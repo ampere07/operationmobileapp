@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DCNotice from './DCNotice';
 import Discounts from './Discounts';
 import Overdue from './Overdue';
@@ -61,48 +63,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [userData, setUserData] = useState<any>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
 
-  // Track dark mode changes
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
-  // Load user data from localStorage
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const user = JSON.parse(authData);
-        setUserData(user);
-      } catch (error) {
-        console.error('Error parsing user data:', error);
+    const loadUserData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const user = JSON.parse(authData);
+          setUserData(user);
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+        }
       }
-    }
+    };
+
+    loadUserData();
   }, []);
 
-  // Add effect to log the active section when it changes
   useEffect(() => {
     console.log('Active section changed to:', activeSection);
   }, [activeSection]);
 
   const renderContent = () => {
     switch (activeSection) {
-
       case 'live-monitor':
         return <LiveMonitor />;
       case 'support':
@@ -129,8 +120,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         return <PPPoESetup />;
       case 'concern-config':
         return <ConcernConfig />;
-
-
       case 'staggered-payment':
         return <StaggeredPayment />;
       case 'mass-rebate':
@@ -206,12 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   };
 
   const toggleSidebar = () => {
-    const isMobile = window.innerWidth < 768;
-    if (isMobile) {
-      setIsMobileMenuOpen(!isMobileMenuOpen);
-    } else {
-      setSidebarCollapsed(!sidebarCollapsed);
-    }
+    setSidebarCollapsed(!sidebarCollapsed);
   };
 
   const closeMobileMenu = () => {
@@ -220,57 +204,97 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
   const handleSectionChange = (section: string) => {
     setActiveSection(section);
-    if (window.innerWidth < 768) {
-      closeMobileMenu();
-    }
+    closeMobileMenu();
   };
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      {/* Fixed Header */}
-      <div className="flex-shrink-0">
+    <View style={[styles.container, isDarkMode ? styles.bgDark : styles.bgLight]}>
+      <View style={styles.flexShrink}>
         <Header onSearch={handleSearch} onToggleSidebar={toggleSidebar} />
-      </div>
+      </View>
       
-      {/* Main Content Area with Fixed Sidebar and Scrollable Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Mobile Overlay */}
+      <View style={styles.mainContent}>
         {isMobileMenuOpen && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-            onClick={closeMobileMenu}
+          <Pressable 
+            style={styles.overlay}
+            onPress={closeMobileMenu}
           />
         )}
         
-        {/* Fixed Sidebar */}
-        <div className={`flex-shrink-0 fixed md:relative z-50 transition-all duration-300 top-0 md:top-auto left-0 ${
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 h-screen md:h-auto`}>
-          <div className="h-full md:h-full">
-          <Sidebar 
-            activeSection={activeSection}
-            onSectionChange={handleSectionChange}
-            onLogout={onLogout}
-            isCollapsed={sidebarCollapsed}
-            userRole={userData?.role || ''}
-            userEmail={userData?.email || ''}
-          />
-          </div>
-        </div>
+        <View style={[styles.sidebarContainer, isMobileMenuOpen ? styles.sidebarVisible : styles.sidebarHidden]}>
+          <View style={styles.fullHeight}>
+            <Sidebar 
+              activeSection={activeSection}
+              onSectionChange={handleSectionChange}
+              onLogout={onLogout}
+              isCollapsed={sidebarCollapsed}
+              userRole={userData?.role || ''}
+              userEmail={userData?.email || ''}
+            />
+          </View>
+        </View>
         
-        {/* Scrollable Content Area Only */}
-        <div className={`flex-1 overflow-hidden ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <div className="h-full overflow-y-auto">
+        <View style={[styles.contentArea, isDarkMode ? styles.bgDark : styles.bgLight]}>
+          <ScrollView style={styles.fullHeight}>
             {renderContent()}
-          </div>
-        </div>
-      </div>
-    </div>
+          </ScrollView>
+        </View>
+      </View>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    height: '100%',
+    flex: 1,
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  bgDark: {
+    backgroundColor: '#030712',
+  },
+  bgLight: {
+    backgroundColor: '#f9fafb',
+  },
+  flexShrink: {
+    flexShrink: 0,
+  },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 40,
+  },
+  sidebarContainer: {
+    flexShrink: 0,
+    position: 'absolute',
+    zIndex: 50,
+    top: 0,
+    left: 0,
+    height: '100%',
+  },
+  sidebarVisible: {
+    transform: [{ translateX: 0 }],
+  },
+  sidebarHidden: {
+    transform: [{ translateX: -300 }],
+  },
+  fullHeight: {
+    height: '100%',
+  },
+  contentArea: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+});
 
 export default Dashboard;
