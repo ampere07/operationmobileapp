@@ -1,0 +1,10 @@
+/node_modules
+
+# Google Drive Service Account Credentials
+google-service-account.json
+backend/storage/app/google-service-account.json
+
+# Environment files
+.env
+.env.backup
+.env.production
