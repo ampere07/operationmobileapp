@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, Image, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Image, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { login, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
@@ -140,14 +140,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   if (showForgotPassword) {
     return (
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.card}>
-          <View style={styles.header}>
+      <ScrollView style={{ flex: 1, backgroundColor: '#ffffff' }} contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 20 }}>
+        <View style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0', width: '100%', maxWidth: 400, shadowColor: 'rgba(147, 51, 234, 0.1)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 20, elevation: 4 }}>
+          <View style={{ textAlign: 'center', marginBottom: 30 }}>
             {logoUrl && (
-              <View style={styles.logoContainer}>
+              <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 20 }}>
                 <Image 
                   source={{ uri: logoUrl }} 
-                  style={styles.logo}
+                  style={{ height: 80, resizeMode: 'contain' }}
                   onError={() => {
                     console.error('[Logo] Failed to load image from:', logoUrl);
                     console.error('[Logo] Make sure the Google Drive file is shared as "Anyone with the link"');
@@ -155,15 +155,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 />
               </View>
             )}
-            <Text style={[styles.title, { color: primaryColor }]}>
+            <Text style={{ fontSize: 24, marginBottom: 10, textAlign: 'center', color: primaryColor }}>
               Reset Password
             </Text>
           </View>
           
           {forgotMessage ? (
             <View>
-              <View style={styles.successMessage}>
-                <Text style={styles.successText}>
+              <View style={{ textAlign: 'center', marginBottom: 20, padding: 15, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#16a34a' }}>
+                <Text style={{ color: '#16a34a', textAlign: 'center' }}>
                   {forgotMessage}
                 </Text>
               </View>
@@ -174,23 +174,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   setForgotEmail('');
                   setError('');
                 }}
-                style={[styles.button, { backgroundColor: primaryColor }]}
+                style={{ width: '100%', padding: 12, borderRadius: 8, backgroundColor: primaryColor }}
               >
-                <Text style={styles.buttonText}>
+                <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '600' }}>
                   Back to Login
                 </Text>
               </Pressable>
             </View>
           ) : (
             <View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>
+              <View style={{ marginBottom: 20 }}>
+                <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
                   Email Address
                 </Text>
                 <TextInput
                   value={forgotEmail}
                   onChangeText={setForgotEmail}
-                  style={styles.input}
+                  style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
                   placeholder="Enter your email address"
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -198,8 +198,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </View>
               
               {error && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>
+                <View style={{ marginBottom: 20, textAlign: 'center' }}>
+                  <Text style={{ color: '#dc2626', fontSize: 14, textAlign: 'center' }}>
                     {error}
                   </Text>
                 </View>
@@ -208,9 +208,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <Pressable
                 onPress={handleForgotPassword}
                 disabled={isLoading}
-                style={[styles.button, styles.buttonMargin, { backgroundColor: isLoading ? '#d1d5db' : '#16a34a' }]}
+                style={{ width: '100%', padding: 12, borderRadius: 8, marginBottom: 15, backgroundColor: isLoading ? '#d1d5db' : '#16a34a' }}
               >
-                <Text style={styles.buttonText}>
+                <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '600' }}>
                   {isLoading ? 'Sending...' : 'Send Reset Instructions'}
                 </Text>
               </Pressable>
@@ -220,9 +220,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   setShowForgotPassword(false);
                   setError('');
                 }}
-                style={[styles.outlineButton, { borderColor: primaryColor }]}
+                style={{ width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: primaryColor }}
               >
-                <Text style={[styles.outlineButtonText, { color: primaryColor }]}>
+                <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: '600', color: primaryColor }}>
                   Back to Login
                 </Text>
               </Pressable>
@@ -234,14 +234,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   }
 
   return (
-    <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.card}>
-        <View style={styles.header}>
+    <ScrollView style={{ flex: 1, backgroundColor: '#ffffff' }} contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 20 }}>
+      <View style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0', width: '100%', maxWidth: 400, shadowColor: 'rgba(147, 51, 234, 0.1)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 20, elevation: 4 }}>
+        <View style={{ textAlign: 'center', marginBottom: 30 }}>
           {logoUrl && (
-            <View style={styles.logoContainer}>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 20 }}>
               <Image 
                 source={{ uri: logoUrl }} 
-                style={styles.logo}
+                style={{ height: 80, resizeMode: 'contain' }}
                 onError={() => {
                   console.error('[Logo] Failed to load image from:', logoUrl);
                   console.error('[Logo] Make sure the Google Drive file is shared as "Anyone with the link"');
@@ -249,44 +249,44 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               />
             </View>
           )}
-          <Text style={[styles.mainTitle, { color: primaryColor }]}>
+          <Text style={{ fontSize: 28, marginBottom: 10, fontWeight: '700', textAlign: 'center', color: primaryColor }}>
             Powered by Sync
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={{ color: '#6b7280', fontSize: 16, textAlign: 'center' }}>
             Sign in to your account
           </Text>
         </View>
         
         <View>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
+          <View style={{ marginBottom: 20 }}>
+            <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
               Email or Username
             </Text>
             <TextInput
               value={identifier}
               onChangeText={setIdentifier}
-              style={styles.input}
+              style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
               placeholder="Enter your email or username"
               autoCapitalize="none"
             />
           </View>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
+          <View style={{ marginBottom: 20 }}>
+            <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
               Password
             </Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
-              style={styles.input}
+              style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
               placeholder="Enter your password"
               secureTextEntry
             />
           </View>
           
           {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>
+            <View style={{ marginBottom: 20, textAlign: 'center' }}>
+              <Text style={{ color: '#dc2626', fontSize: 14, textAlign: 'center' }}>
                 {error}
               </Text>
             </View>
@@ -295,21 +295,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <Pressable
             onPress={handleSubmit}
             disabled={isLoading}
-            style={[styles.button, styles.buttonMargin, { backgroundColor: isLoading ? '#d1d5db' : primaryColor }]}
+            style={{ width: '100%', padding: 12, borderRadius: 8, marginBottom: 15, backgroundColor: isLoading ? '#d1d5db' : primaryColor }}
           >
-            <Text style={styles.buttonTextBold}>
+            <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '700' }}>
               {isLoading ? 'Signing In...' : 'Sign In'}
             </Text>
           </Pressable>
           
-          <View style={styles.forgotContainer}>
+          <View style={{ textAlign: 'center' }}>
             <Pressable
               onPress={() => {
                 setShowForgotPassword(true);
                 setError('');
               }}
             >
-              <Text style={[styles.forgotText, { color: primaryColor }]}>
+              <Text style={{ fontSize: 14, fontWeight: '500', textDecorationLine: 'underline', textAlign: 'center', color: primaryColor }}>
                 Forgot your password?
               </Text>
             </Pressable>
@@ -319,144 +319,5 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100%',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    padding: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: 'rgba(147, 51, 234, 0.1)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    elevation: 4,
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  logo: {
-    height: 80,
-    resizeMode: 'contain',
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  mainTitle: {
-    fontSize: 28,
-    marginBottom: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: '#6b7280',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    display: 'flex',
-    color: '#6b7280',
-    marginBottom: 8,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  input: {
-    width: '100%',
-    padding: 12,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    color: '#111827',
-    fontSize: 16,
-  },
-  errorContainer: {
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  errorText: {
-    color: '#dc2626',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  successMessage: {
-    textAlign: 'center',
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#16a34a',
-  },
-  successText: {
-    color: '#16a34a',
-    textAlign: 'center',
-  },
-  button: {
-    width: '100%',
-    padding: 12,
-    borderRadius: 8,
-  },
-  buttonMargin: {
-    marginBottom: 15,
-  },
-  buttonText: {
-    color: '#ffffff',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonTextBold: {
-    color: '#ffffff',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  outlineButton: {
-    width: '100%',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  outlineButtonText: {
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  forgotContainer: {
-    textAlign: 'center',
-  },
-  forgotText: {
-    fontSize: 14,
-    fontWeight: '500',
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-  },
-});
 
 export default Login;

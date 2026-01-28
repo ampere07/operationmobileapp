@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { View, Text, Modal, Pressable, ScrollView, TextInput } from 'react-native';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface ApplicationFunnelFilterProps {
@@ -61,17 +63,17 @@ const ApplicationFunnelFilter: React.FC<ApplicationFunnelFilterProps> = ({
   onClose,
   onApplyFilters
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<Column | null>(null);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+    };
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -165,258 +167,188 @@ const ApplicationFunnelFilter: React.FC<ApplicationFunnelFilterProps> = ({
 
     if (isBooleanType(selectedColumn.dataType)) {
       return (
-        <div>
-          <label className={`text-sm font-medium mb-2 block ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>
+        <View>
+          <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
             Select Value
-          </label>
-          <select
-            value={currentValue?.value === true ? 'true' : currentValue?.value === false ? 'false' : ''}
-            onChange={(e) => handleBooleanChange(selectedColumn.key, e.target.value)}
-            className={`w-full px-3 py-2 rounded border ${
-              isDarkMode 
-                ? 'bg-gray-800 border-gray-700 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            }`}
-          >
-            <option value="">All</option>
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        </div>
+          </Text>
+          <View style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}>
+            <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+              {currentValue?.value === true ? 'Yes' : currentValue?.value === false ? 'No' : 'All'}
+            </Text>
+          </View>
+        </View>
       );
     }
 
     if (isNumericType(selectedColumn.dataType)) {
       return (
-        <div className="space-y-4">
-          <div>
-            <label className={`text-sm font-medium mb-2 block ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+        <View style={{ gap: 16 }}>
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
               From
-            </label>
-            <input
-              type="number"
-              value={currentValue?.from || ''}
-              onChange={(e) => handleRangeChange(selectedColumn.key, 'from', e.target.value)}
+            </Text>
+            <TextInput
+              keyboardType="numeric"
+              value={currentValue?.from?.toString() || ''}
+              onChangeText={(text) => handleRangeChange(selectedColumn.key, 'from', text)}
               placeholder="Minimum value"
-              className={`w-full px-3 py-2 rounded border ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700 text-white' 
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
+              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
             />
-          </div>
-          <div>
-            <label className={`text-sm font-medium mb-2 block ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+          </View>
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
               To
-            </label>
-            <input
-              type="number"
-              value={currentValue?.to || ''}
-              onChange={(e) => handleRangeChange(selectedColumn.key, 'to', e.target.value)}
+            </Text>
+            <TextInput
+              keyboardType="numeric"
+              value={currentValue?.to?.toString() || ''}
+              onChangeText={(text) => handleRangeChange(selectedColumn.key, 'to', text)}
               placeholder="Maximum value"
-              className={`w-full px-3 py-2 rounded border ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700 text-white' 
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
+              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
             />
-          </div>
-        </div>
+          </View>
+        </View>
       );
     }
 
     if (isDateType(selectedColumn.dataType)) {
       return (
-        <div className="space-y-4">
-          <div>
-            <label className={`text-sm font-medium mb-2 block ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+        <View style={{ gap: 16 }}>
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
               From
-            </label>
-            <input
-              type={selectedColumn.dataType === 'datetime' ? 'datetime-local' : 'date'}
-              value={currentValue?.from || ''}
-              onChange={(e) => handleDateChange(selectedColumn.key, 'from', e.target.value)}
-              className={`w-full px-3 py-2 rounded border ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700 text-white' 
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
+            </Text>
+            <TextInput
+              value={currentValue?.from?.toString() || ''}
+              onChangeText={(text) => handleDateChange(selectedColumn.key, 'from', text)}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
             />
-          </div>
-          <div>
-            <label className={`text-sm font-medium mb-2 block ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+          </View>
+          <View>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
               To
-            </label>
-            <input
-              type={selectedColumn.dataType === 'datetime' ? 'datetime-local' : 'date'}
-              value={currentValue?.to || ''}
-              onChange={(e) => handleDateChange(selectedColumn.key, 'to', e.target.value)}
-              className={`w-full px-3 py-2 rounded border ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700 text-white' 
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
+            </Text>
+            <TextInput
+              value={currentValue?.to?.toString() || ''}
+              onChangeText={(text) => handleDateChange(selectedColumn.key, 'to', text)}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
             />
-          </div>
-        </div>
+          </View>
+        </View>
       );
     }
 
     return (
-      <div>
-        <label className={`text-sm font-medium mb-2 block ${
-          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-        }`}>
+      <View>
+        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
           Search Value
-        </label>
-        <input
-          type="text"
+        </Text>
+        <TextInput
           value={typeof currentValue?.value === 'string' ? currentValue.value : ''}
-          onChange={(e) => handleTextChange(selectedColumn.key, e.target.value)}
+          onChangeText={(text) => handleTextChange(selectedColumn.key, text)}
           placeholder={`Enter ${selectedColumn.label.toLowerCase()}`}
-          className={`w-full px-3 py-2 rounded border ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700 text-white' 
-              : 'bg-white border-gray-300 text-gray-900'
-          }`}
+          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
         />
-      </div>
+      </View>
     );
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
-          onClick={onClose}
+    <Modal
+      transparent={true}
+      visible={isOpen}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <Pressable 
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+          onPress={onClose}
         />
         
-        <div className="fixed inset-y-0 right-0 max-w-full flex">
-          <div className={`w-screen max-w-md transform transition-transform ${
-            isDarkMode ? 'bg-gray-900' : 'bg-white'
-          }`}>
-            <div className="h-full flex flex-col">
-              <div className={`px-6 py-4 border-b ${
-                isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    {selectedColumn && (
-                      <button
-                        onClick={handleBack}
-                        className={`p-2 rounded-lg transition-colors ${
-                          isDarkMode 
-                            ? 'hover:bg-gray-800 text-gray-400' 
-                            : 'hover:bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                    )}
-                    <h2 className={`text-lg font-semibold ${
-                      isDarkMode ? 'text-white' : 'text-gray-900'
-                    }`}>
-                      {selectedColumn ? selectedColumn.label : 'Filter'}
-                    </h2>
-                  </div>
-                  <button
-                    onClick={onClose}
-                    className={`p-2 rounded-lg transition-colors ${
-                      isDarkMode 
-                        ? 'hover:bg-gray-800 text-gray-400' 
-                        : 'hover:bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
+        <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: 448, backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
+          <View style={{ height: '100%', flexDirection: 'column' }}>
+            <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  {selectedColumn && (
+                    <Pressable
+                      onPress={handleBack}
+                      style={{ padding: 8, borderRadius: 8 }}
+                    >
+                      <ChevronLeft size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                    </Pressable>
+                  )}
+                  <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                    {selectedColumn ? selectedColumn.label : 'Filter'}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={onClose}
+                  style={{ padding: 8, borderRadius: 8 }}
+                >
+                  <X size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
+              </View>
+            </View>
 
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                {selectedColumn ? (
-                  renderFilterInput()
-                ) : (
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className={`text-sm font-semibold mb-3 uppercase tracking-wider ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                        Applications Table
-                      </h3>
-                      <div className="flex flex-col gap-2 w-full">
-                        {allColumns.map(column => (
-                          <div
-                            key={column.key}
-                            onClick={() => handleColumnClick(column)}
-                            className={`w-full p-3 cursor-pointer transition-all flex items-center justify-between border-b ${
-                              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                            }`}
-                          >
-                            <span className={`text-sm font-medium ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
-                              {column.label}
-                            </span>
-                            <ChevronRight className={`h-4 w-4 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <ScrollView style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 16 }}>
+              {selectedColumn ? (
+                renderFilterInput()
+              ) : (
+                <View style={{ gap: 24 }}>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1.2, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                      Applications Table
+                    </Text>
+                    <View style={{ flexDirection: 'column', gap: 8, width: '100%' }}>
+                      {allColumns.map(column => (
+                        <Pressable
+                          key={column.key}
+                          onPress={() => handleColumnClick(column)}
+                          style={{ width: '100%', padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+                        >
+                          <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                            {column.label}
+                          </Text>
+                          <ChevronRight size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
 
-              <div className={`px-6 py-4 border-t ${
-                isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={handleReset}
-                    className={`flex-1 px-4 py-2 rounded transition-colors ${
-                      isDarkMode 
-                        ? 'bg-gray-800 hover:bg-gray-700 text-white' 
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}
-                  >
-                    Clear
-                  </button>
-                  <button
-                    onClick={handleApply}
-                    className="flex-1 px-4 py-2 text-white rounded transition-colors"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                    onMouseEnter={(e) => {
-                      if (colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-                    }}
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Pressable
+                  onPress={handleReset}
+                  style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}
+                >
+                  <Text style={{ textAlign: 'center', color: isDarkMode ? '#ffffff' : '#111827' }}>Clear</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleApply}
+                  style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#ea580c' }}
+                >
+                  <Text style={{ textAlign: 'center', color: '#ffffff' }}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

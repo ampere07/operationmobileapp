@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getServiceOrders, createServiceOrder } from '../services/serviceOrderService';
 
@@ -33,6 +35,7 @@ const Support: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showLoadingModal, setShowLoadingModal] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [showConcernPicker, setShowConcernPicker] = useState<boolean>(false);
 
   const concernOptions = [
     'No Internet',
@@ -45,45 +48,38 @@ const Support: React.FC = () => {
   ];
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
   const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const user = JSON.parse(authData);
-        console.log('[Support] User auth data:', user);
-        const accountNo = user.account_no || user.username || '';
-        const email = user.email || '';
-        console.log('[Support] Using account identifier:', accountNo);
-        console.log('[Support] Using email:', email);
-        setUserAccountNo(accountNo);
-        setUserEmail(email);
-      } catch (error) {
-        console.error('Error parsing auth data:', error);
+    const loadAuthData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const user = JSON.parse(authData);
+          console.log('[Support] User auth data:', user);
+          const accountNo = user.account_no || user.username || '';
+          const email = user.email || '';
+          console.log('[Support] Using account identifier:', accountNo);
+          console.log('[Support] Using email:', email);
+          setUserAccountNo(accountNo);
+          setUserEmail(email);
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
+      } else {
+        console.error('[Support] No auth data found');
       }
-    } else {
-      console.error('[Support] No auth data found');
-    }
+    };
+
+    loadAuthData();
   }, []);
 
   useEffect(() => {
@@ -161,9 +157,7 @@ const Support: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = () => {
     if (!details.trim()) {
       setSubmitMessage('Please provide details about your issue');
       setTimeout(() => setSubmitMessage(''), 3000);
@@ -225,349 +219,336 @@ const Support: React.FC = () => {
   };
 
   const handleRequestPlanUpdate = () => {
-    window.open('https://forms.gle/your-plan-update-form', '_blank');
+    // WEB-ONLY: window.open('https://forms.gle/your-plan-update-form', '_blank');
+    console.log('Open plan update form');
   };
 
   return (
-    <div className={`h-full overflow-auto ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className={`lg:col-span-1 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-            <div className="flex items-center mb-6">
-              <FileText className={`mr-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`} size={20} />
-              <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                New Request
-              </h2>
-            </div>
+    <View style={{ height: '100%', overflow: 'hidden', backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+      <ScrollView style={{ flex: 1 }}>
+        <View style={{ maxWidth: 1280, marginHorizontal: 'auto', padding: 24 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 24 }}>
+            <View style={{ flex: 1, minWidth: 300, backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 8, padding: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+                <FileText color={isDarkMode ? '#ffffff' : '#111827'} size={20} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 20, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                  New Request
+                </Text>
+              </View>
 
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Concern
-                </label>
-                <select
-                  value={selectedConcern}
-                  onChange={(e) => setSelectedConcern(e.target.value)}
-                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
+              <View>
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ display: 'flex', fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Concern
+                  </Text>
+                  <Pressable
+                    onPress={() => setShowConcernPicker(true)}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}
+                  >
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{selectedConcern}</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ marginBottom: 24 }}>
+                  <Text style={{ display: 'flex', fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Details
+                  </Text>
+                  <TextInput
+                    value={details}
+                    onChangeText={setDetails}
+                    placeholder="Describe your issue..."
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    multiline
+                    numberOfLines={5}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827', borderColor: isDarkMode ? '#374151' : '#d1d5db', textAlignVertical: 'top', height: 120 }}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={handleSubmit}
+                  disabled={isSubmitting || remainingRequests <= 0}
+                  style={{ width: '100%', paddingVertical: 12, borderRadius: 4, backgroundColor: (isSubmitting || remainingRequests <= 0) ? '#6b7280' : (colorPalette?.primary || '#1e40af'), opacity: (isSubmitting || remainingRequests <= 0) ? 0.5 : 1 }}
                 >
-                  {concernOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <Text style={{ color: '#ffffff', textAlign: 'center', fontWeight: '500' }}>
+                    SUBMIT TICKET
+                  </Text>
+                </Pressable>
 
-              <div className="mb-6">
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Details
-                </label>
-                <textarea
-                  value={details}
-                  onChange={(e) => setDetails(e.target.value)}
-                  placeholder="Describe your issue..."
-                  rows={5}
-                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 resize-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700 placeholder-gray-500'
-                      : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'
-                  }`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
-                />
-              </div>
+                <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Clock color={isDarkMode ? '#9ca3af' : '#4b5563'} size={14} style={{ marginRight: 4 }} />
+                  <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                    Limit: {remainingRequests} requests/day. 1 hour cooldown.
+                  </Text>
+                </View>
 
-              <button
-                type="submit"
-                disabled={isSubmitting || remainingRequests <= 0}
-                className="w-full text-white py-3 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  backgroundColor: (isSubmitting || remainingRequests <= 0) ? '#6b7280' : (colorPalette?.primary || '#1e40af')
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSubmitting && remainingRequests > 0 && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSubmitting && remainingRequests > 0 && colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
+                {submitMessage && (
+                  <View style={{ marginTop: 12, padding: 12, borderRadius: 4, backgroundColor: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found') ? (isDarkMode ? 'rgba(127, 29, 29, 0.5)' : '#fee2e2') : (isDarkMode ? 'rgba(20, 83, 45, 0.5)' : '#d1fae5') }}>
+                    <Text style={{ fontSize: 14, textAlign: 'center', color: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found') ? (isDarkMode ? '#fecaca' : '#b91c1c') : (isDarkMode ? '#86efac' : '#065f46') }}>
+                      {submitMessage}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <Pressable
+                onPress={handleRequestPlanUpdate}
+                style={{ width: '100%', marginTop: 16, paddingVertical: 12, borderRadius: 4, borderWidth: 2, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: 'transparent' }}
               >
-                SUBMIT TICKET
-              </button>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Upload color={isDarkMode ? '#d1d5db' : '#374151'} size={16} style={{ marginRight: 8 }} />
+                  <Text style={{ fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Request Plan Update
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
 
-              <div className={`mt-3 text-center text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                <Clock className="inline mr-1" size={14} />
-                Limit: {remainingRequests} requests/day. 1 hour cooldown.
-              </div>
+            <View style={{ flex: 2, minWidth: 300, backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 8, padding: 24 }}>
+              <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 24, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                Latest Request
+              </Text>
 
-              {submitMessage && (
-                <div className={`mt-3 p-3 rounded text-sm text-center ${
-                  submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
-                    ? isDarkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-100 text-red-700'
-                    : isDarkMode ? 'bg-green-900/50 text-green-200' : 'bg-green-100 text-green-700'
-                }`}>
-                  {submitMessage}
-                </div>
-              )}
-            </form>
+              <View style={{ overflow: 'hidden' }}>
+                {isLoading ? (
+                  <View style={{ paddingVertical: 48, alignItems: 'center', color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                    <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                      <View style={{ height: 16, width: '33%', borderRadius: 4, marginBottom: 16, backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }}></View>
+                      <View style={{ height: 16, width: '50%', borderRadius: 4, backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }}></View>
+                    </View>
+                    <Text style={{ marginTop: 16, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Loading support requests...</Text>
+                  </View>
+                ) : (
+                  <>
+                    <ScrollView style={{ maxHeight: 400 }}>
+                      <View>
+                        <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb', position: 'sticky', top: 0, backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 10 }}>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 1 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>Date</Text>
+                          </View>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 1 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>ID</Text>
+                          </View>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 2 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>Issue</Text>
+                          </View>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 1.5 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>Status</Text>
+                          </View>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 1.5 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>Visit Info</Text>
+                          </View>
+                          <View style={{ paddingVertical: 12, paddingHorizontal: 12, flex: 1 }}>
+                            <Text style={{ textAlign: 'left', fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>Action</Text>
+                          </View>
+                        </View>
+                        {requests.map((request) => (
+                          <View key={request.id} style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 1 }}>
+                              <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
+                                {request.date}
+                              </Text>
+                            </View>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 1 }}>
+                              <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
+                                {request.requestId}
+                              </Text>
+                            </View>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 2 }}>
+                              <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>{request.issue}</Text>
+                              <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                                {request.issueDetails}
+                              </Text>
+                            </View>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 1.5 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', alignSelf: 'flex-start' }}>
+                                <Info color={isDarkMode ? '#d1d5db' : '#374151'} size={14} style={{ marginRight: 4 }} />
+                                <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
+                                  {request.status}
+                                </Text>
+                              </View>
+                              <Text style={{ fontSize: 12, marginTop: 4, color: '#6b7280' }}>
+                                Note: {request.statusNote || 'N/A'}
+                              </Text>
+                            </View>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 1.5 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, backgroundColor: request.visitInfo.status === 'Done' ? 'rgba(234, 179, 8, 0.2)' : (isDarkMode ? '#1f2937' : '#f3f4f6'), borderWidth: request.visitInfo.status === 'Done' ? 1 : 0, borderColor: request.visitInfo.status === 'Done' ? 'rgba(234, 179, 8, 0.5)' : 'transparent', alignSelf: 'flex-start' }}>
+                                <CheckCircle color={request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151')} size={14} style={{ marginRight: 4 }} />
+                                <Text style={{ color: request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151'), fontSize: 14 }}>
+                                  {request.visitInfo.status}
+                                </Text>
+                              </View>
+                              <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                                Techs: {request.assignedEmail || 'Not assigned'}
+                              </Text>
+                              <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                                Note: {request.visitNote || 'N/A'}
+                              </Text>
+                            </View>
+                            <View style={{ paddingVertical: 16, paddingHorizontal: 12, flex: 1 }}>
+                              <Pressable
+                                style={{ paddingHorizontal: 16, paddingVertical: 4, borderRadius: 4, borderWidth: 1, borderColor: colorPalette?.primary || '#3b82f6' }}
+                              >
+                                <Text style={{ color: colorPalette?.primary || '#3b82f6', fontSize: 14 }}>
+                                  View
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
 
-            <button
-              onClick={handleRequestPlanUpdate}
-              className={`w-full mt-4 py-3 rounded font-medium border-2 transition-colors ${
-                isDarkMode
-                  ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
+                    {requests.length === 0 && (
+                      <View style={{ paddingVertical: 48, alignItems: 'center', color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                        <FileText color={isDarkMode ? '#9ca3af' : '#4b5563'} size={48} strokeWidth={1} style={{ marginBottom: 16, opacity: 0.5 }} />
+                        <Text style={{ fontSize: 18, fontWeight: '500', color: isDarkMode ? '#9ca3af' : '#4b5563' }}>No support requests</Text>
+                        <Text style={{ fontSize: 14, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Submit a ticket to get started</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+
+      <Modal
+        visible={showConcernPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowConcernPicker(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 16, color: isDarkMode ? '#ffffff' : '#111827' }}>Select Concern</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {concernOptions.map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => {
+                    setSelectedConcern(option);
+                    setShowConcernPicker(false);
+                  }}
+                  style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+                >
+                  <Text style={{ fontSize: 16, color: selectedConcern === option ? (colorPalette?.primary || '#3b82f6') : (isDarkMode ? '#d1d5db' : '#374151') }}>
+                    {option}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              onPress={() => setShowConcernPicker(false)}
+              style={{ marginTop: 16, paddingVertical: 12, backgroundColor: isDarkMode ? '#374151' : '#e5e7eb', borderRadius: 4 }}
             >
-              <Upload className="inline mr-2" size={16} />
-              Request Plan Update
-            </button>
-          </div>
+              <Text style={{ textAlign: 'center', color: isDarkMode ? '#d1d5db' : '#374151', fontWeight: '500' }}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
-          <div className={`lg:col-span-2 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-            <h2 className={`text-xl font-semibold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Latest Request
-            </h2>
-
-            <div className="overflow-x-auto">
-              {isLoading ? (
-                <div className={`py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                  </div>
-                  <p className="mt-4">Loading support requests...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="max-h-[400px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} z-10`}>
-                        <tr className={`border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Date</th>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>ID</th>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Issue</th>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Status</th>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Visit Info</th>
-                          <th className={`text-left py-3 px-3 font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                      {requests.map((request) => (
-                        <tr key={request.id} className={`border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {request.date}
-                          </td>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {request.requestId}
-                          </td>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            <div>{request.issue}</div>
-                            <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                              {request.issueDetails}
-                            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <div className={`inline-flex items-center px-3 py-1 rounded ${
-                              isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              <Info className="mr-1" size={14} />
-                              {request.status}
-                            </div>
-                            <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                              Note: {request.statusNote || 'N/A'}
-                            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <div className={`inline-flex items-center px-3 py-2 rounded ${
-                              request.visitInfo.status === 'Done'
-                                ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/50'
-                                : isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              <CheckCircle className="mr-1" size={14} />
-                              {request.visitInfo.status}
-                            </div>
-            <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Techs: {request.assignedEmail || 'Not assigned'}
-            </div>
-            <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              Note: {request.visitNote || 'N/A'}
-            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <button
-                              className="px-4 py-1 rounded text-sm transition-colors"
-                              style={{
-                                color: colorPalette?.primary || '#3b82f6',
-                                border: `1px solid ${colorPalette?.primary || '#3b82f6'}`
-                              }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.backgroundColor = `${colorPalette.primary}20`;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'transparent';
-                              }}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-
-                  {requests.length === 0 && (
-                    <div className={`py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      <FileText className="mx-auto mb-4 opacity-50" size={48} strokeWidth={1} />
-                      <p className="text-lg font-medium">No support requests</p>
-                      <p className="text-sm mt-1">Submit a ticket to get started</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-white'} rounded-lg shadow-xl p-6 max-w-md w-full mx-4`}>
-            <div className="mb-4">
-              <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+      <Modal
+        visible={showConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 25, elevation: 12, padding: 24, maxWidth: 448, width: '100%', marginHorizontal: 16 }}>
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 20, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
                 Confirm Submission
-              </h3>
-            </div>
-            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              </Text>
+            </View>
+            <Text style={{ marginBottom: 24, color: isDarkMode ? '#d1d5db' : '#374151' }}>
               Are you sure you want to submit this support ticket?
-            </p>
-            <div className={`mb-4 p-3 rounded ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-              <p className={`text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            </Text>
+            <View style={{ marginBottom: 16, padding: 12, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
+              <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                 Concern: {selectedConcern}
-              </p>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              </Text>
+              <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
                 Details: {details.substring(0, 100)}{details.length > 100 ? '...' : ''}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className={`flex-1 py-2 px-4 rounded font-medium transition-colors ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable
+                onPress={() => setShowConfirmModal(false)}
+                style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmSubmit}
-                className="flex-1 py-2 px-4 rounded font-medium text-white transition-colors"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#1e40af'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
+                <Text style={{ textAlign: 'center', fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmSubmit}
+                style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4, backgroundColor: colorPalette?.primary || '#1e40af' }}
               >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <Text style={{ textAlign: 'center', fontWeight: '500', color: '#ffffff' }}>
+                  Confirm
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showLoadingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-white'} rounded-lg shadow-xl p-8 max-w-sm w-full mx-4`}>
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 mb-4"
-                style={{
-                  borderColor: colorPalette?.primary || '#1e40af'
-                }}
-              ></div>
-              <h3 className={`text-xl font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+      <Modal
+        visible={showLoadingModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 25, elevation: 12, padding: 32, maxWidth: 384, width: '100%', marginHorizontal: 16 }}>
+            <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={colorPalette?.primary || '#1e40af'} style={{ marginBottom: 16 }} />
+              <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
                 Submitting Ticket
-              </h3>
-              <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              </Text>
+              <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
                 Please wait...
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-white'} rounded-lg shadow-xl p-6 max-w-md w-full mx-4`}>
-            <div className="flex flex-col items-center">
-              <div className="rounded-full p-3 mb-4"
-                style={{
-                  backgroundColor: `${colorPalette?.primary || '#1e40af'}20`
-                }}
-              >
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 25, elevation: 12, padding: 24, maxWidth: 448, width: '100%', marginHorizontal: 16 }}>
+            <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+              <View style={{ borderRadius: 9999, padding: 12, marginBottom: 16, backgroundColor: `${colorPalette?.primary || '#1e40af'}33` }}>
                 <CheckCircle
                   size={48}
-                  style={{
-                    color: colorPalette?.primary || '#1e40af'
-                  }}
+                  color={colorPalette?.primary || '#1e40af'}
                 />
-              </div>
-              <h3 className={`text-xl font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
                 Ticket Submitted Successfully
-              </h3>
-              <p className={`text-sm text-center mb-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              </Text>
+              <Text style={{ fontSize: 14, textAlign: 'center', marginBottom: 24, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
                 Your support ticket has been created. We will get back to you soon.
-              </p>
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="w-full py-2 px-4 rounded font-medium text-white transition-colors"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#1e40af'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
+              </Text>
+              <Pressable
+                onPress={() => setShowSuccessModal(false)}
+                style={{ width: '100%', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 4, backgroundColor: colorPalette?.primary || '#1e40af' }}
               >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                <Text style={{ textAlign: 'center', fontWeight: '500', color: '#ffffff' }}>
+                  OK
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 

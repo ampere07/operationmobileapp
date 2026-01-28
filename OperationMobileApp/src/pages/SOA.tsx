@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { Search, X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SOADetails from '../components/SOADetails';
 import { soaService, SOARecord } from '../services/soaService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -75,41 +77,41 @@ const SOA: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const allColumns = [
-    { key: 'id', label: 'ID', width: 'min-w-20' },
-    { key: 'accountNo', label: 'Account Number', width: 'min-w-36' },
-    { key: 'statementDate', label: 'Statement Date', width: 'min-w-36' },
-    { key: 'balanceFromPreviousBill', label: 'Balance from Previous Bill', width: 'min-w-48' },
-    { key: 'paymentReceivedPrevious', label: 'Payment Received Previous', width: 'min-w-48' },
-    { key: 'remainingBalancePrevious', label: 'Remaining Balance Previous', width: 'min-w-48' },
-    { key: 'monthlyServiceFee', label: 'Monthly Service Fee', width: 'min-w-40' },
-    { key: 'serviceCharge', label: 'Service Charge', width: 'min-w-36' },
-    { key: 'rebate', label: 'Rebate', width: 'min-w-28' },
-    { key: 'discounts', label: 'Discounts', width: 'min-w-28' },
-    { key: 'staggered', label: 'Staggered', width: 'min-w-28' },
-    { key: 'vat', label: 'VAT', width: 'min-w-28' },
-    { key: 'dueDate', label: 'Due Date', width: 'min-w-32' },
-    { key: 'amountDue', label: 'Amount Due', width: 'min-w-32' },
-    { key: 'totalAmountDue', label: 'Total Amount Due', width: 'min-w-36' },
-    { key: 'printLink', label: 'Print Link', width: 'min-w-28' },
-    { key: 'createdAt', label: 'Created At', width: 'min-w-40' },
-    { key: 'createdBy', label: 'Created By', width: 'min-w-32' },
-    { key: 'updatedAt', label: 'Updated At', width: 'min-w-40' },
-    { key: 'updatedBy', label: 'Updated By', width: 'min-w-32' },
-    { key: 'fullName', label: 'Full Name', width: 'min-w-40' },
-    { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-    { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-    { key: 'address', label: 'Address', width: 'min-w-56' },
-    { key: 'plan', label: 'Plan', width: 'min-w-32' },
-    { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-32' },
-    { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-    { key: 'city', label: 'City', width: 'min-w-32' },
-    { key: 'region', label: 'Region', width: 'min-w-32' },
+    { key: 'id', label: 'ID', width: 80 },
+    { key: 'accountNo', label: 'Account Number', width: 144 },
+    { key: 'statementDate', label: 'Statement Date', width: 144 },
+    { key: 'balanceFromPreviousBill', label: 'Balance from Previous Bill', width: 192 },
+    { key: 'paymentReceivedPrevious', label: 'Payment Received Previous', width: 192 },
+    { key: 'remainingBalancePrevious', label: 'Remaining Balance Previous', width: 192 },
+    { key: 'monthlyServiceFee', label: 'Monthly Service Fee', width: 160 },
+    { key: 'serviceCharge', label: 'Service Charge', width: 144 },
+    { key: 'rebate', label: 'Rebate', width: 112 },
+    { key: 'discounts', label: 'Discounts', width: 112 },
+    { key: 'staggered', label: 'Staggered', width: 112 },
+    { key: 'vat', label: 'VAT', width: 112 },
+    { key: 'dueDate', label: 'Due Date', width: 128 },
+    { key: 'amountDue', label: 'Amount Due', width: 128 },
+    { key: 'totalAmountDue', label: 'Total Amount Due', width: 144 },
+    { key: 'printLink', label: 'Print Link', width: 112 },
+    { key: 'createdAt', label: 'Created At', width: 160 },
+    { key: 'createdBy', label: 'Created By', width: 128 },
+    { key: 'updatedAt', label: 'Updated At', width: 160 },
+    { key: 'updatedBy', label: 'Updated By', width: 128 },
+    { key: 'fullName', label: 'Full Name', width: 160 },
+    { key: 'contactNumber', label: 'Contact Number', width: 144 },
+    { key: 'emailAddress', label: 'Email Address', width: 192 },
+    { key: 'address', label: 'Address', width: 224 },
+    { key: 'plan', label: 'Plan', width: 128 },
+    { key: 'dateInstalled', label: 'Date Installed', width: 128 },
+    { key: 'barangay', label: 'Barangay', width: 128 },
+    { key: 'city', label: 'City', width: 128 },
+    { key: 'region', label: 'Region', width: 128 },
   ];
 
   const customerColumns = [
-    { key: 'statementDate', label: 'Statement Date', width: 'min-w-36' },
-    { key: 'id', label: 'ID', width: 'min-w-20' },
-    { key: 'action', label: 'Action', width: 'min-w-32' },
+    { key: 'statementDate', label: 'Statement Date', width: 144 },
+    { key: 'id', label: 'ID', width: 80 },
+    { key: 'action', label: 'Action', width: 128 },
   ];
 
   const displayColumns = userRole === 'customer' ? customerColumns : allColumns;
@@ -117,40 +119,33 @@ const SOA: React.FC = () => {
   const dateItems: Array<{ date: string; id: string }> = [{ date: 'All', id: '' }];
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const user = JSON.parse(authData);
-        setUserRole(user.role?.toLowerCase() || '');
-        setAccountNo(user.username || ''); // username IS the account_no
-        const balance = parseFloat(user.account_balance || '0');
-        setAccountBalance(balance);
-        setPaymentAmount(balance > 0 ? balance : 100); // Default to 100 if no balance
-        setFullName(user.full_name || '');
-      } catch (error) {
-        console.error('Error parsing auth data:', error);
+    const loadAuthData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const user = JSON.parse(authData);
+          setUserRole(user.role?.toLowerCase() || '');
+          setAccountNo(user.username || '');
+          const balance = parseFloat(user.account_balance || '0');
+          setAccountBalance(balance);
+          setPaymentAmount(balance > 0 ? balance : 100);
+          setFullName(user.full_name || '');
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
       }
-    }
+    };
+
+    loadAuthData();
   }, []);
 
   useEffect(() => {
@@ -259,7 +254,6 @@ const SOA: React.FC = () => {
     setIsPaymentProcessing(true);
 
     try {
-      // Fetch current account balance from database
       const currentBalance = await paymentService.getAccountBalance(accountNo);
       setAccountBalance(currentBalance);
       
@@ -323,7 +317,7 @@ const SOA: React.FC = () => {
 
   const handleOpenPaymentLink = () => {
     if (paymentLinkData?.paymentUrl) {
-      window.open(paymentLinkData.paymentUrl, '_blank');
+      // WEB-ONLY: window.open(paymentLinkData.paymentUrl, '_blank');
       setShowPaymentLinkModal(false);
       setPaymentLinkData(null);
     }
@@ -336,7 +330,7 @@ const SOA: React.FC = () => {
 
   const handleResumePendingPayment = () => {
     if (pendingPayment && pendingPayment.payment_url) {
-      window.open(pendingPayment.payment_url, '_blank');
+      // WEB-ONLY: window.open(pendingPayment.payment_url, '_blank');
       setShowPendingPaymentModal(false);
       setPendingPayment(null);
     }
@@ -347,620 +341,675 @@ const SOA: React.FC = () => {
     setPendingPayment(null);
   };
 
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
   const handleDownloadPDF = (printLink: string | undefined) => {
     if (printLink) {
-      window.open(printLink, '_blank');
+      // WEB-ONLY: window.open(printLink, '_blank');
     }
   };
 
   const renderCellValue = (record: SOARecordUI, columnKey: string) => {
     switch (columnKey) {
       case 'id':
-        return record.id;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.id}</Text>;
       case 'accountNo':
-        return <span className="text-red-400">{record.accountNo}</span>;
+        return <Text style={{ color: '#f87171' }}>{record.accountNo}</Text>;
       case 'statementDate':
-        return record.statementDate;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.statementDate}</Text>;
       case 'action':
         return (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
+          <Pressable
+            onPress={(e) => {
               handleDownloadPDF(record.printLink);
             }}
             disabled={!record.printLink}
-            className="px-3 py-1 rounded text-sm text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              backgroundColor: record.printLink ? (colorPalette?.primary || '#ea580c') : '#6b7280'
-            }}
-            onMouseEnter={(e) => {
-              if (record.printLink && colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (record.printLink && colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              borderRadius: 4,
+              backgroundColor: record.printLink ? (colorPalette?.primary || '#ea580c') : '#6b7280',
+              opacity: !record.printLink ? 0.5 : 1
             }}
           >
-            Download PDF
-          </button>
+            <Text style={{ color: '#ffffff', fontSize: 14 }}>Download PDF</Text>
+          </Pressable>
         );
       case 'balanceFromPreviousBill':
-        return `₱ ${record.balanceFromPreviousBill.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.balanceFromPreviousBill.toFixed(2)}</Text>;
       case 'paymentReceivedPrevious':
-        return `₱ ${record.paymentReceivedPrevious.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.paymentReceivedPrevious.toFixed(2)}</Text>;
       case 'remainingBalancePrevious':
-        return `₱ ${record.remainingBalancePrevious.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.remainingBalancePrevious.toFixed(2)}</Text>;
       case 'monthlyServiceFee':
-        return `₱ ${record.monthlyServiceFee.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.monthlyServiceFee.toFixed(2)}</Text>;
       case 'serviceCharge':
-        return `₱ ${record.serviceCharge.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.serviceCharge.toFixed(2)}</Text>;
       case 'rebate':
-        return `₱ ${record.rebate.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.rebate.toFixed(2)}</Text>;
       case 'discounts':
-        return `₱ ${record.discounts.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.discounts.toFixed(2)}</Text>;
       case 'staggered':
-        return `₱ ${record.staggered.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.staggered.toFixed(2)}</Text>;
       case 'vat':
-        return `₱ ${record.vat.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.vat.toFixed(2)}</Text>;
       case 'dueDate':
-        return record.dueDate;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.dueDate}</Text>;
       case 'amountDue':
-        return `₱ ${record.amountDue.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.amountDue.toFixed(2)}</Text>;
       case 'totalAmountDue':
-        return `₱ ${record.totalAmountDue.toFixed(2)}`;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>₱ {record.totalAmountDue.toFixed(2)}</Text>;
       case 'printLink':
-        return record.printLink || 'NULL';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.printLink || 'NULL'}</Text>;
       case 'createdAt':
-        return record.createdAt || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.createdAt || '-'}</Text>;
       case 'createdBy':
-        return record.createdBy || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.createdBy || '-'}</Text>;
       case 'updatedAt':
-        return record.updatedAt || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.updatedAt || '-'}</Text>;
       case 'updatedBy':
-        return record.updatedBy || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.updatedBy || '-'}</Text>;
       case 'fullName':
-        return record.fullName || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.fullName || '-'}</Text>;
       case 'contactNumber':
-        return record.contactNumber || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.contactNumber || '-'}</Text>;
       case 'emailAddress':
-        return record.emailAddress || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.emailAddress || '-'}</Text>;
       case 'address':
-        return <span title={record.address}>{record.address || '-'}</span>;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>{record.address || '-'}</Text>;
       case 'plan':
-        return record.plan || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.plan || '-'}</Text>;
       case 'dateInstalled':
-        return record.dateInstalled || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.dateInstalled || '-'}</Text>;
       case 'barangay':
-        return record.barangay || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.barangay || '-'}</Text>;
       case 'city':
-        return record.city || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.city || '-'}</Text>;
       case 'region':
-        return record.region || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{record.region || '-'}</Text>;
       default:
-        return '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>-</Text>;
     }
   };
 
   return (
-    <div className={`h-full flex overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
+    <View style={{
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden',
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
       {userRole !== 'customer' && (
-        <div className={`border-r flex-shrink-0 flex flex-col relative ${
-          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>SOA</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {dateItems.map((item, index) => (
-            <button
-              key={index}
-              onClick={() => setSelectedDate(item.date)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              } ${
-                selectedDate === item.date
-                  ? ''
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}
-              style={selectedDate === item.date ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c'
-              } : {}}
-            >
-              <span className="text-sm font-medium flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                {item.date}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-          style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
-          }}
-          onMouseEnter={(e) => {
-            if (!isResizingSidebar && colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizingSidebar) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-          onMouseDown={handleMouseDownSidebarResize}
-        />
-        </div>
-      )}
-
-      <div className={`flex-1 overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search SOA records..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border border-gray-700'
-                      : 'bg-white text-gray-900 border border-gray-300'
-                  }`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                  }}
-                />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              {userRole === 'customer' && (
-                <button
-                  onClick={handlePayNow}
-                  disabled={isPaymentProcessing}
-                  className="text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    backgroundColor: isPaymentProcessing ? '#6b7280' : (colorPalette?.primary || '#ea580c')
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isPaymentProcessing && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isPaymentProcessing && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                >
-                  {isPaymentProcessing ? 'Processing...' : 'Pay Now'}
-                </button>
-              )}
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600"
+        <View style={{
+          borderRightWidth: 1,
+          borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+          flexShrink: 0,
+          flexDirection: 'column',
+          position: 'relative',
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          width: sidebarWidth
+        }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>SOA</Text>
+            </View>
+          </View>
+          <ScrollView style={{ flex: 1 }}>
+            {dateItems.map((item, index) => (
+              <Pressable
+                key={index}
+                onPress={() => setSelectedDate(item.date)}
                 style={{
-                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading && colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: selectedDate === item.date 
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent'
                 }}
               >
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
-              {isLoading ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                  </div>
-                  <p className="mt-4">Loading SOA records...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-red-400' : 'text-red-600'
-                }`}>
-                  <p>{error}</p>
-                  <button 
-                    onClick={handleRefresh}
-                    className={`mt-4 px-4 py-2 rounded ${
-                      isDarkMode
-                        ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}>
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${
-                        isDarkMode
-                          ? 'border-gray-700 bg-gray-800'
-                          : 'border-gray-200 bg-gray-100'
-                      }`}>
-                        {displayColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap ${
-                              isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
-                            } ${
-                              index < displayColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''
-                            }`}
-                          >
-                            {column.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredRecords.length > 0 ? (
-                        filteredRecords.map((record) => (
-                          <tr 
-                            key={record.id} 
-                            className={`border-b cursor-pointer transition-colors ${
-                              isDarkMode
-                              ? 'border-gray-800 hover:bg-gray-900'
-                              : 'border-gray-200 hover:bg-gray-50'
-                              } ${
-                              selectedRecord?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''
-                              } ${
-                                userRole === 'customer' ? '' : 'cursor-pointer'
-                            }`}
-                            onClick={() => handleRowClick(record)}
-                          >
-                            {displayColumns.map((column, index) => (
-                              <td
-                                key={column.key}
-                                className={`py-4 px-3 whitespace-nowrap ${
-                                  isDarkMode ? 'text-white' : 'text-gray-900'
-                                } ${
-                                  index < displayColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''
-                                }`}
-                              >
-                                {renderCellValue(record, column.key)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={displayColumns.length} className={`px-4 py-12 text-center ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                            No SOA records found matching your filters
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    color: selectedDate === item.date
+                      ? (colorPalette?.primary || '#fb923c')
+                      : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>
+                    {item.date}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      <View style={{
+        flex: 1,
+        overflow: 'hidden',
+        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
+                  placeholder="Search SOA records..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={{
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                  }}
+                />
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              {userRole === 'customer' && (
+                <Pressable
+                  onPress={handlePayNow}
+                  disabled={isPaymentProcessing}
+                  style={{
+                    backgroundColor: isPaymentProcessing ? '#6b7280' : (colorPalette?.primary || '#ea580c'),
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    opacity: isPaymentProcessing ? 0.5 : 1
+                  }}
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 14 }}>
+                    {isPaymentProcessing ? 'Processing...' : 'Pay Now'}
+                  </Text>
+                </Pressable>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+              <Pressable
+                onPress={handleRefresh}
+                disabled={isLoading}
+                style={{
+                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c'),
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 4
+                }}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 14 }}>
+                  {isLoading ? 'Loading...' : 'Refresh'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+          
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
+              {isLoading ? (
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#9ca3af' : '#4b5563'
+                }}>
+                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+                  <Text style={{
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>Loading SOA records...</Text>
+                </View>
+              ) : error ? (
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#f87171' : '#dc2626'
+                }}>
+                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Pressable 
+                    onPress={handleRefresh}
+                    style={{
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Retry</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <ScrollView horizontal>
+                  <View>
+                    <View style={{
+                      flexDirection: 'row',
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                    }}>
+                      {displayColumns.map((column, index) => (
+                        <View
+                          key={column.key}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            width: column.width,
+                            borderRightWidth: index < displayColumns.length - 1 ? 1 : 0,
+                            borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            fontWeight: '400',
+                            color: isDarkMode ? '#9ca3af' : '#4b5563'
+                          }}>
+                            {column.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                    {filteredRecords.length > 0 ? (
+                      filteredRecords.map((record) => (
+                        <Pressable 
+                          key={record.id} 
+                          onPress={() => handleRowClick(record)}
+                          style={{
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                            backgroundColor: selectedRecord?.id === record.id 
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : 'transparent'
+                          }}
+                        >
+                          {displayColumns.map((column, index) => (
+                            <View
+                              key={column.key}
+                              style={{
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                width: column.width,
+                                borderRightWidth: index < displayColumns.length - 1 ? 1 : 0,
+                                borderRightColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                              }}
+                            >
+                              {renderCellValue(record, column.key)}
+                            </View>
+                          ))}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 48,
+                        alignItems: 'center'
+                      }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                          No SOA records found matching your filters
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
       {selectedRecord && userRole !== 'customer' && (
-        <div className="flex-shrink-0 overflow-hidden">
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           <SOADetails soaRecord={selectedRecord} />
-        </div>
+        </View>
       )}
 
-      {showPaymentVerifyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div 
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${
-              isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
-            }`}
-          >
-            <div className={`p-6 border-b ${
-              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-              <h3 className="text-xl font-bold text-center">Confirm Payment</h3>
-            </div>
+      <Modal
+        visible={showPaymentVerifyModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseVerifyModal}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            borderRadius: 8,
+            maxWidth: 448,
+            width: '90%',
+            marginHorizontal: 16,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{
+              padding: 24,
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Confirm Payment</Text>
+            </View>
 
-            <div className="p-6">
-              <div className={`p-4 rounded mb-4 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-              }`}>
-                <div className="flex justify-between mb-2">
-                  <span>Account:</span>
-                  <span className="font-bold">{fullName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Current Balance:</span>
-                  <span className={`font-bold ${
-                    accountBalance > 0 ? 'text-red-500' : 'text-green-500'
-                  }`}>₱{accountBalance.toFixed(2)}</span>
-                </div>
-              </div>
+            <View style={{ padding: 24 }}>
+              <View style={{
+                padding: 16,
+                borderRadius: 4,
+                marginBottom: 16,
+                backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Account:</Text>
+                  <Text style={{ fontWeight: 'bold', color: isDarkMode ? '#ffffff' : '#111827' }}>{fullName}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Current Balance:</Text>
+                  <Text style={{
+                    fontWeight: 'bold',
+                    color: accountBalance > 0 ? '#ef4444' : '#22c55e'
+                  }}>₱{accountBalance.toFixed(2)}</Text>
+                </View>
+              </View>
 
               {errorMessage && (
-                <div className={`p-3 rounded mb-4 ${
-                  isDarkMode ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'
-                }`}>
-                  <p className="text-red-500 text-sm text-center">{errorMessage}</p>
-                </div>
+                <View style={{
+                  padding: 12,
+                  borderRadius: 4,
+                  marginBottom: 16,
+                  backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
+                  borderWidth: 1,
+                  borderColor: isDarkMode ? '#7f1d1d' : '#fecaca'
+                }}>
+                  <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
+                </View>
               )}
 
-              <div className="mb-4">
-                <label className="block font-bold mb-2">Payment Amount</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={paymentAmount || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow empty, numbers, and decimal point
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      setPaymentAmount(value === '' ? 0 : parseFloat(value) || 0);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    // Format to 2 decimal places on blur if there's a value
-                    const value = parseFloat(e.target.value);
-                    if (!isNaN(value) && value > 0) {
-                      setPaymentAmount(parseFloat(value.toFixed(2)));
-                    } else {
-                      setPaymentAmount(0);
-                    }
-                  }}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{
+                  fontWeight: 'bold',
+                  marginBottom: 8,
+                  color: isDarkMode ? '#ffffff' : '#111827'
+                }}>Payment Amount</Text>
+                <TextInput
+                  value={paymentAmount.toString()}
+                  onChangeText={(text) => setPaymentAmount(parseFloat(text) || 0)}
+                  keyboardType="numeric"
                   placeholder="100"
-                  className={`w-full px-4 py-3 rounded text-lg font-bold ${
-                    isDarkMode 
-                      ? 'bg-gray-800 border-gray-700 text-white' 
-                      : 'bg-white border-gray-300 text-gray-900'
-                  } border focus:outline-none focus:ring-2`}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
+                    width: '100%',
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    color: isDarkMode ? '#ffffff' : '#111827'
+                  }}
                 />
-                <div className={`text-sm text-right mt-1 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
+                <Text style={{
+                  fontSize: 14,
+                  textAlign: 'right',
+                  marginTop: 4,
+                  color: isDarkMode ? '#9ca3af' : '#4b5563'
+                }}>
                   {accountBalance > 0 ? (
-                    <span>Outstanding balance: ₱{accountBalance.toFixed(2)}</span>
+                    `Outstanding balance: ₱${accountBalance.toFixed(2)}`
                   ) : (
-                    <span>Minimum: ₱1.00</span>
+                    'Minimum: ₱1.00'
                   )}
-                </div>
-              </div>
+                </Text>
+              </View>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCloseVerifyModal}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Pressable
+                  onPress={handleCloseVerifyModal}
                   disabled={isPaymentProcessing}
-                  className={`flex-1 px-4 py-3 rounded font-bold transition-colors ${
-                    isDarkMode
-                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleProceedToCheckout}
-                  disabled={isPaymentProcessing || paymentAmount < 1}
-                  className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
+                    flex: 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
+                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                    opacity: isPaymentProcessing ? 0.5 : 1
+                  }}
+                >
+                  <Text style={{
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: isDarkMode ? '#ffffff' : '#111827'
+                  }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleProceedToCheckout}
+                  disabled={isPaymentProcessing || paymentAmount < 1}
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
                     backgroundColor: (isPaymentProcessing || paymentAmount < 1) 
                       ? '#6b7280' 
-                      : (colorPalette?.primary || '#ea580c')
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isPaymentProcessing && paymentAmount >= 1 && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isPaymentProcessing && paymentAmount >= 1 && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
+                      : (colorPalette?.primary || '#ea580c'),
+                    opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1
                   }}
                 >
-                  {isPaymentProcessing ? (
-                    <span className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </span>
-                  ) : (
-                    'PROCEED TO CHECKOUT →'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                  <Text style={{
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: '#ffffff'
+                  }}>
+                    {isPaymentProcessing ? 'Processing...' : 'PROCEED TO CHECKOUT →'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showPendingPaymentModal && pendingPayment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div 
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
-          >
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className="text-xl font-bold text-center">Transaction In Progress</h3>
-            </div>
+      <Modal
+        visible={showPendingPaymentModal && pendingPayment !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelPendingPayment}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            borderRadius: 8,
+            maxWidth: 448,
+            width: '90%',
+            marginHorizontal: 16,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{
+              padding: 24,
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Transaction In Progress</Text>
+            </View>
 
-            <div className="p-6">
-              <div className={`p-4 rounded mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <p className="text-center mb-4">
-                  You have a pending payment (<b>{pendingPayment.reference_no}</b>).
-                  <br />The link is still active.
-                </p>
-                <div className="flex justify-between mt-4">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#ea580c' }}>
-                    ₱{pendingPayment.amount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
+            <View style={{ padding: 24 }}>
+              <View style={{
+                padding: 16,
+                borderRadius: 4,
+                marginBottom: 24,
+                backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+              }}>
+                <Text style={{
+                  textAlign: 'center',
+                  marginBottom: 16,
+                  color: isDarkMode ? '#ffffff' : '#111827'
+                }}>
+                  You have a pending payment (<Text style={{ fontWeight: 'bold' }}>{pendingPayment?.reference_no}</Text>).
+                  {'\n'}The link is still active.
+                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+                  <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Amount:</Text>
+                  <Text style={{
+                    fontWeight: 'bold',
+                    fontSize: 18,
+                    color: colorPalette?.primary || '#ea580c'
+                  }}>₱{pendingPayment?.amount.toFixed(2)}</Text>
+                </View>
+              </View>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCancelPendingPayment}
-                  className={`flex-1 px-4 py-3 rounded font-bold transition-colors ${
-                    isDarkMode
-                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleResumePendingPayment}
-                  className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors"
-                  style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  onMouseEnter={(e) => {
-                    if (colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Pressable
+                  onPress={handleCancelPendingPayment}
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
+                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
                   }}
-                  onMouseLeave={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
+                >
+                  <Text style={{
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: isDarkMode ? '#ffffff' : '#111827'
+                  }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleResumePendingPayment}
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
+                    backgroundColor: colorPalette?.primary || '#ea580c'
                   }}
                 >
-                  Pay Now →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                  <Text style={{
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    color: '#ffffff'
+                  }}>Pay Now →</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showPaymentLinkModal && paymentLinkData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div 
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
-          >
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className="text-xl font-bold text-center">Proceed to Payment Portal</h3>
-            </div>
+      <Modal
+        visible={showPaymentLinkModal && paymentLinkData !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelPaymentLink}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            borderRadius: 8,
+            maxWidth: 448,
+            width: '90%',
+            marginHorizontal: 16,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{
+              padding: 24,
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Proceed to Payment Portal</Text>
+            </View>
 
-            <div className="p-6">
-              <div className={`p-4 rounded mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <div className="flex justify-between mb-3">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Reference:</span>
-                  <span className="font-mono font-bold">{paymentLinkData.referenceNo}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#ea580c' }}>
-                    ₱{paymentLinkData.amount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
+            <View style={{ padding: 24 }}>
+              <View style={{
+                padding: 16,
+                borderRadius: 4,
+                marginBottom: 24,
+                backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Reference:</Text>
+                  <Text style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 'bold',
+                    color: isDarkMode ? '#ffffff' : '#111827'
+                  }}>{paymentLinkData?.referenceNo}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Amount:</Text>
+                  <Text style={{
+                    fontWeight: 'bold',
+                    fontSize: 18,
+                    color: colorPalette?.primary || '#ea580c'
+                  }}>₱{paymentLinkData?.amount.toFixed(2)}</Text>
+                </View>
+              </View>
 
-              <button
-                onClick={handleOpenPaymentLink}
-                className="w-full px-4 py-3 rounded font-bold text-white transition-colors"
-                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
+              <Pressable
+                onPress={handleOpenPaymentLink}
+                style={{
+                  width: '100%',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  borderRadius: 4,
+                  backgroundColor: colorPalette?.primary || '#ea580c'
                 }}
               >
-                PROCEED
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                <Text style={{
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  color: '#ffffff'
+                }}>PROCEED</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 

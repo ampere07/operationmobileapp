@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Update this to your API URL
-const API_BASE_URL = 'https://sync.atssfiber.ph/api';
+const API_BASE_URL = 'https://backend.atssfiber.ph/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

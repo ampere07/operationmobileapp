@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, Filter, RefreshCw } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, Filter, RefreshCw } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
 import ServiceOrderFunnelFilter from '../components/filters/ServiceOrderFunnelFilter';
 import { getServiceOrders, ServiceOrderData } from '../services/serviceOrderService';
@@ -64,19 +66,19 @@ type DisplayMode = 'card' | 'table';
 type MobileView = 'locations' | 'orders' | 'details';
 
 const allColumns = [
-  { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
-  { key: 'fullName', label: 'Full Name', width: 'min-w-40' },
-  { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-  { key: 'fullAddress', label: 'Full Address', width: 'min-w-56' },
-  { key: 'concern', label: 'Concern', width: 'min-w-36' },
-  { key: 'concernRemarks', label: 'Concern Remarks', width: 'min-w-48' },
-  { key: 'requestedBy', label: 'Requested By', width: 'min-w-36' },
-  { key: 'supportStatus', label: 'Support Status', width: 'min-w-32' },
-  { key: 'assignedEmail', label: 'Assigned Email', width: 'min-w-48' },
-  { key: 'repairCategory', label: 'Repair Category', width: 'min-w-36' },
-  { key: 'visitStatus', label: 'Visit Status', width: 'min-w-32' },
-  { key: 'modifiedBy', label: 'Modified By', width: 'min-w-32' },
-  { key: 'modifiedDate', label: 'Modified Date', width: 'min-w-40' }
+  { key: 'timestamp', label: 'Timestamp', width: 160 },
+  { key: 'fullName', label: 'Full Name', width: 160 },
+  { key: 'contactNumber', label: 'Contact Number', width: 144 },
+  { key: 'fullAddress', label: 'Full Address', width: 224 },
+  { key: 'concern', label: 'Concern', width: 144 },
+  { key: 'concernRemarks', label: 'Concern Remarks', width: 192 },
+  { key: 'requestedBy', label: 'Requested By', width: 144 },
+  { key: 'supportStatus', label: 'Support Status', width: 128 },
+  { key: 'assignedEmail', label: 'Assigned Email', width: 192 },
+  { key: 'repairCategory', label: 'Repair Category', width: 144 },
+  { key: 'visitStatus', label: 'Visit Status', width: 128 },
+  { key: 'modifiedBy', label: 'Modified By', width: 128 },
+  { key: 'modifiedDate', label: 'Modified Date', width: 160 }
 ];
 
 const ServiceOrder: React.FC = () => {
@@ -107,25 +109,12 @@ const ServiceOrder: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [mobileView, setMobileView] = useState<MobileView>('locations');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLTableElement>(null);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
   const sidebarStartXRef = useRef<number>(0);
   const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const [activeFilters, setActiveFilters] = useState<any>(() => {
-    const saved = localStorage.getItem('serviceOrderFilters');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.error('Failed to load filters:', err);
-      }
-    }
-    return {};
-  });
+  const [activeFilters, setActiveFilters] = useState<any>({});
 
   const formatDate = (dateStr?: string): string => {
     if (!dateStr) return 'Not scheduled';
@@ -150,50 +139,44 @@ const ServiceOrder: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme !== 'light');
-    });
+    };
 
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
+    checkDarkMode();
+  }, []);
+  
+  useEffect(() => {
+    const loadAuthData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const userData = JSON.parse(authData);
+          setUserRole(userData.role || '');
+          setUserEmail(userData.email || '');
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
+      }
+    };
 
-    const theme = localStorage.getItem('theme');
-    setIsDarkMode(theme !== 'light');
-
-    return () => observer.disconnect();
+    loadAuthData();
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setFilterDropdownOpen(false);
+    const loadFilters = async () => {
+      const saved = await AsyncStorage.getItem('serviceOrderFilters');
+      if (saved) {
+        try {
+          setActiveFilters(JSON.parse(saved));
+        } catch (err) {
+          console.error('Failed to load filters:', err);
+        }
       }
     };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownRef, filterDropdownRef]);
-  
-  useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const userData = JSON.parse(authData);
-        setUserRole(userData.role || '');
-        setUserEmail(userData.email || '');
-      } catch (error) {
-        console.error('Error parsing auth data:', error);
-      }
-    }
+
+    loadFilters();
   }, []);
 
   useEffect(() => {
@@ -206,7 +189,7 @@ const ServiceOrder: React.FC = () => {
         setCities(citiesData || []);
         
         console.log('Fetching service orders from service_orders table...');
-        const authData = localStorage.getItem('authData');
+        const authData = await AsyncStorage.getItem('authData');
         let assignedEmail: string | undefined;
         
         if (authData) {
@@ -357,7 +340,6 @@ const ServiceOrder: React.FC = () => {
     return items;
   }, [cities, serviceOrders]);
   
-  // Helper function to apply funnel filters
   const applyFunnelFilters = (orders: ServiceOrder[], filters: any): ServiceOrder[] => {
     if (!filters || Object.keys(filters).length === 0) return orders;
 
@@ -405,7 +387,6 @@ const ServiceOrder: React.FC = () => {
       return matchesLocation && matchesSearch;
     });
 
-    // Apply funnel filters
     filtered = applyFunnelFilters(filtered, activeFilters);
 
     filtered.sort((a, b) => {
@@ -491,7 +472,7 @@ const ServiceOrder: React.FC = () => {
   }, [serviceOrders, selectedLocation, searchQuery, sortColumn, sortDirection, activeFilters]);
   
   const StatusText = ({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
-    if (!status) return <span className="text-gray-400">Unknown</span>;
+    if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
     
     let textColor = '';
     
@@ -499,56 +480,54 @@ const ServiceOrder: React.FC = () => {
       switch (status.toLowerCase()) {
         case 'resolved':
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'in-progress':
         case 'in progress':
-          textColor = 'text-blue-400';
+          textColor = '#60a5fa';
           break;
         case 'pending':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'closed':
         case 'cancelled':
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     } else {
       switch (status.toLowerCase()) {
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'scheduled':
         case 'reschedule':
         case 'in progress':
-          textColor = 'text-blue-400';
+          textColor = '#60a5fa';
           break;
         case 'pending':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'cancelled':
         case 'failed':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     }
     
     return (
-      <span className={`${textColor} font-bold uppercase`}>
+      <Text style={{ color: textColor, fontWeight: 'bold', textTransform: 'uppercase' }}>
         {status === 'in-progress' ? 'In Progress' : status}
-      </span>
+      </Text>
     );
   };
 
   const handleRowClick = (serviceOrder: ServiceOrder) => {
     setSelectedServiceOrder(serviceOrder);
-    if (window.innerWidth < 768) {
-      setMobileView('details');
-    }
+    setMobileView('details');
   };
 
   const handleLocationSelect = (locationId: string) => {
@@ -574,7 +553,7 @@ const ServiceOrder: React.FC = () => {
   const handleRefresh = async () => {
     try {
       setLoading(true);
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let assignedEmail: string | undefined;
       
       if (authData) {
@@ -674,121 +653,6 @@ const ServiceOrder: React.FC = () => {
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
-    setDraggedColumn(columnKey);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedColumn && draggedColumn !== columnKey) {
-      setDragOverColumn(columnKey);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
-    e.preventDefault();
-    
-    if (!draggedColumn || draggedColumn === targetColumnKey) {
-      setDraggedColumn(null);
-      setDragOverColumn(null);
-      return;
-    }
-
-    const newOrder = [...columnOrder];
-    const draggedIndex = newOrder.indexOf(draggedColumn);
-    const targetIndex = newOrder.indexOf(targetColumnKey);
-
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedColumn);
-
-    setColumnOrder(newOrder);
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleMouseDownResize = (e: React.MouseEvent, columnKey: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizingColumn(columnKey);
-    startXRef.current = e.clientX;
-    
-    const th = (e.target as HTMLElement).closest('th');
-    if (th) {
-      startWidthRef.current = th.offsetWidth;
-    }
-  };
-
-  useEffect(() => {
-    if (!resizingColumn) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingColumn) return;
-      
-      const diff = e.clientX - startXRef.current;
-      const newWidth = Math.max(100, startWidthRef.current + diff);
-      
-      setColumnWidths(prev => ({
-        ...prev,
-        [resizingColumn]: newWidth
-      }));
-    };
-
-    const handleMouseUp = () => {
-      setResizingColumn(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingColumn]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
   const filteredColumns = allColumns
     .filter(col => visibleColumns.includes(col.key))
     .sort((a, b) => {
@@ -800,662 +664,434 @@ const ServiceOrder: React.FC = () => {
   const renderCellValue = (serviceOrder: ServiceOrder, columnKey: string) => {
     switch (columnKey) {
       case 'timestamp':
-        return serviceOrder.timestamp;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.timestamp}</Text>;
       case 'fullName':
-        return serviceOrder.fullName;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.fullName}</Text>;
       case 'contactNumber':
-        return serviceOrder.contactNumber;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.contactNumber}</Text>;
       case 'fullAddress':
-        return <span title={serviceOrder.fullAddress}>{serviceOrder.fullAddress}</span>;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>{serviceOrder.fullAddress}</Text>;
       case 'concern':
-        return serviceOrder.concern;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.concern}</Text>;
       case 'concernRemarks':
-        return serviceOrder.concernRemarks || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.concernRemarks || '-'}</Text>;
       case 'requestedBy':
-        return serviceOrder.requestedBy || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.requestedBy || '-'}</Text>;
       case 'supportStatus':
         return <StatusText status={serviceOrder.supportStatus} type="support" />;
       case 'assignedEmail':
-        return serviceOrder.assignedEmail || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.assignedEmail || '-'}</Text>;
       case 'repairCategory':
-        return serviceOrder.repairCategory || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.repairCategory || '-'}</Text>;
       case 'visitStatus':
         return <StatusText status={serviceOrder.visitStatus} type="visit" />;
       case 'modifiedBy':
-        return serviceOrder.modifiedBy || '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.modifiedBy || '-'}</Text>;
       case 'modifiedDate':
-        return serviceOrder.modifiedDate;
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.modifiedDate}</Text>;
       default:
-        return '-';
+        return <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>-</Text>;
     }
   };
   
   if (loading) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-orange-500 mb-3"></div>
-          <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      }}>
+        <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+          <Text style={{
+            marginTop: 12,
+            color: isDarkMode ? '#d1d5db' : '#374151'
+          }}>
             Loading service orders...
-          </p>
-        </div>
-      </div>
+          </Text>
+        </View>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className={`border rounded-md p-6 max-w-lg ${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-        }`}>
-          <h3 className="text-red-500 text-lg font-medium mb-2">Error</h3>
-          <p className={`mb-4 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-white py-2 px-4 rounded transition-colors"
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      }}>
+        <View style={{
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          borderWidth: 1,
+          borderColor: isDarkMode ? '#374151' : '#d1d5db',
+          borderRadius: 6,
+          padding: 24,
+          maxWidth: 512
+        }}>
+          <Text style={{ color: '#ef4444', fontSize: 18, fontWeight: '500', marginBottom: 8 }}>Error</Text>
+          <Text style={{
+            color: isDarkMode ? '#d1d5db' : '#374151',
+            marginBottom: 16
+          }}>{error}</Text>
+          <Pressable
+            onPress={handleRefresh}
             style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
+              backgroundColor: colorPalette?.primary || '#ea580c',
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 4
             }}
           >
-            Retry
-          </button>
-        </div>
-      </div>
+            <Text style={{ color: '#ffffff' }}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
   return (
-    <div className={`${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    } h-full flex flex-col md:flex-row overflow-hidden`}>
-      {/* Desktop Sidebar - Hidden on mobile */}
+    <View style={{
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden',
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
       {userRole.toLowerCase() !== 'technician' && (
-        <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative ${
-          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`} style={{ width: `${sidebarWidth}px` }}>
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-            <div className="flex items-center mb-1">
-              <h2 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Service Orders</h2>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
+        <View style={{
+          borderRightWidth: 1,
+          borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+          flexShrink: 0,
+          flexDirection: 'column',
+          position: 'relative',
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          width: sidebarWidth
+        }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Service Orders</Text>
+            </View>
+          </View>
+          <ScrollView style={{ flex: 1 }}>
             {locationItems.map((location) => (
-              <button
+              <Pressable
                 key={location.id}
-                onClick={() => setSelectedLocation(location.id)}
-                className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                  isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                }`}
-                style={selectedLocation === location.id ? {
-                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                  color: colorPalette?.primary || '#fb923c',
-                  fontWeight: 500
-                } : {
-                  color: isDarkMode ? '#d1d5db' : '#374151'
+                onPress={() => setSelectedLocation(location.id)}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: selectedLocation === location.id 
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent'
                 }}
               >
-                <div className="flex items-center">
-                  <FileText className="h-4 w-4 mr-2" />
-                  <span className="capitalize">{location.name}</span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    textTransform: 'capitalize',
+                    color: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#fb923c')
+                      : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>
+                    {location.name}
+                  </Text>
+                </View>
                 {location.count > 0 && (
-                  <span
-                    className="px-2 py-1 rounded-full text-xs"
-                    style={selectedLocation === location.id ? {
-                      backgroundColor: colorPalette?.primary || '#ea580c',
-                      color: 'white'
-                    } : {
-                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
-                      color: isDarkMode ? '#d1d5db' : '#374151'
-                    }}
-                  >
-                    {location.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-          
-          <div
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-orange-500 transition-colors z-10"
-            onMouseDown={handleMouseDownSidebarResize}
-          />
-        </div>
-      )}
-
-      {/* Mobile Location View */}
-      {mobileView === 'locations' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <div className={`p-4 border-b ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Service Orders</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {locationItems.map((location) => (
-              <button
-                key={location.id}
-                onClick={() => handleLocationSelect(location.id)}
-                className={`w-full flex items-center justify-between px-4 py-4 text-sm transition-colors border-b ${
-                  isDarkMode 
-                    ? 'hover:bg-gray-800 border-gray-800 text-gray-300' 
-                    : 'hover:bg-gray-100 border-gray-200 text-gray-700'
-                }`}
-              >
-                <div className="flex items-center">
-                  <FileText className="h-5 w-5 mr-3" />
-                  <span className="capitalize text-base">{location.name}</span>
-                </div>
-                {location.count > 0 && (
-                  <span className={`px-3 py-1 rounded-full text-sm ${
-                    isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                  }`}>
-                    {location.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Overlay Menu */}
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
-          <div className={`absolute inset-y-0 left-0 w-64 shadow-xl flex flex-col ${
-            isDarkMode ? 'bg-gray-900' : 'bg-white'
-          }`}>
-            <div className={`p-4 border-b flex items-center justify-between ${
-              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-              <h2 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Filters</h2>
-              <button 
-                onClick={() => setMobileMenuOpen(false)} 
-                className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {locationItems.map((location) => (
-                <button
-                  key={location.id}
-                  onClick={() => handleLocationSelect(location.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-gray-800 ${
-                    selectedLocation === location.id
-                      ? 'bg-orange-500 bg-opacity-20 text-orange-400'
-                      : 'text-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    <span className="capitalize">{location.name}</span>
-                  </div>
-                  {location.count > 0 && (
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      selectedLocation === location.id
-                        ? 'bg-orange-600 text-white'
-                        : 'bg-gray-700 text-gray-300'
-                    }`}>
+                  <View style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}>
                       {location.count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
-      {/* Main Content */}
-      <div className={`overflow-hidden flex-1 flex flex-col ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      } ${mobileView === 'locations' || mobileView === 'details' ? 'hidden md:flex' : ''}`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
-                <button
-                  onClick={() => setMobileMenuOpen(true)}
-                  className="md:hidden bg-gray-700 hover:bg-gray-600 text-white p-2 rounded text-sm transition-colors flex items-center justify-center"
-                  aria-label="Open filter menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              )}
-              <div className="relative flex-1">
-                <input
-                  type="text"
+      <View style={{
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        overflow: 'hidden',
+        flex: 1,
+        flexDirection: 'column'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
                   placeholder="Search service orders..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 border focus:outline-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-gray-100 text-gray-900 border-gray-300'
-                  }`}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                      e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                    e.currentTarget.style.boxShadow = 'none';
+                  onChangeText={setSearchQuery}
+                  style={{
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              <div className="hidden md:flex space-x-2">
-                <button
-                  onClick={() => setIsFunnelFilterOpen(true)}
-                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                    isDarkMode
-                      ? 'hover:bg-gray-700 text-white'
-                      : 'hover:bg-gray-200 text-gray-900'
-                  }`}
-                >
-                  <Filter className="h-5 w-5" />
-                </button>
-                {displayMode === 'table' && (
-                  <div className="relative" ref={filterDropdownRef}>
-                    <button
-                      className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                        isDarkMode
-                          ? 'hover:bg-gray-800 text-white'
-                          : 'hover:bg-gray-100 text-gray-900'
-                      }`}
-                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
-                    >
-                      <ListFilter className="h-5 w-5" />
-                    </button>
-                    {filterDropdownOpen && (
-                      <div className={`absolute top-full right-0 mt-2 w-80 border rounded shadow-lg z-50 max-h-96 flex flex-col ${
-                        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                      }`}>
-                        <div className={`p-3 border-b flex items-center justify-between ${
-                          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                        }`}>
-                          <span className={`text-sm font-medium ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>Column Visibility</span>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={handleSelectAllColumns}
-                              className="text-xs transition-colors"
-                              style={{
-                                color: colorPalette?.primary || '#f97316'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.accent) {
-                                  e.currentTarget.style.color = colorPalette.accent;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.color = colorPalette.primary;
-                                }
-                              }}
-                            >
-                              Select All
-                            </button>
-                            <span className="text-gray-600">|</span>
-                            <button
-                              onClick={handleDeselectAllColumns}
-                              className="text-xs transition-colors"
-                              style={{
-                                color: colorPalette?.primary || '#f97316'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.accent) {
-                                  e.currentTarget.style.color = colorPalette.accent;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.color = colorPalette.primary;
-                                }
-                              }}
-                            >
-                              Deselect All
-                            </button>
-                          </div>
-                        </div>
-                        <div className="overflow-y-auto flex-1">
-                          {allColumns.map((column) => (
-                            <label
-                              key={column.key}
-                              className={`flex items-center px-4 py-2 cursor-pointer text-sm ${
-                                isDarkMode 
-                                  ? 'hover:bg-gray-700 text-white' 
-                                  : 'hover:bg-gray-100 text-gray-900'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns.includes(column.key)}
-                                onChange={() => handleToggleColumn(column.key)}
-                                className={`mr-3 h-4 w-4 rounded text-orange-600 focus:ring-orange-500 ${
-                                  isDarkMode 
-                                    ? 'border-gray-600 bg-gray-700 focus:ring-offset-gray-800' 
-                                    : 'border-gray-300 bg-white focus:ring-offset-white'
-                                }`}
-                              />
-                              <span>{column.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="relative z-50" ref={dropdownRef}>
-                <button
-                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                    isDarkMode
-                      ? 'hover:bg-gray-800 text-white'
-                      : 'hover:bg-gray-100 text-gray-900'
-                  }`}
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                >
-                    <span>{displayMode === 'card' ? 'Card View' : 'Table View'}</span>
-                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {dropdownOpen && (
-                  <div className={`fixed right-auto mt-1 w-36 border rounded shadow-lg ${
-                        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                      }`}>
-                      <button
-                        onClick={() => {
-                          setDisplayMode('card');
-                          setDropdownOpen(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        }`}
-                        style={displayMode === 'card' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
-                        }}
-                      >
-                        Card View
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDisplayMode('table');
-                          setDropdownOpen(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        }`}
-                        style={displayMode === 'table' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
-                        }}
-                      >
-                        Table View
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="text-white px-3 py-2 rounded text-sm flex items-center transition-colors disabled:bg-gray-600"
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => setIsFunnelFilterOpen(true)}
                   style={{
-                    backgroundColor: loading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!loading && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    backgroundColor: 'transparent'
                   }}
                 >
-                  <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
-          </div>
+                  <Filter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
+                <Pressable
+                  onPress={handleRefresh}
+                  disabled={loading}
+                  style={{
+                    backgroundColor: loading ? '#4b5563' : (colorPalette?.primary || '#ea580c'),
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <RefreshCw size={20} color="#ffffff" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
           
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
               {loading ? (
-                <div className="px-4 py-12 text-center text-gray-400">
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className="h-4 w-1/3 bg-gray-700 rounded mb-4"></div>
-                    <div className="h-4 w-1/2 bg-gray-700 rounded"></div>
-                  </div>
-                  <p className="mt-4">Loading service orders...</p>
-                </div>
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#9ca3af' : '#4b5563'
+                }}>
+                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+                  <Text style={{
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>Loading service orders...</Text>
+                </View>
               ) : error ? (
-                <div className="px-4 py-12 text-center text-red-400">
-                  <p>{error}</p>
-                  <button 
-                    onClick={handleRefresh}
-                    className="mt-4 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded">
-                    Retry
-                  </button>
-                </div>
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#f87171' : '#dc2626'
+                }}>
+                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Pressable 
+                    onPress={handleRefresh}
+                    style={{
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Retry</Text>
+                  </Pressable>
+                </View>
               ) : displayMode === 'card' ? (
                 filteredServiceOrders.length > 0 ? (
-                  <div className="space-y-0">
+                  <View>
                     {filteredServiceOrders.map((serviceOrder) => (
-                      <div
+                      <Pressable
                         key={serviceOrder.id}
-                        onClick={() => window.innerWidth < 768 ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
-                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${
-                          isDarkMode 
-                            ? `hover:bg-gray-800 border-gray-800 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-800' : ''}` 
-                            : `hover:bg-gray-100 border-gray-200 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-100' : ''}`
-                        }`}
+                        onPress={() => handleRowClick(serviceOrder)}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                          backgroundColor: selectedServiceOrder?.id === serviceOrder.id 
+                            ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                            : 'transparent'
+                        }}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-sm mb-1 ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{
+                              fontWeight: '500',
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: isDarkMode ? '#ffffff' : '#111827'
+                            }}>
                               {serviceOrder.fullName}
-                            </div>
-                            <div className={`text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
+                            </Text>
+                            <Text style={{
+                              fontSize: 12,
+                              color: isDarkMode ? '#9ca3af' : '#4b5563'
+                            }}>
                               {serviceOrder.timestamp} | {serviceOrder.fullAddress}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end space-y-1 ml-4 flex-shrink-0">
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 }}>
                             <StatusText status={serviceOrder.supportStatus} type="support" />
-                          </div>
-                        </div>
-                      </div>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))}
-                  </div>
+                  </View>
                 ) : (
-                  <div className={`text-center py-12 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                    No service orders found matching your filters
-                  </div>
+                  <View style={{
+                    alignItems: 'center',
+                    paddingVertical: 48,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>
+                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                      No service orders found matching your filters
+                    </Text>
+                  </View>
                 )
               ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${
-                        isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'
-                      }`}>
-                        {filteredColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, column.key)}
-                            onDragOver={(e) => handleDragOver(e, column.key)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, column.key)}
-                            onDragEnd={handleDragEnd}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${
-                              isDarkMode 
-                                ? `text-gray-400 bg-gray-800 ${index < filteredColumns.length - 1 ? 'border-r border-gray-700' : ''}` 
-                                : `text-gray-600 bg-gray-100 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
-                            } ${
-                              draggedColumn === column.key ? 'opacity-50' : ''
-                            } ${
-                              dragOverColumn === column.key ? 'bg-orange-500 bg-opacity-20' : ''
-                            }`}
-                            style={{ width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined }}
-                            onMouseEnter={() => setHoveredColumn(column.key)}
-                            onMouseLeave={() => setHoveredColumn(null)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{column.label}</span>
-                              {(hoveredColumn === column.key || sortColumn === column.key) && (
-                                <button
-                                  onClick={() => handleSort(column.key)}
-                                  className="ml-2 transition-colors"
-                                >
-                                  {sortColumn === column.key && sortDirection === 'desc' ? (
-                                    <ArrowDown className="h-4 w-4 text-orange-400" />
-                                  ) : (
-                                    <ArrowUp className="h-4 w-4 text-gray-400 hover:text-orange-400" />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                            {index < filteredColumns.length - 1 && (
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-orange-500 group-hover:bg-gray-600"
-                                onMouseDown={(e) => handleMouseDownResize(e, column.key)}
-                              />
-                            )}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredServiceOrders.length > 0 ? (
-                        filteredServiceOrders.map((serviceOrder) => (
-                          <tr 
-                            key={serviceOrder.id} 
-                            className={`border-b cursor-pointer transition-colors ${
-                              isDarkMode 
-                                ? `border-gray-800 hover:bg-gray-900 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-800' : ''}` 
-                                : `border-gray-200 hover:bg-gray-100 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-100' : ''}`
-                            }`}
-                            onClick={() => window.innerWidth < 768 ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
-                          >
-                            {filteredColumns.map((column, index) => (
-                              <td 
-                                key={column.key}
-                                className={`py-4 px-3 ${
-                                  isDarkMode 
-                                    ? `text-white ${index < filteredColumns.length - 1 ? 'border-r border-gray-800' : ''}` 
-                                    : `text-gray-900 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
-                                }`}
-                                style={{ 
-                                  width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                                  maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                                }}
-                              >
-                                <div className="truncate">
-                                  {renderCellValue(serviceOrder, column.key)}
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${
-                            isDarkMode ? 'text-gray-400 border-gray-800' : 'text-gray-600 border-gray-200'
-                          }`}>
-                            No service orders found matching your filters
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <ScrollView horizontal>
+                  <View>
+                    <View style={{
+                      flexDirection: 'row',
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                    }}>
+                      {filteredColumns.map((column, index) => (
+                        <View
+                          key={column.key}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            width: column.width,
+                            borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                            borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            fontWeight: '400',
+                            color: isDarkMode ? '#9ca3af' : '#4b5563'
+                          }}>
+                            {column.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                    {filteredServiceOrders.length > 0 ? (
+                      filteredServiceOrders.map((serviceOrder) => (
+                        <Pressable 
+                          key={serviceOrder.id} 
+                          onPress={() => handleRowClick(serviceOrder)}
+                          style={{
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                            backgroundColor: selectedServiceOrder?.id === serviceOrder.id 
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : 'transparent'
+                          }}
+                        >
+                          {filteredColumns.map((column, index) => (
+                            <View
+                              key={column.key}
+                              style={{
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                width: column.width,
+                                borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                                borderRightColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                              }}
+                            >
+                              {renderCellValue(serviceOrder, column.key)}
+                            </View>
+                          ))}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 48,
+                        alignItems: 'center'
+                      }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                          No service orders found matching your filters
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
-      {selectedServiceOrder && mobileView === 'details' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <ServiceOrderDetails 
-            serviceOrder={selectedServiceOrder} 
-            onClose={handleMobileBack}
-            isMobile={true}
-          />
-        </div>
-      )}
-
-      {selectedServiceOrder && mobileView !== 'details' && (
-        <div className="hidden md:block flex-shrink-0 overflow-hidden">
+      {selectedServiceOrder && (
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           <ServiceOrderDetails 
             serviceOrder={selectedServiceOrder} 
             onClose={() => setSelectedServiceOrder(null)}
             isMobile={false}
           />
-        </div>
+        </View>
       )}
 
       <ServiceOrderFunnelFilter
         isOpen={isFunnelFilterOpen}
         onClose={() => setIsFunnelFilterOpen(false)}
-        onApplyFilters={(filters) => {
+        onApplyFilters={async (filters) => {
           console.log('Applied filters:', filters);
           setActiveFilters(filters);
-          localStorage.setItem('serviceOrderFilters', JSON.stringify(filters));
+          await AsyncStorage.setItem('serviceOrderFilters', JSON.stringify(filters));
           setIsFunnelFilterOpen(false);
         }}
         currentFilters={activeFilters}
       />
-    </div>
+    </View>
   );
 };
 

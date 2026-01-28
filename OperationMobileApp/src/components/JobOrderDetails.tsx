@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, Pressable, Linking } from 'react-native';
 import { 
   X, ExternalLink, Edit, Settings
-} from 'lucide-react';
+} from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrderDetailsProps } from '../types/jobOrder';
@@ -26,9 +28,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
@@ -79,42 +78,47 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'houseFrontPicture'
   ];
 
-  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem(FIELD_VISIBILITY_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-  });
-
-  const [fieldOrder, setFieldOrder] = useState<string[]>(() => {
-    const saved = localStorage.getItem(FIELD_ORDER_KEY);
-    return saved ? JSON.parse(saved) : defaultFields;
-  });
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>({});
+  const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
 
   useEffect(() => {
-    localStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
+    const loadFieldSettings = async () => {
+      try {
+        const savedVisibility = await AsyncStorage.getItem(FIELD_VISIBILITY_KEY);
+        const savedOrder = await AsyncStorage.getItem(FIELD_ORDER_KEY);
+        
+        if (savedVisibility) {
+          setFieldVisibility(JSON.parse(savedVisibility));
+        } else {
+          const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
+          setFieldVisibility(allVisible);
+        }
+        
+        if (savedOrder) {
+          setFieldOrder(JSON.parse(savedOrder));
+        }
+      } catch (error) {
+        const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
+        setFieldVisibility(allVisible);
+      }
+    };
+    loadFieldSettings();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
   }, [fieldVisibility]);
 
   useEffect(() => {
-    localStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
+    AsyncStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
   }, [fieldOrder]);
   
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -130,15 +134,18 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   }, []);
   
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const userData = JSON.parse(authData);
-        setUserRole(userData.role?.toLowerCase() || '');
-      } catch (error) {
-        console.error('Error parsing auth data:', error);
+    const loadUserRole = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const userData = JSON.parse(authData);
+          setUserRole(userData.role?.toLowerCase() || '');
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
       }
-    }
+    };
+    loadUserRole();
   }, []);
   
   useEffect(() => {
@@ -152,38 +159,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     };
     fetchBillingStatuses();
   }, []);
-  
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
   
   const getBillingStatusName = (statusId?: number | null): string => {
     if (!statusId) return 'Not Set';
@@ -253,42 +228,42 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   };
 
   const getStatusColor = (status: string | undefined | null, type: 'onsite' | 'billing') => {
-    if (!status) return 'text-gray-400';
+    if (!status) return '#9ca3af';
     
     if (type === 'onsite') {
       switch (status.toLowerCase()) {
         case 'done':
         case 'completed':
-          return 'text-green-400';
+          return '#4ade80';
         case 'reschedule':
-          return 'text-blue-400';
+          return '#60a5fa';
         case 'inprogress':
         case 'in progress':
-          return 'text-blue-400';
+          return '#60a5fa';
         case 'pending':
-          return 'text-orange-400';
+          return '#fb923c';
         case 'failed':
         case 'cancelled':
-          return 'text-red-500';
+          return '#ef4444';
         default:
-          return 'text-gray-400';
+          return '#9ca3af';
       }
     } else {
       switch (status.toLowerCase()) {
         case 'done':
         case 'active':
         case 'completed':
-          return 'text-green-400';
+          return '#4ade80';
         case 'pending':
         case 'in progress':
-          return 'text-orange-400';
+          return '#fb923c';
         case 'suspended':
         case 'overdue':
-          return 'text-red-500';
+          return '#ef4444';
         case 'cancelled':
-          return 'text-red-500';
+          return '#ef4444';
         default:
-          return 'text-gray-400';
+          return '#9ca3af';
       }
     }
   };
@@ -529,27 +504,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     setFieldVisibility(allHidden);
   };
 
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (dropIndex: number) => {
-    if (draggedIndex === null) return;
-    const newOrder = [...fieldOrder];
-    const [removed] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, removed);
-    setFieldOrder(newOrder);
-    setDraggedIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
   const resetFieldSettings = () => {
     const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
     setFieldVisibility(allVisible);
@@ -559,442 +513,337 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const renderFieldContent = (fieldKey: string) => {
     if (!fieldVisibility[fieldKey]) return null;
 
-    const baseFieldClass = `flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`;
-    const labelClass = `w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`;
-    const valueClass = `flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`;
+    const baseFieldStyle = { flexDirection: 'row' as const, borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' };
+    const labelStyle = { width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' };
+    const valueStyle = { flex: 1, color: isDarkMode ? '#ffffff' : '#111827' };
 
     switch (fieldKey) {
       case 'timestamp':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Timestamp:</div>
-            <div className={valueClass}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at)}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Timestamp:</Text>
+            <Text style={valueStyle}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at)}</Text>
+          </View>
         );
 
       case 'jobOrderNumber':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Job Order #:</div>
-            <div className={valueClass}>{jobOrder.id || 'N/A'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Job Order #:</Text>
+            <Text style={valueStyle}>{jobOrder.id || 'N/A'}</Text>
+          </View>
         );
 
       case 'referredBy':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Referred By:</div>
-            <div className={valueClass}>{jobOrder.Referred_By || 'None'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Referred By:</Text>
+            <Text style={valueStyle}>{jobOrder.Referred_By || 'None'}</Text>
+          </View>
         );
 
       case 'fullName':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Full Name:</div>
-            <div className={valueClass}>{getClientFullName()}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Full Name:</Text>
+            <Text style={valueStyle}>{getClientFullName()}</Text>
+          </View>
         );
 
       case 'contactNumber':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Contact Number:</div>
-            <div className={valueClass}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Contact Number:</Text>
+            <Text style={valueStyle}>
               {jobOrder.Contact_Number || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'secondContactNumber':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Second Contact Number:</div>
-            <div className={valueClass}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Second Contact Number:</Text>
+            <Text style={valueStyle}>
               {jobOrder.Second_Contact_Number || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'emailAddress':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Email Address:</div>
-            <div className={valueClass}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Email Address:</Text>
+            <Text style={valueStyle}>
               {jobOrder.Email_Address || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'fullAddress':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Full Address:</div>
-            <div className={valueClass}>{getClientFullAddress()}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Full Address:</Text>
+            <Text style={valueStyle}>{getClientFullAddress()}</Text>
+          </View>
         );
 
       case 'billingStatus':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Billing Status:</div>
-            <div className={valueClass}>{getBillingStatusName(jobOrder.billing_status_id || jobOrder.Billing_Status_ID)}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Billing Status:</Text>
+            <Text style={valueStyle}>{getBillingStatusName(jobOrder.billing_status_id || jobOrder.Billing_Status_ID)}</Text>
+          </View>
         );
 
       case 'billingDay':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Billing Day:</div>
-            <div className={valueClass}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Billing Day:</Text>
+            <Text style={valueStyle}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>
+          </View>
         );
 
       case 'choosePlan':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Choose Plan:</div>
-            <div className={valueClass}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Choose Plan:</Text>
+            <Text style={valueStyle}>
               {jobOrder.Desired_Plan || jobOrder.Choose_Plan || 'Not specified'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'statusRemarks':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Status Remarks:</div>
-            <div className={valueClass}>{jobOrder.Status_Remarks || 'No remarks'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Status Remarks:</Text>
+            <Text style={valueStyle}>{jobOrder.Status_Remarks || 'No remarks'}</Text>
+          </View>
         );
 
       case 'remarks':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Remarks:</div>
-            <div className={valueClass}>{jobOrder.Remarks || 'No remarks'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Remarks:</Text>
+            <Text style={valueStyle}>{jobOrder.Remarks || 'No remarks'}</Text>
+          </View>
         );
 
       case 'installationLandmark':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Installation Landmark:</div>
-            <div className={valueClass}>{jobOrder.Installation_Landmark || 'Not provided'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Installation Landmark:</Text>
+            <Text style={valueStyle}>{jobOrder.Installation_Landmark || 'Not provided'}</Text>
+          </View>
         );
 
       case 'connectionType':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Connection Type:</div>
-            <div className={valueClass}>{jobOrder.Connection_Type || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Connection Type:</Text>
+            <Text style={valueStyle}>{jobOrder.Connection_Type || 'Not specified'}</Text>
+          </View>
         );
 
       case 'modemRouterSn':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Modem/Router SN:</div>
-            <div className={valueClass}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Modem/Router SN:</Text>
+            <Text style={valueStyle}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>
+          </View>
         );
 
       case 'routerModel':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Router Model:</div>
-            <div className={valueClass}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Router Model:</Text>
+            <Text style={valueStyle}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>
+          </View>
         );
 
       case 'affiliateName':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Affiliate Name:</div>
-            <div className={valueClass}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Affiliate Name:</Text>
+            <Text style={valueStyle}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>
+          </View>
         );
 
       case 'lcpnap':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>LCPNAP:</div>
-            <div className={valueClass}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>LCPNAP:</Text>
+            <Text style={valueStyle}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>
+          </View>
         );
 
       case 'port':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>PORT:</div>
-            <div className={valueClass}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>PORT:</Text>
+            <Text style={valueStyle}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>
+          </View>
         );
 
       case 'vlan':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>VLAN:</div>
-            <div className={valueClass}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>VLAN:</Text>
+            <Text style={valueStyle}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>
+          </View>
         );
 
       case 'username':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Username:</div>
-            <div className={valueClass}>{jobOrder.Username || jobOrder.username || 'Not provided'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Username:</Text>
+            <Text style={valueStyle}>{jobOrder.Username || jobOrder.username || 'Not provided'}</Text>
+          </View>
         );
 
       case 'ipAddress':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>IP Address:</div>
-            <div className={valueClass}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>IP Address:</Text>
+            <Text style={valueStyle}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>
+          </View>
         );
 
       case 'usageType':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Usage Type:</div>
-            <div className={valueClass}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Usage Type:</Text>
+            <Text style={valueStyle}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>
+          </View>
         );
 
       case 'dateInstalled':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Date Installed:</div>
-            <div className={valueClass}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Date Installed:</Text>
+            <Text style={valueStyle}>
               {jobOrder.Date_Installed || jobOrder.date_installed 
                 ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) 
                 : 'Not installed yet'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'visitBy':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Visit By:</div>
-            <div className={valueClass}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Visit By:</Text>
+            <Text style={valueStyle}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>
+          </View>
         );
 
       case 'visitWith':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Visit With:</div>
-            <div className={valueClass}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Visit With:</Text>
+            <Text style={valueStyle}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>
+          </View>
         );
 
       case 'visitWithOther':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Visit With Other:</div>
-            <div className={valueClass}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Visit With Other:</Text>
+            <Text style={valueStyle}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>
+          </View>
         );
 
       case 'onsiteStatus':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Onsite Status:</div>
-            <div className={`${getStatusColor(jobOrder.Onsite_Status, 'onsite')} flex-1 capitalize`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Onsite Status:</Text>
+            <Text style={{ color: getStatusColor(jobOrder.Onsite_Status, 'onsite'), flex: 1, textTransform: 'capitalize' }}>
               {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'contractTemplate':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Contract Template:</div>
-            <div className={valueClass}>{jobOrder.Contract_Template || 'Standard'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Contract Template:</Text>
+            <Text style={valueStyle}>{jobOrder.Contract_Template || 'Standard'}</Text>
+          </View>
         );
 
       case 'contractLink':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Contract Link:</div>
-            <div className={`flex-1 truncate flex items-center ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              {jobOrder.Contract_Link || 'Not available'}
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Contract Link:</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+              <Text numberOfLines={1} style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                {jobOrder.Contract_Link || 'Not available'}
+              </Text>
               {jobOrder.Contract_Link && (
-                <button className={isDarkMode ? 'text-gray-400 hover:text-white ml-2' : 'text-gray-600 hover:text-gray-900 ml-2'}>
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(jobOrder.Contract_Link || '')} style={{ marginLeft: 8 }}>
+                  <ExternalLink size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'modifiedBy':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Modified By:</div>
-            <div className={valueClass}>{jobOrder.Modified_By || 'System'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Modified By:</Text>
+            <Text style={valueStyle}>{jobOrder.Modified_By || 'System'}</Text>
+          </View>
         );
 
       case 'modifiedDate':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Modified Date:</div>
-            <div className={valueClass}>{formatDate(jobOrder.Modified_Date)}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Modified Date:</Text>
+            <Text style={valueStyle}>{formatDate(jobOrder.Modified_Date)}</Text>
+          </View>
         );
 
       case 'assignedEmail':
         return (
-          <div className={baseFieldClass}>
-            <div className={labelClass}>Assigned Email:</div>
-            <div className={valueClass}>{jobOrder.Assigned_Email || 'Not assigned'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Assigned Email:</Text>
+            <Text style={valueStyle}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>
+          </View>
         );
 
       case 'setupImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Setup Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url || 'No image available'}
-              </span>
-              {(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'speedtestImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Speedtest Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image || 'No image available'}
-              </span>
-              {(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'signedContractImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Signed Contract Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL || 'No image available'}
-              </span>
-              {(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'boxReadingImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Box Reading Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL || 'No image available'}
-              </span>
-              {(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'routerReadingImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Router Reading Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL || 'No image available'}
-              </span>
-              {(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'portLabelImage':
-        return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Port Label Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL || 'No image available'}
-              </span>
-              {(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-
       case 'houseFrontPicture':
+        const imageUrls: Record<string, string | undefined> = {
+          setupImage: jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url,
+          speedtestImage: jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image,
+          signedContractImage: jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL,
+          boxReadingImage: jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL,
+          routerReadingImage: jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL,
+          portLabelImage: jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL,
+          houseFrontPicture: jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture
+        };
+        const imageUrl = imageUrls[fieldKey];
         return (
-          <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>House Front Picture</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              <span className="truncate mr-2">
-                {jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture || 'No image available'}
-              </span>
-              {(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture) && (
-                <button 
-                  className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                  onClick={() => window.open(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture || '')}
-                >
-                  <ExternalLink size={16} />
-                </button>
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>{getFieldLabel(fieldKey)}</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text numberOfLines={1} style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                {imageUrl || 'No image available'}
+              </Text>
+              {imageUrl && (
+                <Pressable onPress={() => Linking.openURL(imageUrl)}>
+                  <ExternalLink size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       default:
@@ -1003,230 +852,119 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   };
   
   return (
-    <div 
-      className={`h-full flex flex-col overflow-hidden ${!isMobile ? 'md:border-l' : ''} relative w-full md:w-auto ${
-        isDarkMode ? 'bg-gray-950 border-white border-opacity-30' : 'bg-gray-50 border-gray-300'
-      }`}
-      style={!isMobile && window.innerWidth >= 768 ? { width: `${detailsWidth}px` } : undefined}
-    >
-      {!isMobile && (
-        <div
-          className={`hidden md:block absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50 ${
-            isDarkMode ? 'hover:bg-orange-500' : 'hover:bg-orange-600'
-          }`}
-          onMouseDown={handleMouseDownResize}
-        />
-      )}
-      <div className={`p-3 flex items-center justify-between border-b ${
-        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-      }`}>
-        <div className="flex items-center flex-1 min-w-0">
-          <h2 className={`font-medium truncate ${isMobile ? 'max-w-[200px] text-sm' : ''} ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{getClientFullName()}</h2>
-          {loading && <div className={`ml-3 animate-pulse text-sm flex-shrink-0 ${
-            isDarkMode ? 'text-orange-500' : 'text-orange-600'
-          }`}>Loading...</div>}
-        </div>
+    <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%', backgroundColor: isDarkMode ? '#030712' : '#f9fafb', borderLeftWidth: isMobile ? 0 : 1, borderLeftColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : '#d1d5db' }}>
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827', fontSize: isMobile ? 14 : 16, maxWidth: isMobile ? 200 : undefined }}>{getClientFullName()}</Text>
+          {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#f97316' : '#ea580c' }}>Loading...</Text>}
+        </View>
         
-        <div className="flex items-center space-x-3">
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {userRole !== 'technician' && (
-            <>
-              <button className={`p-1 rounded-sm border flex items-center justify-center ${
-                isDarkMode
-                  ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border-gray-300'
-              }`}>
-                <ExternalLink size={16} />
-              </button>
-            </>
+            <Pressable style={{ padding: 4, borderRadius: 2, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}>
+              <ExternalLink size={16} color={isDarkMode ? '#ffffff' : '#111827'} />
+            </Pressable>
           )}
           {shouldShowApproveButton() && (
-            <button 
-              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-sm flex items-center"
-              onClick={handleApproveClick}
+            <Pressable 
+              style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: '#16a34a' }}
+              onPress={handleApproveClick}
               disabled={loading}
             >
-              <span>Approve</span>
-            </button>
+              <Text style={{ color: '#ffffff' }}>Approve</Text>
+            </Pressable>
           )}
-          <button 
-            className="text-white px-3 py-1 rounded-sm flex items-center transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-            }}
-            onClick={handleDoneClick}
+          <Pressable 
+            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            onPress={handleDoneClick}
             disabled={loading}
           >
-            <span className="hidden md:inline">Done</span>
-          </button>
+            <Text style={{ color: '#ffffff' }}>Done</Text>
+          </Pressable>
           
-          <div className="relative">
-            <button
-              onClick={() => setShowFieldSettings(!showFieldSettings)}
-              className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-              title="Field Settings"
-            >
-              <Settings size={16} />
-            </button>
+          <View style={{ position: 'relative' }}>
+            <Pressable onPress={() => setShowFieldSettings(!showFieldSettings)}>
+              <Settings size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            </Pressable>
             {showFieldSettings && (
-              <div className={`absolute right-0 mt-2 w-80 rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-white border-gray-200'
-              }`}>
-                <div className={`px-4 py-3 border-b flex items-center justify-between ${
-                  isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                }`}>
-                  <h3 className={`font-semibold ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Field Visibility & Order</h3>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={selectAllFields}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Show All
-                    </button>
-                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
-                    <button
-                      onClick={deselectAllFields}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Hide All
-                    </button>
-                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
-                    <button
-                      onClick={resetFieldSettings}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-                <div className="p-2">
-                  <div className={`text-xs mb-2 px-2 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
+              <View style={{ position: 'absolute', right: 0, marginTop: 8, width: 320, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5, borderWidth: 1, zIndex: 50, maxHeight: 384, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+                <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+                  <Text style={{ fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Field Visibility & Order</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Pressable onPress={selectAllFields}>
+                      <Text style={{ color: '#2563eb', fontSize: 12 }}>Show All</Text>
+                    </Pressable>
+                    <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                    <Pressable onPress={deselectAllFields}>
+                      <Text style={{ color: '#2563eb', fontSize: 12 }}>Hide All</Text>
+                    </Pressable>
+                    <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                    <Pressable onPress={resetFieldSettings}>
+                      <Text style={{ color: '#2563eb', fontSize: 12 }}>Reset</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <ScrollView style={{ padding: 8 }}>
+                  <Text style={{ fontSize: 12, marginBottom: 8, paddingHorizontal: 8, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
                     Drag to reorder fields
-                  </div>
+                  </Text>
                   {fieldOrder.map((fieldKey, index) => (
-                    <div
+                    <Pressable
                       key={fieldKey}
-                      draggable
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(index)}
-                      onDragEnd={handleDragEnd}
-                      className={`flex items-center space-x-2 px-2 py-1.5 rounded cursor-move transition-colors ${
-                        isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                      } ${
-                        draggedIndex === index
-                          ? isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
-                          : ''
-                      }`}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4, backgroundColor: isDarkMode ? '#374151' : '#f3f4f6' }}
+                      onPress={() => toggleFieldVisibility(fieldKey)}
                     >
-                      <input
-                        type="checkbox"
-                        checked={fieldVisibility[fieldKey]}
-                        onChange={() => toggleFieldVisibility(fieldKey)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className={`text-xs ${
-                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                      }`}>☰</span>
-                      <span className={`text-sm ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
-                        {getFieldLabel(fieldKey)}
-                      </span>
-                    </div>
+                      <Text style={{ fontSize: 12, color: isDarkMode ? '#6b7280' : '#9ca3af' }}>☰</Text>
+                      <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                        {fieldVisibility[fieldKey] ? '✓' : '○'} {getFieldLabel(fieldKey)}
+                      </Text>
+                    </Pressable>
                   ))}
-                </div>
-              </div>
+                </ScrollView>
+              </View>
             )}
-          </div>
+          </View>
           
-          <button 
-            onClick={onClose}
-            className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+          <Pressable onPress={onClose}>
+            <X size={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        </View>
+      </View>
       
       {userRole !== 'technician' && (
-        <div className={`py-3 border-b ${
-          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-200'
-        }`}>
-          <div className="flex items-center justify-center px-4">
-            <button 
-              onClick={handleEditClick}
+        <View style={{ paddingVertical: 12, borderBottomWidth: 1, backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
+            <Pressable 
+              onPress={handleEditClick}
               disabled={loading}
-              className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-              }`}
+              style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
             >
-              <div 
-                className="p-2 rounded-full transition-colors"
-                style={{
-                  backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-                  }
-                }}
-              >
-                <Edit className="text-white" size={18} />
-              </div>
-              <span className={`text-xs mt-1 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Edit</span>
-            </button>
-          </div>
-        </div>
+              <View style={{ padding: 8, borderRadius: 9999, backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c') }}>
+                <Edit size={18} color="#ffffff" />
+              </View>
+              <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Edit</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {error && (
-        <div className={`p-3 m-3 rounded ${
-          isDarkMode 
-            ? 'bg-red-900 bg-opacity-20 border border-red-700 text-red-400'
-            : 'bg-red-100 border border-red-300 text-red-700'
-        }`}>
-          {error}
-        </div>
+        <View style={{ padding: 12, margin: 12, borderRadius: 4, backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fee2e2', borderWidth: 1, borderColor: isDarkMode ? '#991b1b' : '#fca5a5' }}>
+          <Text style={{ color: isDarkMode ? '#fca5a5' : '#991b1b' }}>{error}</Text>
+        </View>
       )}
       
-      <div className="flex-1 overflow-y-auto">
-        <div className={`max-w-2xl mx-auto py-6 px-4 ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <div className="space-y-4">
+      <ScrollView style={{ flex: 1 }}>
+        <View style={{ maxWidth: 672, marginHorizontal: 'auto', paddingVertical: 24, paddingHorizontal: 16, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+          <View style={{ gap: 16 }}>
             {fieldOrder.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
                 {renderFieldContent(fieldKey)}
               </React.Fragment>
             ))}
-          </div>
-        </div>
-      </div>
+          </View>
+        </View>
+      </ScrollView>
 
       <JobOrderDoneFormModal
         isOpen={isDoneModalOpen}
@@ -1265,7 +1003,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
       />
-    </div>
+    </View>
   );
 };
 

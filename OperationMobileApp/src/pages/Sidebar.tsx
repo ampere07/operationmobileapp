@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Users, FileText, LogOut, ChevronRight, User, Building2, Shield, FileCheck, Wrench, Map, MapPinned , MapPin, Package, CreditCard, List, Router, DollarSign, Receipt, FileBarChart, Clock, Calendar, UserCheck, AlertTriangle, Tag, MessageSquare, Settings, Network, Activity, AlertCircle } from 'lucide-react';
+import { View, Text, Pressable, ScrollView } from 'react-native';
+import { LayoutDashboard, Users, FileText, LogOut, ChevronRight, User, Building2, Shield, FileCheck, Wrench, Map, MapPinned, MapPin, Package, CreditCard, List, Router, DollarSign, Receipt, FileBarChart, Clock, Calendar, UserCheck, AlertTriangle, Tag, MessageSquare, Settings, Network, Activity, AlertCircle } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface SidebarProps {
@@ -59,23 +61,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -256,118 +247,169 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
     const IconComponent = item.icon;
 
     return (
-      <div key={item.id}>
-        <button
-          onClick={() => {
+      <View key={item.id}>
+        <Pressable
+          onPress={() => {
             if (hasChildren) {
               toggleExpanded(item.id);
             } else {
               onSectionChange(item.id);
             }
           }}
-          className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-            level > 0 ? 'pl-8' : 'pl-4'
-          } ${
-            isCurrentItemActive
-              ? ''
-              : isDarkMode
-              ? 'text-gray-300 hover:text-white hover:bg-gray-700'
-              : 'text-gray-700 hover:text-black hover:bg-gray-100'
-          }`}
-          style={isCurrentItemActive ? {
-            backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : isDarkMode ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.1)',
-            color: colorPalette?.primary || (isDarkMode ? '#fb923c' : '#ea580c'),
-            borderRightWidth: '2px',
-            borderRightStyle: 'solid',
-            borderRightColor: colorPalette?.primary || '#ea580c'
-          } : {}}
+          style={{
+            width: '100%',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            paddingLeft: level > 0 ? 32 : 16,
+            backgroundColor: isCurrentItemActive
+              ? (colorPalette?.primary ? `${colorPalette.primary}33` : isDarkMode ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.1)')
+              : 'transparent',
+            borderRightWidth: isCurrentItemActive ? 2 : 0,
+            borderRightColor: isCurrentItemActive ? (colorPalette?.primary || '#ea580c') : 'transparent'
+          }}
         >
-          <div className="flex items-center">
-            <IconComponent className={`h-5 w-5 ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            } ${!isCollapsed ? 'mr-3' : ''}`} />
-            {!isCollapsed && <span>{item.label}</span>}
-          </div>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <IconComponent 
+              size={20} 
+              color={isDarkMode ? '#9ca3af' : '#4b5563'} 
+              style={{ marginRight: !isCollapsed ? 12 : 0 }}
+            />
+            {!isCollapsed && (
+              <Text style={{
+                fontSize: 14,
+                color: isCurrentItemActive
+                  ? (colorPalette?.primary || (isDarkMode ? '#fb923c' : '#ea580c'))
+                  : (isDarkMode ? '#d1d5db' : '#374151')
+              }}>
+                {item.label}
+              </Text>
+            )}
+          </View>
           {hasChildren && !isCollapsed && (
             <ChevronRight
-              className={`h-4 w-4 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              } transition-transform ${
-                isExpanded ? 'transform rotate-90' : ''
-              } ${isCollapsed ? 'hidden' : ''}`}
+              size={16}
+              color={isDarkMode ? '#9ca3af' : '#4b5563'}
+              style={{
+                transform: [{ rotate: isExpanded ? '90deg' : '0deg' }]
+              }}
             />
           )}
-        </button>
+        </Pressable>
         
         {hasChildren && isExpanded && !isCollapsed && (
-          <div>
+          <View>
             {item.children!.map(child => renderMenuItem(child, level + 1))}
-          </div>
+          </View>
         )}
-      </div>
+      </View>
     );
   };
 
   return (
-    <div className={`${
-      isCollapsed ? 'w-16' : 'w-64'
-    } h-full ${
-      isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
-    } border-r flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}>
-      <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-none">
+    <View style={{
+      width: isCollapsed ? 64 : 256,
+      height: '100%',
+      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+      borderRightWidth: 1,
+      borderRightColor: isDarkMode ? '#4b5563' : '#d1d5db',
+      flexDirection: 'column'
+    }}>
+      <ScrollView 
+        style={{ flex: 1, paddingVertical: 16 }}
+        showsVerticalScrollIndicator={false}
+      >
         {filteredMenuItems.map(item => renderMenuItem(item))}
-      </nav>
+      </ScrollView>
       
-      <div className={`px-3 py-3 ${
-        isDarkMode ? 'border-gray-600' : 'border-gray-300'
-      } border-t flex-shrink-0`}>
+      <View style={{
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: isDarkMode ? '#4b5563' : '#d1d5db',
+        flexShrink: 0
+      }}>
         {!isCollapsed && (
-          <div className="mb-3">
-            <div className={`text-xs mb-2 text-center ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{
+              fontSize: 12,
+              marginBottom: 8,
+              textAlign: 'center',
+              color: isDarkMode ? '#9ca3af' : '#4b5563'
+            }}>
               {currentDateTime}
-            </div>
-            <div className="flex items-center mb-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-300'
-              } border-2`}>
-                <User className={`h-5 w-5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`} />
-              </div>
-              <div className="ml-3 flex-1 min-w-0">
-                <div className={`text-sm font-medium truncate ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}>
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                borderWidth: 2,
+                borderColor: isDarkMode ? '#4b5563' : '#d1d5db'
+              }}>
+                <User size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              </View>
+              <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
+                <Text 
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    color: isDarkMode ? '#e5e7eb' : '#1f2937'
+                  }}
+                  numberOfLines={1}
+                >
                   {userEmail || 'user@example.com'}
-                </div>
-                <div className={`text-xs truncate ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
+                </Text>
+                <Text 
+                  style={{
+                    fontSize: 12,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}
+                  numberOfLines={1}
+                >
                   {userRole}
-                </div>
-              </div>
-            </div>
-            <div className={`h-px ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-            } mb-2`} />
-          </div>
+                </Text>
+              </View>
+            </View>
+            <View style={{
+              height: 1,
+              backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
+              marginBottom: 8
+            }} />
+          </View>
         )}
         
-        <button
-          onClick={onLogout}
-          className={`w-full px-3 py-2 ${
-            isDarkMode 
-              ? 'text-gray-300 hover:text-white hover:bg-gray-700' 
-              : 'text-gray-700 hover:text-black hover:bg-gray-100'
-          } rounded transition-colors text-sm flex items-center justify-center`}
+        <Pressable
+          onPress={onLogout}
+          style={{
+            width: '100%',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            backgroundColor: 'transparent',
+            borderRadius: 4,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
         >
-          <LogOut className={`h-4 w-4 ${!isCollapsed ? 'mr-2' : ''}`} />
-          {!isCollapsed && <span>Logout</span>}
-        </button>
-      </div>
-    </div>
+          <LogOut size={16} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: !isCollapsed ? 8 : 0 }} />
+          {!isCollapsed && (
+            <Text style={{
+              fontSize: 14,
+              color: isDarkMode ? '#d1d5db' : '#374151'
+            }}>
+              Logout
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
   );
 };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ExternalLink, X, Info } from 'lucide-react';
+import { View, Text, ScrollView, Pressable, Linking } from 'react-native';
+import { ExternalLink, X, Info } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface SOARecord {
@@ -41,19 +43,16 @@ interface SOADetailsProps {
 }
 
 const SOADetails: React.FC<SOADetailsProps> = ({ soaRecord }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+    };
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -69,236 +68,162 @@ const SOADetails: React.FC<SOADetailsProps> = ({ soaRecord }) => {
     fetchColorPalette();
   }, []);
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
-
   const handleOpenGDrive = () => {
     if (soaRecord.printLink) {
-      window.open(soaRecord.printLink, '_blank', 'noopener,noreferrer');
+      Linking.openURL(soaRecord.printLink);
     }
   };
 
   return (
-    <div className={`h-full flex flex-col border-l relative ${
-      isDarkMode
-        ? 'bg-gray-900 text-white border-white border-opacity-30'
-        : 'bg-white text-gray-900 border-gray-300'
-    }`} style={{ width: `${detailsWidth}px` }}>
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
-        style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#ea580c') : 'transparent'
-        }}
-        onMouseEnter={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#ea580c';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
-        onMouseDown={handleMouseDownResize}
-      />
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-700'
-          : 'bg-gray-100 border-gray-200'
-      }`}>
-        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${
-          isDarkMode ? 'text-white' : 'text-gray-900'
-        }`}>
+    <View style={{ height: '100%', flexDirection: 'column', borderLeftWidth: 1, position: 'relative', backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderLeftColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : '#d1d5db', width: detailsWidth }}>
+      <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+        <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '600', paddingRight: 16, minWidth: 0, flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
           {soaRecord.accountNo} | {soaRecord.fullName} | {soaRecord.address.split(',')[0]}
-        </h1>
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          <button 
-            onClick={handleOpenGDrive}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Pressable 
+            onPress={handleOpenGDrive}
             disabled={!soaRecord.printLink}
-            className={`p-2 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
-            }`}
-            title={soaRecord.printLink ? 'Open SOA in Google Drive' : 'No Google Drive link available'}
+            style={{ padding: 8, borderRadius: 4, opacity: !soaRecord.printLink ? 0.5 : 1 }}
           >
-            <ExternalLink size={18} />
-          </button>
-          <button className={`p-2 rounded transition-colors ${
-            isDarkMode
-              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-          }`}>
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+            <ExternalLink size={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+          <Pressable style={{ padding: 8, borderRadius: 4 }}>
+            <X size={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        </View>
+      </View>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className={isDarkMode ? 'divide-y divide-gray-800' : 'divide-y divide-gray-300'}>
-          <div className="px-5 py-4">
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Statement No.</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.statementNo || '2509180' + soaRecord.id}</span>
-            </div>
+      <ScrollView style={{ flex: 1 }}>
+        <View>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Statement No.</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.statementNo || '2509180' + soaRecord.id}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Full Name</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.fullName}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Full Name</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.fullName}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Statement Date</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.statementDate}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Statement Date</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.statementDate}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Account No.</span>
-              <div className="flex items-center">
-                <span className="text-red-500">
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Account No.</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: '#ef4444' }}>
                   {soaRecord.accountNo} | {soaRecord.fullName} | {soaRecord.address}
-                </span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
+                </Text>
+                <Info size={16} color={isDarkMode ? '#6b7280' : '#4b5563'} style={{ marginLeft: 8 }} />
+              </View>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Date Installed</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.dateInstalled}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Date Installed</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.dateInstalled}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Contact Number</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.contactNumber}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Contact Number</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.contactNumber}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Email Address</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.emailAddress}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Email Address</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.emailAddress}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Plan</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.plan}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Plan</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.plan}</Text>
+                <Info size={16} color={isDarkMode ? '#6b7280' : '#4b5563'} style={{ marginLeft: 8 }} />
+              </View>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Provider</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.provider || 'SWITCH'}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Provider</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.provider || 'SWITCH'}</Text>
+                <Info size={16} color={isDarkMode ? '#6b7280' : '#4b5563'} style={{ marginLeft: 8 }} />
+              </View>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Balance from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Balance from Previous Bill</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.balanceFromPreviousBill?.toFixed(2) || '0.00'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Payment Received from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Payment Received from Previous Bill</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.paymentReceived || '0'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Remaining Balance from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Remaining Balance from Previous Bill</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.remainingBalance?.toFixed(2) || '0.00'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Monthly Service Fee</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Monthly Service Fee</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.monthlyServiceFee?.toFixed(2) || '624.11'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Others and Basic Charges</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Others and Basic Charges</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.otherCharges?.toFixed(2) || '0.00'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>VAT</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>VAT</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.vat?.toFixed(2) || '74.89'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>DUE DATE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.dueDate || '9/30/2025'}</span>
-            </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>DUE DATE</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.dueDate || '9/30/2025'}</Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>AMOUNT DUE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>AMOUNT DUE</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.amountDue?.toFixed(2) || '699.00'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>TOTAL AMOUNT DUE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>TOTAL AMOUNT DUE</Text>
+              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                 ₱{soaRecord.totalAmountDue?.toFixed(2) || '699.00'}
-              </span>
-            </div>
+              </Text>
+            </View>
 
             {soaRecord.deliveryStatus && (
-              <div className="flex justify-between items-center py-2">
-                <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Delivery Status</span>
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.deliveryStatus}</span>
-              </div>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Delivery Status</Text>
+                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{soaRecord.deliveryStatus}</Text>
+              </View>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 

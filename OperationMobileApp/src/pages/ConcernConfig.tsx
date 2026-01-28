@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { Search, Plus, Edit2, Trash2, Loader2 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { concernService, Concern } from '../services/concernService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import EditConcernModal from '../modals/EditConcernModal';
@@ -18,6 +20,9 @@ const ConcernConfig: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [deletingItems, setDeletingItems] = useState<Set<number>>(new Set());
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [addButtonHovered, setAddButtonHovered] = useState(false);
+  const [retryButtonHovered, setRetryButtonHovered] = useState(false);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -33,20 +38,16 @@ const ConcernConfig: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme !== 'light');
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    const theme = localStorage.getItem('theme');
-    setIsDarkMode(theme !== 'light');
-
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme !== 'light');
+      } catch (err) {
+        console.error('Failed to load theme:', err);
+      }
+    };
+    
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -67,36 +68,44 @@ const ConcernConfig: React.FC = () => {
     }
   };
 
-  const handleDelete = async (item: Concern, event: React.MouseEvent) => {
-    event.stopPropagation();
-    
-    if (!window.confirm(`⚠️ PERMANENT DELETE WARNING ⚠️\n\nAre you sure you want to permanently delete "${item.concern_name}"?\n\nThis action CANNOT BE UNDONE!\n\nClick OK to permanently delete, or Cancel to keep the item.`)) {
-      return;
-    }
-
-    setDeletingItems(prev => {
-      const newSet = new Set(prev);
-      newSet.add(item.id);
-      return newSet;
-    });
-    
-    try {
-      await concernService.deleteConcern(item.id);
-      await loadConcerns();
-    } catch (error) {
-      console.error('Error deleting concern:', error);
-      alert('Failed to delete concern: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setDeletingItems(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(item.id);
-        return newSet;
-      });
-    }
+  const handleDelete = async (item: Concern, event: any) => {
+    Alert.alert(
+      '⚠️ PERMANENT DELETE WARNING ⚠️',
+      `Are you sure you want to permanently delete "${item.concern_name}"?\n\nThis action CANNOT BE UNDONE!\n\nClick OK to permanently delete, or Cancel to keep the item.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'OK',
+          onPress: async () => {
+            setDeletingItems(prev => {
+              const newSet = new Set(prev);
+              newSet.add(item.id);
+              return newSet;
+            });
+            
+            try {
+              await concernService.deleteConcern(item.id);
+              await loadConcerns();
+            } catch (error) {
+              console.error('Error deleting concern:', error);
+              Alert.alert('Error', 'Failed to delete concern: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            } finally {
+              setDeletingItems(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(item.id);
+                return newSet;
+              });
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const handleEdit = (item: Concern, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleEdit = (item: Concern, event: any) => {
     setEditingItem(item);
     setIsModalOpen(true);
   };
@@ -126,171 +135,208 @@ const ConcernConfig: React.FC = () => {
   });
 
   return (
-    <div className={`${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    } h-full flex overflow-hidden`}>
-      <div className={`${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      } overflow-hidden flex-1`}>
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
+    <View style={{ 
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden'
+    }}>
+      <View style={{ 
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        overflow: 'hidden',
+        flex: 1
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{ 
+            padding: 16,
+            borderBottomWidth: 1,
+            flexShrink: 0,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
                   placeholder="Search Concerns"
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-gray-100 text-gray-900 border-gray-300'
-                  } border`}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                      e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                    e.currentTarget.style.boxShadow = 'none';
+                  onChangeText={(text) => setSearchQuery(text)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setSearchFocused(false)}
+                  style={{
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: searchFocused && colorPalette?.primary 
+                      ? colorPalette.primary 
+                      : isDarkMode ? '#374151' : '#d1d5db'
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              <button
-                onClick={handleAddNew}
-                className="text-white px-4 py-2 rounded text-sm transition-colors flex items-center space-x-1"
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <Pressable
+                onPress={handleAddNew}
+                onPressIn={() => setAddButtonHovered(true)}
+                onPressOut={() => setAddButtonHovered(false)}
                 style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
+                  backgroundColor: addButtonHovered && colorPalette?.accent 
+                    ? colorPalette.accent 
+                    : colorPalette?.primary || '#ea580c',
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 4,
+                  fontSize: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4
                 }}
               >
-                <Plus className="h-4 w-4" />
-                <span>Add</span>
-              </button>
-            </div>
-          </div>
+                <Plus size={16} color="#ffffff" />
+                <Text style={{ color: '#ffffff' }}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
           
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
               {isLoading ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                  </div>
-                  <p className="mt-4">Loading concerns...</p>
-                </div>
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+                  <Text style={{ 
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#6b7280'
+                  }}>
+                    Loading concerns...
+                  </Text>
+                </View>
               ) : error ? (
-                <div className={`px-4 py-12 text-center text-red-400`}>
-                  <p>{error}</p>
-                  <button 
-                    onClick={() => loadConcerns()}
-                    className="mt-4 px-4 py-2 rounded text-white transition-colors"
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ color: '#f87171' }}>{error}</Text>
+                  <Pressable 
+                    onPress={() => loadConcerns()}
+                    onPressIn={() => setRetryButtonHovered(true)}
+                    onPressOut={() => setRetryButtonHovered(false)}
                     style={{
-                      backgroundColor: colorPalette?.primary || '#ea580c'
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: retryButtonHovered && colorPalette?.accent 
+                        ? colorPalette.accent 
+                        : colorPalette?.primary || '#ea580c'
                     }}
-                    onMouseEnter={(e) => {
-                      if (colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (colorPalette?.primary) {
-                        e.currentTarget.style.backgroundColor = colorPalette.primary;
-                      }
-                    }}>
-                    Retry
-                  </button>
-                </div>
+                  >
+                    <Text style={{ color: '#ffffff' }}>Retry</Text>
+                  </Pressable>
+                </View>
               ) : filteredConcerns.length > 0 ? (
-                <div className="space-y-0">
+                <View>
                   {filteredConcerns.map((item) => (
-                    <div
+                    <View
                       key={item.id}
-                      className={`px-4 py-3 cursor-pointer transition-colors border-b ${
-                        isDarkMode 
-                          ? 'hover:bg-gray-800 border-gray-800' 
-                          : 'hover:bg-gray-100 border-gray-200'
-                      }`}
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        borderBottomWidth: 1,
+                        borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                      }}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className={`font-medium text-sm mb-1 uppercase ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>
+                      <View style={{ 
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between'
+                      }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={{ 
+                            fontWeight: '500',
+                            fontSize: 14,
+                            marginBottom: 4,
+                            textTransform: 'uppercase',
+                            color: isDarkMode ? '#ffffff' : '#111827'
+                          }}>
                             {item.concern_name}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
-                          <button
-                            onClick={(e) => handleEdit(item, e)}
-                            className={`p-1.5 rounded transition-colors ${
-                              isDarkMode 
-                                ? 'text-gray-400 hover:text-blue-400 hover:bg-gray-700' 
-                                : 'text-gray-600 hover:text-blue-600 hover:bg-gray-200'
-                            }`}
-                            title="Edit Concern"
+                          </Text>
+                        </View>
+                        <View style={{ 
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 8,
+                          marginLeft: 16,
+                          flexShrink: 0
+                        }}>
+                          <Pressable
+                            onPress={(e) => handleEdit(item, e)}
+                            style={({ pressed }) => ({
+                              padding: 6,
+                              borderRadius: 4,
+                              backgroundColor: pressed 
+                                ? (isDarkMode ? '#374151' : '#e5e7eb')
+                                : 'transparent'
+                            })}
                           >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(item, e)}
+                            <Edit2 
+                              size={16} 
+                              color={isDarkMode ? '#9ca3af' : '#6b7280'} 
+                            />
+                          </Pressable>
+                          <Pressable
+                            onPress={(e) => handleDelete(item, e)}
                             disabled={deletingItems.has(item.id)}
-                            className={`p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                              isDarkMode 
-                                ? 'text-gray-400 hover:text-red-400 hover:bg-gray-700' 
-                                : 'text-gray-600 hover:text-red-600 hover:bg-gray-200'
-                            }`}
-                            title={deletingItems.has(item.id) ? 'Deleting...' : 'Delete Concern'}
+                            style={({ pressed }) => ({
+                              padding: 6,
+                              borderRadius: 4,
+                              backgroundColor: pressed 
+                                ? (isDarkMode ? '#374151' : '#e5e7eb')
+                                : 'transparent',
+                              opacity: deletingItems.has(item.id) ? 0.5 : 1
+                            })}
                           >
                             {deletingItems.has(item.id) ? (
-                              <Loader2 size={16} className="animate-spin" />
+                              <ActivityIndicator size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                             ) : (
-                              <Trash2 size={16} />
+                              <Trash2 
+                                size={16} 
+                                color={isDarkMode ? '#9ca3af' : '#6b7280'} 
+                              />
                             )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
                   ))}
-                </div>
+                </View>
               ) : (
-                <div className={`text-center py-12 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  No concerns found
-                </div>
+                <View style={{ 
+                  alignItems: 'center',
+                  paddingVertical: 48
+                }}>
+                  <Text style={{ 
+                    color: isDarkMode ? '#9ca3af' : '#6b7280'
+                  }}>
+                    No concerns found
+                  </Text>
+                </View>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
-      {/* Edit/Add Concern Modal */}
       <EditConcernModal
         isOpen={isModalOpen}
         onClose={() => {
@@ -300,7 +346,7 @@ const ConcernConfig: React.FC = () => {
         onSave={handleSave}
         concernItem={editingItem}
       />
-    </div>
+    </View>
   );
 };
 

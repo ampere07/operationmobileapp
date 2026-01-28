@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Receipt, Search, ChevronDown, CheckCheck, X, Check } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { Receipt, Search, ChevronDown, CheckCheck, X, Check } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import TransactionListDetails from '../components/TransactionListDetails';
 import { transactionService } from '../services/transactionService';
 import LoadingModal from '../components/LoadingModal';
@@ -89,23 +91,12 @@ const TransactionList: React.FC = () => {
   };
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -192,9 +183,6 @@ const TransactionList: React.FC = () => {
         toggleTransactionSelection(transaction.id);
       }
     } else {
-      console.log('Transaction clicked:', transaction);
-      console.log('Customer data:', transaction.account?.customer);
-      console.log('Full name:', transaction.account?.customer?.full_name);
       setSelectedTransaction(transaction);
     }
   };
@@ -285,508 +273,392 @@ const TransactionList: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
   const StatusText = ({ status }: { status: string }) => {
     let textColor = '';
     
     switch (status.toLowerCase()) {
       case 'done':
       case 'completed':
-        textColor = 'text-green-500';
+        textColor = '#22c55e';
         break;
       case 'pending':
-        textColor = 'text-yellow-500';
+        textColor = '#eab308';
         break;
       case 'processing':
-        textColor = 'text-blue-500';
+        textColor = '#3b82f6';
         break;
       case 'failed':
       case 'cancelled':
-        textColor = 'text-red-500';
+        textColor = '#ef4444';
         break;
       default:
-        textColor = 'text-gray-400';
+        textColor = '#9ca3af';
     }
     
     return (
-      <span className={`${textColor} capitalize`}>
+      <Text style={{ color: textColor, textTransform: 'capitalize' }}>
         {status}
-      </span>
+      </Text>
     );
   };
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col items-center">
-          <div 
-            className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 mb-3"
-            style={{ borderTopColor: colorPalette?.primary || '#ea580c', borderBottomColor: colorPalette?.primary || '#ea580c' }}
-          ></div>
-          <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Loading transactions...</p>
-        </div>
-      </div>
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb' 
+      }}>
+        <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+          <Text style={{ 
+            marginTop: 12, 
+            color: isDarkMode ? '#d1d5db' : '#374151' 
+          }}>Loading transactions...</Text>
+        </View>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className={`rounded-md p-6 max-w-lg ${
-          isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-        }`}>
-          <h3 className="text-red-500 text-lg font-medium mb-2">Error</h3>
-          <p className={`mb-4 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-white py-2 px-4 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb' 
+      }}>
+        <View style={{ 
+          borderRadius: 6, 
+          padding: 24, 
+          maxWidth: 512, 
+          borderWidth: 1, 
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+          borderColor: isDarkMode ? '#374151' : '#e5e7eb' 
+        }}>
+          <Text style={{ color: '#f87171', fontSize: 18, fontWeight: '500', marginBottom: 8 }}>Error</Text>
+          <Text style={{ 
+            marginBottom: 16, 
+            color: isDarkMode ? '#d1d5db' : '#374151' 
+          }}>{error}</Text>
+          <Pressable
+            onPress={() => {}}
+            style={{ 
+              backgroundColor: colorPalette?.primary || '#ea580c', 
+              paddingVertical: 8, 
+              paddingHorizontal: 16, 
+              borderRadius: 4 
             }}
           >
-            Retry
-          </button>
-        </div>
-      </div>
+            <Text style={{ color: '#ffffff' }}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
   return (
-    <div className={`h-full flex overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      <div className={`border-r flex-shrink-0 flex flex-col relative ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Transactions</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
+    <View style={{ 
+      height: '100%', 
+      flexDirection: 'row', 
+      overflow: 'hidden', 
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb' 
+    }}>
+      <View style={{ 
+        borderRightWidth: 1, 
+        flexShrink: 0, 
+        flexDirection: 'column', 
+        position: 'relative', 
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff', 
+        borderRightColor: isDarkMode ? '#374151' : '#e5e7eb', 
+        width: sidebarWidth 
+      }}>
+        <View style={{ 
+          padding: 16, 
+          borderBottomWidth: 1, 
+          flexShrink: 0, 
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' 
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text style={{ 
+              fontSize: 18, 
+              fontWeight: '600', 
+              color: isDarkMode ? '#ffffff' : '#111827' 
+            }}>Transactions</Text>
+          </View>
+        </View>
+        <ScrollView style={{ flex: 1 }}>
           {locationItems.map((location) => (
-            <button
+            <Pressable
               key={location.id}
-              onClick={() => setSelectedLocation(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              } ${
-                selectedLocation === location.id
-                  ? ''
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}
-              style={selectedLocation === location.id ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c'
-              } : {}}
+              onPress={() => setSelectedLocation(location.id)}
+              style={{
+                width: '100%', 
+                flexDirection: 'row', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                paddingHorizontal: 16, 
+                paddingVertical: 12,
+                backgroundColor: selectedLocation === location.id 
+                  ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                  : 'transparent'
+              }}
             >
-              <div className="flex items-center">
-                <Receipt className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
-              {location.count > 0 && (
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${
-                    selectedLocation === location.id
-                      ? 'text-white'
-                      : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                  }`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#ea580c'
-                  } : {}}
-                >
-                  {location.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-          style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
-          }}
-          onMouseEnter={(e) => {
-            if (!isResizingSidebar && colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizingSidebar) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-          onMouseDown={handleMouseDownSidebarResize}
-        />
-      </div>
-
-      <div className={`overflow-hidden flex-1 ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border border-gray-700'
-                      : 'bg-white text-gray-900 border border-gray-300'
-                  }`}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Receipt size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
+                <Text
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
+                    fontSize: 14, 
+                    textTransform: 'capitalize',
+                    color: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#fb923c')
+                      : (isDarkMode ? '#d1d5db' : '#374151')
                   }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
+                >
+                  {location.name}
+                </Text>
+              </View>
+              {location.count > 0 && (
+                <View
+                  style={{
+                    paddingHorizontal: 8, 
+                    paddingVertical: 4, 
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}
+                  >
+                    {location.count}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={{ 
+        overflow: 'hidden', 
+        flex: 1, 
+        backgroundColor: isDarkMode ? '#111827' : '#f9fafb' 
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{ 
+            padding: 16, 
+            borderBottomWidth: 1, 
+            flexShrink: 0, 
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff', 
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' 
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
+                  placeholder="Search transactions..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={{ 
+                    width: '100%', 
+                    borderRadius: 4, 
+                    paddingVertical: 8, 
+                    paddingLeft: 40, 
+                    paddingRight: 16, 
+                    borderWidth: 1, 
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+                    color: isDarkMode ? '#ffffff' : '#111827', 
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db' 
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              <button 
-                onClick={() => isBatchApproveMode ? handleCancelApprove() : setIsBatchApproveMode(true)}
-                className="px-4 py-2 rounded flex items-center transition-colors text-white"
-                style={{
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <Pressable 
+                onPress={() => isBatchApproveMode ? handleCancelApprove() : setIsBatchApproveMode(true)}
+                style={{ 
+                  paddingHorizontal: 16, 
+                  paddingVertical: 8, 
+                  borderRadius: 4, 
+                  flexDirection: 'row', 
+                  alignItems: 'center',
                   backgroundColor: isBatchApproveMode ? '#dc2626' : (colorPalette?.primary || '#ea580c')
-                }}
-                onMouseEnter={(e) => {
-                  if (isBatchApproveMode) {
-                    e.currentTarget.style.backgroundColor = '#b91c1c';
-                  } else if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (isBatchApproveMode) {
-                    e.currentTarget.style.backgroundColor = '#dc2626';
-                  } else if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
                 }}
               >
                 {isBatchApproveMode ? (
                   <>
-                    <X className="h-4 w-4 mr-2" />
-                    <span>Cancel Approve</span>
+                    <X size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={{ color: '#ffffff', fontSize: 14 }}>Cancel Approve</Text>
                   </>
                 ) : (
                   <>
-                    <CheckCheck className="h-4 w-4 mr-2" />
-                    <span>Batch Approve</span>
+                    <CheckCheck size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={{ color: '#ffffff', fontSize: 14 }}>Batch Approve</Text>
                   </>
                 )}
-              </button>
+              </Pressable>
               {isBatchApproveMode && (
-                <button 
-                  onClick={handleBatchApprove}
+                <Pressable 
+                  onPress={handleBatchApprove}
                   disabled={selectedTransactionIds.length === 0 || isApproving}
-                  className={`px-4 py-2 rounded flex items-center transition-colors ${
-                    selectedTransactionIds.length === 0 || isApproving
-                      ? isDarkMode
-                        ? 'bg-gray-700 text-gray-500 border border-gray-600 cursor-not-allowed'
-                        : 'bg-gray-300 text-gray-500 border border-gray-400 cursor-not-allowed'
-                      : isDarkMode
-                        ? 'bg-green-600 text-white border border-green-700 hover:bg-green-700'
-                        : 'bg-green-500 text-white border border-green-600 hover:bg-green-600'
-                  }`}
+                  style={{
+                    paddingHorizontal: 16, 
+                    paddingVertical: 8, 
+                    borderRadius: 4, 
+                    flexDirection: 'row', 
+                    alignItems: 'center', 
+                    borderWidth: 1,
+                    backgroundColor: selectedTransactionIds.length === 0 || isApproving
+                      ? (isDarkMode ? '#374151' : '#d1d5db')
+                      : '#16a34a',
+                    borderColor: selectedTransactionIds.length === 0 || isApproving
+                      ? (isDarkMode ? '#4b5563' : '#9ca3af')
+                      : '#15803d',
+                    opacity: selectedTransactionIds.length === 0 || isApproving ? 0.5 : 1
+                  }}
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  <span>{isApproving ? 'Approving...' : `Approve (${selectedTransactionIds.length})`}</span>
-                </button>
+                  <Check size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#ffffff', fontSize: 14 }}>
+                    {isApproving ? 'Approving...' : `Approve (${selectedTransactionIds.length})`}
+                  </Text>
+                </Pressable>
               )}
-              <button className={`px-4 py-2 rounded flex items-center ${
-                isDarkMode
-                  ? 'bg-gray-800 text-white border border-gray-700'
-                  : 'bg-gray-200 text-gray-900 border border-gray-300'
-              }`}>
-                <span className="mr-2">Filter</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+            </View>
+          </View>
           
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-x-auto overflow-y-auto pb-4">
-              <table className={`min-w-full text-sm ${
-                isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
-              }`}>
-                <thead className={`sticky top-0 ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                }`}>
-                  <tr>
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView horizontal>
+              <ScrollView style={{ height: '100%' }}>
+                <View>
+                  <View style={{ 
+                    flexDirection: 'row', 
+                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' 
+                  }}>
                     {isBatchApproveMode && (
-                      <th className={`px-4 py-3 text-left ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={
-                            selectedTransactionIds.length > 0 &&
-                            selectedTransactionIds.length === filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length &&
-                            filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length > 0
-                          }
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                          style={{
-                            accentColor: colorPalette?.primary || '#ea580c'
-                          }}
-                        />
-                      </th>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 60 }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Select</Text>
+                      </View>
                     )}
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Date Processed</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Account No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Received Payment</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Payment Method</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Processed By</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Full Name</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>OR No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Reference No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Remarks</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Status</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Transaction Type</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Image</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Barangay</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Contact No</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Payment Date</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>City</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Plan</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Account Balance</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Created At</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Updated At</th>
-                  </tr>
-                </thead>
-                <tbody className={`${
-                  isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
-                }`}>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 200 }}>
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '500', 
+                        textTransform: 'uppercase', 
+                        color: isDarkMode ? '#9ca3af' : '#4b5563' 
+                      }}>Date Processed</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '500', 
+                        textTransform: 'uppercase', 
+                        color: isDarkMode ? '#9ca3af' : '#4b5563' 
+                      }}>Account No.</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '500', 
+                        textTransform: 'uppercase', 
+                        color: isDarkMode ? '#9ca3af' : '#4b5563' 
+                      }}>Received Payment</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '500', 
+                        textTransform: 'uppercase', 
+                        color: isDarkMode ? '#9ca3af' : '#4b5563' 
+                      }}>Payment Method</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                      <Text style={{ 
+                        fontSize: 12, 
+                        fontWeight: '500', 
+                        textTransform: 'uppercase', 
+                        color: isDarkMode ? '#9ca3af' : '#4b5563' 
+                      }}>Status</Text>
+                    </View>
+                  </View>
                   {filteredTransactions.length > 0 ? (
                     filteredTransactions.map((transaction) => {
                       const isSelected = selectedTransactionIds.includes(transaction.id);
                       const isPending = transaction.status.toLowerCase() === 'pending';
-                      const canSelect = isBatchApproveMode && isPending;
                       
                       return (
-                        <tr 
+                        <Pressable 
                           key={transaction.id} 
-                          className={`${
-                            canSelect ? 'cursor-pointer' : isBatchApproveMode ? 'cursor-not-allowed' : 'cursor-pointer'
-                          } ${
-                            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                          } ${
-                            !isSelected && selectedTransaction?.id === transaction.id 
-                              ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') 
-                              : !isSelected && isBatchApproveMode && !isPending
-                                ? (isDarkMode ? 'bg-gray-800 opacity-50' : 'bg-gray-200 opacity-50')
-                                : ''
-                          }`}
-                          style={isSelected ? {
-                            backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
-                          } : {}}
-                          onClick={() => handleRowClick(transaction)}
+                          onPress={() => handleRowClick(transaction)}
+                          style={{
+                            flexDirection: 'row', 
+                            borderBottomWidth: 1, 
+                            borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                            backgroundColor: isSelected 
+                              ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                              : selectedTransaction?.id === transaction.id 
+                                ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                                : 'transparent'
+                          }}
                         >
                           {isBatchApproveMode && (
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleTransactionSelection(transaction.id)}
-                                disabled={!isPending}
-                                className={`w-4 h-4 rounded border-gray-300 ${
-                                  isPending ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                                }`}
-                                style={{
-                                  accentColor: colorPalette?.primary || '#ea580c'
-                                }}
-                              />
-                            </td>
+                            <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 60 }}>
+                              <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                                {isPending ? '☐' : ''}
+                              </Text>
+                            </View>
                           )}
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{formatDate(transaction.date_processed)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">{transaction.account?.account_no || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap font-medium ${
-                          isDarkMode ? 'text-white' : 'text-gray-900'
-                        }`}>{formatCurrency(transaction.received_payment)}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.payment_method}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.processed_by_user || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.account?.customer?.full_name || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.or_no}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.reference_no}</td>
-                        <td className={`px-4 py-3 max-w-xs truncate ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.remarks || 'No remarks'}</td>
-                        <td className="px-4 py-3 whitespace-nowrap"><StatusText status={transaction.status} /></td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.transaction_type}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.image_url ? 'Yes' : '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.account?.customer?.barangay || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.account?.customer?.contact_number_primary || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{formatDate(transaction.payment_date)}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.account?.customer?.city || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{transaction.account?.customer?.desired_plan || '-'}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{formatCurrency(transaction.account?.account_balance || 0)}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{formatDate(transaction.created_at)}</td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>{formatDate(transaction.updated_at)}</td>
-                      </tr>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 200 }}>
+                            <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151' }}>{formatDate(transaction.date_processed)}</Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                            <Text style={{ color: '#f87171', fontWeight: '500' }}>{transaction.account?.account_no || '-'}</Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                            <Text style={{ 
+                              fontWeight: '500', 
+                              color: isDarkMode ? '#ffffff' : '#111827' 
+                            }}>{formatCurrency(transaction.received_payment)}</Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                            <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151' }}>{transaction.payment_method}</Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 12, width: 140 }}>
+                            <StatusText status={transaction.status} />
+                          </View>
+                        </Pressable>
                       );
                     })
                   ) : (
-                    <tr>
-                      <td colSpan={isBatchApproveMode ? 21 : 20} className={`px-4 py-12 text-center ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' }}>
+                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
                         {transactions.length > 0
                           ? 'No transactions found matching your filters'
                           : 'No transactions found.'}
-                      </td>
-                    </tr>
+                      </Text>
+                    </View>
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
+                </View>
+              </ScrollView>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
       {selectedTransaction && (
-        <div className="flex-shrink-0 overflow-hidden">
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           <TransactionListDetails 
             transaction={selectedTransaction}
             onClose={() => setSelectedTransaction(null)}
           />
-        </div>)}
+        </View>
+      )}
 
       <LoadingModal 
         isOpen={isApproving} 
@@ -794,118 +666,152 @@ const TransactionList: React.FC = () => {
         percentage={50} 
       />
 
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${
-            isDarkMode
-              ? 'bg-gray-800 border-gray-700'
-              : 'bg-white border-gray-300'
-          }`}>
-            <h3 className={`text-xl font-semibold mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Confirm Batch Approval</h3>
-            <p className={`mb-6 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+      <Modal
+        visible={showConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ 
+            borderRadius: 8, 
+            padding: 24, 
+            maxWidth: 448, 
+            width: '91.666667%', 
+            marginHorizontal: 16, 
+            borderWidth: 1, 
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+            borderColor: isDarkMode ? '#374151' : '#d1d5db' 
+          }}>
+            <Text style={{ 
+              fontSize: 20, 
+              fontWeight: '600', 
+              marginBottom: 16, 
+              color: isDarkMode ? '#ffffff' : '#111827' 
+            }}>Confirm Batch Approval</Text>
+            <Text style={{ 
+              marginBottom: 24, 
+              color: isDarkMode ? '#d1d5db' : '#374151' 
+            }}>
               Are you sure you want to approve {selectedTransactionIds.length} transaction(s)? This will update account balances and apply payments to invoices.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded transition-colors"
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <Pressable
+                onPress={() => setShowConfirmModal(false)}
+                style={{ backgroundColor: '#4b5563', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 4 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBatchApproval}
-                className="text-white px-6 py-2 rounded transition-colors"
-                style={{
+                <Text style={{ color: '#ffffff' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmBatchApproval}
+                style={{ 
+                  paddingHorizontal: 24, 
+                  paddingVertical: 8, 
+                  borderRadius: 4,
                   backgroundColor: colorPalette?.primary || '#22c55e'
                 }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
               >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <Text style={{ color: '#ffffff' }}>Confirm</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${
-            isDarkMode
-              ? 'bg-gray-800 border-gray-700'
-              : 'bg-white border-gray-300'
-          }`}>
-            <h3 className={`text-xl font-semibold mb-4 text-green-500`}>Success</h3>
-            <p className={`mb-6 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>{approvalMessage}</p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded transition-colors"
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ 
+            borderRadius: 8, 
+            padding: 24, 
+            maxWidth: 448, 
+            width: '91.666667%', 
+            marginHorizontal: 16, 
+            borderWidth: 1, 
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+            borderColor: isDarkMode ? '#374151' : '#d1d5db' 
+          }}>
+            <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 16, color: '#22c55e' }}>Success</Text>
+            <Text style={{ 
+              marginBottom: 24, 
+              color: isDarkMode ? '#d1d5db' : '#374151' 
+            }}>{approvalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <Pressable
+                onPress={() => setShowSuccessModal(false)}
+                style={{ backgroundColor: '#16a34a', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 4 }}
               >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                <Text style={{ color: '#ffffff' }}>OK</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-      {showFailedModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-2xl w-full mx-4 border ${
-            isDarkMode
-              ? 'bg-gray-800 border-gray-700'
-              : 'bg-white border-gray-300'
-          }`}>
-            <h3 className={`text-xl font-semibold mb-4 text-red-500`}>Batch Approval Results</h3>
-            <p className={`mb-4 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>{approvalMessage}</p>
+      <Modal
+        visible={showFailedModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFailedModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ 
+            borderRadius: 8, 
+            padding: 24, 
+            maxWidth: 672, 
+            width: '91.666667%', 
+            marginHorizontal: 16, 
+            borderWidth: 1, 
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+            borderColor: isDarkMode ? '#374151' : '#d1d5db' 
+          }}>
+            <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 16, color: '#ef4444' }}>Batch Approval Results</Text>
+            <Text style={{ 
+              marginBottom: 16, 
+              color: isDarkMode ? '#d1d5db' : '#374151' 
+            }}>{approvalMessage}</Text>
             
             {approvalDetails && approvalDetails.failed && approvalDetails.failed.length > 0 && (
-              <div className={`mb-6 p-4 rounded max-h-96 overflow-y-auto ${
-                isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-              }`}>
-                <h4 className={`font-medium mb-2 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Failed Transactions:</h4>
-                <ul className="space-y-2">
-                  {approvalDetails.failed.map((fail: any, index: number) => (
-                    <li key={index} className={`text-sm ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>
-                      <span className="font-medium">ID: {fail.transaction_id}</span> - {fail.reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ScrollView style={{ 
+                marginBottom: 24, 
+                padding: 16, 
+                borderRadius: 4, 
+                maxHeight: 384, 
+                backgroundColor: isDarkMode ? '#111827' : '#f3f4f6' 
+              }}>
+                <Text style={{ 
+                  fontWeight: '500', 
+                  marginBottom: 8, 
+                  color: isDarkMode ? '#ffffff' : '#111827' 
+                }}>Failed Transactions:</Text>
+                {approvalDetails.failed.map((fail: any, index: number) => (
+                  <Text key={index} style={{ 
+                    fontSize: 14, 
+                    marginBottom: 8, 
+                    color: isDarkMode ? '#d1d5db' : '#374151' 
+                  }}>
+                    <Text style={{ fontWeight: '500' }}>ID: {fail.transaction_id}</Text> - {fail.reason}
+                  </Text>
+                ))}
+              </ScrollView>
             )}
             
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowFailedModal(false)}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded transition-colors"
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <Pressable
+                onPress={() => setShowFailedModal(false)}
+                style={{ backgroundColor: '#dc2626', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 4 }}
               >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+                <Text style={{ color: '#ffffff' }}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 

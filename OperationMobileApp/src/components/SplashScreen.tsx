@@ -1,49 +1,64 @@
-import React from 'react';
-import logo1 from '../assets/logo1.png';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Image, Animated, Easing } from 'react-native';
+
+const logo1 = require('../assets/logo1.png');
 
 const SplashScreen: React.FC = () => {
+  const spinValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, [spinValue]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
-    <div style={{
-      display: 'flex',
+    <View style={{
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: '100vh',
       backgroundColor: '#282c34',
-      color: '#61dafb',
-      fontSize: '18px',
-      fontWeight: '500'
     }}>
-      <div style={{
-        display: 'flex',
+      <View style={{
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '20px'
+        gap: 20
       }}>
-        <img 
-          src={logo1} 
-          alt="Sync Logo" 
+        <Image 
+          source={logo1}
           style={{
-            height: '80px',
-            marginBottom: '10px'
+            height: 80,
+            width: 80,
+            marginBottom: 10,
+            resizeMode: 'contain'
           }}
         />
-        <div style={{
-          width: '48px',
-          height: '48px',
-          border: '4px solid',
+        <Animated.View style={{
+          width: 48,
+          height: 48,
+          borderWidth: 4,
           borderColor: '#444',
           borderTopColor: '#61dafb',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          borderRadius: 24,
+          transform: [{ rotate: spin }]
         }} />
-        <div>Loading...</div>
-      </div>
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+        <Text style={{
+          color: '#61dafb',
+          fontSize: 18,
+          fontWeight: '500'
+        }}>Loading...</Text>
+      </View>
+    </View>
   );
 };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw, Filter } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw, Filter } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
 import JobOrderFunnelFilter from '../components/filters/JobOrderFunnelFilter';
 import { getJobOrders } from '../services/jobOrderService';
@@ -17,65 +19,65 @@ interface LocationItem {
 type DisplayMode = 'card' | 'table';
 
 const allColumns = [
-  { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
-  { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-36' },
-  { key: 'installationFee', label: 'Installation Fee', width: 'min-w-32' },
-  { key: 'billingDay', label: 'Billing Day', width: 'min-w-28' },
-  { key: 'billingStatusId', label: 'Billing Status ID', width: 'min-w-32' },
-  { key: 'modemRouterSN', label: 'Modem/Router SN', width: 'min-w-36' },
-  { key: 'routerModel', label: 'Router Model', width: 'min-w-32' },
-  { key: 'groupName', label: 'Group Name', width: 'min-w-32' },
-  { key: 'lcpnap', label: 'LCPNAP', width: 'min-w-28' },
-  { key: 'port', label: 'PORT', width: 'min-w-24' },
-  { key: 'vlan', label: 'VLAN', width: 'min-w-24' },
-  { key: 'username', label: 'Username', width: 'min-w-32' },
-  { key: 'ipAddress', label: 'IP Address', width: 'min-w-32' },
-  { key: 'connectionType', label: 'Connection Type', width: 'min-w-36' },
-  { key: 'usageType', label: 'Usage Type', width: 'min-w-32' },
-  { key: 'usernameStatus', label: 'Username Status', width: 'min-w-32' },
-  { key: 'visitBy', label: 'Visit By', width: 'min-w-32' },
-  { key: 'visitWith', label: 'Visit With', width: 'min-w-32' },
-  { key: 'visitWithOther', label: 'Visit With Other', width: 'min-w-32' },
-  { key: 'onsiteStatus', label: 'Onsite Status', width: 'min-w-32' },
-  { key: 'onsiteRemarks', label: 'Onsite Remarks', width: 'min-w-40' },
-  { key: 'statusRemarks', label: 'Status Remarks', width: 'min-w-40' },
-  { key: 'addressCoordinates', label: 'Address Coordinates', width: 'min-w-40' },
-  { key: 'contractLink', label: 'Contract Link', width: 'min-w-48' },
-  { key: 'clientSignatureUrl', label: 'Client Signature URL', width: 'min-w-48' },
-  { key: 'setupImageUrl', label: 'Setup Image URL', width: 'min-w-48' },
-  { key: 'speedtestImageUrl', label: 'Speedtest Image URL', width: 'min-w-48' },
-  { key: 'signedContractImageUrl', label: 'Signed Contract Image URL', width: 'min-w-48' },
-  { key: 'boxReadingImageUrl', label: 'Box Reading Image URL', width: 'min-w-48' },
-  { key: 'routerReadingImageUrl', label: 'Router Reading Image URL', width: 'min-w-48' },
-  { key: 'portLabelImageUrl', label: 'Port Label Image URL', width: 'min-w-48' },
-  { key: 'houseFrontPictureUrl', label: 'House Front Picture URL', width: 'min-w-48' },
-  { key: 'createdAt', label: 'Created At', width: 'min-w-40' },
-  { key: 'createdByUserEmail', label: 'Created By User Email', width: 'min-w-48' },
-  { key: 'updatedAt', label: 'Updated At', width: 'min-w-40' },
-  { key: 'updatedByUserEmail', label: 'Updated By User Email', width: 'min-w-48' },
-  { key: 'assignedEmail', label: 'Assigned Email', width: 'min-w-48' },
-  { key: 'pppoeUsername', label: 'PPPoE Username', width: 'min-w-36' },
-  { key: 'pppoePassword', label: 'PPPoE Password', width: 'min-w-36' },
-  { key: 'fullName', label: 'Full Name of Client', width: 'min-w-48' },
-  { key: 'address', label: 'Full Address of Client', width: 'min-w-56' },
-  { key: 'contractTemplate', label: 'Contract Template', width: 'min-w-36' },
-  { key: 'modifiedBy', label: 'Modified By', width: 'min-w-32' },
-  { key: 'modifiedDate', label: 'Modified Date', width: 'min-w-40' },
-  { key: 'firstName', label: 'First Name', width: 'min-w-32' },
-  { key: 'middleInitial', label: 'Middle Initial', width: 'min-w-28' },
-  { key: 'lastName', label: 'Last Name', width: 'min-w-32' },
-  { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-  { key: 'secondContactNumber', label: 'Second Contact Number', width: 'min-w-40' },
-  { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-  { key: 'region', label: 'Region', width: 'min-w-28' },
-  { key: 'city', label: 'City', width: 'min-w-28' },
-  { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-  { key: 'location', label: 'Location', width: 'min-w-32' },
-  { key: 'choosePlan', label: 'Choose Plan', width: 'min-w-36' },
-  { key: 'referredBy', label: 'Referred By', width: 'min-w-32' },
-  { key: 'startTimestamp', label: 'Start Timestamp', width: 'min-w-40' },
-  { key: 'endTimestamp', label: 'End Timestamp', width: 'min-w-40' },
-  { key: 'duration', label: 'Duration', width: 'min-w-28' }
+  { key: 'timestamp', label: 'Timestamp', width: 160 },
+  { key: 'dateInstalled', label: 'Date Installed', width: 144 },
+  { key: 'installationFee', label: 'Installation Fee', width: 128 },
+  { key: 'billingDay', label: 'Billing Day', width: 112 },
+  { key: 'billingStatusId', label: 'Billing Status ID', width: 128 },
+  { key: 'modemRouterSN', label: 'Modem/Router SN', width: 144 },
+  { key: 'routerModel', label: 'Router Model', width: 128 },
+  { key: 'groupName', label: 'Group Name', width: 128 },
+  { key: 'lcpnap', label: 'LCPNAP', width: 112 },
+  { key: 'port', label: 'PORT', width: 96 },
+  { key: 'vlan', label: 'VLAN', width: 96 },
+  { key: 'username', label: 'Username', width: 128 },
+  { key: 'ipAddress', label: 'IP Address', width: 128 },
+  { key: 'connectionType', label: 'Connection Type', width: 144 },
+  { key: 'usageType', label: 'Usage Type', width: 128 },
+  { key: 'usernameStatus', label: 'Username Status', width: 128 },
+  { key: 'visitBy', label: 'Visit By', width: 128 },
+  { key: 'visitWith', label: 'Visit With', width: 128 },
+  { key: 'visitWithOther', label: 'Visit With Other', width: 128 },
+  { key: 'onsiteStatus', label: 'Onsite Status', width: 128 },
+  { key: 'onsiteRemarks', label: 'Onsite Remarks', width: 160 },
+  { key: 'statusRemarks', label: 'Status Remarks', width: 160 },
+  { key: 'addressCoordinates', label: 'Address Coordinates', width: 160 },
+  { key: 'contractLink', label: 'Contract Link', width: 192 },
+  { key: 'clientSignatureUrl', label: 'Client Signature URL', width: 192 },
+  { key: 'setupImageUrl', label: 'Setup Image URL', width: 192 },
+  { key: 'speedtestImageUrl', label: 'Speedtest Image URL', width: 192 },
+  { key: 'signedContractImageUrl', label: 'Signed Contract Image URL', width: 192 },
+  { key: 'boxReadingImageUrl', label: 'Box Reading Image URL', width: 192 },
+  { key: 'routerReadingImageUrl', label: 'Router Reading Image URL', width: 192 },
+  { key: 'portLabelImageUrl', label: 'Port Label Image URL', width: 192 },
+  { key: 'houseFrontPictureUrl', label: 'House Front Picture URL', width: 192 },
+  { key: 'createdAt', label: 'Created At', width: 160 },
+  { key: 'createdByUserEmail', label: 'Created By User Email', width: 192 },
+  { key: 'updatedAt', label: 'Updated At', width: 160 },
+  { key: 'updatedByUserEmail', label: 'Updated By User Email', width: 192 },
+  { key: 'assignedEmail', label: 'Assigned Email', width: 192 },
+  { key: 'pppoeUsername', label: 'PPPoE Username', width: 144 },
+  { key: 'pppoePassword', label: 'PPPoE Password', width: 144 },
+  { key: 'fullName', label: 'Full Name of Client', width: 192 },
+  { key: 'address', label: 'Full Address of Client', width: 224 },
+  { key: 'contractTemplate', label: 'Contract Template', width: 144 },
+  { key: 'modifiedBy', label: 'Modified By', width: 128 },
+  { key: 'modifiedDate', label: 'Modified Date', width: 160 },
+  { key: 'firstName', label: 'First Name', width: 128 },
+  { key: 'middleInitial', label: 'Middle Initial', width: 112 },
+  { key: 'lastName', label: 'Last Name', width: 128 },
+  { key: 'contactNumber', label: 'Contact Number', width: 144 },
+  { key: 'secondContactNumber', label: 'Second Contact Number', width: 160 },
+  { key: 'emailAddress', label: 'Email Address', width: 192 },
+  { key: 'region', label: 'Region', width: 112 },
+  { key: 'city', label: 'City', width: 112 },
+  { key: 'barangay', label: 'Barangay', width: 128 },
+  { key: 'location', label: 'Location', width: 128 },
+  { key: 'choosePlan', label: 'Choose Plan', width: 144 },
+  { key: 'referredBy', label: 'Referred By', width: 128 },
+  { key: 'startTimestamp', label: 'Start Timestamp', width: 160 },
+  { key: 'endTimestamp', label: 'End Timestamp', width: 160 },
+  { key: 'duration', label: 'Duration', width: 112 }
 ];
 
 const JobOrderPage: React.FC = () => {
@@ -107,55 +109,13 @@ const JobOrderPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [mobileView, setMobileView] = useState<'locations' | 'orders' | 'details'>('locations');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLTableElement>(null);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
   const sidebarStartXRef = useRef<number>(0);
   const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const [activeFilters, setActiveFilters] = useState<any>(() => {
-    const saved = localStorage.getItem('jobOrderFilters');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.error('Failed to load filters:', err);
-      }
-    }
-    return {};
-  });
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-    
-    fetchColorPalette();
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setFilterDropdownOpen(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownRef, filterDropdownRef]);
+  const [activeFilters, setActiveFilters] = useState<any>({});
+  const [userEmail, setUserEmail] = useState<string>('');
 
   const formatDate = (dateStr?: string | null): string => {
     if (!dateStr) return '-';
@@ -195,35 +155,57 @@ const JobOrderPage: React.FC = () => {
     return status ? status.status_name : '-';
   };
 
-  const [userEmail, setUserEmail] = useState<string>('');
-
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme !== 'light');
-    });
+    };
 
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    const theme = localStorage.getItem('theme');
-    setIsDarkMode(theme !== 'light');
-
-    return () => observer.disconnect();
+    checkDarkMode();
   }, []);
 
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const userData = JSON.parse(authData);
-        setUserRole(userData.role || '');
-        setUserEmail(userData.email || '');
-      } catch (error) {
+    const loadAuthData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const userData = JSON.parse(authData);
+          setUserRole(userData.role || '');
+          setUserEmail(userData.email || '');
+        } catch (error) {
+        }
       }
-    }
+    };
+
+    loadAuthData();
+  }, []);
+
+  useEffect(() => {
+    const fetchColorPalette = async () => {
+      try {
+        const activePalette = await settingsColorPaletteService.getActive();
+        setColorPalette(activePalette);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
+      }
+    };
+    
+    fetchColorPalette();
+  }, []);
+
+  useEffect(() => {
+    const loadFilters = async () => {
+      const saved = await AsyncStorage.getItem('jobOrderFilters');
+      if (saved) {
+        try {
+          setActiveFilters(JSON.parse(saved));
+        } catch (err) {
+          console.error('Failed to load filters:', err);
+        }
+      }
+    };
+
+    loadFilters();
   }, []);
 
   const fetchData = async () => {
@@ -236,7 +218,7 @@ const JobOrderPage: React.FC = () => {
       const billingStatusesData = await getBillingStatuses();
       setBillingStatuses(billingStatusesData);
       
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let assignedEmail: string | undefined;
       
       if (authData) {
@@ -331,7 +313,6 @@ const JobOrderPage: React.FC = () => {
     });
   });
   
-  // Helper function to apply funnel filters
   const applyFunnelFilters = (orders: JobOrder[], filters: any): JobOrder[] => {
     if (!filters || Object.keys(filters).length === 0) return orders;
 
@@ -382,7 +363,6 @@ const JobOrderPage: React.FC = () => {
     return matchesLocation && matchesSearch;
   });
 
-  // Apply funnel filters
   filteredJobOrders = applyFunnelFilters(filteredJobOrders, activeFilters);
 
   const presortedJobOrders = [...filteredJobOrders].sort((a, b) => {
@@ -444,7 +424,7 @@ const JobOrderPage: React.FC = () => {
   });
 
   const StatusText = ({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
-    if (!status) return <span className="text-gray-400">-</span>;
+    if (!status) return <Text style={{ color: '#9ca3af' }}>-</Text>;
     
     let textColor = '';
     
@@ -452,52 +432,52 @@ const JobOrderPage: React.FC = () => {
       switch (status.toLowerCase()) {
         case 'done':
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'reschedule':
-          textColor = 'text-blue-400';
+          textColor = '#60a5fa';
           break;
         case 'inprogress':
         case 'in progress':
-          textColor = 'text-blue-400';
+          textColor = '#60a5fa';
           break;
         case 'pending':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'failed':
         case 'cancelled':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     } else {
       switch (status.toLowerCase()) {
         case 'done':
         case 'active':
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'pending':
         case 'in progress':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'suspended':
         case 'overdue':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         case 'cancelled':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     }
     
     return (
-      <span className={`${textColor} font-bold uppercase`}>
+      <Text style={{ color: textColor, fontWeight: 'bold', textTransform: 'uppercase' }}>
         {status === 'inprogress' ? 'In Progress' : status}
-      </span>
+      </Text>
     );
   };
 
@@ -564,121 +544,6 @@ const JobOrderPage: React.FC = () => {
       const indexB = columnOrder.indexOf(b.key);
       return indexA - indexB;
     });
-
-  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
-    setDraggedColumn(columnKey);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedColumn && draggedColumn !== columnKey) {
-      setDragOverColumn(columnKey);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
-    e.preventDefault();
-    
-    if (!draggedColumn || draggedColumn === targetColumnKey) {
-      setDraggedColumn(null);
-      setDragOverColumn(null);
-      return;
-    }
-
-    const newOrder = [...columnOrder];
-    const draggedIndex = newOrder.indexOf(draggedColumn);
-    const targetIndex = newOrder.indexOf(targetColumnKey);
-
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedColumn);
-
-    setColumnOrder(newOrder);
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleMouseDownResize = (e: React.MouseEvent, columnKey: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizingColumn(columnKey);
-    startXRef.current = e.clientX;
-    
-    const th = (e.target as HTMLElement).closest('th');
-    if (th) {
-      startWidthRef.current = th.offsetWidth;
-    }
-  };
-
-  useEffect(() => {
-    if (!resizingColumn) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingColumn) return;
-      
-      const diff = e.clientX - startXRef.current;
-      const newWidth = Math.max(100, startWidthRef.current + diff);
-      
-      setColumnWidths(prev => ({
-        ...prev,
-        [resizingColumn]: newWidth
-      }));
-    };
-
-    const handleMouseUp = () => {
-      setResizingColumn(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingColumn]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
 
   const getValue = (value: any): string => {
     if (value === null || value === undefined || value === '') return '-';
@@ -856,737 +721,471 @@ const JobOrderPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 mb-3" style={{ borderTopColor: colorPalette?.primary || '#ea580c', borderBottomColor: colorPalette?.primary || '#ea580c' }}></div>
-          <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      }}>
+        <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+          <Text style={{
+            marginTop: 12,
+            color: isDarkMode ? '#d1d5db' : '#374151'
+          }}>
             Loading job orders...
-          </p>
-        </div>
-      </div>
+          </Text>
+        </View>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center h-full ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className={`${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-        } border rounded-md p-6 max-w-lg`}>
-          <h3 className="text-red-500 text-lg font-medium mb-2">Error</h3>
-          <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-4`}>
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      }}>
+        <View style={{
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          borderWidth: 1,
+          borderColor: isDarkMode ? '#374151' : '#d1d5db',
+          borderRadius: 6,
+          padding: 24,
+          maxWidth: 512
+        }}>
+          <Text style={{ color: '#ef4444', fontSize: 18, fontWeight: '500', marginBottom: 8 }}>Error</Text>
+          <Text style={{
+            color: isDarkMode ? '#d1d5db' : '#374151',
+            marginBottom: 16
+          }}>
             {error}
-          </p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="text-white py-2 px-4 rounded transition-colors"
+          </Text>
+          <Pressable
+            onPress={() => handleRefresh()}
             style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
+              backgroundColor: colorPalette?.primary || '#ea580c',
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 4
             }}
           >
-            Retry
-          </button>
-        </div>
-      </div>
+            <Text style={{ color: '#ffffff' }}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
   return (
-    <div className={`${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    } h-full flex flex-col md:flex-row overflow-hidden`}>
-      {/* Mobile Location View */}
-      {mobileView === 'locations' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <div className={`${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          } p-4 border-b`}>
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              Job Orders
-            </h2>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {locationItems.map((location) => (
-              <button
-              key={location.id}
-              onClick={() => handleLocationSelect(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-4 text-sm transition-colors border-b ${isDarkMode ? 'hover:bg-gray-800 border-gray-800' : 'hover:bg-gray-100 border-gray-200'}`}
-              style={selectedLocation === location.id ? {
-              backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-              color: colorPalette?.primary || '#fb923c'
-              } : {
-              color: isDarkMode ? '#d1d5db' : '#374151'
-              }}
-              >
-                <div className="flex items-center">
-                  <FileText className="h-5 w-5 mr-3" />
-                  <span className="capitalize text-base">{location.name}</span>
-                </div>
-                {location.count > 0 && (
-                  <span
-                    className="px-3 py-1 rounded-full text-sm"
-                    style={selectedLocation === location.id ? {
-                      backgroundColor: colorPalette?.primary || '#ea580c',
-                      color: 'white'
-                    } : {
-                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
-                      color: isDarkMode ? '#d1d5db' : '#374151'
-                    }}
-                  >
-                    {location.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Overlay Menu */}
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
-          <div className={`absolute inset-y-0 left-0 w-64 shadow-xl flex flex-col ${
-            isDarkMode ? 'bg-gray-900' : 'bg-white'
-          }`}>
-            <div className={`p-4 border-b flex items-center justify-between ${
-              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-              <h2 className={`text-lg font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                Filters
-              </h2>
-              <button 
-                onClick={() => setMobileMenuOpen(false)} 
-                className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {locationItems.map((location) => (
-                <button
-                  key={location.id}
-                  onClick={() => handleLocationSelect(location.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                    color: colorPalette?.primary || '#fb923c',
-                    fontWeight: 500
-                  } : {
-                    color: isDarkMode ? '#d1d5db' : '#374151'
-                  }}
-                >
-                  <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    <span className="capitalize">{location.name}</span>
-                  </div>
-                  {location.count > 0 && (
-                  <span
-                  className="px-2 py-1 rounded-full text-xs"
-                  style={selectedLocation === location.id ? {
-                  backgroundColor: colorPalette?.primary || '#ea580c',
-                      color: 'white'
-                  } : {
-                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
-                        color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}
-                      >
-                        {location.count}
-                      </span>
-                    )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Desktop Sidebar - Hidden on mobile */}
+    <View style={{
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden',
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
       {userRole.toLowerCase() !== 'technician' && (
-      <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <div className="flex items-center mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              Job Orders
-            </h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {locationItems.map((location) => (
-            <button
-              key={location.id}
-              onClick={() => {
-                setSelectedLocation(location.id);
-              }}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              }`}
-              style={selectedLocation === location.id ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c',
-                fontWeight: 500
-              } : {
-                color: isDarkMode ? '#d1d5db' : '#374151'
-              }}
-            >
-              <div className="flex items-center">
-                <FileText className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
-              {location.count > 0 && (
-                <span
-                  className="px-2 py-1 rounded-full text-xs"
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#ea580c',
-                    color: 'white'
-                  } : {
-                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
-                    color: isDarkMode ? '#d1d5db' : '#374151'
-                  }}
-                >
-                  {location.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        
-        {/* Resize Handle */}
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-          onMouseDown={handleMouseDownSidebarResize}
-          style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
-          }}
-          onMouseEnter={(e) => {
-            if (!isResizingSidebar && colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizingSidebar) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-        />
-      </div>
+        <View style={{
+          borderRightWidth: 1,
+          borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+          flexShrink: 0,
+          flexDirection: 'column',
+          position: 'relative',
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          width: sidebarWidth
+        }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>
+                Job Orders
+              </Text>
+            </View>
+          </View>
+          <ScrollView style={{ flex: 1 }}>
+            {locationItems.map((location) => (
+              <Pressable
+                key={location.id}
+                onPress={() => {
+                  setSelectedLocation(location.id);
+                }}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: selectedLocation === location.id 
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent'
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    textTransform: 'capitalize',
+                    color: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#fb923c')
+                      : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>
+                    {location.name}
+                  </Text>
+                </View>
+                {location.count > 0 && (
+                  <View style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}>
+                      {location.count}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
-      <div className={`${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      } overflow-hidden flex-1 flex flex-col md:pb-0 ${mobileView === 'locations' || mobileView === 'details' ? 'hidden md:flex' : ''}`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
-                <button
-                  onClick={() => setMobileMenuOpen(true)}
-                  className="md:hidden bg-gray-700 hover:bg-gray-600 text-white p-2 rounded text-sm transition-colors flex items-center justify-center"
-                  aria-label="Open filter menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              )}
-              <div className="relative flex-1">
-                <input
-                  type="text"
+      <View style={{
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        overflow: 'hidden',
+        flex: 1,
+        flexDirection: 'column'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            flexShrink: 0,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
                   placeholder="Search job orders..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-gray-100 text-gray-900 border-gray-300'} border`}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                      e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                    e.currentTarget.style.boxShadow = 'none';
+                  onChangeText={setSearchQuery}
+                  style={{
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setIsFunnelFilterOpen(true)}
-                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                    isDarkMode
-                      ? 'hover:bg-gray-700 text-white'
-                      : 'hover:bg-gray-200 text-gray-900'
-                  }`}
-                >
-                  <Filter className="h-5 w-5" />
-                </button>
-                {displayMode === 'table' && (
-                  <div className="relative" ref={filterDropdownRef}>
-                    <button
-                      className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                        isDarkMode
-                          ? 'hover:bg-gray-800 text-white'
-                          : 'hover:bg-gray-100 text-gray-900'
-                      }`}
-                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
-                    >
-                      <ListFilter className="h-5 w-5" />
-                    </button>
-                    {filterDropdownOpen && (
-                      <>
-                        {/* Mobile Overlay */}
-                        <div className="md:hidden fixed inset-0 z-50">
-                          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setFilterDropdownOpen(false)} />
-                          <div className={`absolute inset-x-4 top-20 bottom-4 border rounded shadow-lg flex flex-col ${
-                            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                          }`}>
-                            <div className={`p-3 border-b flex items-center justify-between ${
-                              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                            }`}>
-                              <span className={`text-sm font-medium ${
-                                isDarkMode ? 'text-white' : 'text-gray-900'
-                              }`}>
-                                Column Visibility
-                              </span>
-                              <button 
-                                onClick={() => setFilterDropdownOpen(false)} 
-                                className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
-                              >
-                                <X className="h-5 w-5" />
-                              </button>
-                            </div>
-                            <div className={`p-3 border-b flex items-center justify-between ${
-                              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                            }`}>
-                              <button
-                                onClick={handleSelectAllColumns}
-                                className="text-sm px-3 py-1 rounded transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#f97316',
-                                  backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
-                                }}
-                              >
-                                Select All
-                              </button>
-                              <button
-                                onClick={handleDeselectAllColumns}
-                                className="text-sm px-3 py-1 rounded transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#f97316',
-                                  backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
-                                }}
-                              >
-                                Deselect All
-                              </button>
-                            </div>
-                            <div className="overflow-y-auto flex-1">
-                              {allColumns.map((column) => (
-                                <label
-                                  key={column.key}
-                                  className={`flex items-center px-4 py-3 cursor-pointer text-sm border-b ${
-                                    isDarkMode 
-                                      ? 'hover:bg-gray-700 text-white border-gray-700' 
-                                      : 'hover:bg-gray-100 text-gray-900 border-gray-200'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.includes(column.key)}
-                                    onChange={() => handleToggleColumn(column.key)}
-                                    className={`mr-3 h-4 w-4 rounded text-orange-600 focus:ring-orange-500 ${
-                                      isDarkMode 
-                                        ? 'border-gray-600 bg-gray-700 focus:ring-offset-gray-800' 
-                                        : 'border-gray-300 bg-white focus:ring-offset-white'
-                                    }`}
-                                  />
-                                  <span>{column.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Desktop Dropdown */}
-                        <div className={`hidden md:flex absolute top-full right-0 mt-2 w-80 border rounded shadow-lg z-50 max-h-96 flex-col ${
-                          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                        }`}>
-                          <div className={`p-3 border-b flex items-center justify-between ${
-                            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                          }`}>
-                            <span className={`text-sm font-medium ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
-                              Column Visibility
-                            </span>
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleSelectAllColumns}
-                                className="text-xs transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#f97316'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (colorPalette?.accent) {
-                                    e.currentTarget.style.color = colorPalette.accent;
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (colorPalette?.primary) {
-                                    e.currentTarget.style.color = colorPalette.primary;
-                                  }
-                                }}
-                              >
-                                Select All
-                              </button>
-                              <span className="text-gray-600">|</span>
-                              <button
-                                onClick={handleDeselectAllColumns}
-                                className="text-xs transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#f97316'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (colorPalette?.accent) {
-                                    e.currentTarget.style.color = colorPalette.accent;
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (colorPalette?.primary) {
-                                    e.currentTarget.style.color = colorPalette.primary;
-                                  }
-                                }}
-                              >
-                                Deselect All
-                              </button>
-                            </div>
-                          </div>
-                          <div className="overflow-y-auto flex-1">
-                            {allColumns.map((column) => (
-                              <label
-                                key={column.key}
-                                className={`flex items-center px-4 py-2 cursor-pointer text-sm ${
-                                  isDarkMode 
-                                    ? 'hover:bg-gray-700 text-white' 
-                                    : 'hover:bg-gray-100 text-gray-900'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={visibleColumns.includes(column.key)}
-                                  onChange={() => handleToggleColumn(column.key)}
-                                  className="mr-3 h-4 w-4 rounded border-gray-600 bg-gray-700 text-orange-600 focus:ring-orange-500 focus:ring-offset-gray-800"
-                                />
-                                <span>{column.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                      isDarkMode 
-                        ? 'hover:bg-gray-800 text-white' 
-                        : 'hover:bg-gray-100 text-gray-900'
-                    }`}
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                  >
-                    <span>{displayMode === 'card' ? 'Card View' : 'Table View'}</span>
-                    <ChevronDown className="w-4 h-4 ml-1" />
-                  </button>
-                  {dropdownOpen && (
-                    <div className={`absolute top-full right-0 mt-1 w-36 border rounded shadow-lg z-50 ${
-                      isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                    }`}>
-                      <button
-                        onClick={() => {
-                          setDisplayMode('card');
-                          setDropdownOpen(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                        style={displayMode === 'card' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
-                        }}
-                      >
-                        Card View
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDisplayMode('table');
-                          setDropdownOpen(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                        style={displayMode === 'table' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
-                        }}
-                      >
-                        Table View
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className="text-white px-3 py-2 rounded text-sm flex items-center transition-colors disabled:bg-gray-600"
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => setIsFunnelFilterOpen(true)}
                   style={{
-                    backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    backgroundColor: 'transparent'
                   }}
-                  onMouseEnter={(e) => {
-                    if (!isRefreshing && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isRefreshing && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                  aria-label="Refresh"
                 >
-                  <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
-          </div>
+                  <Filter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
+                {displayMode === 'table' && (
+                  <Pressable
+                    onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: 'transparent'
+                    }}
+                  >
+                    <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => setDropdownOpen(!dropdownOpen)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'transparent'
+                  }}
+                >
+                  <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', fontSize: 14 }}>
+                    {displayMode === 'card' ? 'Card View' : 'Table View'}
+                  </Text>
+                  <ChevronDown size={16} color={isDarkMode ? '#ffffff' : '#111827'} style={{ marginLeft: 4 }} />
+                </Pressable>
+                <Pressable
+                  onPress={handleRefresh}
+                  disabled={isRefreshing}
+                  style={{
+                    backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c'),
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <RefreshCw size={20} color="#ffffff" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
           
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
               {displayMode === 'card' ? (
                 sortedJobOrders.length > 0 ? (
-                  <div className="space-y-0">
+                  <View>
                     {sortedJobOrders.map((jobOrder) => (
-                      <div
+                      <Pressable
                         key={jobOrder.id}
-                        onClick={() => window.innerWidth < 768 ? handleMobileRowClick(jobOrder) : handleRowClick(jobOrder)}
-                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${
-                          isDarkMode 
-                            ? `hover:bg-gray-800 border-gray-800 ${selectedJobOrder?.id === jobOrder.id ? 'bg-gray-800' : ''}` 
-                            : `hover:bg-gray-100 border-gray-200 ${selectedJobOrder?.id === jobOrder.id ? 'bg-gray-100' : ''}`
-                        }`}
+                        onPress={() => handleRowClick(jobOrder)}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                          backgroundColor: selectedJobOrder?.id === jobOrder.id 
+                            ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                            : 'transparent'
+                        }}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-sm mb-1 ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{
+                              fontWeight: '500',
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: isDarkMode ? '#ffffff' : '#111827'
+                            }}>
                               {getClientFullName(jobOrder)}
-                            </div>
-                            <div className={`text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
+                            </Text>
+                            <Text style={{
+                              fontSize: 12,
+                              color: isDarkMode ? '#9ca3af' : '#4b5563'
+                            }}>
                               {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end space-y-1 ml-4 flex-shrink-0">
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 }}>
                             <StatusText status={jobOrder.Onsite_Status || jobOrder.onsite_status} type="onsite" />
-                          </div>
-                        </div>
-                      </div>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))}
-                  </div>
+                  </View>
                 ) : (
-                  <div className={`text-center py-12 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                    No job orders found matching your filters
-                  </div>
+                  <View style={{
+                    alignItems: 'center',
+                    paddingVertical: 48,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>
+                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                      No job orders found matching your filters
+                    </Text>
+                  </View>
                 )
               ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${
-                        isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'
-                      }`}>
-                        {filteredColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, column.key)}
-                            onDragOver={(e) => handleDragOver(e, column.key)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, column.key)}
-                            onDragEnd={handleDragEnd}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${
-                              isDarkMode 
-                                ? `text-gray-400 bg-gray-800 ${index < filteredColumns.length - 1 ? 'border-r border-gray-700' : ''}` 
-                                : `text-gray-600 bg-gray-100 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
-                            } ${
-                              draggedColumn === column.key ? 'opacity-50' : ''
-                            } ${
-                              dragOverColumn === column.key ? '' : ''
-                            }`}
-                            style={{
-                              width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                              ...(dragOverColumn === column.key ? {
-                                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
-                              } : {})
-                            }}
-                            onMouseEnter={() => setHoveredColumn(column.key)}
-                            onMouseLeave={() => setHoveredColumn(null)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{column.label}</span>
-                              {(hoveredColumn === column.key || sortColumn === column.key) && (
-                                <button
-                                  onClick={() => handleSort(column.key)}
-                                  className="ml-2 transition-colors"
-                                >
-                                  {sortColumn === column.key && sortDirection === 'desc' ? (
-                                    <ArrowDown
-                                      className="h-4 w-4"
-                                      style={{
-                                        color: colorPalette?.primary || '#fb923c'
-                                      }}
-                                    />
-                                  ) : (
-                                    <ArrowUp
-                                      className="h-4 w-4 text-gray-400 transition-colors"
-                                      style={{
-                                        color: hoveredColumn === column.key ? (colorPalette?.primary || '#fb923c') : undefined
-                                      }}
-                                    />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                            {index < filteredColumns.length - 1 && (
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize group-hover:bg-gray-600"
-                                style={{
-                                  backgroundColor: hoveredColumn === column.key ? (colorPalette?.primary || '#f97316') : undefined
-                                }}
-                                onMouseDown={(e) => handleMouseDownResize(e, column.key)}
-                              />
-                            )}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedJobOrders.length > 0 ? (
-                        sortedJobOrders.map((jobOrder) => (
-                          <tr 
-                            key={jobOrder.id} 
-                            className={`border-b cursor-pointer transition-colors ${
-                              isDarkMode 
-                                ? `border-gray-800 hover:bg-gray-900 ${selectedJobOrder?.id === jobOrder.id ? 'bg-gray-800' : ''}` 
-                                : `border-gray-200 hover:bg-gray-100 ${selectedJobOrder?.id === jobOrder.id ? 'bg-gray-100' : ''}`
-                            }`}
-                            onClick={() => window.innerWidth < 768 ? handleMobileRowClick(jobOrder) : handleRowClick(jobOrder)}
-                          >
-                            {filteredColumns.map((column, index) => (
-                              <td 
-                                key={column.key}
-                                className={`py-4 px-3 ${
-                                  isDarkMode 
-                                    ? `text-white ${index < filteredColumns.length - 1 ? 'border-r border-gray-800' : ''}` 
-                                    : `text-gray-900 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
-                                }`}
-                                style={{ 
-                                  width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                                  maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                                }}
+                <ScrollView horizontal>
+                  <View>
+                    <View style={{
+                      flexDirection: 'row',
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                    }}>
+                      {filteredColumns.map((column, index) => (
+                        <View
+                          key={column.key}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            width: column.width,
+                            borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                            borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            fontWeight: '400',
+                            color: isDarkMode ? '#9ca3af' : '#4b5563'
+                          }}>
+                            {column.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                    {sortedJobOrders.length > 0 ? (
+                      sortedJobOrders.map((jobOrder) => (
+                        <Pressable 
+                          key={jobOrder.id} 
+                          onPress={() => handleRowClick(jobOrder)}
+                          style={{
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                            backgroundColor: selectedJobOrder?.id === jobOrder.id 
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : 'transparent'
+                          }}
+                        >
+                          {filteredColumns.map((column, index) => (
+                            <View
+                              key={column.key}
+                              style={{
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                width: column.width,
+                                borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                                borderRightColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                              }}
+                            >
+                              <Text 
+                                style={{ color: isDarkMode ? '#ffffff' : '#111827' }}
+                                numberOfLines={1}
                               >
-                                <div className="truncate" title={renderCellValue(jobOrder, column.key)}>
-                                  {renderCellValue(jobOrder, column.key)}
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${
-                            isDarkMode ? 'text-gray-400 border-gray-800' : 'text-gray-600 border-gray-200'
-                          }`}>
-                            {jobOrders.length > 0
-                              ? 'No job orders found matching your filters'
-                              : 'No job orders found. Create your first job order.'}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                {renderCellValue(jobOrder, column.key)}
+                              </Text>
+                            </View>
+                          ))}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 48,
+                        alignItems: 'center'
+                      }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                          {jobOrders.length > 0
+                            ? 'No job orders found matching your filters'
+                            : 'No job orders found. Create your first job order.'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
-      {selectedJobOrder && mobileView === 'details' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <JobOrderDetails 
-            jobOrder={selectedJobOrder}
-            onClose={handleMobileBack}
-            onRefresh={fetchData}
-            isMobile={true}
-          />
-        </div>
-      )}
-
-      {selectedJobOrder && mobileView !== 'details' && (
-        <div className="hidden md:block flex-shrink-0 overflow-hidden">
+      {selectedJobOrder && (
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           <JobOrderDetails 
             jobOrder={selectedJobOrder}
             onClose={() => setSelectedJobOrder(null)}
             onRefresh={fetchData}
             isMobile={false}
           />
-        </div>
+        </View>
       )}
+
+      <Modal
+        visible={dropdownOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDropdownOpen(false)}
+      >
+        <Pressable 
+          style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}
+          onPress={() => setDropdownOpen(false)}
+        >
+          <View style={{
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            borderWidth: 1,
+            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+            borderRadius: 4,
+            width: 144
+          }}>
+            <Pressable
+              onPress={() => {
+                setDisplayMode('card');
+                setDropdownOpen(false);
+              }}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 8
+              }}
+            >
+              <Text style={{
+                fontSize: 14,
+                color: displayMode === 'card' 
+                  ? (colorPalette?.primary || '#f97316')
+                  : (isDarkMode ? '#ffffff' : '#111827')
+              }}>
+                Card View
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setDisplayMode('table');
+                setDropdownOpen(false);
+              }}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 8
+              }}
+            >
+              <Text style={{
+                fontSize: 14,
+                color: displayMode === 'table' 
+                  ? (colorPalette?.primary || '#f97316')
+                  : (isDarkMode ? '#ffffff' : '#111827')
+              }}>
+                Table View
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
 
       <JobOrderFunnelFilter
         isOpen={isFunnelFilterOpen}
         onClose={() => setIsFunnelFilterOpen(false)}
-        onApplyFilters={(filters) => {
+        onApplyFilters={async (filters) => {
           console.log('Applied filters:', filters);
           setActiveFilters(filters);
-          localStorage.setItem('jobOrderFilters', JSON.stringify(filters));
+          await AsyncStorage.setItem('jobOrderFilters', JSON.stringify(filters));
           setIsFunnelFilterOpen(false);
         }}
         currentFilters={activeFilters}
       />
-    </div>
+    </View>
   );
 };
 

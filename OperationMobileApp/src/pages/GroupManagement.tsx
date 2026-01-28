@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Modal } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Group } from '../types/api';
 import { groupService } from '../services/userService';
 import Breadcrumb from './Breadcrumb';
@@ -17,6 +19,9 @@ const GroupManagement: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [addButtonHovered, setAddButtonHovered] = useState(false);
+  const [selectFocused, setSelectFocused] = useState(false);
 
   useEffect(() => {
     loadGroups();
@@ -35,20 +40,16 @@ const GroupManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
+    const loadTheme = async () => {
+      try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark');
+      } catch (err) {
+        console.error('Failed to load theme:', err);
+      }
     };
     
-    checkDarkMode();
-    
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    
-    return () => observer.disconnect();
+    loadTheme();
   }, []);
 
   const loadGroups = async () => {
@@ -104,7 +105,6 @@ const GroupManagement: React.FC = () => {
   const handleGroupCreated = (newGroup: Group) => {
     if (!newGroup) {
       console.error('Received invalid Affiliate from creation');
-      alert('Warning: Failed to receive Affiliate data. Please refresh the page.');
       return;
     }
     
@@ -116,7 +116,6 @@ const GroupManagement: React.FC = () => {
   const handleEdit = (group: Group) => {
     if (!group) {
       console.error('Cannot edit Affiliate: No Affiliate data');
-      alert('Cannot edit Affiliate: No Affiliate data');
       return;
     }
     
@@ -151,14 +150,9 @@ const GroupManagement: React.FC = () => {
       if (response.success) {
         setGroups(prev => prev.filter(group => group.group_id !== deletingGroup.group_id));
         setDeletingGroup(null);
-      } else {
-        const errorMessage = response.message || 'Failed to delete Affiliate';
-        alert(errorMessage);
       }
     } catch (error: any) {
       console.error('Failed to delete Affiliate:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete Affiliate';
-      alert(errorMessage);
     }
   };
 
@@ -171,421 +165,361 @@ const GroupManagement: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
+    <View style={{ padding: 24 }}>
       <Breadcrumb items={[
         { label: 'Affiliates' }
       ]} />
-      <div className={`rounded-lg border overflow-hidden text-white ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-600'
-          : 'bg-white border-gray-300'
-      }`}>
-        <div className="p-6">
-          <div className="mb-8">
-            <h2 className={`text-2xl font-semibold mb-2 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+      <View style={{ 
+        borderRadius: 8,
+        borderWidth: 1,
+        overflow: 'hidden',
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+        borderColor: isDarkMode ? '#4b5563' : '#d1d5db'
+      }}>
+        <View style={{ padding: 24 }}>
+          <View style={{ marginBottom: 32 }}>
+            <Text style={{ 
+              fontSize: 24,
+              fontWeight: '600',
+              marginBottom: 8,
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>
               Affiliate Management
-            </h2>
-            <p className={`text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>
+            </Text>
+            <Text style={{ 
+              fontSize: 14,
+              color: isDarkMode ? '#9ca3af' : '#6b7280'
+            }}>
               Manage user Affiliate and their settings
-            </p>
-          </div>
+            </Text>
+          </View>
 
-          <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mb-8">
-            <input
-              type="text"
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 32 }}>
+            <TextInput
               placeholder="Search Affiliates by name, company, or email..."
+              placeholderTextColor="#6b7280"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`px-4 py-3 border rounded placeholder-gray-500 focus:outline-none w-full md:w-80 ${
-                isDarkMode
-                  ? 'bg-gray-900 border-gray-600 text-white focus:border-gray-100'
-                  : 'bg-white border-gray-300 text-gray-900 focus:border-gray-500'
-              }`}
-              onFocus={(e) => {
-                if (colorPalette?.primary) {
-                  e.currentTarget.style.borderColor = colorPalette.primary;
-                  e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
-                e.currentTarget.style.boxShadow = 'none';
+              onChangeText={(text) => setSearchTerm(text)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderWidth: 1,
+                borderRadius: 4,
+                flex: 1,
+                maxWidth: 320,
+                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+                borderColor: searchFocused && colorPalette?.primary
+                  ? colorPalette.primary
+                  : isDarkMode ? '#4b5563' : '#d1d5db',
+                color: isDarkMode ? '#ffffff' : '#111827'
               }}
             />
-            <button 
-              onClick={handleAddNew}
-              className="px-6 py-3 rounded transition-colors text-sm font-medium whitespace-nowrap text-white"
+            <Pressable 
+              onPress={handleAddNew}
+              onPressIn={() => setAddButtonHovered(true)}
+              onPressOut={() => setAddButtonHovered(false)}
               style={{
-                backgroundColor: colorPalette?.primary || '#3b82f6'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#3b82f6';
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 4,
+                backgroundColor: addButtonHovered && colorPalette?.accent
+                  ? colorPalette.accent
+                  : colorPalette?.primary || '#3b82f6'
               }}
             >
-              Add New Affiliate
-            </button>
-          </div>
+              <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '500' }}>
+                Add New Affiliate
+              </Text>
+            </Pressable>
+          </View>
 
           {loading ? (
-            <div className="text-center py-8">
-              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading Affiliates...</p>
-            </div>
+            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+              <ActivityIndicator size="large" color={colorPalette?.primary || '#3b82f6'} />
+              <Text style={{ 
+                marginTop: 16,
+                color: isDarkMode ? '#9ca3af' : '#6b7280'
+              }}>
+                Loading Affiliates...
+              </Text>
+            </View>
           ) : (
             <>
-              {/* Desktop Table View */}
-              <div className={`hidden md:block rounded border overflow-hidden ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-600'
-                  : 'bg-white border-gray-300'
-              }`}>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="">
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Affiliate Name</th>
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Company Name</th>
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Email</th>
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Hotline</th>
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Modified Date</th>
-                        <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                          isDarkMode
-                            ? 'text-gray-300 border-gray-600'
-                            : 'text-gray-700 border-gray-300'
-                        }`}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentGroups.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className={`px-6 py-8 text-center ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                            No Affiliate found
-                          </td>
-                        </tr>
-                      ) : (
-                        currentGroups.map((group: Group) => (
-                          <tr key={group.group_id} className={`border-b ${
-                            isDarkMode
-                              ? 'border-gray-700 hover:bg-gray-750'
-                              : 'border-gray-200 hover:bg-gray-50'
-                          }`}>
-                            <td className={`px-4 py-4 text-sm font-medium ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+              <View style={{ 
+                borderRadius: 4,
+                borderWidth: 1,
+                overflow: 'hidden',
+                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                borderColor: isDarkMode ? '#4b5563' : '#d1d5db'
+              }}>
+                <ScrollView horizontal>
+                  <View>
+                    <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#4b5563' : '#d1d5db' }}>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Affiliate Name
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Company Name
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Email
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 150 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Hotline
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 150 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Modified Date
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 120 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                          Actions
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {currentGroups.length === 0 ? (
+                      <View style={{ paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center' }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                          No Affiliate found
+                        </Text>
+                      </View>
+                    ) : (
+                      currentGroups.map((group: Group) => (
+                        <Pressable 
+                          key={group.group_id}
+                          style={({ pressed }) => ({
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+                            backgroundColor: pressed ? (isDarkMode ? '#374151' : '#f9fafb') : 'transparent'
+                          })}
+                        >
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827' }}>
                               {group.group_name}
-                            </td>
-                            <td className={`px-4 py-4 text-sm ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
+                            </Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                            <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                               {group.company_name || '-'}
-                            </td>
-                            <td className={`px-4 py-4 text-sm ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
+                            </Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 200 }}>
+                            <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                               {group.email || '-'}
-                            </td>
-                            <td className={`px-4 py-4 text-sm ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
+                            </Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 150 }}>
+                            <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                               {group.hotline || '-'}
-                            </td>
-                            <td className={`px-4 py-4 text-sm ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
+                            </Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 150 }}>
+                            <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                               {group.modified_date ? new Date(group.modified_date).toLocaleDateString() : '-'}
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex gap-2">
-                                <button 
-                                  onClick={() => handleEdit(group)}
-                                  className={`p-2 rounded transition-colors ${
-                                    isDarkMode
-                                      ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-900'
-                                      : 'text-blue-600 hover:text-blue-700 hover:bg-blue-100'
-                                  }`}
-                                  title="Edit Affiliate"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteClick(group)}
-                                  className={`p-2 rounded transition-colors ${
-                                    isDarkMode
-                                      ? 'text-red-400 hover:text-red-300 hover:bg-red-900'
-                                      : 'text-red-600 hover:text-red-700 hover:bg-red-100'
-                                  }`}
-                                  title="Delete Affiliate"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Mobile Card View */}
-              <div className="md:hidden space-y-4">
-                {currentGroups.length === 0 ? (
-                  <div className={`rounded border p-6 text-center ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-600 text-gray-400'
-                      : 'bg-white border-gray-300 text-gray-600'
-                  }`}>
-                    No Affiliate found
-                  </div>
-                ) : (
-                  currentGroups.map((group: Group) => (
-                    <div key={group.group_id} className={`rounded border p-4 ${
-                      isDarkMode
-                        ? 'bg-gray-800 border-gray-600'
-                        : 'bg-white border-gray-300'
-                    }`}>
-                      <div className="mb-3">
-                        <div className={`font-medium text-lg mb-1 ${
-                          isDarkMode ? 'text-white' : 'text-gray-900'
-                        }`}>
-                          {group.group_name}
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2 mb-4">
-                        <div className="flex justify-between text-sm">
-                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Company:</span>
-                          <span className={`truncate ml-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{group.company_name || '-'}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Email:</span>
-                          <span className={`truncate ml-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{group.email || '-'}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Hotline:</span>
-                          <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{group.hotline || '-'}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Modified:</span>
-                          <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>{group.modified_date ? new Date(group.modified_date).toLocaleDateString() : '-'}</span>
-                        </div>
-                      </div>
-                      
-                      <div className={`flex gap-2 pt-3 border-t ${
-                        isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                      }`}>
-                        <button 
-                          onClick={() => handleEdit(group)}
-                          className={`flex-1 px-4 py-2 border rounded transition-colors text-sm font-medium ${
-                            isDarkMode
-                              ? 'text-blue-400 border-blue-400 hover:bg-blue-900'
-                              : 'text-blue-600 border-blue-600 hover:bg-blue-100'
-                          }`}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteClick(group)}
-                          className={`flex-1 px-4 py-2 border rounded transition-colors text-sm font-medium ${
-                            isDarkMode
-                              ? 'text-red-400 border-red-400 hover:bg-red-900'
-                              : 'text-red-600 border-red-600 hover:bg-red-100'
-                          }`}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                            </Text>
+                          </View>
+                          <View style={{ paddingHorizontal: 16, paddingVertical: 16, width: 120, flexDirection: 'row', gap: 8 }}>
+                            <Pressable 
+                              onPress={() => handleEdit(group)}
+                              style={({ pressed }) => ({
+                                padding: 8,
+                                borderRadius: 4,
+                                backgroundColor: pressed 
+                                  ? (isDarkMode ? '#1e3a8a' : '#dbeafe')
+                                  : 'transparent'
+                              })}
+                            >
+                              <Text style={{ color: isDarkMode ? '#60a5fa' : '#2563eb' }}>✏️</Text>
+                            </Pressable>
+                            <Pressable 
+                              onPress={() => handleDeleteClick(group)}
+                              style={({ pressed }) => ({
+                                padding: 8,
+                                borderRadius: 4,
+                                backgroundColor: pressed 
+                                  ? (isDarkMode ? '#7f1d1d' : '#fee2e2')
+                                  : 'transparent'
+                              })}
+                            >
+                              <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>🗑️</Text>
+                            </Pressable>
+                          </View>
+                        </Pressable>
+                      ))
+                    )}
+                  </View>
+                </ScrollView>
+              </View>
             </>
           )}
 
-          {/* Pagination Controls */}
           {totalItems > 0 && (
-            <div className="mt-4">
-              <div className="px-4 md:px-6 py-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                  <div className={`text-sm text-center sm:text-left ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
+            <View style={{ marginTop: 16 }}>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                  <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
                     Showing {showingStart} to {showingEnd} of {totalItems} entries
-                  </div>
-                  <div className="flex items-center justify-center gap-2">
-                    <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show</span>
-                    <select
-                      value={itemsPerPage}
-                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
-                      className={`px-3 py-1 border rounded text-sm focus:outline-none ${
-                        isDarkMode
-                          ? 'bg-gray-800 border-gray-600 text-white focus:border-gray-400'
-                          : 'bg-white border-gray-300 text-gray-900 focus:border-gray-500'
-                      }`}
-                      onFocus={(e) => {
-                        if (colorPalette?.primary) {
-                          e.currentTarget.style.borderColor = colorPalette.primary;
-                          e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                        }
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>Show</Text>
+                    <Pressable
+                      onPress={() => {
+                        const options = [10, 25, 50, 100];
+                        const currentIndex = options.indexOf(itemsPerPage);
+                        const nextIndex = (currentIndex + 1) % options.length;
+                        handleItemsPerPageChange(options[nextIndex]);
                       }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
-                        e.currentTarget.style.boxShadow = 'none';
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 4,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                        borderColor: isDarkMode ? '#4b5563' : '#d1d5db'
                       }}
                     >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                    <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>entries</span>
-                  </div>
-                </div>
+                      <Text style={{ fontSize: 14, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                        {itemsPerPage}
+                      </Text>
+                    </Pressable>
+                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>entries</Text>
+                  </View>
+                </View>
                 
-                <div className="flex items-center justify-center gap-1 flex-wrap">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <Pressable
+                    onPress={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1 || totalPages === 0}
-                    className={`px-3 py-1 text-sm border rounded whitespace-nowrap ${
-                      isDarkMode
-                        ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                        : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
-                    }`}
-                  >
-                    Previous
-                  </button>
-                  
-                  <div className="hidden sm:flex items-center gap-1">
-                  {totalPages > 0 && Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(page => {
-                      const distance = Math.abs(page - currentPage);
-                      return distance <= 2 || page === 1 || page === totalPages;
-                    })
-                    .map((page, index, array) => {
-                      const prevPage = array[index - 1];
-                      const showEllipsis = prevPage && page - prevPage > 1;
-                      
-                      return (
-                        <React.Fragment key={page}>
-                          {showEllipsis && (
-                            <span className={`px-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>...</span>
-                          )}
-                          <button
-                            onClick={() => handlePageChange(page)}
-                            className={`px-3 py-1 text-sm border rounded ${
-                              currentPage === page
-                                ? isDarkMode
-                                  ? 'bg-blue-600 border-blue-600 text-white'
-                                  : 'bg-blue-500 border-blue-500 text-white'
-                                : isDarkMode
-                                  ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700'
-                                  : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-100'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        </React.Fragment>
-                      );
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      fontSize: 14,
+                      borderWidth: 1,
+                      borderRadius: 4,
+                      backgroundColor: pressed 
+                        ? (isDarkMode ? '#374151' : '#f3f4f6')
+                        : (isDarkMode ? '#1f2937' : '#ffffff'),
+                      borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                      opacity: currentPage === 1 || totalPages === 0 ? 0.5 : 1
                     })}
-                  </div>
-                  
-                  <div className={`sm:hidden text-sm px-3 py-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {currentPage} / {totalPages}
-                  </div>
-                  
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className={`px-3 py-1 text-sm border rounded whitespace-nowrap ${
-                      isDarkMode
-                        ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                        : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed'
-                    }`}
                   >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Previous</Text>
+                  </Pressable>
+                  
+                  <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    {currentPage} / {totalPages}
+                  </Text>
+                  
+                  <Pressable
+                    onPress={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      fontSize: 14,
+                      borderWidth: 1,
+                      borderRadius: 4,
+                      backgroundColor: pressed 
+                        ? (isDarkMode ? '#374151' : '#f3f4f6')
+                        : (isDarkMode ? '#1f2937' : '#ffffff'),
+                      borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                      opacity: currentPage === totalPages || totalPages === 0 ? 0.5 : 1
+                    })}
+                  >
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Next</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
           )}
-        </div>
+        </View>
         
-        {/* Delete Confirmation Modal */}
-        {deletingGroup && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className={`p-6 rounded border max-w-md w-full mx-4 ${
-              isDarkMode
-                ? 'bg-gray-900 border-gray-700'
-                : 'bg-white border-gray-300'
-            }`}>
-              <h3 className={`text-lg font-semibold mb-4 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
+        <Modal
+          visible={deletingGroup !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCancelDelete}
+        >
+          <View style={{ 
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <View style={{ 
+              padding: 24,
+              borderRadius: 8,
+              borderWidth: 1,
+              maxWidth: 448,
+              width: '100%',
+              marginHorizontal: 16,
+              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+              borderColor: isDarkMode ? '#374151' : '#d1d5db'
+            }}>
+              <Text style={{ 
+                fontSize: 18,
+                fontWeight: '600',
+                marginBottom: 16,
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>
                 Confirm Delete Group
-              </h3>
-              <p className={`mb-6 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Are you sure you want to delete group "{deletingGroup.group_name}"? This action cannot be undone.
-              </p>
-              <div className="flex gap-4">
-                <button
-                  onClick={handleCancelDelete}
-                  className={`px-4 py-2 border rounded transition-colors text-sm font-medium ${
-                    isDarkMode
-                      ? 'border-gray-600 text-white hover:bg-gray-800'
-                      : 'border-gray-300 text-gray-900 hover:bg-gray-100'
-                  }`}
+              </Text>
+              <Text style={{ 
+                marginBottom: 24,
+                color: isDarkMode ? '#d1d5db' : '#374151'
+              }}>
+                Are you sure you want to delete group "{deletingGroup?.group_name}"? This action cannot be undone.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <Pressable
+                  onPress={handleCancelDelete}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    fontSize: 14,
+                    fontWeight: '500',
+                    backgroundColor: pressed 
+                      ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                      : 'transparent',
+                    borderColor: isDarkMode ? '#4b5563' : '#d1d5db'
+                  })}
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium"
+                  <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleConfirmDelete}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    fontSize: 14,
+                    fontWeight: '500',
+                    backgroundColor: pressed ? '#b91c1c' : '#dc2626'
+                  })}
                 >
-                  Delete Group
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+                  <Text style={{ color: '#ffffff' }}>Delete Group</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </View>
   );
 };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, ChevronRight, Tag } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { Search, ChevronRight, Tag } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DiscountDetails from '../components/DiscountDetails';
 import DiscountFormModal from '../modals/DiscountFormModal';
 import * as discountService from '../services/discountService';
@@ -117,30 +119,21 @@ const Discounts: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
-  const sidebarStartXRef = useRef<number>(0);
-  const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isDiscountFormModalOpen, setIsDiscountFormModalOpen] = useState<boolean>(false);
+  const [addButtonHovered, setAddButtonHovered] = useState(false);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
+    const loadTheme = async () => {
+      try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark' || theme === null);
+      } catch (err) {
+        console.error('Failed to load theme:', err);
+      }
     };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -259,38 +252,6 @@ const Discounts: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
   const handleOpenDiscountFormModal = () => {
     setIsDiscountFormModalOpen(true);
   };
@@ -301,7 +262,6 @@ const Discounts: React.FC = () => {
 
   const handleSaveDiscount = async (formData: any) => {
     try {
-      // The form modal handles the save internally, just refresh the list
       await handleRefresh();
       handleCloseDiscountFormModal();
     } catch (error) {
@@ -310,217 +270,255 @@ const Discounts: React.FC = () => {
   };
 
   return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      <div className={`md:border-r border-t md:border-t-0 flex-shrink-0 flex flex-col order-2 md:order-1 relative ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 hidden md:block ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Discounts</h2>
-            <div>
-              <button 
-                className="flex items-center space-x-1 text-white px-3 py-1 rounded text-sm transition-colors"
-                onClick={handleOpenDiscountFormModal}
-                style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                <span className="font-bold">+</span>
-                <span>Add</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto md:block overflow-x-auto">
-          <div className="flex md:flex-col md:space-y-0 space-x-2 md:space-x-0 p-2 md:p-0">
-            {locationItems.map((location) => (
-              <button
-                key={location.id}
-                onClick={() => setSelectedLocation(location.id)}
-                className={`md:w-full flex-shrink-0 flex flex-col md:flex-row items-center md:justify-between px-4 py-3 text-sm transition-colors rounded-md md:rounded-none ${
-                  isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                } ${
-                  selectedLocation === location.id
-                    ? ''
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}
-                style={selectedLocation === location.id ? {
-                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                  color: colorPalette?.primary || '#fb923c'
-                } : {}}
-              >
-                {location.id === 'all' ? (
-                  <>
-                    <span className="text-xs md:text-sm whitespace-nowrap">All</span>
-                    {location.count > 0 && (
-                      <span className={`px-2 py-1 rounded-full text-xs mt-1 md:mt-0`}
-                        style={selectedLocation === location.id ? {
-                          backgroundColor: colorPalette?.primary || '#ea580c',
-                          color: 'white'
-                        } : {
-                          backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
-                          color: isDarkMode ? '#d1d5db' : '#4b5563'
-                        }}>
+    <View style={{ 
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden',
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
+      <View style={{ 
+        width: sidebarWidth,
+        borderRightWidth: 1,
+        flexShrink: 0,
+        flexDirection: 'column',
+        position: 'relative',
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        borderRightColor: isDarkMode ? '#374151' : '#e5e7eb'
+      }}>
+        <View style={{ 
+          padding: 16,
+          borderBottomWidth: 1,
+          flexShrink: 0,
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text style={{ 
+              fontSize: 18,
+              fontWeight: '600',
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>
+              Discounts
+            </Text>
+            <Pressable 
+              onPress={handleOpenDiscountFormModal}
+              onPressIn={() => setAddButtonHovered(true)}
+              onPressOut={() => setAddButtonHovered(false)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                borderRadius: 4,
+                fontSize: 14,
+                backgroundColor: addButtonHovered && colorPalette?.accent
+                  ? colorPalette.accent
+                  : colorPalette?.primary || '#ea580c'
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>+</Text>
+              <Text style={{ color: '#ffffff' }}>Add</Text>
+            </Pressable>
+          </View>
+        </View>
+        <ScrollView style={{ flex: 1 }}>
+          {locationItems.map((location) => (
+            <Pressable
+              key={location.id}
+              onPress={() => setSelectedLocation(location.id)}
+              style={({ pressed }) => ({
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                fontSize: 14,
+                backgroundColor: selectedLocation === location.id
+                  ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                  : pressed
+                    ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                    : 'transparent'
+              })}
+            >
+              {location.id === 'all' ? (
+                <>
+                  <Text style={{ 
+                    fontSize: 14,
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')
+                  }}>
+                    All
+                  </Text>
+                  {location.count > 0 && (
+                    <View style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 9999,
+                      fontSize: 12,
+                      backgroundColor: selectedLocation === location.id 
+                        ? (colorPalette?.primary || '#ea580c')
+                        : (isDarkMode ? '#374151' : '#d1d5db')
+                    }}>
+                      <Text style={{ 
+                        color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#4b5563')
+                      }}>
                         {location.count}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex flex-col md:flex-row items-center md:justify-between w-full">
-                    <div className="flex items-center">
-                      <ChevronRight size={16} className="mr-2 hidden md:block" />
-                      <span className="capitalize text-xs md:text-sm whitespace-nowrap">{location.name}</span>
-                    </div>
-                    {location.count > 0 && (
-                      <span className={`px-2 py-1 rounded-full text-xs mt-1 md:mt-0`}
-                        style={selectedLocation === location.id ? {
-                          backgroundColor: colorPalette?.primary || '#ea580c',
-                          color: 'white'
-                        } : {
-                          backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
-                          color: isDarkMode ? '#d1d5db' : '#4b5563'
-                        }}>
-                        {location.count}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10 hidden md:block"
-          onMouseDown={handleMouseDownSidebarResize}
-          style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#f97316') : 'transparent'
-          }}
-          onMouseEnter={(e) => {
-            if (!isResizingSidebar && colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizingSidebar) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-        />
-      </div>
-
-      <div className={`flex-1 overflow-hidden order-1 md:order-2 ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col h-full">
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
-              {isLoading ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                  </div>
-                  <p className="mt-4">Loading discount records...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-red-400' : 'text-red-600'
-                }`}>
-                  <p>{error}</p>
-                  <button 
-                    onClick={handleRefresh}
-                    className={`mt-4 px-4 py-2 rounded ${
-                      isDarkMode
-                        ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}>
-                    Retry
-                  </button>
-                </div>
+                      </Text>
+                    </View>
+                  )}
+                </>
               ) : (
-                <div className="space-y-0">
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ChevronRight size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')} style={{ marginRight: 8 }} />
+                    <Text style={{ 
+                      textTransform: 'capitalize',
+                      fontSize: 14,
+                      color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')
+                    }}>
+                      {location.name}
+                    </Text>
+                  </View>
+                  {location.count > 0 && (
+                    <View style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 9999,
+                      fontSize: 12,
+                      backgroundColor: selectedLocation === location.id 
+                        ? (colorPalette?.primary || '#ea580c')
+                        : (isDarkMode ? '#374151' : '#d1d5db')
+                    }}>
+                      <Text style={{ 
+                        color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#4b5563')
+                      }}>
+                        {location.count}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={{ 
+        flex: 1,
+        overflow: 'hidden',
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
+              {isLoading ? (
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+                  <Text style={{ 
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#6b7280'
+                  }}>
+                    Loading discount records...
+                  </Text>
+                </View>
+              ) : error ? (
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Pressable 
+                    onPress={handleRefresh}
+                    style={{ 
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}
+                  >
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Retry</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View>
                   {filteredDiscountRecords.length > 0 ? (
                     filteredDiscountRecords.map((record) => (
-                      <div
+                      <Pressable
                         key={record.id}
-                        onClick={() => handleRecordClick(record)}
-                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${
-                          isDarkMode ? 'hover:bg-gray-800 border-gray-800' : 'hover:bg-gray-100 border-gray-200'
-                        } ${selectedDiscount?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
+                        onPress={() => handleRecordClick(record)}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                          backgroundColor: selectedDiscount?.id === record.id
+                            ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                            : pressed
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : 'transparent'
+                        })}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ 
+                              fontWeight: '500',
+                              color: isDarkMode ? '#ffffff' : '#111827'
+                            }}>
                               {record.fullName}
-                            </div>
-                            <div className="text-red-400 text-sm">
+                            </Text>
+                            <Text style={{ color: '#f87171', fontSize: 14 }}>
                               {record.accountNo} | {record.fullName} | {record.address}
-                            </div>
-                          </div>
-                          <div className="flex items-center ml-4 flex-shrink-0">
-                            <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 16, flexShrink: 0 }}>
+                            <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
                               ₱{record.discountAmount.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                            </Text>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))
                   ) : (
-                    <div className={`text-center py-12 ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                      No discount records found matching your filters
-                    </div>
+                    <View style={{ 
+                      alignItems: 'center',
+                      paddingVertical: 48
+                    }}>
+                      <Text style={{ 
+                        color: isDarkMode ? '#9ca3af' : '#6b7280'
+                      }}>
+                        No discount records found matching your filters
+                      </Text>
+                    </View>
                   )}
-                </div>
+                </View>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
       {selectedDiscount && (
-        <div className="flex-shrink-0 overflow-hidden order-3">
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           <DiscountDetails
             discountRecord={selectedDiscount}
             onClose={handleCloseDetails}
             onApproveSuccess={handleRefresh}
           />
-        </div>
+        </View>
       )}
 
-      {/* Discount Form Modal */}
       <DiscountFormModal
         isOpen={isDiscountFormModalOpen}
         onClose={handleCloseDiscountFormModal}
         onSave={handleSaveDiscount}
       />
-    </div>
+    </View>
   );
 };
 

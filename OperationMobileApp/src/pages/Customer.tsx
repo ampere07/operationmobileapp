@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { CreditCard, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, RefreshCw, Filter } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { CreditCard, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, RefreshCw, Filter } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import BillingDetails from '../components/CustomerDetails';
 import { getBillingRecords, BillingRecord } from '../services/billingService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
@@ -67,72 +69,71 @@ interface LocationItem {
 
 type DisplayMode = 'card' | 'table';
 
-// All available columns for the table - extended list to match BillingListView
 const allColumns = [
-  { key: 'status', label: 'Status', width: 'min-w-28' },
-  { key: 'billingStatus', label: 'Billing Status', width: 'min-w-28' },
-  { key: 'accountNo', label: 'Account No.', width: 'min-w-32' },
-  { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-28' },
-  { key: 'customerName', label: 'Full Name', width: 'min-w-40' },
-  { key: 'address', label: 'Address', width: 'min-w-56' },
-  { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-  { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-  { key: 'plan', label: 'Plan', width: 'min-w-40' },
-  { key: 'balance', label: 'Account Balance', width: 'min-w-32' },
-  { key: 'username', label: 'Username', width: 'min-w-32' },
-  { key: 'connectionType', label: 'Connection Type', width: 'min-w-36' },
-  { key: 'routerModel', label: 'Router Model', width: 'min-w-32' },
-  { key: 'routerModemSN', label: 'Router/Modem SN', width: 'min-w-36' },
-  { key: 'lcpnap', label: 'LCPNAP', width: 'min-w-32' },
-  { key: 'port', label: 'PORT', width: 'min-w-28' },
-  { key: 'vlan', label: 'VLAN', width: 'min-w-24' },
-  { key: 'billingDay', label: 'Billing Day', width: 'min-w-28' },
-  { key: 'totalPaid', label: 'Total Paid', width: 'min-w-28' },
-  { key: 'provider', label: 'Provider', width: 'min-w-24' },
-  { key: 'lcp', label: 'LCP', width: 'min-w-28' },
-  { key: 'nap', label: 'NAP', width: 'min-w-28' },
-  { key: 'modifiedBy', label: 'Modified By', width: 'min-w-32' },
-  { key: 'modifiedDate', label: 'Modified Date', width: 'min-w-36' },
-  { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-  { key: 'city', label: 'City', width: 'min-w-28' },
-  { key: 'region', label: 'Region', width: 'min-w-28' },
-  { key: 'lcpnapport', label: 'LCPNAPPORT', width: 'min-w-36' },
-  { key: 'usageType', label: 'Usage Type', width: 'min-w-32' },
-  { key: 'referredBy', label: 'Referred By', width: 'min-w-36' },
-  { key: 'secondContactNumber', label: 'Second Contact Number', width: 'min-w-40' },
-  { key: 'referrersAccountNumber', label: 'Referrer\'s Account Number', width: 'min-w-44' },
-  { key: 'relatedInvoices', label: 'Related Invoices', width: 'min-w-36' },
-  { key: 'relatedStatementOfAccount', label: 'Related Statement of Account', width: 'min-w-52' },
-  { key: 'relatedDiscounts', label: 'Related Discounts', width: 'min-w-36' },
-  { key: 'relatedStaggeredInstallation', label: 'Related Staggered Installation', width: 'min-w-52' },
-  { key: 'relatedStaggeredPayments', label: 'Related Staggered Payments', width: 'min-w-52' },
-  { key: 'relatedOverdues', label: 'Related Overdues', width: 'min-w-36' },
-  { key: 'relatedDCNotices', label: 'Related DC Notices', width: 'min-w-40' },
-  { key: 'relatedServiceOrders', label: 'Related Service Orders', width: 'min-w-44' },
-  { key: 'relatedDisconnectedLogs', label: 'Related Disconnected Logs', width: 'min-w-48' },
-  { key: 'relatedReconnectionLogs', label: 'Related Reconnection Logs', width: 'min-w-48' },
-  { key: 'relatedChangeDueLogs', label: 'Related Change Due Logs', width: 'min-w-48' },
-  { key: 'relatedTransactions', label: 'Related Transactions', width: 'min-w-40' },
-  { key: 'relatedDetailsUpdateLogs', label: 'Related Details Update Logs', width: 'min-w-48' },
-  { key: 'computedAddress', label: '_ComputedAddress', width: 'min-w-40' },
-  { key: 'computedStatus', label: '_ComputedStatus', width: 'min-w-36' },
-  { key: 'relatedAdvancedPayments', label: 'Related Advanced Payments', width: 'min-w-48' },
-  { key: 'relatedPaymentPortalLogs', label: 'Related Payment Portal Logs', width: 'min-w-48' },
-  { key: 'relatedInventoryLogs', label: 'Related Inventory Logs', width: 'min-w-44' },
-  { key: 'computedAccountNo', label: '_ComputedAccountNo', width: 'min-w-44' },
-  { key: 'relatedOnlineStatus', label: 'Related Online Status', width: 'min-w-44' },
-  { key: 'group', label: 'Group', width: 'min-w-28' },
-  { key: 'mikrotikId', label: 'Mikrotik ID', width: 'min-w-32' },
-  { key: 'sessionIP', label: 'Session IP', width: 'min-w-32' },
-  { key: 'relatedBorrowedLogs', label: 'Related Borrowed Logs', width: 'min-w-44' },
-  { key: 'relatedPlanChangeLogs', label: 'Related Plan Change Logs', width: 'min-w-48' },
-  { key: 'relatedServiceChargeLogs', label: 'Related Service Charge Logs', width: 'min-w-48' },
-  { key: 'relatedAdjustedAccountLogs', label: 'Related Adjusted Account Logs', width: 'min-w-52' },
-  { key: 'referralContactNo', label: 'Referral Contact No.', width: 'min-w-40' },
-  { key: 'logs', label: 'Logs', width: 'min-w-24' },
-  { key: 'relatedSecurityDeposits', label: 'Related Security Deposits', width: 'min-w-48' },
-  { key: 'relatedApprovedTransactions', label: 'Related Approved Transaction', width: 'min-w-52' },
-  { key: 'relatedAttachments', label: 'Related Attachments', width: 'min-w-40' }
+  { key: 'status', label: 'Status', width: 112 },
+  { key: 'billingStatus', label: 'Billing Status', width: 112 },
+  { key: 'accountNo', label: 'Account No.', width: 128 },
+  { key: 'dateInstalled', label: 'Date Installed', width: 112 },
+  { key: 'customerName', label: 'Full Name', width: 160 },
+  { key: 'address', label: 'Address', width: 224 },
+  { key: 'contactNumber', label: 'Contact Number', width: 144 },
+  { key: 'emailAddress', label: 'Email Address', width: 192 },
+  { key: 'plan', label: 'Plan', width: 160 },
+  { key: 'balance', label: 'Account Balance', width: 128 },
+  { key: 'username', label: 'Username', width: 128 },
+  { key: 'connectionType', label: 'Connection Type', width: 144 },
+  { key: 'routerModel', label: 'Router Model', width: 128 },
+  { key: 'routerModemSN', label: 'Router/Modem SN', width: 144 },
+  { key: 'lcpnap', label: 'LCPNAP', width: 128 },
+  { key: 'port', label: 'PORT', width: 112 },
+  { key: 'vlan', label: 'VLAN', width: 96 },
+  { key: 'billingDay', label: 'Billing Day', width: 112 },
+  { key: 'totalPaid', label: 'Total Paid', width: 112 },
+  { key: 'provider', label: 'Provider', width: 96 },
+  { key: 'lcp', label: 'LCP', width: 112 },
+  { key: 'nap', label: 'NAP', width: 112 },
+  { key: 'modifiedBy', label: 'Modified By', width: 128 },
+  { key: 'modifiedDate', label: 'Modified Date', width: 144 },
+  { key: 'barangay', label: 'Barangay', width: 128 },
+  { key: 'city', label: 'City', width: 112 },
+  { key: 'region', label: 'Region', width: 112 },
+  { key: 'lcpnapport', label: 'LCPNAPPORT', width: 144 },
+  { key: 'usageType', label: 'Usage Type', width: 128 },
+  { key: 'referredBy', label: 'Referred By', width: 144 },
+  { key: 'secondContactNumber', label: 'Second Contact Number', width: 160 },
+  { key: 'referrersAccountNumber', label: 'Referrer\'s Account Number', width: 176 },
+  { key: 'relatedInvoices', label: 'Related Invoices', width: 144 },
+  { key: 'relatedStatementOfAccount', label: 'Related Statement of Account', width: 208 },
+  { key: 'relatedDiscounts', label: 'Related Discounts', width: 144 },
+  { key: 'relatedStaggeredInstallation', label: 'Related Staggered Installation', width: 208 },
+  { key: 'relatedStaggeredPayments', label: 'Related Staggered Payments', width: 208 },
+  { key: 'relatedOverdues', label: 'Related Overdues', width: 144 },
+  { key: 'relatedDCNotices', label: 'Related DC Notices', width: 160 },
+  { key: 'relatedServiceOrders', label: 'Related Service Orders', width: 176 },
+  { key: 'relatedDisconnectedLogs', label: 'Related Disconnected Logs', width: 192 },
+  { key: 'relatedReconnectionLogs', label: 'Related Reconnection Logs', width: 192 },
+  { key: 'relatedChangeDueLogs', label: 'Related Change Due Logs', width: 192 },
+  { key: 'relatedTransactions', label: 'Related Transactions', width: 160 },
+  { key: 'relatedDetailsUpdateLogs', label: 'Related Details Update Logs', width: 192 },
+  { key: 'computedAddress', label: '_ComputedAddress', width: 160 },
+  { key: 'computedStatus', label: '_ComputedStatus', width: 144 },
+  { key: 'relatedAdvancedPayments', label: 'Related Advanced Payments', width: 192 },
+  { key: 'relatedPaymentPortalLogs', label: 'Related Payment Portal Logs', width: 192 },
+  { key: 'relatedInventoryLogs', label: 'Related Inventory Logs', width: 176 },
+  { key: 'computedAccountNo', label: '_ComputedAccountNo', width: 176 },
+  { key: 'relatedOnlineStatus', label: 'Related Online Status', width: 176 },
+  { key: 'group', label: 'Group', width: 112 },
+  { key: 'mikrotikId', label: 'Mikrotik ID', width: 128 },
+  { key: 'sessionIP', label: 'Session IP', width: 128 },
+  { key: 'relatedBorrowedLogs', label: 'Related Borrowed Logs', width: 176 },
+  { key: 'relatedPlanChangeLogs', label: 'Related Plan Change Logs', width: 192 },
+  { key: 'relatedServiceChargeLogs', label: 'Related Service Charge Logs', width: 192 },
+  { key: 'relatedAdjustedAccountLogs', label: 'Related Adjusted Account Logs', width: 208 },
+  { key: 'referralContactNo', label: 'Referral Contact No.', width: 160 },
+  { key: 'logs', label: 'Logs', width: 96 },
+  { key: 'relatedSecurityDeposits', label: 'Related Security Deposits', width: 192 },
+  { key: 'relatedApprovedTransactions', label: 'Related Approved Transaction', width: 208 },
+  { key: 'relatedAttachments', label: 'Related Attachments', width: 160 }
 ];
 
 const Customer: React.FC = () => {
@@ -149,86 +150,40 @@ const Customer: React.FC = () => {
   const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    const saved = localStorage.getItem('customerTableVisibleColumns');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.error('Failed to load column visibility:', err);
-      }
-    }
-    return allColumns.map(col => col.key);
-  });
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => allColumns.map(col => col.key));
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
-  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>(allColumns.map(col => col.key));
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
-  const [activeFilters, setActiveFilters] = useState<any>(() => {
-    const saved = localStorage.getItem('customerFilters');
-    if (saved) {
+  const [activeFilters, setActiveFilters] = useState<any>({});
+  const dropdownRef = useRef<View>(null);
+  const filterDropdownRef = useRef<View>(null);
+
+  useEffect(() => {
+    const loadStoredData = async () => {
       try {
-        return JSON.parse(saved);
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark' || theme === null);
+
+        const savedColumns = await AsyncStorage.getItem('customerTableVisibleColumns');
+        if (savedColumns) {
+          setVisibleColumns(JSON.parse(savedColumns));
+        }
+
+        const savedFilters = await AsyncStorage.getItem('customerFilters');
+        if (savedFilters) {
+          setActiveFilters(JSON.parse(savedFilters));
+        }
       } catch (err) {
-        console.error('Failed to load filters:', err);
+        console.error('Failed to load stored data:', err);
       }
-    }
-    return {};
-  });
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLTableElement>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const sidebarStartXRef = useRef<number>(0);
-  const sidebarStartWidthRef = useRef<number>(0);
-
-  // Fetch location data
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
     };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    loadStoredData();
   }, []);
-
-  // Handle click outside to close dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setFilterDropdownOpen(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownRef, filterDropdownRef]);
 
   useEffect(() => {
     const fetchLocationData = async () => {
@@ -251,7 +206,6 @@ const Customer: React.FC = () => {
     fetchLocationData();
   }, []);
 
-  // Fetch billing data
   useEffect(() => {
     const fetchBillingData = async () => {
       try {
@@ -271,7 +225,6 @@ const Customer: React.FC = () => {
     fetchBillingData();
   }, []);
 
-  // Memoize city name lookup for performance
   const getCityName = useMemo(() => {
     const cityMap = new Map(cities.map(c => [c.id, c.name]));
     return (cityId: number | null | undefined): string => {
@@ -280,7 +233,6 @@ const Customer: React.FC = () => {
     };
   }, [cities]);
 
-  // Memoize location items for performance
   const locationItems: LocationItem[] = useMemo(() => {
     const items: LocationItem[] = [
       {
@@ -290,7 +242,6 @@ const Customer: React.FC = () => {
       }
     ];
     
-    // Add cities with counts
     cities.forEach((city) => {
       const cityCount = billingRecords.filter(record => record.cityId === city.id).length;
       items.push({
@@ -303,7 +254,6 @@ const Customer: React.FC = () => {
     return items;
   }, [cities, billingRecords]);
 
-  // Helper function to apply funnel filters
   const applyFunnelFilters = (records: BillingRecord[], filters: any): BillingRecord[] => {
     if (!filters || Object.keys(filters).length === 0) return records;
 
@@ -338,7 +288,6 @@ const Customer: React.FC = () => {
     });
   };
 
-  // Memoize filtered and sorted records for performance
   const filteredBillingRecords = useMemo(() => {
     let filtered = billingRecords.filter(record => {
       const matchesLocation = selectedLocation === 'all' || 
@@ -352,7 +301,6 @@ const Customer: React.FC = () => {
       return matchesLocation && matchesSearch;
     });
 
-    // Apply funnel filters
     filtered = applyFunnelFilters(filtered, activeFilters);
 
     if (sortColumn) {
@@ -509,100 +457,92 @@ const Customer: React.FC = () => {
   
   const renderCellValue = (record: BillingRecord, columnKey: string) => {
     switch (columnKey) {
-      // Basic fields
       case 'status':
         return (
-          <div className="flex items-center space-x-2">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Circle 
-              className={`h-3 w-3 ${
-                record.onlineStatus === 'Online' 
-                  ? 'text-green-400 fill-green-400' 
-                  : 'text-gray-400 fill-gray-400'
-              }`} 
+              size={12}
+              color={record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af'}
+              fill={record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af'}
             />
-            <span className={`text-xs ${
-              record.onlineStatus === 'Online' 
-                ? 'text-green-400' 
-                : 'text-gray-400'
-            }`}>
+            <Text style={{ 
+              fontSize: 12, 
+              color: record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af' 
+            }}>
               {record.onlineStatus}
-            </span>
-          </div>
+            </Text>
+          </View>
         );
       case 'billingStatus':
-        return record.billingStatus || 'Active';
+        return <Text>{record.billingStatus || 'Active'}</Text>;
       case 'accountNo':
-        return <span className="text-red-400">{record.applicationId}</span>;
+        return <Text style={{ color: '#f87171' }}>{record.applicationId}</Text>;
       case 'dateInstalled':
-        return record.dateInstalled || '-';
+        return <Text>{record.dateInstalled || '-'}</Text>;
       case 'customerName':
-        return record.customerName;
+        return <Text>{record.customerName}</Text>;
       case 'address':
-        return <span title={record.address}>{record.address}</span>;
+        return <Text numberOfLines={1}>{record.address}</Text>;
       case 'contactNumber':
-        return record.contactNumber || '-';
+        return <Text>{record.contactNumber || '-'}</Text>;
       case 'emailAddress':
-        return record.emailAddress || '-';
+        return <Text>{record.emailAddress || '-'}</Text>;
       case 'plan':
-        return record.plan || '-';
+        return <Text>{record.plan || '-'}</Text>;
       case 'balance':
-        return `₱ ${record.balance.toFixed(2)}`;
+        return <Text>{`₱ ${record.balance.toFixed(2)}`}</Text>;
       case 'username':
-        return record.username || '-';
+        return <Text>{record.username || '-'}</Text>;
       case 'connectionType':
-        return record.connectionType || '-';
+        return <Text>{record.connectionType || '-'}</Text>;
       case 'routerModel':
-        return record.routerModel || '-';
+        return <Text>{record.routerModel || '-'}</Text>;
       case 'routerModemSN':
-        return record.routerModemSN || '-';
+        return <Text>{record.routerModemSN || '-'}</Text>;
       case 'lcpnap':
-        return record.lcpnap || '-';
+        return <Text>{record.lcpnap || '-'}</Text>;
       case 'port':
-        return record.port || '-';
+        return <Text>{record.port || '-'}</Text>;
       case 'vlan':
-        return record.vlan || '-';
+        return <Text>{record.vlan || '-'}</Text>;
       case 'billingDay':
-        return record.billingDay === 0 ? 'Every end of month' : (record.billingDay || '-');
+        return <Text>{record.billingDay === 0 ? 'Every end of month' : (record.billingDay || '-')}</Text>;
       case 'totalPaid':
-        return `₱ ${record.totalPaid?.toFixed(2) || '0.00'}`;
+        return <Text>{`₱ ${record.totalPaid?.toFixed(2) || '0.00'}`}</Text>;
       case 'provider':
-        return record.provider || '-';
+        return <Text>{record.provider || '-'}</Text>;
       case 'lcp':
-        return record.lcp || '-';
+        return <Text>{record.lcp || '-'}</Text>;
       case 'nap':
-        return record.nap || '-';
+        return <Text>{record.nap || '-'}</Text>;
       case 'modifiedBy':
-        return record.modifiedBy || '-';
+        return <Text>{record.modifiedBy || '-'}</Text>;
       case 'modifiedDate':
-        return record.modifiedDate || '-';
+        return <Text>{record.modifiedDate || '-'}</Text>;
       case 'barangay':
-        return record.barangay || '-';
+        return <Text>{record.barangay || '-'}</Text>;
       case 'city':
-        return record.city || '-';
+        return <Text>{record.city || '-'}</Text>;
       case 'region':
-        return record.region || '-';
-      
-      // Fields from BillingDetailRecord
+        return <Text>{record.region || '-'}</Text>;
       case 'lcpnapport':
-        return (record as any).lcpnapport || '-';
+        return <Text>{(record as any).lcpnapport || '-'}</Text>;
       case 'usageType':
-        return (record as any).usageType || '-';
+        return <Text>{(record as any).usageType || '-'}</Text>;
       case 'referredBy':
-        return (record as any).referredBy || '-';
+        return <Text>{(record as any).referredBy || '-'}</Text>;
       case 'secondContactNumber':
-        return (record as any).secondContactNumber || '-';
+        return <Text>{(record as any).secondContactNumber || '-'}</Text>;
       case 'referrersAccountNumber':
-        return (record as any).referrersAccountNumber || '-';
+        return <Text>{(record as any).referrersAccountNumber || '-'}</Text>;
       case 'group':
-        return (record as any).group || '-';
+        return <Text>{(record as any).group || '-'}</Text>;
       case 'mikrotikId':
-        return (record as any).mikrotikId || '-';
+        return <Text>{(record as any).mikrotikId || '-'}</Text>;
       case 'sessionIP':
-        return (record as any).sessionIP || '-';
+        return <Text>{(record as any).sessionIP || '-'}</Text>;
       case 'referralContactNo':
-        return (record as any).referralContactNo || '-';
-      
-      // Related records - placeholders
+        return <Text>{(record as any).referralContactNo || '-'}</Text>;
       case 'relatedInvoices':
       case 'relatedStatementOfAccount':
       case 'relatedDiscounts':
@@ -628,21 +568,18 @@ const Customer: React.FC = () => {
       case 'relatedApprovedTransactions':
       case 'relatedAttachments':
       case 'logs':
-        return '-';
-      
-      // Computed fields
+        return <Text>-</Text>;
       case 'computedAddress':
-        return (record as any).computedAddress || 
-               (record.address ? (record.address.length > 25 ? `${record.address.substring(0, 25)}...` : record.address) : '-');
+        return <Text>{(record as any).computedAddress || 
+               (record.address ? (record.address.length > 25 ? `${record.address.substring(0, 25)}...` : record.address) : '-')}</Text>;
       case 'computedStatus':
-        return (record as any).computedStatus || 
-               `${record.status || 'Inactive'} | P ${record.balance.toFixed(0)}`;
+        return <Text>{(record as any).computedStatus || 
+               `${record.status || 'Inactive'} | P ${record.balance.toFixed(0)}`}</Text>;
       case 'computedAccountNo':
-        return (record as any).computedAccountNo || 
-               `${record.applicationId} | ${record.customerName}${record.address ? (' | ' + record.address.substring(0, 10) + '...') : ''}`;
-        
+        return <Text>{(record as any).computedAccountNo || 
+               `${record.applicationId} | ${record.customerName}${record.address ? (' | ' + record.address.substring(0, 10) + '...') : ''}`}</Text>;
       default:
-        return '-';
+        return <Text>-</Text>;
     }
   };
 
@@ -661,103 +598,105 @@ const Customer: React.FC = () => {
   };
 
   const handleGenerateSampleData = async () => {
-    if (!window.confirm('Generate sample SOA and invoices for ALL accounts in database (regardless of billing day, status, or any restrictions)?\n\nThis will process EVERY account that has a date_installed value.\n\n✨ NEW: Includes PDF generation + Email queue + SMS notifications!\n\nContinue?')) {
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    const API_BASE_URL = window.location.hostname === 'localhost' 
-      ? 'https://backend.atssfiber.ph/api'
-      : 'https://backend.atssfiber.ph/api';
-
-    const generationDate = new Date().toISOString().split('T')[0];
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/billing-generation/force-generate-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          generation_date: generationDate,
-          send_notifications: true
-        })
-      });
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        const errorDetails = result.data?.invoices?.errors || [];
-        const soaErrors = result.data?.statements?.errors || [];
-        const allErrors = [...errorDetails, ...soaErrors];
-        
-        if (allErrors.length > 0) {
-          console.error('Generation errors:', allErrors);
-          const firstError = allErrors[0];
-          alert(`Generation failed for account ${firstError.account_no}: ${firstError.error}`);
-        } else {
-          alert(result.message || 'Generation failed');
+    Alert.alert(
+      'Generate Sample Data',
+      'Generate sample SOA and invoices for ALL accounts in database (regardless of billing day, status, or any restrictions)?\n\nThis will process EVERY account that has a date_installed value.\n\n✨ NEW: Includes PDF generation + Email queue + SMS notifications!\n\nContinue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'OK',
+          onPress: async () => {
+            setIsLoading(true);
+            
+            const API_BASE_URL = 'https://backend.atssfiber.ph/api';
+            const generationDate = new Date().toISOString().split('T')[0];
+            
+            try {
+              const response = await fetch(`${API_BASE_URL}/billing-generation/force-generate-all`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  generation_date: generationDate,
+                  send_notifications: true
+                })
+              });
+              
+              const result = await response.json();
+              
+              if (!result.success) {
+                const errorDetails = result.data?.invoices?.errors || [];
+                const soaErrors = result.data?.statements?.errors || [];
+                const allErrors = [...errorDetails, ...soaErrors];
+                
+                if (allErrors.length > 0) {
+                  console.error('Generation errors:', allErrors);
+                  const firstError = allErrors[0];
+                  Alert.alert('Error', `Generation failed for account ${firstError.account_no}: ${firstError.error}`);
+                } else {
+                  Alert.alert('Error', result.message || 'Generation failed');
+                }
+                setError(result.message);
+                setIsLoading(false);
+                return;
+              }
+              
+              const data = await getBillingRecords();
+              setBillingRecords(data);
+              setError(null);
+              
+              const invoiceCount = result.data?.invoices?.success || 0;
+              const soaCount = result.data?.statements?.success || 0;
+              const accountCount = result.data?.total_accounts || 0;
+              const invoiceErrors = result.data?.invoices?.failed || 0;
+              const soaErrors = result.data?.statements?.failed || 0;
+              
+              const invoiceNotifications = result.data?.invoices?.notifications?.length || 0;
+              const soaNotifications = result.data?.statements?.notifications?.length || 0;
+              
+              if (invoiceErrors > 0 || soaErrors > 0) {
+                const errors = [
+                  ...(result.data?.invoices?.errors || []),
+                  ...(result.data?.statements?.errors || [])
+                ];
+                console.error('Generation errors:', errors);
+                Alert.alert('Success', `Generated ${invoiceCount} invoices and ${soaCount} statements for ${accountCount} accounts.\n\nFailed: ${invoiceErrors} invoices, ${soaErrors} statements.\n\nNotifications queued: ${invoiceNotifications + soaNotifications}\n\nCheck console for errors.`);
+              } else {
+                Alert.alert('Success', `✅ Success!\n\nGenerated:\n- ${invoiceCount} invoices\n- ${soaCount} statements\n- ${accountCount} accounts processed\n\n📧 Notifications:\n- ${invoiceNotifications + soaNotifications} emails queued\n- ${invoiceNotifications + soaNotifications} SMS sent\n- ${invoiceNotifications + soaNotifications} PDFs created\n\n(All accounts with date_installed, regardless of billing day or status)`);
+              }
+            } catch (err) {
+              console.error('Generation failed:', err);
+              setError('Generation failed. Please try again.');
+              Alert.alert('Error', 'Generation failed: ' + (err as Error).message);
+            } finally {
+              setIsLoading(false);
+            }
+          }
         }
-        setError(result.message);
-        setIsLoading(false);
-        return;
-      }
-      
-      const data = await getBillingRecords();
-      setBillingRecords(data);
-      setError(null);
-      
-      const invoiceCount = result.data?.invoices?.success || 0;
-      const soaCount = result.data?.statements?.success || 0;
-      const accountCount = result.data?.total_accounts || 0;
-      const invoiceErrors = result.data?.invoices?.failed || 0;
-      const soaErrors = result.data?.statements?.failed || 0;
-      
-      // Count notifications
-      const invoiceNotifications = result.data?.invoices?.notifications?.length || 0;
-      const soaNotifications = result.data?.statements?.notifications?.length || 0;
-      
-      if (invoiceErrors > 0 || soaErrors > 0) {
-        const errors = [
-          ...(result.data?.invoices?.errors || []),
-          ...(result.data?.statements?.errors || [])
-        ];
-        console.error('Generation errors:', errors);
-        alert(`Generated ${invoiceCount} invoices and ${soaCount} statements for ${accountCount} accounts.\n\nFailed: ${invoiceErrors} invoices, ${soaErrors} statements.\n\nNotifications queued: ${invoiceNotifications + soaNotifications}\n\nCheck console for errors.`);
-      } else {
-        alert(`✅ Success!\n\nGenerated:\n- ${invoiceCount} invoices\n- ${soaCount} statements\n- ${accountCount} accounts processed\n\n📧 Notifications:\n- ${invoiceNotifications + soaNotifications} emails queued\n- ${invoiceNotifications + soaNotifications} SMS sent\n- ${invoiceNotifications + soaNotifications} PDFs created\n\n(All accounts with date_installed, regardless of billing day or status)`);
-      }
-    } catch (err) {
-      console.error('Generation failed:', err);
-      setError('Generation failed. Please try again.');
-      alert('Generation failed: ' + (err as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
+      ]
+    );
   };
 
-  const handleToggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev => {
-      const newColumns = prev.includes(columnKey)
-        ? prev.filter(key => key !== columnKey)
-        : [...prev, columnKey];
-      localStorage.setItem('customerTableVisibleColumns', JSON.stringify(newColumns));
-      return newColumns;
-    });
+  const handleToggleColumn = async (columnKey: string) => {
+    const newColumns = visibleColumns.includes(columnKey)
+      ? visibleColumns.filter(key => key !== columnKey)
+      : [...visibleColumns, columnKey];
+    setVisibleColumns(newColumns);
+    await AsyncStorage.setItem('customerTableVisibleColumns', JSON.stringify(newColumns));
   };
 
-  const handleSelectAllColumns = () => {
+  const handleSelectAllColumns = async () => {
     const allKeys = allColumns.map(col => col.key);
     setVisibleColumns(allKeys);
-    localStorage.setItem('customerTableVisibleColumns', JSON.stringify(allKeys));
+    await AsyncStorage.setItem('customerTableVisibleColumns', JSON.stringify(allKeys));
   };
 
-  const handleDeselectAllColumns = () => {
+  const handleDeselectAllColumns = async () => {
     setVisibleColumns([]);
-    localStorage.setItem('customerTableVisibleColumns', JSON.stringify([]));
+    await AsyncStorage.setItem('customerTableVisibleColumns', JSON.stringify([]));
   };
 
   const handleSort = (columnKey: string) => {
@@ -774,121 +713,6 @@ const Customer: React.FC = () => {
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
-    setDraggedColumn(columnKey);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedColumn && draggedColumn !== columnKey) {
-      setDragOverColumn(columnKey);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
-    e.preventDefault();
-    
-    if (!draggedColumn || draggedColumn === targetColumnKey) {
-      setDraggedColumn(null);
-      setDragOverColumn(null);
-      return;
-    }
-
-    const newOrder = [...columnOrder];
-    const draggedIndex = newOrder.indexOf(draggedColumn);
-    const targetIndex = newOrder.indexOf(targetColumnKey);
-
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedColumn);
-
-    setColumnOrder(newOrder);
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleMouseDownResize = (e: React.MouseEvent, columnKey: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizingColumn(columnKey);
-    startXRef.current = e.clientX;
-    
-    const th = (e.target as HTMLElement).closest('th');
-    if (th) {
-      startWidthRef.current = th.offsetWidth;
-    }
-  };
-
-  useEffect(() => {
-    if (!resizingColumn) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingColumn) return;
-      
-      const diff = e.clientX - startXRef.current;
-      const newWidth = Math.max(100, startWidthRef.current + diff);
-      
-      setColumnWidths(prev => ({
-        ...prev,
-        [resizingColumn]: newWidth
-      }));
-    };
-
-    const handleMouseUp = () => {
-      setResizingColumn(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingColumn]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-      
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-      
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
   const filteredColumns = allColumns
     .filter(col => visibleColumns.includes(col.key))
     .sort((a, b) => {
@@ -898,500 +722,541 @@ const Customer: React.FC = () => {
     });
 
   return (
-    <div className={`h-full flex overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      <div className={`border-r flex-shrink-0 flex flex-col relative ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Customer Details</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
+    <View style={{ 
+      height: '100%',
+      flexDirection: 'row',
+      overflow: 'hidden',
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
+      <View style={{ 
+        width: sidebarWidth,
+        borderRightWidth: 1,
+        flexShrink: 0,
+        flexDirection: 'column',
+        position: 'relative',
+        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        borderRightColor: isDarkMode ? '#374151' : '#e5e7eb'
+      }}>
+        <View style={{ 
+          padding: 16,
+          borderBottomWidth: 1,
+          flexShrink: 0,
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text style={{ 
+              fontSize: 18,
+              fontWeight: '600',
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>
+              Customer Details
+            </Text>
+          </View>
+        </View>
+        <ScrollView style={{ flex: 1 }}>
           {locationItems.map((location) => (
-            <button
+            <Pressable
               key={location.id}
-              onClick={() => setSelectedLocation(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              } ${
-                selectedLocation === location.id
-                  ? ''
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}
-              style={selectedLocation === location.id ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c'
-              } : {}}
+              onPress={() => setSelectedLocation(location.id)}
+              style={({ pressed }) => ({
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                fontSize: 14,
+                backgroundColor: selectedLocation === location.id
+                  ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                  : pressed
+                    ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                    : 'transparent'
+              })}
             >
-              <div className="flex items-center">
-                <CreditCard className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <CreditCard size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')} style={{ marginRight: 8 }} />
+                <Text style={{ 
+                  textTransform: 'capitalize',
+                  color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')
+                }}>
+                  {location.name}
+                </Text>
+              </View>
               {location.count > 0 && (
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${
-                    selectedLocation === location.id
-                      ? 'text-white'
-                      : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                  }`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#ea580c'
-                  } : {}}
-                >
-                  {location.count}
-                </span>
+                <View style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderRadius: 9999,
+                  fontSize: 12,
+                  backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#e5e7eb')
+                }}>
+                  <Text style={{ color: selectedLocation === location.id ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#6b7280') }}>
+                    {location.count}
+                  </Text>
+                </View>
               )}
-            </button>
+            </Pressable>
           ))}
-        </div>
-        
-        {/* Resize Handle */}
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-          onMouseDown={handleMouseDownSidebarResize}
-          onMouseEnter={(e) => {
-            if (colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '';
-          }}
-        />
-      </div>
+        </ScrollView>
+      </View>
 
-      <div className={`flex-1 overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
+      <View style={{ 
+        flex: 1,
+        overflow: 'hidden',
+        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{ 
+            padding: 16,
+            borderBottomWidth: 1,
+            flexShrink: 0,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
                   placeholder="Search customer records..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border border-gray-700' 
-                      : 'bg-white text-gray-900 border border-gray-300'
-                  }`}
+                  onChangeText={(text) => setSearchQuery(text)}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setIsFunnelFilterOpen(true)}
-                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                    isDarkMode 
-                      ? 'hover:bg-gray-700 text-white' 
-                      : 'hover:bg-gray-200 text-gray-900'
-                  }`}
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => setIsFunnelFilterOpen(true)}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    fontSize: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: pressed ? (isDarkMode ? '#374151' : '#e5e7eb') : 'transparent'
+                  })}
                 >
-                  <Filter className="h-5 w-5" />
-                </button>
+                  <Filter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
                 {displayMode === 'table' && (
-                  <div className="relative" ref={filterDropdownRef}>
-                    <button
-                      className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                        isDarkMode 
-                          ? 'hover:bg-gray-700 text-white' 
-                          : 'hover:bg-gray-200 text-gray-900'
-                      }`}
-                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                  <View style={{ position: 'relative' }} ref={filterDropdownRef}>
+                    <Pressable
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 4,
+                        fontSize: 14,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: pressed ? (isDarkMode ? '#374151' : '#e5e7eb') : 'transparent'
+                      })}
+                      onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
                     >
-                      <ListFilter className="h-5 w-5" />
-                    </button>
+                      <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                    </Pressable>
                     {filterDropdownOpen && (
-                      <div className={`absolute top-full right-0 mt-2 w-80 rounded shadow-lg z-50 max-h-96 flex flex-col ${
-                        isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                      }`}>
-                        <div className={`p-3 border-b flex items-center justify-between ${
-                          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                        }`}>
-                          <span className={`text-sm font-medium ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>Column Visibility</span>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={handleSelectAllColumns}
-                              className="text-xs"
-                              style={{ color: colorPalette?.primary || '#f97316' }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.accent) {
-                                  e.currentTarget.style.color = colorPalette.accent;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.color = colorPalette.primary;
-                                }
-                              }}
-                            >
-                              Select All
-                            </button>
-                            <span className={isDarkMode ? 'text-gray-600' : 'text-gray-400'}>|</span>
-                            <button
-                              onClick={handleDeselectAllColumns}
-                              className="text-xs"
-                              style={{ color: colorPalette?.primary || '#f97316' }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.accent) {
-                                  e.currentTarget.style.color = colorPalette.accent;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.color = colorPalette.primary;
-                                }
-                              }}
-                            >
-                              Deselect All
-                            </button>
-                          </div>
-                        </div>
-                        <div className="overflow-y-auto flex-1">
+                      <View style={{ 
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        marginTop: 8,
+                        width: 320,
+                        borderRadius: 4,
+                        zIndex: 50,
+                        maxHeight: 384,
+                        flexDirection: 'column',
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                        borderWidth: 1,
+                        borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                      }}>
+                        <View style={{ 
+                          padding: 12,
+                          borderBottomWidth: 1,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+                        }}>
+                          <Text style={{ 
+                            fontSize: 14,
+                            fontWeight: '500',
+                            color: isDarkMode ? '#ffffff' : '#111827'
+                          }}>
+                            Column Visibility
+                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <Pressable onPress={handleSelectAllColumns}>
+                              <Text style={{ 
+                                fontSize: 12,
+                                color: colorPalette?.primary || '#f97316'
+                              }}>
+                                Select All
+                              </Text>
+                            </Pressable>
+                            <Text style={{ color: isDarkMode ? '#4b5563' : '#9ca3af' }}>|</Text>
+                            <Pressable onPress={handleDeselectAllColumns}>
+                              <Text style={{ 
+                                fontSize: 12,
+                                color: colorPalette?.primary || '#f97316'
+                              }}>
+                                Deselect All
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                        <ScrollView style={{ flex: 1 }}>
                           {allColumns.map((column) => (
-                            <label
+                            <Pressable
                               key={column.key}
-                              className={`flex items-center px-4 py-2 cursor-pointer text-sm ${
-                                isDarkMode 
-                                  ? 'hover:bg-gray-700 text-white' 
-                                  : 'hover:bg-gray-100 text-gray-900'
-                              }`}
+                              onPress={() => handleToggleColumn(column.key)}
+                              style={({ pressed }) => ({
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                fontSize: 14,
+                                backgroundColor: pressed ? (isDarkMode ? '#374151' : '#f3f4f6') : 'transparent'
+                              })}
                             >
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns.includes(column.key)}
-                                onChange={() => handleToggleColumn(column.key)}
-                                className={`mr-3 h-4 w-4 rounded ${
-                                  isDarkMode 
-                                    ? 'border-gray-600 bg-gray-700 focus:ring-offset-gray-800' 
-                                    : 'border-gray-300 bg-white focus:ring-offset-white'
-                                }`}
-                                style={{
-                                  accentColor: colorPalette?.primary || '#ea580c'
-                                }}
-                              />
-                              <span>{column.label}</span>
-                            </label>
+                              <View style={{ 
+                                width: 16,
+                                height: 16,
+                                borderRadius: 4,
+                                marginRight: 12,
+                                borderWidth: 1,
+                                borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                                backgroundColor: visibleColumns.includes(column.key) ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#ffffff'),
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                {visibleColumns.includes(column.key) && (
+                                  <Text style={{ color: '#ffffff', fontSize: 12 }}>✓</Text>
+                                )}
+                              </View>
+                              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{column.label}</Text>
+                            </Pressable>
                           ))}
-                        </div>
-                      </div>
+                        </ScrollView>
+                      </View>
                     )}
-                  </div>
+                  </View>
                 )}
-                <div className="relative z-50" ref={dropdownRef}>
-                  <button
-                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${
-                      isDarkMode 
-                        ? 'hover:bg-gray-700 text-white' 
-                        : 'hover:bg-gray-200 text-gray-900'
-                    }`}
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                <View style={{ position: 'relative', zIndex: 50 }} ref={dropdownRef}>
+                  <Pressable
+                    style={({ pressed }) => ({
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      fontSize: 14,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: pressed ? (isDarkMode ? '#374151' : '#e5e7eb') : 'transparent'
+                    })}
+                    onPress={() => setDropdownOpen(!dropdownOpen)}
                   >
-                    <span>{displayMode === 'card' ? 'Card View' : 'Table View'}</span>
-                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      {displayMode === 'card' ? 'Card View' : 'Table View'}
+                    </Text>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', marginLeft: 4 }}>▼</Text>
+                  </Pressable>
                   {dropdownOpen && (
-                    <div className={`fixed right-auto mt-1 w-36 rounded shadow-lg ${
-                      isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                    }`}>
-                      <button
-                        onClick={() => {
+                    <View style={{ 
+                      position: 'absolute',
+                      marginTop: 4,
+                      width: 144,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                      borderWidth: 1,
+                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}>
+                      <Pressable
+                        onPress={() => {
                           setDisplayMode('card');
                           setDropdownOpen(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        } ${displayMode === 'card' ? '' : isDarkMode ? 'text-white' : 'text-gray-900'}`}
-                        style={displayMode === 'card' ? { color: colorPalette?.primary || '#f97316' } : {}}
+                        style={({ pressed }) => ({
+                          width: '100%',
+                          paddingHorizontal: 16,
+                          paddingVertical: 8,
+                          fontSize: 14,
+                          backgroundColor: pressed ? (isDarkMode ? '#374151' : '#f3f4f6') : 'transparent'
+                        })}
                       >
-                        Card View
-                      </button>
-                      <button
-                        onClick={() => {
+                        <Text style={{ 
+                          color: displayMode === 'card' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#ffffff' : '#111827')
+                        }}>
+                          Card View
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
                           setDisplayMode('table');
                           setDropdownOpen(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        } ${displayMode === 'table' ? '' : isDarkMode ? 'text-white' : 'text-gray-900'}`}
-                        style={displayMode === 'table' ? { color: colorPalette?.primary || '#f97316' } : {}}
+                        style={({ pressed }) => ({
+                          width: '100%',
+                          paddingHorizontal: 16,
+                          paddingVertical: 8,
+                          fontSize: 14,
+                          backgroundColor: pressed ? (isDarkMode ? '#374151' : '#f3f4f6') : 'transparent'
+                        })}
                       >
-                        Table View
-                      </button>
-                    </div>
+                        <Text style={{ 
+                          color: displayMode === 'table' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#ffffff' : '#111827')
+                        }}>
+                          Table View
+                        </Text>
+                      </Pressable>
+                    </View>
                   )}
-                </div>
-                <button
-                  onClick={handleGenerateSampleData}
+                </View>
+                <Pressable
+                  onPress={handleGenerateSampleData}
                   disabled={isLoading}
-                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded text-sm transition-colors"
+                  style={({ pressed }) => ({
+                    backgroundColor: isLoading ? '#4b5563' : pressed ? '#15803d' : '#16a34a',
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    fontSize: 14
+                  })}
                 >
-                  {isLoading ? 'Generating...' : 'Generate Sample Data'}
-                </button>
-                <button
-                  onClick={handleRefresh}
+                  <Text style={{ color: '#ffffff' }}>
+                    {isLoading ? 'Generating...' : 'Generate Sample Data'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleRefresh}
                   disabled={isLoading}
-                  className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600 flex items-center"
-                  style={{
-                    backgroundColor: colorPalette?.primary || '#ea580c',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isLoading && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isLoading && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
+                  style={({ pressed }) => ({
+                    backgroundColor: isLoading ? '#4b5563' : pressed ? (colorPalette?.accent || '#c2410c') : (colorPalette?.primary || '#ea580c'),
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    fontSize: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  })}
                 >
-                  <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
-          </div>
+                  <RefreshCw size={20} color="#ffffff" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
           
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <ScrollView style={{ height: '100%' }}>
               {isLoading ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                  </div>
-                  <p className="mt-4">Loading customer records...</p>
-                </div>
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+                  <Text style={{ 
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#6b7280'
+                  }}>
+                    Loading customer records...
+                  </Text>
+                </View>
               ) : error ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-red-400' : 'text-red-600'
-                }`}>
-                  <p>{error}</p>
-                  <button 
-                    onClick={handleRefresh}
-                    className={`mt-4 px-4 py-2 rounded ${
-                      isDarkMode 
-                        ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}>
-                    Retry
-                  </button>
-                </div>
+                <View style={{ 
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Pressable 
+                    onPress={handleRefresh}
+                    style={{ 
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}
+                  >
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Retry</Text>
+                  </Pressable>
+                </View>
               ) : displayMode === 'card' ? (
                 filteredBillingRecords.length > 0 ? (
-                  <div className="space-y-0">
+                  <View>
                     {filteredBillingRecords.map((record) => (
-                      <div
+                      <Pressable
                         key={record.id}
-                        onClick={() => handleRecordClick(record)}
-                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${
-                          isDarkMode 
-                            ? 'hover:bg-gray-800 border-gray-800' 
-                            : 'hover:bg-gray-100 border-gray-200'
-                        } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
+                        onPress={() => handleRecordClick(record)}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                          backgroundColor: selectedCustomer?.billingAccount?.accountNo === record.applicationId 
+                            ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                            : pressed
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : 'transparent'
+                        })}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-red-400 font-medium text-sm mb-1">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{ 
+                              color: '#f87171',
+                              fontWeight: '500',
+                              fontSize: 14,
+                              marginBottom: 4
+                            }}>
                               {record.applicationId} | {record.customerName} | {record.address}
-                            </div>
-                            <div className={`text-sm ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                            </Text>
+                            <Text style={{ 
+                              fontSize: 14,
+                              color: isDarkMode ? '#ffffff' : '#111827'
+                            }}>
                               {record.status} | ₱ {record.balance.toFixed(2)}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0 }}>
                             <Circle 
-                              className={`h-3 w-3 ${record.onlineStatus === 'Online' ? 'text-green-400 fill-green-400' : 'text-gray-400 fill-gray-400'}`} 
+                              size={12}
+                              color={record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af'}
+                              fill={record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af'}
                             />
-                            <span className={`text-sm ${record.onlineStatus === 'Online' ? 'text-green-400' : 'text-gray-400'}`}>
+                            <Text style={{ 
+                              fontSize: 14,
+                              color: record.onlineStatus === 'Online' ? '#4ade80' : '#9ca3af'
+                            }}>
                               {record.onlineStatus}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                            </Text>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))}
-                  </div>
+                  </View>
                 ) : (
-                  <div className={`text-center py-12 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                    No customer records found matching your filters
-                  </div>
+                  <View style={{ 
+                    alignItems: 'center',
+                    paddingVertical: 48
+                  }}>
+                    <Text style={{ 
+                      color: isDarkMode ? '#9ca3af' : '#6b7280'
+                    }}>
+                      No customer records found matching your filters
+                    </Text>
+                  </View>
                 )
               ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${
-                        isDarkMode 
-                          ? 'border-gray-700 bg-gray-800' 
-                          : 'border-gray-200 bg-gray-100'
-                      }`}>
-                        {filteredColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, column.key)}
-                            onDragOver={(e) => handleDragOver(e, column.key)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, column.key)}
-                            onDragEnd={handleDragEnd}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${
-                              isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
-                            } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''} ${
-                              draggedColumn === column.key ? 'opacity-50' : ''
-                            } ${
-                              dragOverColumn === column.key ? '' : ''
-                            }`}
-                            style={dragOverColumn === column.key ? {
-                              backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                              width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                            } : {
-                              width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                            }}
-                            onMouseEnter={() => setHoveredColumn(column.key)}
-                            onMouseLeave={() => setHoveredColumn(null)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{column.label}</span>
-                              {(hoveredColumn === column.key || sortColumn === column.key) && (
-                                <button
-                                  onClick={() => handleSort(column.key)}
-                                  className="ml-2 transition-colors"
-                                >
-                                  {sortColumn === column.key && sortDirection === 'desc' ? (
-                                    <ArrowDown className="h-4 w-4" style={{ color: colorPalette?.accent || '#fb923c' }} />
-                                  ) : (
-                                    <ArrowUp className="h-4 w-4 text-gray-400" style={{ color: hoveredColumn === column.key ? (colorPalette?.accent || '#fb923c') : undefined }} />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                            {index < filteredColumns.length - 1 && (
-                              <div
-                                className={`absolute right-0 top-0 bottom-0 w-1 cursor-col-resize ${
-                                  isDarkMode ? 'group-hover:bg-gray-600' : 'group-hover:bg-gray-300'
-                                }`}
-                                style={{
-                                  '--hover-bg': colorPalette?.primary || '#ea580c'
-                                } as React.CSSProperties}
-                                onMouseEnter={(e) => {
-                                  if (colorPalette?.primary) {
-                                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = '';
-                                }}
-                                onMouseDown={(e) => handleMouseDownResize(e, column.key)}
-                              />
-                            )}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredBillingRecords.length > 0 ? (
-                        filteredBillingRecords.map((record) => (
-                          <tr 
-                            key={record.id} 
-                            className={`border-b cursor-pointer transition-colors ${
-                              isDarkMode 
-                                ? 'border-gray-800 hover:bg-gray-900' 
-                                : 'border-gray-200 hover:bg-gray-50'
-                            } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                            onClick={() => handleRecordClick(record)}
-                          >
-                            {filteredColumns.map((column, index) => (
-                              <td 
-                                key={column.key}
-                                className={`py-4 px-3 ${
-                                  isDarkMode ? 'text-white' : 'text-gray-900'
-                                } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''}`}
-                                style={{ 
-                                  width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                                  maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                                }}
-                              >
-                                <div className="truncate">
-                                  {renderCellValue(record, column.key)}
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${
-                            isDarkMode 
-                              ? 'text-gray-400 border-gray-800' 
-                              : 'text-gray-600 border-gray-200'
-                          }`}>
-                            No customer records found matching your filters
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <ScrollView horizontal>
+                  <View>
+                    <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
+                      {filteredColumns.map((column, index) => (
+                        <Pressable
+                          key={column.key}
+                          onPress={() => handleSort(column.key)}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                            width: column.width,
+                            borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                            borderRightColor: isDarkMode ? '#374151' : '#e5e7eb',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}
+                        >
+                          <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280', fontWeight: '400' }}>
+                            {column.label}
+                          </Text>
+                          {sortColumn === column.key && (
+                            sortDirection === 'desc' ? (
+                              <ArrowDown size={16} color={colorPalette?.accent || '#fb923c'} />
+                            ) : (
+                              <ArrowUp size={16} color={colorPalette?.accent || '#fb923c'} />
+                            )
+                          )}
+                        </Pressable>
+                      ))}
+                    </View>
+                    {filteredBillingRecords.length > 0 ? (
+                      filteredBillingRecords.map((record) => (
+                        <Pressable 
+                          key={record.id}
+                          onPress={() => handleRecordClick(record)}
+                          style={({ pressed }) => ({
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                            backgroundColor: selectedCustomer?.billingAccount?.accountNo === record.applicationId 
+                              ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                              : pressed
+                                ? (isDarkMode ? '#111827' : '#f9fafb')
+                                : 'transparent'
+                          })}
+                        >
+                          {filteredColumns.map((column, index) => (
+                            <View
+                              key={column.key}
+                              style={{
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                width: column.width,
+                                borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                                borderRightColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                              }}
+                            >
+                              <View style={{ overflow: 'hidden' }}>
+                                {renderCellValue(record, column.key)}
+                              </View>
+                            </View>
+                          ))}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={{ paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' }}>
+                        <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                          No customer records found matching your filters
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
 
       {(selectedCustomer || isLoadingDetails) && (
-        <div className="flex-shrink-0 overflow-hidden">
+        <View style={{ flexShrink: 0, overflow: 'hidden' }}>
           {isLoadingDetails ? (
-            <div className={`w-[600px] h-full flex items-center justify-center border-l ${
-              isDarkMode 
-                ? 'bg-gray-900 text-white border-white border-opacity-30' 
-                : 'bg-white text-gray-900 border-gray-300'
-            }`}>
-              <div className="text-center">
-                <div 
-                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#ea580c' }}
-                ></div>
-                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
-              </div>
-            </div>
+            <View style={{ 
+              width: 600,
+              height: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderLeftWidth: 1,
+              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+              borderLeftColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : '#d1d5db'
+            }}>
+              <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} style={{ marginBottom: 16 }} />
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Loading details...</Text>
+              </View>
+            </View>
           ) : selectedCustomer ? (
             <BillingDetails
               billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
@@ -1399,21 +1264,21 @@ const Customer: React.FC = () => {
               onClose={handleCloseDetails}
             />
           ) : null}
-        </div>
+        </View>
       )}
 
       <CustomerFunnelFilter
         isOpen={isFunnelFilterOpen}
         onClose={() => setIsFunnelFilterOpen(false)}
-        onApplyFilters={(filters) => {
+        onApplyFilters={async (filters) => {
           console.log('Applied filters:', filters);
           setActiveFilters(filters);
-          localStorage.setItem('customerFilters', JSON.stringify(filters));
+          await AsyncStorage.setItem('customerFilters', JSON.stringify(filters));
           setIsFunnelFilterOpen(false);
         }}
         currentFilters={activeFilters}
       />
-    </div>
+    </View>
   );
 };
 

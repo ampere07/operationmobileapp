@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { View, Text, Modal, Pressable } from 'react-native';
+import { X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface ApprovalConfirmationModalProps {
@@ -15,15 +17,15 @@ const ApprovalConfirmationModal: React.FC<ApprovalConfirmationModalProps> = ({
   onConfirm,
   loading = false
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+    };
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -37,58 +39,49 @@ const ApprovalConfirmationModal: React.FC<ApprovalConfirmationModalProps> = ({
     };
     fetchColorPalette();
   }, []);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className={`rounded-lg shadow-2xl w-full max-w-md ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
-      }`}>
-        <div className="p-6">
-          <h2 className={`text-xl font-semibold mb-4 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Confirm</h2>
-          
-          <p className={`mb-8 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>
-            Are you sure you want to approve this job order?
-          </p>
+    <Modal
+      transparent={true}
+      visible={isOpen}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10, width: '100%', maxWidth: 448, marginHorizontal: 16, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
+          <View style={{ padding: 24 }}>
+            <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 16, color: isDarkMode ? '#ffffff' : '#111827' }}>
+              Confirm
+            </Text>
+            
+            <Text style={{ marginBottom: 32, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+              Are you sure you want to approve this job order?
+            </Text>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className={`px-6 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                isDarkMode
-                  ? 'bg-gray-700 text-white hover:bg-gray-600'
-                  : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={loading}
-              className="px-6 py-2 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: colorPalette?.primary || '#ea580c'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent && !loading) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-              }}
-            >
-              {loading ? 'Processing...' : 'Approve'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <Pressable
+                onPress={onClose}
+                disabled={loading}
+                style={{ paddingHorizontal: 24, paddingVertical: 8, borderRadius: 4, opacity: loading ? 0.5 : 1, backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+              >
+                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={onConfirm}
+                disabled={loading}
+                style={{ paddingHorizontal: 24, paddingVertical: 8, borderRadius: 4, opacity: loading ? 0.5 : 1, backgroundColor: colorPalette?.primary || '#ea580c' }}
+              >
+                <Text style={{ color: '#ffffff' }}>
+                  {loading ? 'Processing...' : 'Approve'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
