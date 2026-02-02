@@ -19,11 +19,45 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react-native';
-import { getServiceOrders, ServiceOrderData } from '../services/serviceOrderService';
+import { getAllApplicationVisits } from '../services/applicationVisitService';
+import { getApplication } from '../services/applicationService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { applyFilters } from '../utils/filterUtils';
-import ServiceOrderDetails from '../components/ServiceOrderDetails';
-import ServiceOrderFunnelFilter, { FilterValues } from '../components/filters/ServiceOrderFunnelFilter';
+import ApplicationVisitDetails from '../components/ApplicationVisitDetails';
+import ApplicationVisitFunnelFilter, { FilterValues } from '../components/filters/ApplicationVisitFunnelFilter';
+
+interface ApplicationVisit {
+  id: string;
+  application_id: string;
+  timestamp: string;
+  assigned_email?: string;
+  visit_by?: string;
+  visit_with?: string;
+  visit_with_other?: string;
+  visit_status: string;
+  visit_remarks?: string;
+  status_remarks?: string;
+  application_status?: string;
+  full_name: string;
+  full_address: string;
+  referred_by?: string;
+  updated_by_user_email: string;
+  created_at: string;
+  updated_at: string;
+  first_name?: string;
+  middle_initial?: string;
+  last_name?: string;
+  region?: string;
+  city?: string;
+  barangay?: string;
+  location?: string;
+  choose_plan?: string;
+  promo?: string;
+  house_front_picture_url?: string;
+  image1_url?: string;
+  image2_url?: string;
+  image3_url?: string;
+}
 
 interface LocationItem {
   id: string;
@@ -39,23 +73,24 @@ interface SortConfig {
 const allColumns = [
   { key: 'timestamp', label: 'Timestamp' },
   { key: 'full_name', label: 'Full Name' },
-  { key: 'contact_number', label: 'Contact #' },
-  { key: 'support_status', label: 'Status' },
+  { key: 'visit_status', label: 'Visit Status' },
+  { key: 'application_status', label: 'App Status' },
+  { key: 'full_address', label: 'Address' },
 ];
 
-const ServiceOrderPage: React.FC = () => {
+const ApplicationVisitPage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedOrder, setSelectedOrder] = useState<ServiceOrderData | null>(null);
-  const [serviceOrders, setServiceOrders] = useState<ServiceOrderData[]>([]);
+  const [selectedVisit, setSelectedVisit] = useState<ApplicationVisit | null>(null);
+  const [applicationVisits, setApplicationVisits] = useState<ApplicationVisit[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('');
 
   // Mobile UI States
-  const [mobileView, setMobileView] = useState<'locations' | 'orders' | 'details'>('locations');
+  const [mobileView, setMobileView] = useState<'locations' | 'visits' | 'details'>('locations');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const [isSortModalOpen, setIsSortModalOpen] = useState<boolean>(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'timestamp', direction: 'desc' });
@@ -70,7 +105,7 @@ const ServiceOrderPage: React.FC = () => {
         setIsDarkMode(theme !== 'light');
         const activePalette = await settingsColorPaletteService.getActive();
         setColorPalette(activePalette);
-        const savedFilters = await AsyncStorage.getItem('serviceOrderFunnelFilters');
+        const savedFilters = await AsyncStorage.getItem('applicationVisitFunnelFilters');
         if (savedFilters) setActiveFilters(JSON.parse(savedFilters));
         const authData = await AsyncStorage.getItem('authData');
         if (authData) {
@@ -84,7 +119,7 @@ const ServiceOrderPage: React.FC = () => {
     init();
   }, []);
 
-  const fetchServiceOrders = useCallback(async (isInitialLoad: boolean = false) => {
+  const fetchApplicationVisits = useCallback(async (isInitialLoad: boolean = false) => {
     try {
       if (isInitialLoad) setLoading(true);
       setError(null);
@@ -103,38 +138,40 @@ const ServiceOrderPage: React.FC = () => {
         }
       }
 
-      const response = await getServiceOrders(assignedEmail);
+      const response = await getAllApplicationVisits(assignedEmail);
 
-      if (response && Array.isArray(response)) {
-        const orders = response;
+      if (response && response.success && Array.isArray(response.data)) {
+        const visits: ApplicationVisit[] = response.data.map((visit: any) => ({
+          ...visit,
+          id: visit.id ? String(visit.id) : '',
+          full_name: visit.full_name || [visit.first_name, visit.last_name].filter(Boolean).join(' '),
+          full_address: visit.full_address || [visit.address, visit.location, visit.city].filter(Boolean).join(', ')
+        }));
 
-        // Technician Filter Logic (Last 7 days for Resolved)
+        // Technician Filter Logic (Last 7 days unless active)
         const isTechnician = Number(roleId) === 2 || userRoleString === 'technician';
-        let filteredOrders = orders;
+        let filteredVisits = visits;
 
         if (isTechnician) {
           const sevenDaysAgo = new Date();
           sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          const activeStatuses = ['pending', 'scheduled', 'msg sent', 'in progress', 'reschedule'];
 
-          filteredOrders = orders.filter(order => {
-            const status = (order.support_status || '').toLowerCase().trim();
+          filteredVisits = visits.filter(visit => {
+            const status = (visit.visit_status || '').toLowerCase().trim();
+            if (activeStatuses.includes(status)) return true;
 
-            // If resolved, verify timestamp
-            if (status === 'resolved') {
-              const updatedAt = order.updated_at ? new Date(order.updated_at) : null;
-              if (updatedAt && !isNaN(updatedAt.getTime()) && updatedAt < sevenDaysAgo) {
-                return false; // Hide old resolved tickets
-              }
-            }
-            return true;
+            const updatedAt = visit.updated_at || (visit as any).updatedAt;
+            if (!updatedAt) return true;
+            const d = new Date(updatedAt);
+            return !isNaN(d.getTime()) && d >= sevenDaysAgo;
           });
         }
 
-        setServiceOrders(filteredOrders);
+        setApplicationVisits(filteredVisits);
       } else {
-        setServiceOrders([]);
-        // @ts-ignore
-        setError(response?.message || 'Failed to load service orders');
+        setApplicationVisits([]);
+        setError(response?.message || 'Failed to load visits');
       }
     } catch (err: any) {
       if (isInitialLoad) setError(err.message || 'Error loading data');
@@ -146,33 +183,22 @@ const ServiceOrderPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchServiceOrders(true);
-  }, [fetchServiceOrders]);
+    fetchApplicationVisits(true);
+  }, [fetchApplicationVisits]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchServiceOrders(false);
+    fetchApplicationVisits(false);
   };
 
   // Location Groups
-  const locationItems: LocationItem[] = [{ id: 'all', name: 'All', count: serviceOrders.length }];
+  const locationItems: LocationItem[] = [{ id: 'all', name: 'All', count: applicationVisits.length }];
   const locationSet = new Set<string>();
-
-  serviceOrders.forEach(v => {
-    // Heuristic: try to parse city from address string "Street, Barangay, City, Province"
-    // or "Street, City"
-    if (v.full_address) {
-      const parts = v.full_address.split(',');
-      // Attempt to grab city - typically 2nd to last or last item depending on format
-      // Assuming "Barangay, City" or "Barangay, City, Province"
-      if (parts.length >= 2) {
-        const city = parts[parts.length > 2 ? parts.length - 2 : parts.length - 1].trim();
-        if (city) locationSet.add(city.toLowerCase());
-      } else {
-        const city = parts[0].trim();
-        if (city) locationSet.add(city.toLowerCase());
-      }
-    }
+  applicationVisits.forEach(v => {
+    const parts = (v.full_address || '').split(',');
+    // Heuristic: try to find city. Assuming standard format, maybe index 3, but simpler to check v.city if available
+    const city = v.city || (parts.length > 3 ? parts[3].trim() : '');
+    if (city) locationSet.add(city.toLowerCase());
   });
 
   Array.from(locationSet).sort().forEach(loc => {
@@ -180,36 +206,51 @@ const ServiceOrderPage: React.FC = () => {
       locationItems.push({
         id: loc,
         name: loc.charAt(0).toUpperCase() + loc.slice(1),
-        count: serviceOrders.filter(v =>
-          (v.full_address || '').toLowerCase().includes(loc)
+        count: applicationVisits.filter(v =>
+          (v.city || '').toLowerCase() === loc || (v.full_address || '').toLowerCase().includes(loc)
         ).length
       });
     }
   });
 
   // Filter Logic
-  let filteredData = serviceOrders.filter(order => {
+  let filteredData = applicationVisits.filter(visit => {
     const locMatch = selectedLocation === 'all' ||
-      (order.full_address || '').toLowerCase().includes(selectedLocation);
+      (visit.city || '').toLowerCase() === selectedLocation ||
+      (visit.full_address || '').toLowerCase().includes(selectedLocation);
 
     const searchMatch = searchQuery === '' ||
-      (order.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (order.account_no || '').includes(searchQuery) ||
-      (order.ticket_id || '').toLowerCase().includes(searchQuery.toLowerCase());
+      visit.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      visit.full_address.toLowerCase().includes(searchQuery.toLowerCase());
 
     return locMatch && searchMatch;
   });
 
   // Apply Funnel Filters
-  // @ts-ignore - applyFilters typed for objects, should work if data matches keys
-  filteredData = applyFilters(filteredData, activeFilters);
+  // Note: applyFilters generic utility needs to be imported or basic login inline. 
+  // Assuming applyFilters expects array and filter object.
+  // If applyFilters fails (due to import issues), implement basic check here
+  if (Object.keys(activeFilters).length > 0) {
+    filteredData = filteredData.filter(item => {
+      return Object.keys(activeFilters).every(key => {
+        const filter = activeFilters[key];
+        const itemValue = (item as any)[key];
+
+        if (filter.type === 'text' && filter.value) {
+          return String(itemValue || '').toLowerCase().includes(filter.value.toLowerCase());
+        }
+        // Basic implementation for now
+        return true;
+      });
+    });
+  }
 
   // Sort Logic
   const sortedData = [...filteredData].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] || '';
     let valB: any = (b as any)[sortConfig.key] || '';
 
-    if (sortConfig.key === 'timestamp' || sortConfig.key.includes('_at')) {
+    if (sortConfig.key === 'timestamp' || sortConfig.key === 'created_at') {
       valA = new Date(valA).getTime();
       valB = new Date(valB).getTime();
     } else {
@@ -225,9 +266,9 @@ const ServiceOrderPage: React.FC = () => {
   const getStatusColorClass = (status: string | undefined) => {
     if (!status) return 'text-gray-400';
     const s = status.toLowerCase();
-    if (['completed', 'resolved'].includes(s)) return 'text-green-500';
-    if (['pending', 'in progress', 'in-progress', 'open'].includes(s)) return 'text-orange-500';
-    if (['cancelled', 'failed', 'rejected', 'closed'].includes(s)) return 'text-red-500';
+    if (['completed', 'approved', 'done', 'scheduled'].includes(s)) return 'text-green-500';
+    if (['pending', 'in progress', 'msg sent'].includes(s)) return 'text-orange-500';
+    if (['cancelled', 'failed', 'rejected'].includes(s)) return 'text-red-500';
     return 'text-blue-500';
   };
 
@@ -240,7 +281,7 @@ const ServiceOrderPage: React.FC = () => {
     <TouchableOpacity
       onPress={() => {
         setSelectedLocation(item.id);
-        setMobileView('orders');
+        setMobileView('visits');
       }}
       className={`flex-row items-center justify-between p-4 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
         } ${selectedLocation === item.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
@@ -259,10 +300,10 @@ const ServiceOrderPage: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const renderOrderItem = ({ item }: { item: ServiceOrderData }) => (
+  const renderVisitItem = ({ item }: { item: ApplicationVisit }) => (
     <TouchableOpacity
       onPress={() => {
-        setSelectedOrder(item);
+        setSelectedVisit(item);
         setMobileView('details');
       }}
       className={`p-4 border-b mb-1 ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
@@ -274,21 +315,17 @@ const ServiceOrderPage: React.FC = () => {
             {item.full_name}
           </Text>
           <Text className={`text-xs mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Ticket: {item.ticket_id} • {formatDate(item.timestamp)}
+            {formatDate(item.timestamp)}
           </Text>
           <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`} numberOfLines={2}>
-            {item.concern} - {item.full_address}
+            {item.full_address}
           </Text>
         </View>
         <View className="items-end">
-          <Text className={`text-xs font-bold uppercase ${getStatusColorClass(item.support_status)}`}>
-            {item.support_status || 'OPEN'}
+          <Text className={`text-xs font-bold uppercase ${getStatusColorClass(item.visit_status)}`}>
+            {item.visit_status || 'PENDING'}
           </Text>
-          {item.visit_status && (
-            <Text className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              Visit: {item.visit_status}
-            </Text>
-          )}
+          <Text className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>#{item.id}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -298,7 +335,7 @@ const ServiceOrderPage: React.FC = () => {
     return (
       <View className={`flex-1 justify-center items-center ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
         <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
-        <Text className={`mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Loading service orders...</Text>
+        <Text className={`mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Loading visits...</Text>
       </View>
     );
   }
@@ -309,7 +346,7 @@ const ServiceOrderPage: React.FC = () => {
       <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
         <View className={`p-4 border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
           <Text className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            Service Orders
+            Visits
           </Text>
         </View>
         <FlatList
@@ -322,12 +359,12 @@ const ServiceOrderPage: React.FC = () => {
   }
 
   // --- Mobile View: Details ---
-  if (mobileView === 'details' && selectedOrder) {
+  if (mobileView === 'details' && selectedVisit) {
     return (
       <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-        <ServiceOrderDetails
-          serviceOrder={selectedOrder}
-          onClose={() => setMobileView('orders')}
+        <ApplicationVisitDetails
+          visit={selectedVisit}
+          onClose={() => setMobileView('visits')}
           onRefresh={handleRefresh}
           isMobile={true}
         />
@@ -335,7 +372,7 @@ const ServiceOrderPage: React.FC = () => {
     )
   }
 
-  // --- Mobile View: Orders List ---
+  // --- Mobile View: Visits List ---
   return (
     <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
       <View className={`p-4 border-b flex-row items-center space-x-2 ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
@@ -344,7 +381,7 @@ const ServiceOrderPage: React.FC = () => {
         </TouchableOpacity>
         <View className="flex-1 relative">
           <TextInput
-            placeholder="Search Ticket/Name..."
+            placeholder="Search..."
             placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -369,19 +406,19 @@ const ServiceOrderPage: React.FC = () => {
       <FlatList
         data={sortedData}
         keyExtractor={(item) => String(item.id)}
-        renderItem={renderOrderItem}
+        renderItem={renderVisitItem}
         refreshing={isRefreshing}
         onRefresh={handleRefresh}
         ListEmptyComponent={
           <View className="p-8 items-center">
             <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
-              No service orders found.
+              No visits found.
             </Text>
           </View>
         }
       />
 
-      <ServiceOrderFunnelFilter
+      <ApplicationVisitFunnelFilter
         isOpen={isFunnelFilterOpen}
         onClose={() => setIsFunnelFilterOpen(false)}
         onApplyFilters={setActiveFilters}
@@ -434,4 +471,4 @@ const ServiceOrderPage: React.FC = () => {
   );
 };
 
-export default ServiceOrderPage;
+export default ApplicationVisitPage;

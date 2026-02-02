@@ -1,4 +1,11 @@
-import { FilterValues } from '../filter/ApplicationVisitFunnelFilter';
+export interface FilterValues {
+  [key: string]: {
+    type: 'text' | 'number' | 'date';
+    value?: string;
+    from?: string | number;
+    to?: string | number;
+  };
+}
 
 export function applyFilters<T extends Record<string, any>>(
   data: T[],

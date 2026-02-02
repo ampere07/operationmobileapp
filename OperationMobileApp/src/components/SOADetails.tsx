@@ -1,304 +1,160 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ExternalLink, X, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Linking,
+  Modal
+} from 'react-native';
+import { ExternalLink, X, Info, Check } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-
-interface SOARecord {
-  id: string;
-  statementDate: string;
-  accountNo: string;
-  dateInstalled: string;
-  fullName: string;
-  contactNumber: string;
-  emailAddress: string;
-  address: string;
-  plan: string;
-  provider?: string;
-  balanceFromPreviousBill?: number;
-  statementNo?: string;
-  paymentReceived?: number;
-  remainingBalance?: number;
-  monthlyServiceFee?: number;
-  otherCharges?: number;
-  vat?: number;
-  dueDate?: string;
-  amountDue?: number;
-  totalAmountDue?: number;
-  deliveryStatus?: string;
-  deliveryDate?: string;
-  deliveredBy?: string;
-  deliveryRemarks?: string;
-  deliveryProof?: string;
-  modifiedBy?: string;
-  modifiedDate?: string;
-  printLink?: string;
-  barangay?: string;
-  city?: string;
-  region?: string;
-}
+import { SOARecord } from '../services/soaService';
 
 interface SOADetailsProps {
   soaRecord: SOARecord;
+  onClose: () => void;
 }
 
-const SOADetails: React.FC<SOADetailsProps> = ({ soaRecord }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
+const SOADetails: React.FC<SOADetailsProps> = ({ soaRecord, onClose }) => {
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
+  const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+    const init = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme !== 'light');
+      const activePalette = await settingsColorPaletteService.getActive();
+      setColorPalette(activePalette);
 
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
+      // Initialize all fields as visible by default
+      const initialVisibility: Record<string, boolean> = {};
+      Object.keys(soaRecord).forEach(key => initialVisibility[key] = true);
+      setFieldVisibility(initialVisibility);
     };
-    
-    fetchColorPalette();
-  }, []);
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
+    init();
+  }, [soaRecord]);
 
   const handleOpenGDrive = () => {
-    if (soaRecord.printLink) {
-      window.open(soaRecord.printLink, '_blank', 'noopener,noreferrer');
+    if (soaRecord.print_link) {
+      Linking.openURL(soaRecord.print_link).catch(err => console.error('Failed to open link', err));
     }
   };
 
+  const renderRow = (label: string, value: string | number | undefined | null, key?: string) => {
+    // Logic for visibility could be added here if needed
+    if (key && fieldVisibility[key] === false) return null;
+
+    return (
+      <View className="flex-row justify-between items-center py-3 border-b border-gray-100 dark:border-gray-800">
+        <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{label}</Text>
+        <View className="flex-1 items-end ml-4">
+          <Text className={`text-sm font-medium text-right ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {value ?? '-'}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Helper for currency formatting
+  const fmt = (val?: number) => val !== undefined ? `₱${val.toFixed(2)}` : '₱0.00';
+
   return (
-    <div className={`h-full flex flex-col border-l relative ${
-      isDarkMode
-        ? 'bg-gray-900 text-white border-white border-opacity-30'
-        : 'bg-white text-gray-900 border-gray-300'
-    }`} style={{ width: `${detailsWidth}px` }}>
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
-        style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#ea580c') : 'transparent'
-        }}
-        onMouseEnter={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#ea580c';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
-        onMouseDown={handleMouseDownResize}
-      />
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-700'
-          : 'bg-gray-100 border-gray-200'
-      }`}>
-        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${
-          isDarkMode ? 'text-white' : 'text-gray-900'
-        }`}>
-          {soaRecord.accountNo} | {soaRecord.fullName} | {soaRecord.address.split(',')[0]}
-        </h1>
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          <button 
-            onClick={handleOpenGDrive}
-            disabled={!soaRecord.printLink}
-            className={`p-2 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
-            }`}
-            title={soaRecord.printLink ? 'Open SOA in Google Drive' : 'No Google Drive link available'}
+    <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+      {/* Header */}
+      <View className={`border-b px-4 py-3 flex-row items-center justify-between ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+        <View className="flex-1 mr-2">
+          <Text className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`} numberOfLines={1}>
+            Statement Details
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {soaRecord.statement_date}
+          </Text>
+        </View>
+        <View className="flex-row items-center space-x-2">
+          <TouchableOpacity
+            onPress={handleOpenGDrive}
+            disabled={!soaRecord.print_link}
+            className="p-2"
           >
-            <ExternalLink size={18} />
-          </button>
-          <button className={`p-2 rounded transition-colors ${
-            isDarkMode
-              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-          }`}>
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+            <ExternalLink size={24} color={soaRecord.print_link ? (colorPalette?.primary || '#ea580c') : 'gray'} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} className="p-2">
+            <X size={24} color={isDarkMode ? 'white' : 'black'} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className={isDarkMode ? 'divide-y divide-gray-800' : 'divide-y divide-gray-300'}>
-          <div className="px-5 py-4">
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Statement No.</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.statementNo || '2509180' + soaRecord.id}</span>
-            </div>
+      <ScrollView className="flex-1 p-4">
+        {/* Customer Info Section */}
+        <View className={`mb-6 p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+          <Text className={`text-xs font-bold uppercase mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Customer Info
+          </Text>
+          {renderRow('Account No', soaRecord.account_no)}
+          {renderRow('Name', soaRecord.account?.customer?.full_name || '-')}
+          {renderRow('Address', soaRecord.account?.customer?.address || '-')}
+          {renderRow('Plan', soaRecord.account?.customer?.desired_plan || '-')}
+          {renderRow('Contact', soaRecord.account?.customer?.contact_number_primary || '-')}
+          {renderRow('Email', soaRecord.account?.customer?.email_address || '-')}
+        </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Full Name</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.fullName}</span>
-            </div>
+        {/* Billing Details Section */}
+        <View className={`mb-6 p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+          <Text className={`text-xs font-bold uppercase mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Billing Breakdown
+          </Text>
+          {renderRow('Prev. Balance', fmt(soaRecord.balance_from_previous_bill))}
+          {renderRow('Prev. Payment', fmt(soaRecord.payment_received_previous))}
+          {renderRow('Prev. Remaining', fmt(soaRecord.remaining_balance_previous))}
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Statement Date</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.statementDate}</span>
-            </div>
+          <View className="h-px bg-gray-200 dark:bg-gray-700 my-2" />
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Account No.</span>
-              <div className="flex items-center">
-                <span className="text-red-500">
-                  {soaRecord.accountNo} | {soaRecord.fullName} | {soaRecord.address}
-                </span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
+          {renderRow('Monthly Fee', fmt(soaRecord.monthly_service_fee))}
+          {renderRow('Other Charges', fmt(soaRecord.others_and_basic_charges))}
+          {renderRow('Service Charge', fmt(soaRecord.service_charge))}
+          {renderRow('Rebate', fmt(soaRecord.rebate))}
+          {renderRow('Discounts', fmt(soaRecord.discounts))}
+          {renderRow('Staggered', fmt(soaRecord.staggered))}
+          {renderRow('VAT', fmt(soaRecord.vat))}
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Date Installed</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.dateInstalled}</span>
-            </div>
+          <View className="h-px bg-gray-200 dark:bg-gray-700 my-2" />
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Contact Number</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.contactNumber}</span>
-            </div>
+          <View className="flex-row justify-between items-center py-3">
+            <Text className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Amount Due</Text>
+            <Text className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              {fmt(soaRecord.amount_due)}
+            </Text>
+          </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Email Address</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.emailAddress}</span>
-            </div>
+          <View className="flex-row justify-between items-center py-3 border-t border-gray-200 dark:border-gray-700">
+            <Text className={`font-bold text-lg ${colorPalette?.primary ? '' : 'text-orange-600'}`} style={colorPalette?.primary ? { color: colorPalette.primary } : {}}>
+              Total Amount Due
+            </Text>
+            <Text className={`font-bold text-xl ${colorPalette?.primary ? '' : 'text-orange-600'}`} style={colorPalette?.primary ? { color: colorPalette.primary } : {}}>
+              {fmt(soaRecord.total_amount_due)}
+            </Text>
+          </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Plan</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.plan}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
+          <View className="mt-2 flex-row justify-end">
+            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Due Date: {soaRecord.due_date || '-'}
+            </Text>
+          </View>
+        </View>
 
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Provider</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.provider || 'SWITCH'}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Balance from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.balanceFromPreviousBill?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Payment Received from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.paymentReceived || '0'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Remaining Balance from Previous Bill</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.remainingBalance?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Monthly Service Fee</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.monthlyServiceFee?.toFixed(2) || '624.11'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Others and Basic Charges</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.otherCharges?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>VAT</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.vat?.toFixed(2) || '74.89'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>DUE DATE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.dueDate || '9/30/2025'}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>AMOUNT DUE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.amountDue?.toFixed(2) || '699.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>TOTAL AMOUNT DUE</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{soaRecord.totalAmountDue?.toFixed(2) || '699.00'}
-              </span>
-            </div>
-
-            {soaRecord.deliveryStatus && (
-              <div className="flex justify-between items-center py-2">
-                <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Delivery Status</span>
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{soaRecord.deliveryStatus}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        {/* Footer / Meta */}
+        <View className="mb-10">
+          <Text className={`text-center text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            Statement ID: {soaRecord.id} | Generated: {soaRecord.created_at ? new Date(soaRecord.created_at).toLocaleDateString() : '-'}
+          </Text>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
