@@ -1,64 +1,49 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Image, Animated, Easing } from 'react-native';
-
-const logo1 = require('../assets/logo1.png');
+import React from 'react';
+import logo1 from '../assets/logo1.png';
 
 const SplashScreen: React.FC = () => {
-  const spinValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 1000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, [spinValue]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   return (
-    <View style={{
-      flex: 1,
+    <div style={{
+      display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      minHeight: '100vh',
       backgroundColor: '#282c34',
+      color: '#61dafb',
+      fontSize: '18px',
+      fontWeight: '500'
     }}>
-      <View style={{
+      <div style={{
+        display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 20
+        gap: '20px'
       }}>
-        <Image 
-          source={logo1}
+        <img 
+          src={logo1} 
+          alt="Sync Logo" 
           style={{
-            height: 80,
-            width: 80,
-            marginBottom: 10,
-            resizeMode: 'contain'
+            height: '80px',
+            marginBottom: '10px'
           }}
         />
-        <Animated.View style={{
-          width: 48,
-          height: 48,
-          borderWidth: 4,
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '4px solid',
           borderColor: '#444',
           borderTopColor: '#61dafb',
-          borderRadius: 24,
-          transform: [{ rotate: spin }]
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
         }} />
-        <Text style={{
-          color: '#61dafb',
-          fontSize: 18,
-          fontWeight: '500'
-        }}>Loading...</Text>
-      </View>
-    </View>
+        <div>Loading...</div>
+      </div>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
   );
 };
 

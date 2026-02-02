@@ -5,6 +5,11 @@ interface ApiResponse<T> {
   data: T;
   message?: string;
   count?: number;
+  pagination?: {
+    current_page: number;
+    per_page: number;
+    has_more: boolean;
+  };
 }
 
 export interface ApplicationVisitData {
@@ -14,6 +19,7 @@ export interface ApplicationVisitData {
   assigned_email: string;
   visit_by?: string | null;
   visit_with?: string | null;
+  visit_with_other?: string | null;
   visit_status?: string | null;
   visit_remarks?: string | null;
   application_status?: string | null;
@@ -32,6 +38,13 @@ export interface ApplicationVisitData {
   created_by_user_email?: string;
   updated_at?: string;
   updated_by_user_email?: string;
+  full_name?: string;
+  full_address?: string;
+  referred_by?: string;
+  first_name?: string;
+  middle_initial?: string;
+  last_name?: string;
+  installation_address?: string;
 }
 
 export const createApplicationVisit = async (visitData: ApplicationVisitData) => {
@@ -39,28 +52,47 @@ export const createApplicationVisit = async (visitData: ApplicationVisitData) =>
     if (!visitData.application_id) {
       throw new Error('application_id is required');
     }
-    
+
     const response = await apiClient.post<ApiResponse<ApplicationVisitData>>('/application-visits', visitData);
-    
+
     if (!response.data.success) {
       throw new Error(response.data.message || 'Unknown API error');
     }
-    
+
     return response.data;
   } catch (error: any) {
     throw error;
   }
 };
 
-export const getAllApplicationVisits = async (assignedEmail?: string) => {
+export const getAllApplicationVisits = async (
+  assignedEmail?: string,
+  fastMode: boolean = false,
+  page: number = 1,
+  limit: number = 50,
+  search?: string
+) => {
   try {
-    const params = assignedEmail ? { assigned_email: assignedEmail } : {};
+    const params: any = {
+      fast: fastMode ? '1' : '0',
+      page,
+      limit
+    };
+
+    if (assignedEmail) {
+      params.assigned_email = assignedEmail;
+    }
+
+    if (search) {
+      params.search = search;
+    }
+
     const response = await apiClient.get<ApiResponse<ApplicationVisitData[]>>('/application-visits', { params });
-    
+
     if (response.data && response.data.data) {
       return response.data;
     }
-    
+
     return {
       success: false,
       data: [],
@@ -78,11 +110,11 @@ export const getAllApplicationVisits = async (assignedEmail?: string) => {
 export const getApplicationVisits = async (applicationId: string) => {
   try {
     const response = await apiClient.get<ApiResponse<ApplicationVisitData[]>>(`/application-visits/application/${applicationId}`);
-    
+
     if (response.data && response.data.data) {
       return response.data;
     }
-    
+
     return {
       success: false,
       data: [],
@@ -125,7 +157,7 @@ export const deleteApplicationVisit = async (id: string) => {
 };
 
 export const uploadApplicationVisitImages = async (
-  id: string, 
+  id: string,
   firstName: string,
   middleInitial: string | undefined,
   lastName: string,
@@ -136,7 +168,7 @@ export const uploadApplicationVisitImages = async (
     formData.append('first_name', firstName);
     formData.append('middle_initial', middleInitial || '');
     formData.append('last_name', lastName);
-    
+
     if (images.image1) {
       formData.append('image1', images.image1);
     }
@@ -146,7 +178,7 @@ export const uploadApplicationVisitImages = async (
     if (images.image3) {
       formData.append('image3', images.image3);
     }
-    
+
     const response = await apiClient.post<ApiResponse<{ image1_url?: string; image2_url?: string; image3_url?: string }>>(
       `/application-visits/${id}/upload-images`,
       formData,
@@ -156,7 +188,7 @@ export const uploadApplicationVisitImages = async (
         },
       }
     );
-    
+
     return response.data;
   } catch (error: any) {
     throw error;

@@ -22,7 +22,8 @@ class HandleCorsManually
             'https://sync.atssfiber.ph',
             'https://backend.atssfiber.ph',
             'http://localhost:3000',
-            'http://127.0.0.1:3000'
+            'http://127.0.0.1:3000',
+            'exp://192.168.100.119:8081'
         ];
 
         // Handle preflight OPTIONS request
@@ -34,7 +35,7 @@ class HandleCorsManually
                 $response->header('Access-Control-Allow-Origin', $origin);
             } else {
                 // Default to first allowed origin for development
-                $response->header('Access-Control-Allow-Origin', in_array('http://localhost:3000', $allowedOrigins) ? 'http://localhost:3000' : 'https://sync.atssfiber.ph');
+                $response->header('Access-Control-Allow-Origin', in_array('exp://192.168.100.119:8081', $allowedOrigins) ? 'exp://192.168.100.119:8081' : 'https://sync.atssfiber.ph');
             }
             
             $response->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
@@ -53,7 +54,7 @@ class HandleCorsManually
             $response->headers->set('Access-Control-Allow-Origin', $origin);
         } else {
             // Default to first allowed origin for development
-            $response->headers->set('Access-Control-Allow-Origin', in_array('http://localhost:3000', $allowedOrigins) ? 'http://localhost:3000' : 'https://sync.atssfiber.ph');
+            $response->headers->set('Access-Control-Allow-Origin', in_array('exp://192.168.100.119:8081', $allowedOrigins) ? 'exp://192.168.100.119:8081' : 'https://sync.atssfiber.ph');
         }
         
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');

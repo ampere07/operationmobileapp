@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, ActivityIndicator } from 'react-native';
-import { Loader2 } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Loader2 } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface LoadingModalProps {
@@ -19,11 +17,20 @@ const LoadingModal: React.FC<LoadingModalProps> = ({
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const loadTheme = async () => {
-      const theme = await AsyncStorage.getItem('theme');
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-    loadTheme();
+
+    checkDarkMode();
+
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -41,49 +48,47 @@ const LoadingModal: React.FC<LoadingModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <Modal
-      transparent={true}
-      visible={isOpen}
-      animationType="fade"
-    >
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ borderRadius: 8, padding: 24, maxWidth: 384, width: '100%', marginHorizontal: 16, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
-          <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-            <Loader2 
-              size={48}
-              color={colorPalette?.primary || '#ea580c'}
-              style={{ marginBottom: 16 }}
-            />
-            <Text style={{ textAlign: 'center', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>{message}</Text>
-            
-            {percentage !== undefined && (
-              <View style={{ width: '100%' }}>
-                <View style={{ width: '100%', borderRadius: 9999, height: 10, marginBottom: 8, backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-                  <View 
-                    style={{ 
-                      height: 10, 
-                      borderRadius: 9999,
-                      width: `${percentage}%`,
-                      backgroundColor: colorPalette?.primary || '#ea580c'
-                    }}
-                  />
-                </View>
-                <Text 
-                  style={{
-                    textAlign: 'center',
-                    fontSize: 14,
-                    fontWeight: '500',
-                    color: colorPalette?.primary || '#ea580c'
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+      <div className={`rounded-lg p-6 max-w-sm w-full mx-4 ${
+        isDarkMode ? 'bg-gray-800' : 'bg-white'
+      }`}>
+        <div className="flex flex-col items-center">
+          <Loader2 
+            className="w-12 h-12 animate-spin mb-4" 
+            style={{
+              color: colorPalette?.primary || '#ea580c'
+            }}
+          />
+          <p className={`text-center mb-2 ${
+            isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>{message}</p>
+          
+          {percentage !== undefined && (
+            <div className="w-full">
+              <div className={`w-full rounded-full h-2.5 mb-2 ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+              }`}>
+                <div 
+                  className="h-2.5 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${percentage}%`,
+                    backgroundColor: colorPalette?.primary || '#ea580c'
                   }}
-                >
-                  {percentage}%
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-    </Modal>
+                ></div>
+              </div>
+              <p 
+                className="text-center text-sm font-medium"
+                style={{
+                  color: colorPalette?.primary || '#ea580c'
+                }}
+              >
+                {percentage}%
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

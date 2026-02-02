@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ChevronDown, Minus, Plus ,Loader2 } from 'lucide-react';
+import { X, Calendar, ChevronDown, Minus, Plus, Loader2 } from 'lucide-react';
 import { createJobOrder, JobOrderData } from '../services/jobOrderService';
 import { updateApplication } from '../services/applicationService';
 import { getContractTemplates, ContractTemplate } from '../services/lookupService';
@@ -138,22 +138,22 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const [pendingJobOrder, setPendingJobOrder] = useState<any>(null);
-  
+
   const [modal, setModal] = useState<ModalConfig>({
     isOpen: false,
     type: 'success',
     title: '',
     message: ''
   });
-  
+
   const [contractTemplates, setContractTemplates] = useState<ContractTemplate[]>([]);
   const [lookupLoading, setLookupLoading] = useState(true);
-  
+
   const [regions, setRegions] = useState<Region[]>([]);
   const [allCities, setAllCities] = useState<City[]>([]);
   const [allBarangays, setAllBarangays] = useState<Barangay[]>([]);
   const [allLocations, setAllLocations] = useState<LocationDetail[]>([]);
-  
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [technicians, setTechnicians] = useState<Array<{ email: string; name: string }>>([]);
@@ -216,7 +216,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchTechnicians();
   }, [isOpen]);
 
@@ -235,7 +235,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchGroups();
   }, [isOpen]);
 
@@ -263,7 +263,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         try {
           const response = await apiClient.get<ApiResponse<Plan[]> | Plan[]>('/plans');
           const data = response.data;
-          
+
           if (data && typeof data === 'object' && 'success' in data && data.success && Array.isArray(data.data)) {
             setPlans(data.data);
           } else if (Array.isArray(data)) {
@@ -286,7 +286,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         try {
           const response = await apiClient.get<ApiResponse<Promo[]> | Promo[]>('/promos');
           const data = response.data;
-          
+
           if (data && typeof data === 'object' && 'success' in data && data.success && Array.isArray(data.data)) {
             setPromos(data.data);
           } else if (Array.isArray(data)) {
@@ -308,7 +308,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       if (isOpen) {
         try {
           const fetchedRegions = await getRegions();
-          
+
           if (Array.isArray(fetchedRegions)) {
             setRegions(fetchedRegions);
           } else {
@@ -319,7 +319,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchRegions();
   }, [isOpen]);
 
@@ -328,7 +328,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       if (isOpen) {
         try {
           const fetchedCities = await getCities();
-          
+
           if (Array.isArray(fetchedCities)) {
             setAllCities(fetchedCities);
           } else {
@@ -339,7 +339,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchAllCities();
   }, [isOpen]);
 
@@ -348,7 +348,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       if (isOpen) {
         try {
           const response = await barangayService.getAll();
-          
+
           if (response.success && Array.isArray(response.data)) {
             setAllBarangays(response.data);
           } else {
@@ -359,7 +359,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchAllBarangays();
   }, [isOpen]);
 
@@ -368,7 +368,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       if (isOpen) {
         try {
           const response = await locationDetailService.getAll();
-          
+
           if (response.success && Array.isArray(response.data)) {
             setAllLocations(response.data);
           } else {
@@ -379,7 +379,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         }
       }
     };
-    
+
     fetchAllLocations();
   }, [isOpen]);
 
@@ -406,13 +406,22 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
   }, [applicationData, isOpen]);
 
   const handleInputChange = (field: keyof JOFormData, value: string | number | boolean) => {
+    if (field === 'billingDay') {
+      const numValue = parseInt(value as string);
+      if (!isNaN(numValue) && numValue > 30) {
+        // If user tries to type > 30, keep the previous value or do nothing if this is direct input
+        // However, since we are in the handler, preventing the update is sufficient
+        return;
+      }
+    }
+
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
-      
+
       if (field === 'isLastDayOfMonth' && value === true) {
         newData.billingDay = '0';
       }
-      
+
       if (field === 'region') {
         newData.city = '';
         newData.barangay = '';
@@ -423,7 +432,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       } else if (field === 'barangay') {
         newData.location = '';
       }
-      
+
       return newData;
     });
     if (errors[field]) {
@@ -454,7 +463,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         };
       } else if (field === 'billingDay') {
         const currentValue = parseInt(prev[field]) || 1;
-        const newValue = increment ? Math.min(31, currentValue + 1) : Math.max(1, currentValue - 1);
+        const newValue = increment ? Math.min(30, currentValue + 1) : Math.max(1, currentValue - 1);
         return {
           ...prev,
           [field]: newValue.toString()
@@ -488,23 +497,23 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First Name is required';
     }
-    
+
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last Name is required';
     }
-    
+
     if (!formData.contactNumber.trim()) {
       newErrors.contactNumber = 'Contact Number is required';
     } else if (!/^[0-9+\-\s()]+$/.test(formData.contactNumber.trim())) {
       newErrors.contactNumber = 'Please enter a valid contact number';
     }
-    
+
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
     }
-    
+
     if (!formData.address.trim()) {
       newErrors.address = 'Address is required';
     }
@@ -528,7 +537,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
     if (!formData.choosePlan.trim()) {
       newErrors.choosePlan = 'Choose Plan is required';
     }
-    
+
     if (formData.installationFee < 0) {
       newErrors.installationFee = 'Installation fee cannot be negative';
     }
@@ -536,13 +545,13 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
     if (!formData.contractTemplate.trim()) {
       newErrors.contractTemplate = 'Contract Template is required';
     }
-    
+
     const billingDayNum = parseInt(formData.billingDay);
     if (!formData.isLastDayOfMonth) {
       if (isNaN(billingDayNum) || billingDayNum < 1) {
         newErrors.billingDay = 'Billing Day must be at least 1';
-      } else if (billingDayNum > 31) {
-        newErrors.billingDay = 'Billing Day cannot exceed 31';
+      } else if (billingDayNum > 30) {
+        newErrors.billingDay = 'Billing Day cannot exceed 30';
       }
     }
 
@@ -567,7 +576,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       }
       return String(value);
     };
-    
+
     const toNullIfEmptyOrZero = (value: string | number | undefined): string | null => {
       if (value === undefined || value === null || value === '' || value === 0 || value === '0') {
         return null;
@@ -576,8 +585,8 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
     };
 
     const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const formattedTimestamp = data.timestamp ? 
-      new Date(data.timestamp).toISOString().slice(0, 19).replace('T', ' ') : 
+    const formattedTimestamp = data.timestamp ?
+      new Date(data.timestamp).toISOString().slice(0, 19).replace('T', ' ') :
       currentTimestamp;
 
     return {
@@ -606,11 +615,11 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       modifiedBy: currentUserEmail,
       modifiedDate: new Date().toLocaleString('sv-SE').replace(' ', ' ')
     };
-    
+
     setFormData(updatedFormData);
-    
+
     const isValid = validateForm();
-    
+
     if (!isValid) {
       setModal({
         isOpen: true,
@@ -620,7 +629,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       });
       return;
     }
-    
+
     if (!applicationData?.id) {
       setModal({
         isOpen: true,
@@ -633,7 +642,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
 
     setLoading(true);
     setLoadingPercentage(0);
-    
+
     const progressInterval = setInterval(() => {
       setLoadingPercentage(prev => {
         if (prev >= 99) return 99;
@@ -642,20 +651,20 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         return prev + 5;
       });
     }, 300);
-    
+
     try {
       const jobOrderData = mapFormDataToJobOrder(applicationData.id, updatedFormData);
       const result = await createJobOrder(jobOrderData);
-      
+
       if (!result.success) {
         throw new Error(result.message || 'Failed to create job order');
       }
-      
+
       try {
         const applicationUpdateData: any = {
           promo: updatedFormData.promo || null
         };
-        
+
         await updateApplication(applicationData.id.toString(), applicationUpdateData);
       } catch (appError: any) {
         const errorMsg = appError.response?.data?.message || appError.message || 'Unknown error';
@@ -675,11 +684,11 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
         setLoading(false);
         return;
       }
-      
+
       clearInterval(progressInterval);
       setLoadingPercentage(100);
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       setPendingJobOrder(result.data);
       setErrors({});
       setModal({
@@ -696,7 +705,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       });
     } catch (error: any) {
       let errorMessage = 'Unknown error occurred';
-      
+
       if (error.response?.data?.errors) {
         const validationErrors = error.response.data.errors;
         const errorDetails = Object.entries(validationErrors)
@@ -715,7 +724,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
-      
+
       clearInterval(progressInterval);
       setModal({
         isOpen: true,
@@ -762,826 +771,741 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
 
   return (
     <>
-    {loading && (
-      <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-        <div className={`rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px] ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}>
-          <Loader2 className="w-20 h-20 text-orange-500 animate-spin" />
-          <div className="text-center">
-            <p className={`text-4xl font-bold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{loadingPercentage}%</p>
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
+          <div className={`rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px] ${isDarkMode ? 'bg-gray-800' : 'bg-white'
+            }`}>
+            <Loader2 className="w-20 h-20 text-orange-500 animate-spin" />
+            <div className="text-center">
+              <p className={`text-4xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{loadingPercentage}%</p>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-    
+      )}
+
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-      <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
-        <div className={`px-6 py-4 flex items-center justify-between border-b ${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-        }`}>
-          <h2 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>JO Assign Form</h2>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleCancel}
-              className={`px-4 py-2 rounded text-sm transition-colors ${
-                isDarkMode 
-                  ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm flex items-center"
-              style={{
-                backgroundColor: colorPalette?.primary || '#ea580c'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent && !loading) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-              }}
-            >
-              {loading ? 'Saving...' : 'Save'}
-            </button>
-            <button
-              onClick={onClose}
-              className={`transition-colors ${
-                isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <X size={24} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Timestamp<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="datetime-local"
-                  value={formData.timestamp}
-                  onChange={(e) => handleInputChange('timestamp', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.timestamp ? 'border-red-500' : ''}`}
-                />
-                <Calendar className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.timestamp && <p className="text-red-500 text-xs mt-1">{errors.timestamp}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Affiliate<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.groupName}
-                  onChange={(e) => handleInputChange('groupName', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.groupName ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select Affiliate</option>
-                  {formData.groupName && !groups.some(g => g.group_name === formData.groupName) && (
-                    <option value={formData.groupName}>{formData.groupName}</option>
-                  )}
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.group_name}>
-                      {group.group_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.groupName && <p className="text-red-500 text-xs mt-1">{errors.groupName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Status<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.status ? 'border-red-500' : ''}`}
-                >
-                  <option value="" disabled>Select Status</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="For Confirmation">For Confirmation</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.status && <p className="text-red-500 text-xs mt-1">{errors.status}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Referred By</label>
-              <input
-                type="text"
-                value={formData.referredBy}
-                onChange={(e) => handleInputChange('referredBy', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                First Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.firstName}
-                onChange={(e) => handleInputChange('firstName', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.firstName ? 'border-red-500' : ''}`}
-              />
-              {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Middle Initial</label>
-              <input
-                type="text"
-                value={formData.middleInitial}
-                onChange={(e) => handleInputChange('middleInitial', e.target.value)}
-                maxLength={1}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Last Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.lastName}
-                onChange={(e) => handleInputChange('lastName', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.lastName ? 'border-red-500' : ''}`}
-              />
-              {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Contact Number<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.contactNumber}
-                onChange={(e) => handleInputChange('contactNumber', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.contactNumber ? 'border-red-500' : ''}`}
-              />
-              {errors.contactNumber && <p className="text-red-500 text-xs mt-1">{errors.contactNumber}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Applicant Email Address<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.email ? 'border-red-500' : ''}`}
-              />
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Address<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.address ? 'border-red-500' : ''}`}
-              />
-              {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Region<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.region}
-                  onChange={(e) => handleInputChange('region', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.region ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select Region</option>
-                  {formData.region && !regions.some(reg => reg.name === formData.region) && (
-                    <option value={formData.region}>{formData.region}</option>
-                  )}
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.name}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.region && <p className="text-red-500 text-xs mt-1">{errors.region}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                City<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  disabled={!formData.region}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.city ? 'border-red-500' : ''}`}
-                >
-                  <option value="">{formData.region ? 'Select City' : 'Select Region First'}</option>
-                  {formData.city && !filteredCities.some(city => city.name === formData.city) && (
-                    <option value={formData.city}>{formData.city}</option>
-                  )}
-                  {filteredCities.map((city) => (
-                    <option key={city.id} value={city.name}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Barangay<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.barangay}
-                  onChange={(e) => handleInputChange('barangay', e.target.value)}
-                  disabled={!formData.city}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.barangay ? 'border-red-500' : ''}`}
-                >
-                  <option value="">{formData.city ? 'Select Barangay' : 'Select City First'}</option>
-                  {formData.barangay && !filteredBarangays.some(b => b.barangay === formData.barangay) && (
-                    <option value={formData.barangay}>{formData.barangay}</option>
-                  )}
-                  {filteredBarangays.map((barangay) => (
-                    <option key={barangay.id} value={barangay.barangay}>
-                      {barangay.barangay}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.barangay && <p className="text-red-500 text-xs mt-1">{errors.barangay}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Location<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!formData.barangay}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.location ? 'border-red-500' : ''}`}
-                >
-                  <option value="">{formData.barangay ? 'Select Location' : 'Select Barangay First'}</option>
-                  {formData.location && formData.location.trim() !== '' && !filteredLocations.some(loc => loc.location_name === formData.location) && (
-                    <option value={formData.location}>{formData.location}</option>
-                  )}
-                  {filteredLocations.map((location) => (
-                    <option key={location.id} value={location.location_name}>
-                      {location.location_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Choose Plan<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.choosePlan}
-                  onChange={(e) => handleInputChange('choosePlan', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.choosePlan ? 'border-red-500' : ''}`}
-                >
-                  <option value="">Select Plan</option>
-                  {formData.choosePlan && !plans.some(plan => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
-                  }) && (
-                    <option value={formData.choosePlan}>{formData.choosePlan}</option>
-                  )}
-                  {plans.map((plan) => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return (
-                      <option key={plan.id} value={planWithPrice}>
-                        {planWithPrice}
-                      </option>
-                    );
-                  })}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.choosePlan && <p className="text-red-500 text-xs mt-1">{errors.choosePlan}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Promo
-              </label>
-              <div className="relative">
-                <select
-                  value={formData.promo}
-                  onChange={(e) => handleInputChange('promo', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
+        <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
+          }`}>
+          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+            }`}>
+            <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>JO Assign Form</h2>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={handleCancel}
+                className={`px-4 py-2 rounded text-sm transition-colors ${isDarkMode
+                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
                   }`}
-                >
-                  <option value="">Select Promo</option>
-                  <option value="None">None</option>
-                  {formData.promo && formData.promo !== 'None' && !promos.some(p => p.promo_name === formData.promo) && (
-                    <option value={formData.promo}>{formData.promo}</option>
-                  )}
-                  {promos.map((promo) => (
-                    <option key={promo.id} value={promo.promo_name}>
-                      {promo.promo_name}{promo.description ? ` - ${promo.description}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Remarks</label>
-              <textarea
-                value={formData.remarks}
-                onChange={(e) => handleInputChange('remarks', e.target.value)}
-                rows={3}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Installation Fee<span className="text-red-500">*</span>
-              </label>
-              <div className={`flex items-center border rounded ${
-                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-              }`}>
-                <span className={`px-3 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>₱</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.installationFee === 0 ? '' : formData.installationFee}
-                  onChange={(e) => handleInstallationFeeChange(e.target.value)}
-                  className={`flex-1 px-3 py-2 bg-transparent focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  } ${errors.installationFee ? 'border-red-500' : ''}`}
-                  placeholder="0.00"
-                />
-              </div>
-              {errors.installationFee && <p className="text-red-500 text-xs mt-1">{errors.installationFee}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Contract Template<span className="text-red-500">*</span>
-              </label>
-              <div className={`flex items-center border rounded ${
-                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-              } ${errors.contractTemplate ? 'border-red-500' : ''}`}>
-                <input
-                  type="number"
-                  value={formData.contractTemplate}
-                  onChange={(e) => handleInputChange('contractTemplate', e.target.value)}
-                  className={`flex-1 px-3 py-2 bg-transparent focus:outline-none ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm flex items-center"
+                style={{
+                  backgroundColor: colorPalette?.primary || '#ea580c'
+                }}
+                onMouseEnter={(e) => {
+                  if (colorPalette?.accent && !loading) {
+                    e.currentTarget.style.backgroundColor = colorPalette.accent;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                }}
+              >
+                {loading ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={onClose}
+                className={`transition-colors ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
                   }`}
-                />
-                <div className="flex">
-                  <button
-                    type="button"
-                    onClick={() => handleNumberChange('contractTemplate', false)}
-                    className={`px-3 py-2 border-l transition-colors ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNumberChange('contractTemplate', true)}
-                    className={`px-3 py-2 border-l transition-colors ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
-              {errors.contractTemplate && <p className="text-red-500 text-xs mt-1">{errors.contractTemplate}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Billing Day<span className="text-red-500">*</span>
-              </label>
-              <div className={`flex items-center border rounded ${
-                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-              }`}>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={formData.billingDay}
-                  onChange={(e) => handleInputChange('billingDay', e.target.value)}
-                  disabled={formData.isLastDayOfMonth}
-                  className={`flex-1 px-3 py-2 bg-transparent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  } ${errors.billingDay ? 'border-red-500' : ''}`}
-                />
-                <div className="flex">
-                  <button
-                    type="button"
-                    onClick={() => handleNumberChange('billingDay', false)}
-                    disabled={formData.isLastDayOfMonth}
-                    className={`px-3 py-2 border-l transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNumberChange('billingDay', true)}
-                    disabled={formData.isLastDayOfMonth}
-                    className={`px-3 py-2 border-l transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="mt-2 flex items-center">
-                <input
-                  type="checkbox"
-                  id="isLastDayOfMonth"
-                  checked={formData.isLastDayOfMonth}
-                  onChange={(e) => handleInputChange('isLastDayOfMonth', e.target.checked)}
-                  className={`w-4 h-4 rounded text-orange-600 focus:ring-orange-500 focus:ring-2 ${
-                    isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                  }`}
-                />
-                <label htmlFor="isLastDayOfMonth" className={`ml-2 text-sm cursor-pointer ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Always use last day of the month
-                </label>
-              </div>
-              
-              {parseInt(formData.billingDay) > 31 && !formData.isLastDayOfMonth && (
-                <p className="text-orange-500 text-xs mt-1 flex items-center">
-                  <span className="mr-1">⚠</span>
-                  Billing Day must be between 1 and 31
-                </p>
-              )}
-              {errors.billingDay && <p className="text-red-500 text-xs mt-1">{errors.billingDay}</p>}
+              >
+                <X size={24} />
+              </button>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {formData.status === 'Confirmed' && (
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="space-y-4">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Onsite Status<span className="text-red-500">*</span>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Timestamp<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={formData.timestamp}
+                    onChange={(e) => handleInputChange('timestamp', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.timestamp ? 'border-red-500' : ''}`}
+                  />
+                  <Calendar className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.timestamp && <p className="text-red-500 text-xs mt-1">{errors.timestamp}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Affiliate<span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
-                    value={formData.onsiteStatus}
-                    onChange={(e) => handleInputChange('onsiteStatus', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                      isDarkMode 
-                        ? 'bg-gray-800 text-white border-gray-700' 
+                    value={formData.groupName}
+                    onChange={(e) => handleInputChange('groupName', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
                         : 'bg-white text-gray-900 border-gray-300'
-                    } ${errors.onsiteStatus ? 'border-red-500' : ''}`}
+                      } ${errors.groupName ? 'border-red-500' : ''}`}
                   >
-                    <option value="In Progress">In Progress</option>
-                    <option value="Done">Done</option>
-                    <option value="Failed">Failed</option>
-                    <option value="Reschedule">Reschedule</option>
-                  </select>
-                  <ChevronDown className={`absolute right-3 top-2.5 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} size={20} />
-                </div>
-                {errors.onsiteStatus && <p className="text-red-500 text-xs mt-1">{errors.onsiteStatus}</p>}
-              </div>
-            )}
-
-            {formData.status === 'Confirmed' && formData.onsiteStatus !== 'Failed' && (
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Assigned Email<span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <select
-                    value={formData.assignedEmail}
-                    onChange={(e) => handleInputChange('assignedEmail', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                      isDarkMode 
-                        ? 'bg-gray-800 text-white border-gray-700' 
-                        : 'bg-white text-gray-900 border-gray-300'
-                    } ${errors.assignedEmail ? 'border-red-500' : ''}`}
-                  >
-                    <option value="">Select Assigned Email</option>
-                    {formData.assignedEmail && !technicians.some(t => t.email === formData.assignedEmail) && (
-                      <option value={formData.assignedEmail}>{formData.assignedEmail}</option>
+                    <option value="">Select Affiliate</option>
+                    {formData.groupName && !groups.some(g => g.group_name === formData.groupName) && (
+                      <option value={formData.groupName}>{formData.groupName}</option>
                     )}
-                    {technicians.map((technician, index) => (
-                      <option key={index} value={technician.email}>
-                        {technician.email}
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.group_name}>
+                        {group.group_name}
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className={`absolute right-3 top-2.5 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} size={20} />
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
                 </div>
-                {errors.assignedEmail && <p className="text-red-500 text-xs mt-1">{errors.assignedEmail}</p>}
+                {errors.groupName && <p className="text-red-500 text-xs mt-1">{errors.groupName}</p>}
               </div>
-            )}
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified By<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={formData.modifiedBy}
-                readOnly
-                className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                  isDarkMode 
-                    ? 'bg-gray-700 border-gray-700 text-gray-400' 
-                    : 'bg-gray-100 border-gray-300 text-gray-600'
-                }`}
-                title="Auto-populated with logged-in user"
-              />
-            </div>
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Status<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.status}
+                    onChange={(e) => handleInputChange('status', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.status ? 'border-red-500' : ''}`}
+                  >
+                    <option value="" disabled>Select Status</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="For Confirmation">For Confirmation</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.status && <p className="text-red-500 text-xs mt-1">{errors.status}</p>}
+              </div>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified Date<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Referred By</label>
                 <input
-                  type="datetime-local"
-                  value={formData.modifiedDate}
-                  readOnly
-                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                    isDarkMode 
-                      ? 'bg-gray-700 border-gray-700 text-gray-400' 
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                  }`}
-                  title="Auto-populated with current timestamp"
+                  type="text"
+                  value={formData.referredBy}
+                  onChange={(e) => handleInputChange('referredBy', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    }`}
                 />
-                <Calendar className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
               </div>
             </div>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>Installation Landmark</label>
-              <input
-                type="text"
-                value={formData.installationLandmark}
-                onChange={(e) => handleInputChange('installationLandmark', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-              />
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  First Name<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.firstName}
+                  onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    } ${errors.firstName ? 'border-red-500' : ''}`}
+                />
+                {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Middle Initial</label>
+                <input
+                  type="text"
+                  value={formData.middleInitial}
+                  onChange={(e) => handleInputChange('middleInitial', e.target.value)}
+                  maxLength={1}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    }`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Last Name<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => handleInputChange('lastName', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    } ${errors.lastName ? 'border-red-500' : ''}`}
+                />
+                {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Contact Number<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.contactNumber}
+                  onChange={(e) => handleInputChange('contactNumber', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    } ${errors.contactNumber ? 'border-red-500' : ''}`}
+                />
+                {errors.contactNumber && <p className="text-red-500 text-xs mt-1">{errors.contactNumber}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Applicant Email Address<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    } ${errors.email ? 'border-red-500' : ''}`}
+                />
+                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Address<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    } ${errors.address ? 'border-red-500' : ''}`}
+                />
+                {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Region<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.region}
+                    onChange={(e) => handleInputChange('region', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.region ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">Select Region</option>
+                    {formData.region && !regions.some(reg => reg.name === formData.region) && (
+                      <option value={formData.region}>{formData.region}</option>
+                    )}
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.name}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.region && <p className="text-red-500 text-xs mt-1">{errors.region}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  City<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.city}
+                    onChange={(e) => handleInputChange('city', e.target.value)}
+                    disabled={!formData.region}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.city ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">{formData.region ? 'Select City' : 'Select Region First'}</option>
+                    {formData.city && !filteredCities.some(city => city.name === formData.city) && (
+                      <option value={formData.city}>{formData.city}</option>
+                    )}
+                    {filteredCities.map((city) => (
+                      <option key={city.id} value={city.name}>
+                        {city.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Barangay<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.barangay}
+                    onChange={(e) => handleInputChange('barangay', e.target.value)}
+                    disabled={!formData.city}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.barangay ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">{formData.city ? 'Select Barangay' : 'Select City First'}</option>
+                    {formData.barangay && !filteredBarangays.some(b => b.barangay === formData.barangay) && (
+                      <option value={formData.barangay}>{formData.barangay}</option>
+                    )}
+                    {filteredBarangays.map((barangay) => (
+                      <option key={barangay.id} value={barangay.barangay}>
+                        {barangay.barangay}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.barangay && <p className="text-red-500 text-xs mt-1">{errors.barangay}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Location<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.location}
+                    onChange={(e) => handleInputChange('location', e.target.value)}
+                    disabled={!formData.barangay}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.location ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">{formData.barangay ? 'Select Location' : 'Select Barangay First'}</option>
+                    {formData.location && formData.location.trim() !== '' && !filteredLocations.some(loc => loc.location_name === formData.location) && (
+                      <option value={formData.location}>{formData.location}</option>
+                    )}
+                    {filteredLocations.map((location) => (
+                      <option key={location.id} value={location.location_name}>
+                        {location.location_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Choose Plan<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.choosePlan}
+                    onChange={(e) => handleInputChange('choosePlan', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      } ${errors.choosePlan ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">Select Plan</option>
+                    {formData.choosePlan && !plans.some(plan => {
+                      const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                      return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
+                    }) && (
+                        <option value={formData.choosePlan}>{formData.choosePlan}</option>
+                      )}
+                    {plans.map((plan) => {
+                      const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                      return (
+                        <option key={plan.id} value={planWithPrice}>
+                          {planWithPrice}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+                {errors.choosePlan && <p className="text-red-500 text-xs mt-1">{errors.choosePlan}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Promo
+                </label>
+                <div className="relative">
+                  <select
+                    value={formData.promo}
+                    onChange={(e) => handleInputChange('promo', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                        ? 'bg-gray-800 text-white border-gray-700'
+                        : 'bg-white text-gray-900 border-gray-300'
+                      }`}
+                  >
+                    <option value="">Select Promo</option>
+                    <option value="None">None</option>
+                    {formData.promo && formData.promo !== 'None' && !promos.some(p => p.promo_name === formData.promo) && (
+                      <option value={formData.promo}>{formData.promo}</option>
+                    )}
+                    {promos.map((promo) => (
+                      <option key={promo.id} value={promo.promo_name}>
+                        {promo.promo_name}{promo.description ? ` - ${promo.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Remarks</label>
+                <textarea
+                  value={formData.remarks}
+                  onChange={(e) => handleInputChange('remarks', e.target.value)}
+                  rows={3}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    }`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Installation Fee<span className="text-red-500">*</span>
+                </label>
+                <div className={`flex items-center border rounded ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                  }`}>
+                  <span className={`px-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>₱</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.installationFee === 0 ? '' : formData.installationFee}
+                    onChange={(e) => handleInstallationFeeChange(e.target.value)}
+                    className={`flex-1 px-3 py-2 bg-transparent focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isDarkMode ? 'text-white' : 'text-gray-900'
+                      } ${errors.installationFee ? 'border-red-500' : ''}`}
+                    placeholder="0.00"
+                  />
+                </div>
+                {errors.installationFee && <p className="text-red-500 text-xs mt-1">{errors.installationFee}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Contract Template<span className="text-red-500">*</span>
+                </label>
+                <div className={`flex items-center border rounded ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                  } ${errors.contractTemplate ? 'border-red-500' : ''}`}>
+                  <input
+                    type="number"
+                    value={formData.contractTemplate}
+                    onChange={(e) => handleInputChange('contractTemplate', e.target.value)}
+                    className={`flex-1 px-3 py-2 bg-transparent focus:outline-none ${isDarkMode ? 'text-white' : 'text-gray-900'
+                      }`}
+                  />
+                  <div className="flex">
+                    <button
+                      type="button"
+                      onClick={() => handleNumberChange('contractTemplate', false)}
+                      className={`px-3 py-2 border-l transition-colors ${isDarkMode
+                          ? 'text-gray-400 hover:text-white border-gray-700'
+                          : 'text-gray-600 hover:text-gray-900 border-gray-300'
+                        }`}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNumberChange('contractTemplate', true)}
+                      className={`px-3 py-2 border-l transition-colors ${isDarkMode
+                          ? 'text-gray-400 hover:text-white border-gray-700'
+                          : 'text-gray-600 hover:text-gray-900 border-gray-300'
+                        }`}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+                {errors.contractTemplate && <p className="text-red-500 text-xs mt-1">{errors.contractTemplate}</p>}
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Billing Day<span className="text-red-500">*</span>
+                </label>
+                <div className={`flex items-center border rounded ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                  }`}>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={formData.billingDay}
+                    onChange={(e) => handleInputChange('billingDay', e.target.value)}
+                    disabled={formData.isLastDayOfMonth}
+                    className={`flex-1 px-3 py-2 bg-transparent focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'text-white' : 'text-gray-900'
+                      } ${errors.billingDay ? 'border-red-500' : ''}`}
+                  />
+                  <div className="flex">
+                    <button
+                      type="button"
+                      onClick={() => handleNumberChange('billingDay', false)}
+                      disabled={formData.isLastDayOfMonth}
+                      className={`px-3 py-2 border-l transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
+                          ? 'text-gray-400 hover:text-white border-gray-700'
+                          : 'text-gray-600 hover:text-gray-900 border-gray-300'
+                        }`}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNumberChange('billingDay', true)}
+                      disabled={formData.isLastDayOfMonth}
+                      className={`px-3 py-2 border-l transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
+                          ? 'text-gray-400 hover:text-white border-gray-700'
+                          : 'text-gray-600 hover:text-gray-900 border-gray-300'
+                        }`}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isLastDayOfMonth"
+                    checked={formData.isLastDayOfMonth}
+                    onChange={(e) => handleInputChange('isLastDayOfMonth', e.target.checked)}
+                    className={`w-4 h-4 rounded text-orange-600 focus:ring-orange-500 focus:ring-2 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                      }`}
+                  />
+                  <label htmlFor="isLastDayOfMonth" className={`ml-2 text-sm cursor-pointer ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                    Always use last day of the month
+                  </label>
+                </div>
+
+                {parseInt(formData.billingDay) > 30 && !formData.isLastDayOfMonth && (
+                  <p className="text-orange-500 text-xs mt-1 flex items-center">
+                    <span className="mr-1">⚠</span>
+                    Billing Day must be between 1 and 30
+                  </p>
+                )}
+                {errors.billingDay && <p className="text-red-500 text-xs mt-1">{errors.billingDay}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {formData.status === 'Confirmed' && (
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                    Onsite Status<span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={formData.onsiteStatus}
+                      onChange={(e) => handleInputChange('onsiteStatus', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                          ? 'bg-gray-800 text-white border-gray-700'
+                          : 'bg-white text-gray-900 border-gray-300'
+                        } ${errors.onsiteStatus ? 'border-red-500' : ''}`}
+                    >
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                      <option value="Failed">Failed</option>
+                      <option value="Reschedule">Reschedule</option>
+                    </select>
+                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`} size={20} />
+                  </div>
+                  {errors.onsiteStatus && <p className="text-red-500 text-xs mt-1">{errors.onsiteStatus}</p>}
+                </div>
+              )}
+
+              {formData.status === 'Confirmed' && formData.onsiteStatus !== 'Failed' && (
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                    Assigned Email<span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={formData.assignedEmail}
+                      onChange={(e) => handleInputChange('assignedEmail', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode
+                          ? 'bg-gray-800 text-white border-gray-700'
+                          : 'bg-white text-gray-900 border-gray-300'
+                        } ${errors.assignedEmail ? 'border-red-500' : ''}`}
+                    >
+                      <option value="">Select Assigned Email</option>
+                      {formData.assignedEmail && !technicians.some(t => t.email === formData.assignedEmail) && (
+                        <option value={formData.assignedEmail}>{formData.assignedEmail}</option>
+                      )}
+                      {technicians.map((technician, index) => (
+                        <option key={index} value={technician.email}>
+                          {technician.email}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`} size={20} />
+                  </div>
+                  {errors.assignedEmail && <p className="text-red-500 text-xs mt-1">{errors.assignedEmail}</p>}
+                </div>
+              )}
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Modified By<span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.modifiedBy}
+                  readOnly
+                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${isDarkMode
+                      ? 'bg-gray-700 border-gray-700 text-gray-400'
+                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                    }`}
+                  title="Auto-populated with logged-in user"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                  Modified Date<span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={formData.modifiedDate}
+                    readOnly
+                    className={`w-full px-3 py-2 border rounded cursor-not-allowed ${isDarkMode
+                        ? 'bg-gray-700 border-gray-700 text-gray-400'
+                        : 'bg-gray-100 border-gray-300 text-gray-600'
+                      }`}
+                    title="Auto-populated with current timestamp"
+                  />
+                  <Calendar className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} size={20} />
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Installation Landmark</label>
+                <input
+                  type="text"
+                  value={formData.installationLandmark}
+                  onChange={(e) => handleInputChange('installationLandmark', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode
+                      ? 'bg-gray-800 text-white border-gray-700'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    }`}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       {modal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]">
-          <div className={`border rounded-lg p-8 max-w-md w-full mx-4 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
+          <div className={`border rounded-lg p-8 max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
             {modal.type === 'loading' ? (
               <div className="text-center">
                 <div className="flex justify-center mb-4">
                   <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-orange-500"></div>
                 </div>
-                <h3 className={`text-xl font-semibold mb-2 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{modal.title}</h3>
-                <p className={`text-sm ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>{modal.message}</p>
+                <h3 className={`text-xl font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>{modal.title}</h3>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>{modal.message}</p>
               </div>
             ) : (
               <>
-                <h3 className={`text-lg font-semibold mb-4 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{modal.title}</h3>
-                <p className={`mb-6 whitespace-pre-line ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>{modal.message}</p>
+                <h3 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>{modal.title}</h3>
+                <p className={`mb-6 whitespace-pre-line ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>{modal.message}</p>
                 <div className="flex items-center justify-end gap-3">
                   {modal.type === 'confirm' ? (
                     <>
                       <button
                         onClick={modal.onCancel}
-                        className={`px-4 py-2 rounded transition-colors ${
-                          isDarkMode 
-                            ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                        className={`px-4 py-2 rounded transition-colors ${isDarkMode
+                            ? 'bg-gray-700 hover:bg-gray-600 text-white'
                             : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                        }`}
+                          }`}
                       >
                         Cancel
                       </button>

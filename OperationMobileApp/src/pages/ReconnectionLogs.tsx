@@ -66,15 +66,15 @@ const ReconnectionLogs: React.FC = () => {
       const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-    
+
     checkDarkMode();
-    
+
     const observer = new MutationObserver(checkDarkMode);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
-    
+
     return () => observer.disconnect();
   }, []);
 
@@ -108,84 +108,33 @@ const ReconnectionLogs: React.FC = () => {
     { key: 'reconnectionCode', label: 'Reconnection Code', width: 'min-w-36' }
   ];
 
+  // API Base URL
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+
   // Fetch reconnection log data
   useEffect(() => {
     const fetchReconnectionData = async () => {
       try {
         setIsLoading(true);
-        
-        // This would be an API call in a real implementation
-        // For now, we'll use mock data
-        setTimeout(() => {
-          const mockData: ReconnectionLogRecord[] = [
-            {
-              id: '1',
-              accountNo: '202305171',
-              customerName: 'Emelyn G Manucay',
-              address: '0033 Sitio Kay Habagat St, Tatala, Binangonan, Rizal',
-              remarks: 'Service restored',
-              splynxId: '202509181547536099',
-              mikrotikId: '*1528',
-              provider: 'SWITCH',
-              username: 'manucaye0220251214',
-              date: '9/20/2025 3:47:54 PM',
-              barangay: 'Tatala',
-              city: 'Binangonan',
-              dateFormat: '9/20/2025',
-              cityId: 1,
-              reconnectionFee: 500.00,
-              plan: 'SwitchLite - P699'
-            },
-            {
-              id: '2',
-              accountNo: '202402023',
-              customerName: 'Maria Santos',
-              address: '456 Oak St, Lunsad, Binangonan, Rizal',
-              remarks: 'Payment received',
-              splynxId: 'SPL67890',
-              mikrotikId: 'MK54321',
-              provider: 'SWITCH',
-              username: 'maria.santos456',
-              date: '9/21/2025 10:15:43 AM',
-              barangay: 'Lunsad',
-              city: 'Binangonan',
-              dateFormat: '9/21/2025',
-              cityId: 1,
-              reconnectionFee: 750.00,
-              plan: 'SwitchPro - P1299'
-            },
-            {
-              id: '3',
-              accountNo: '202403045',
-              customerName: 'Robert Reyes',
-              address: '789 Pine St, Libid, Binangonan, Rizal',
-              remarks: 'Issue resolved',
-              splynxId: 'SPL24680',
-              mikrotikId: 'MK13579',
-              provider: 'SWITCH',
-              username: 'robert.reyes789',
-              date: '9/22/2025 09:05:11 AM',
-              barangay: 'Libid',
-              city: 'Binangonan',
-              dateFormat: '9/22/2025',
-              cityId: 1,
-              reconnectionFee: 1000.00,
-              plan: 'SwitchMax - P1599'
-            }
-          ];
-          
-          setLogRecords(mockData);
-          setError(null);
-          setIsLoading(false);
-        }, 1000);
-      } catch (err) {
+        setError(null);
+
+        const response = await fetch(`${API_BASE_URL}/reconnection-logs`);
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          setLogRecords(result.data);
+        } else {
+          throw new Error(result.message || 'Failed to fetch logs');
+        }
+      } catch (err: any) {
         console.error('Failed to fetch reconnection logs:', err);
-        setError('Failed to load reconnection logs. Please try again.');
+        setError(err.message || 'Failed to load reconnection logs. Please try again.');
         setLogRecords([]);
+      } finally {
         setIsLoading(false);
       }
     };
-    
+
     fetchReconnectionData();
   }, []);
 
@@ -198,17 +147,17 @@ const ReconnectionLogs: React.FC = () => {
         count: logRecords.length
       }
     ];
-    
+
     // Create a map to count records by cityId
     const cityCountMap = new Map<number, number>();
-    
+
     logRecords.forEach(record => {
       if (record.cityId !== undefined) {
         const currentCount = cityCountMap.get(record.cityId) || 0;
         cityCountMap.set(record.cityId, currentCount + 1);
       }
     });
-    
+
     // Add city items
     cityCountMap.forEach((count, cityId) => {
       items.push({
@@ -227,21 +176,21 @@ const ReconnectionLogs: React.FC = () => {
       1: 'Binangonan',
       2: 'Cardona'
     };
-    
+
     return cityMap[cityId] || `City ${cityId}`;
   }
 
   // Memoize filtered records for performance
   const filteredLogRecords = useMemo(() => {
     return logRecords.filter(record => {
-      const matchesLocation = selectedLocation === 'all' || 
-                             (record.cityId !== undefined && record.cityId === Number(selectedLocation));
-      
-      const matchesSearch = searchQuery === '' || 
-                           record.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           record.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           record.accountNo.includes(searchQuery);
-      
+      const matchesLocation = selectedLocation === 'all' ||
+        (record.cityId !== undefined && record.cityId === Number(selectedLocation));
+
+      const matchesSearch = searchQuery === '' ||
+        record.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.accountNo.includes(searchQuery);
+
       return matchesLocation && matchesSearch;
     });
   }, [logRecords, selectedLocation, searchQuery]);
@@ -257,80 +206,26 @@ const ReconnectionLogs: React.FC = () => {
   const handleRefresh = async () => {
     try {
       setIsLoading(true);
-      // In a real implementation, this would make an API call
-      // For now, we'll reuse the mock data loading logic
-      setTimeout(() => {
-        const mockData: ReconnectionLogRecord[] = [
-          // Same mock data as above
-          {
-            id: '1',
-            accountNo: '202305171',
-            customerName: 'Emelyn G Manucay',
-            address: '0033 Sitio Kay Habagat St, Tatala, Binangonan, Rizal',
-            remarks: 'Service restored',
-            splynxId: '202509181547536099',
-            mikrotikId: '*1528',
-            provider: 'SWITCH',
-            username: 'manucaye0220251214',
-            date: '9/20/2025 3:47:54 PM',
-            barangay: 'Tatala',
-            city: 'Binangonan',
-            dateFormat: '9/20/2025',
-            cityId: 1,
-            reconnectionFee: 500.00,
-            plan: 'SwitchLite - P699'
-          },
-          {
-            id: '2',
-            accountNo: '202402023',
-            customerName: 'Maria Santos',
-            address: '456 Oak St, Lunsad, Binangonan, Rizal',
-            remarks: 'Payment received',
-            splynxId: 'SPL67890',
-            mikrotikId: 'MK54321',
-            provider: 'SWITCH',
-            username: 'maria.santos456',
-            date: '9/21/2025 10:15:43 AM',
-            barangay: 'Lunsad',
-            city: 'Binangonan',
-            dateFormat: '9/21/2025',
-            cityId: 1,
-            reconnectionFee: 750.00,
-            plan: 'SwitchPro - P1299'
-          },
-          {
-            id: '3',
-            accountNo: '202403045',
-            customerName: 'Robert Reyes',
-            address: '789 Pine St, Libid, Binangonan, Rizal',
-            remarks: 'Issue resolved',
-            splynxId: 'SPL24680',
-            mikrotikId: 'MK13579',
-            provider: 'SWITCH',
-            username: 'robert.reyes789',
-            date: '9/22/2025 09:05:11 AM',
-            barangay: 'Libid',
-            city: 'Binangonan',
-            dateFormat: '9/22/2025',
-            cityId: 1,
-            reconnectionFee: 1000.00,
-            plan: 'SwitchMax - P1599'
-          }
-        ];
-        
-        setLogRecords(mockData);
-        setError(null);
-        setIsLoading(false);
-      }, 1000);
-    } catch (err) {
+      setError(null);
+
+      const response = await fetch(`${API_BASE_URL}/reconnection-logs`);
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        setLogRecords(result.data);
+      } else {
+        throw new Error(result.message || 'Failed to refresh logs');
+      }
+    } catch (err: any) {
       console.error('Failed to refresh reconnection logs:', err);
-      setError('Failed to refresh reconnection logs. Please try again.');
+      setError(err.message || 'Failed to refresh reconnection logs. Please try again.');
+    } finally {
       setIsLoading(false);
     }
   };
 
   const toggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev => 
+    setVisibleColumns(prev =>
       prev.includes(columnKey)
         ? prev.filter(col => col !== columnKey)
         : [...prev, columnKey]
@@ -360,8 +255,8 @@ const ReconnectionLogs: React.FC = () => {
       case 'status':
         return (
           <div className="flex items-center space-x-2">
-            <Circle 
-              className={`h-3 w-3 text-green-400 fill-green-400`} 
+            <Circle
+              className={`h-3 w-3 text-green-400 fill-green-400`}
             />
             <span className="text-xs text-green-400">
               Reconnected
@@ -398,19 +293,15 @@ const ReconnectionLogs: React.FC = () => {
   const displayedColumns = allColumns.filter(col => visibleColumns.includes(col.key));
 
   return (
-    <div className={`h-full flex overflow-hidden ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
       }`}>
-        <div className={`p-4 border-b flex-shrink-0 ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
+      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         }`}>
+        <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
           <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Reconnection Logs</h2>
+            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Reconnection Logs</h2>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -418,22 +309,20 @@ const ReconnectionLogs: React.FC = () => {
             <button
               key={location.id}
               onClick={() => setSelectedLocation(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${
-                selectedLocation === location.id
-                  ? 'bg-orange-500 bg-opacity-20 text-orange-400'
-                  : isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
-              }`}
+              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${selectedLocation === location.id
+                ? 'bg-orange-500 bg-opacity-20 text-orange-400'
+                : isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
+                }`}
             >
               <div className="flex items-center">
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 <span className="capitalize">{location.name}</span>
               </div>
               {location.count > 0 && (
-                <span className={`px-2 py-1 rounded-full text-xs ${
-                  selectedLocation === location.id
-                    ? 'bg-orange-600 text-white'
-                    : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                }`}>
+                <span className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
+                  ? 'bg-orange-600 text-white'
+                  : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                  }`}>
                   {location.count}
                 </span>
               )}
@@ -442,13 +331,11 @@ const ReconnectionLogs: React.FC = () => {
         </div>
       </div>
 
-      <div className={`flex-1 overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
+      <div className={`flex-1 overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-white'
+        }`}>
         <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
+          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
             <div className="flex items-center space-x-3">
               <div className="relative flex-1">
                 <input
@@ -456,15 +343,13 @@ const ReconnectionLogs: React.FC = () => {
                   placeholder="Search reconnection logs..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
+                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 ${isDarkMode
+                    ? 'bg-gray-800 text-white border-gray-700'
+                    : 'bg-white text-gray-900 border-gray-300'
+                    }`}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} />
+                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
               </div>
               <button
                 onClick={handleRefresh}
@@ -488,33 +373,28 @@ const ReconnectionLogs: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           <div className="flex-1 overflow-hidden">
             <div className="h-full overflow-y-auto">
               {isLoading ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
                   <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
                   </div>
                   <p className="mt-4">Loading reconnection logs...</p>
                 </div>
               ) : error ? (
-                <div className={`px-4 py-12 text-center ${
-                  isDarkMode ? 'text-red-400' : 'text-red-600'
-                }`}>
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
+                  }`}>
                   <p>{error}</p>
-                  <button 
+                  <button
                     onClick={handleRefresh}
-                    className={`mt-4 text-white px-4 py-2 rounded ${
-                      isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-500 hover:bg-gray-600'
-                    }`}>
+                    className={`mt-4 text-white px-4 py-2 rounded ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-500 hover:bg-gray-600'
+                      }`}>
                     Retry
                   </button>
                 </div>
@@ -522,19 +402,16 @@ const ReconnectionLogs: React.FC = () => {
                 <div className="overflow-x-auto overflow-y-hidden">
                   <table className="w-max min-w-full text-sm border-separate border-spacing-0">
                     <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${
-                        isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
-                      }`}>
+                      <tr className={`border-b sticky top-0 z-10 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
+                        }`}>
                         {displayedColumns.map((column, index) => (
                           <th
                             key={column.key}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap ${
-                              isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-50'
-                            } ${
-                              index < displayedColumns.length - 1 
+                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-50'
+                              } ${index < displayedColumns.length - 1
                                 ? isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200'
                                 : ''
-                            }`}
+                              }`}
                           >
                             {column.label}
                           </th>
@@ -544,29 +421,25 @@ const ReconnectionLogs: React.FC = () => {
                     <tbody>
                       {filteredLogRecords.length > 0 ? (
                         filteredLogRecords.map((record) => (
-                          <tr 
-                            key={record.id} 
-                            className={`border-b cursor-pointer transition-colors ${
-                              isDarkMode 
-                                ? 'border-gray-800 hover:bg-gray-900' 
-                                : 'border-gray-200 hover:bg-gray-50'
-                            } ${
-                              selectedLog?.id === record.id 
-                                ? isDarkMode ? 'bg-gray-800' : 'bg-gray-100' 
+                          <tr
+                            key={record.id}
+                            className={`border-b cursor-pointer transition-colors ${isDarkMode
+                              ? 'border-gray-800 hover:bg-gray-900'
+                              : 'border-gray-200 hover:bg-gray-50'
+                              } ${selectedLog?.id === record.id
+                                ? isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
                                 : ''
-                            }`}
+                              }`}
                             onClick={() => handleRowClick(record)}
                           >
                             {displayedColumns.map((column, index) => (
                               <td
                                 key={column.key}
-                                className={`py-4 px-3 whitespace-nowrap ${
-                                  isDarkMode ? 'text-white' : 'text-gray-900'
-                                } ${
-                                  index < displayedColumns.length - 1 
+                                className={`py-4 px-3 whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                  } ${index < displayedColumns.length - 1
                                     ? isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200'
                                     : ''
-                                }`}
+                                  }`}
                               >
                                 {renderCellValue(record, column.key)}
                               </td>
@@ -575,9 +448,8 @@ const ReconnectionLogs: React.FC = () => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={displayedColumns.length} className={`px-4 py-12 text-center ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
+                          <td colSpan={displayedColumns.length} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>
                             No reconnection logs found matching your filters
                           </td>
                         </tr>
@@ -592,17 +464,15 @@ const ReconnectionLogs: React.FC = () => {
       </div>
 
       {selectedLog && (
-        <div className={`w-full max-w-3xl border-l flex-shrink-0 relative ${
-          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
+        <div className={`w-full max-w-3xl border-l flex-shrink-0 relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
           <div className="absolute top-4 right-4 z-10">
             <button
               onClick={handleCloseDetails}
-              className={`transition-colors rounded p-1 ${
-                isDarkMode 
-                  ? 'text-gray-400 hover:text-white bg-gray-800' 
-                  : 'text-gray-600 hover:text-gray-900 bg-gray-100'
-              }`}
+              className={`transition-colors rounded p-1 ${isDarkMode
+                ? 'text-gray-400 hover:text-white bg-gray-800'
+                : 'text-gray-600 hover:text-gray-900 bg-gray-100'
+                }`}
             >
               <X size={20} />
             </button>

@@ -7,17 +7,46 @@ interface ApplicationResponse {
   applications?: Application[];
   application?: Application;
   success?: boolean;
+  pagination?: {
+    current_page: number;
+    per_page: number;
+    has_more: boolean;
+  };
 }
 
-export const getApplications = async (): Promise<Application[]> => {
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  applications?: T;
+  message?: string;
+  pagination?: {
+    current_page: number;
+    per_page: number;
+    has_more: boolean;
+  };
+}
+
+export const getApplications = async (
+  fastMode: boolean = false,
+  page: number = 1,
+  limit: number = 50,
+  search?: string
+): Promise<ApiResponse<Application[]>> => {
   try {
-    const response = await apiClient.get<ApplicationResponse>('/applications');
-    
-    if (response.data && response.data.applications && Array.isArray(response.data.applications)) {
-      return response.data.applications;
-    }
-    
-    return [];
+    const response = await apiClient.get<ApplicationResponse>('/applications', {
+      params: {
+        fast: fastMode ? '1' : '0',
+        page,
+        limit,
+        search
+      }
+    });
+
+    return {
+      success: response.data.success ?? true,
+      applications: response.data.applications || [],
+      pagination: response.data.pagination
+    };
   } catch (error: any) {
     console.error('Error fetching applications:', error);
     if (error?.response) {
@@ -30,11 +59,11 @@ export const getApplications = async (): Promise<Application[]> => {
 export const getApplication = async (id: string): Promise<Application> => {
   try {
     const response = await apiClient.get<ApplicationResponse>(`/applications/${id}`);
-    
+
     if (!response.data.application) {
       throw new Error('Application not found in API response');
     }
-    
+
     return response.data.application;
   } catch (error: any) {
     console.error('Error fetching application details:', error);

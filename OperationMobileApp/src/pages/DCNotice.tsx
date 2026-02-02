@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Linking } from 'react-native';
-import { Search } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { dcNoticeService, DCNotice } from '../services/dcNoticeService';
 
@@ -13,24 +11,37 @@ const DCNoticePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [refreshButtonHovered, setRefreshButtonHovered] = useState(false);
+
+  // Pagination State with session storage
+  const [currentPage, setCurrentPage] = useState(() => {
+    const saved = sessionStorage.getItem('dcNoticePage');
+    return saved ? parseInt(saved) : 1;
+  });
+  const [hasMore, setHasMore] = useState(false);
+  const itemsPerPage = 50;
 
   const dateItems = [
     { date: 'All', id: '' },
   ];
 
   useEffect(() => {
-    const loadTheme = async () => {
-      try {
-        const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme === 'dark' || theme === null);
-      } catch (err) {
-        console.error('Failed to load theme:', err);
-      }
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark' || theme === null);
     };
 
-    loadTheme();
+    checkDarkMode();
+
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -42,22 +53,43 @@ const DCNoticePage: React.FC = () => {
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
+  // Fetch data when page changes
   useEffect(() => {
     fetchDCNoticeData();
-  }, []);
+    // Save current page to session storage
+    sessionStorage.setItem('dcNoticePage', currentPage.toString());
+  }, [currentPage]);
 
   const fetchDCNoticeData = async () => {
     try {
       setIsLoading(true);
-      const response = await dcNoticeService.getAll();
-      
-      if (response.success) {
-        setDCNoticeRecords(response.data || []);
+
+      // PHASE 1: Fast load - Get basic data INSTANTLY (50 records, no customer details)
+      const fastResponse = await dcNoticeService.getAll(true, currentPage, itemsPerPage);
+
+      if (fastResponse.success) {
+        setDCNoticeRecords(fastResponse.data || []);
+        setHasMore(fastResponse.pagination?.has_more || false);
+        setIsLoading(false);
         setError(null);
+
+        // PHASE 2: Load full data in background
+        setTimeout(async () => {
+          try {
+            const fullResponse = await dcNoticeService.getAll(false, 1, 50);
+
+            if (fullResponse.success) {
+              setDCNoticeRecords(fullResponse.data || []);
+            }
+          } catch (bgError) {
+            console.warn('Background full data load failed:', bgError);
+            // Keep showing fast data even if full load fails
+          }
+        }, 100);
       } else {
         setError('Failed to load DC Notice records');
         setDCNoticeRecords([]);
@@ -76,12 +108,57 @@ const DCNoticePage: React.FC = () => {
   };
 
   const filteredRecords = dcNoticeRecords.filter(record => {
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch = searchQuery === '' ||
       record.account_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       record.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     return matchesSearch;
   });
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  const PaginationControls = () => {
+    return (
+      <div className={`flex items-center justify-between px-4 py-3 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+        <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          Page <span className="font-medium">{currentPage}</span> - Showing <span className="font-medium">{filteredRecords.length}</span> records
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className={`px-3 py-2 rounded text-sm transition-colors flex items-center space-x-1 ${currentPage === 1
+              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
+              }`}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Back</span>
+          </button>
+
+          <div className="flex items-center space-x-1">
+            <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Page {currentPage}
+            </span>
+          </div>
+
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={!hasMore}
+            className={`px-3 py-2 rounded text-sm transition-colors flex items-center space-x-1 ${!hasMore
+              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
+              }`}
+          >
+            <span>Next</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -89,371 +166,198 @@ const DCNoticePage: React.FC = () => {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  const handleOpenLink = async (url: string) => {
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (err) {
-      console.error('Failed to open link:', err);
-    }
-  };
-
   return (
-    <View style={{ 
-      height: '100%',
-      flexDirection: 'row',
-      overflow: 'hidden',
-      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-    }}>
-      <View style={{ 
-        width: 256,
-        borderRightWidth: 1,
-        flexShrink: 0,
-        flexDirection: 'column',
-        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        borderRightColor: isDarkMode ? '#374151' : '#e5e7eb'
-      }}>
-        <View style={{ 
-          padding: 16,
-          borderBottomWidth: 1,
-          flexShrink: 0,
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <Text style={{ 
-              fontSize: 18,
-              fontWeight: '600',
-              color: isDarkMode ? '#ffffff' : '#111827'
-            }}>
-              DC Notice
-            </Text>
-          </View>
-        </View>
-        <ScrollView style={{ flex: 1 }}>
+    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+      }`}>
+      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+        <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>DC Notice</h2>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
           {dateItems.map((item, index) => (
-            <Pressable
+            <button
               key={index}
-              onPress={() => setSelectedDate(item.date)}
-              style={({ pressed }) => ({
-                width: '100%',
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                backgroundColor: selectedDate === item.date
-                  ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                  : pressed
-                    ? (isDarkMode ? '#1f2937' : '#f3f4f6')
-                    : 'transparent'
-              })}
+              onClick={() => setSelectedDate(item.date)}
+              className={`w-full flex items-center px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+                } ${selectedDate === item.date
+                  ? ''
+                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}
+              style={selectedDate === item.date ? {
+                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
+                color: colorPalette?.primary || '#fb923c'
+              } : {}}
             >
-              <Text style={{ 
-                fontSize: 14,
-                fontWeight: '500',
-                flexDirection: 'row',
-                alignItems: 'center',
-                color: selectedDate === item.date ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#6b7280')
-              }}>
-                <Text style={{ marginRight: 8 }}>📄</Text>
+              <span className="text-sm font-medium flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
                 {item.date}
-              </Text>
-            </Pressable>
+              </span>
+            </button>
           ))}
-        </ScrollView>
-      </View>
+        </div>
+      </div>
 
-      <View style={{ 
-        flex: 1,
-        overflow: 'hidden',
-        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
-      }}>
-        <View style={{ flexDirection: 'column', height: '100%' }}>
-          <View style={{ 
-            padding: 16,
-            borderBottomWidth: 1,
-            flexShrink: 0,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <View style={{ flexDirection: 'column', gap: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ position: 'relative', flex: 1 }}>
-                  <TextInput
+      <div className={`flex-1 overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+        }`}>
+        <div className="flex flex-col h-full">
+          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
+            <div className="flex flex-col space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
                     placeholder="Search DC Notice records..."
-                    placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                     value={searchQuery}
-                    onChangeText={(text) => setSearchQuery(text)}
-                    onFocus={() => setSearchFocused(true)}
-                    onBlur={() => setSearchFocused(false)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${isDarkMode
+                      ? 'bg-gray-800 text-white border border-gray-700'
+                      : 'bg-white text-gray-900 border border-gray-300'
+                      }`}
                     style={{
-                      width: '100%',
-                      borderRadius: 4,
-                      paddingLeft: 40,
-                      paddingRight: 16,
-                      paddingVertical: 8,
-                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                      color: isDarkMode ? '#ffffff' : '#111827',
-                      borderWidth: 1,
-                      borderColor: searchFocused && colorPalette?.primary
-                        ? colorPalette.primary
-                        : isDarkMode ? '#374151' : '#d1d5db'
+                      '--tw-ring-color': colorPalette?.primary || '#ea580c'
+                    } as React.CSSProperties}
+                    onFocus={(e) => {
+                      if (colorPalette?.primary) {
+                        e.currentTarget.style.borderColor = colorPalette.primary;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
                     }}
                   />
-                  <View style={{ position: 'absolute', left: 12, top: 10 }}>
-                    <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                  </View>
-                </View>
-                <Pressable
-                  onPress={handleRefresh}
-                  onPressIn={() => setRefreshButtonHovered(true)}
-                  onPressOut={() => setRefreshButtonHovered(false)}
+                  <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`} />
+                </div>
+                <button
+                  onClick={handleRefresh}
                   disabled={isLoading}
+                  className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600"
                   style={{
-                    backgroundColor: isLoading 
-                      ? '#4b5563' 
-                      : refreshButtonHovered && colorPalette?.accent
-                        ? colorPalette.accent
-                        : colorPalette?.primary || '#ea580c',
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 4,
-                    fontSize: 14
+                    backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLoading && colorPalette?.accent) {
+                      e.currentTarget.style.backgroundColor = colorPalette.accent;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isLoading && colorPalette?.primary) {
+                      e.currentTarget.style.backgroundColor = colorPalette.primary;
+                    }
                   }}
                 >
-                  <Text style={{ color: '#ffffff' }}>
-                    {isLoading ? 'Loading...' : 'Refresh'}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-          
-          <View style={{ flex: 1, overflow: 'hidden' }}>
-            <ScrollView style={{ height: '100%' }}>
+                  {isLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full overflow-y-auto">
               {isLoading ? (
-                <View style={{ 
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
-                  <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
-                  <Text style={{ 
-                    marginTop: 16,
-                    color: isDarkMode ? '#9ca3af' : '#6b7280'
-                  }}>
-                    Loading DC Notice records...
-                  </Text>
-                </View>
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
+                  </div>
+                  <p className="mt-4">Loading DC Notice records...</p>
+                </div>
               ) : error ? (
-                <View style={{ 
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
-                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
-                  <Pressable 
-                    onPress={handleRefresh}
-                    style={{ 
-                      marginTop: 16,
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
-                    }}
-                  >
-                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>Retry</Text>
-                  </Pressable>
-                </View>
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
+                  }`}>
+                  <p>{error}</p>
+                  <button
+                    onClick={handleRefresh}
+                    className={`mt-4 px-4 py-2 rounded ${isDarkMode
+                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                      : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                      }`}>
+                    Retry
+                  </button>
+                </div>
               ) : filteredRecords.length > 0 ? (
-                <ScrollView horizontal>
-                  <View>
-                    <View style={{ 
-                      flexDirection: 'row',
-                      borderBottomWidth: 1,
-                      borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
-                    }}>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 80
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>ID</Text>
-                      </View>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 150
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>Account No</Text>
-                      </View>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 200
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>Customer Name</Text>
-                      </View>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 150
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>DC Notice Date</Text>
-                      </View>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 120
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>Invoice ID</Text>
-                      </View>
-                      <View style={{ 
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        width: 120
-                      }}>
-                        <Text style={{ 
-                          fontSize: 12,
-                          fontWeight: '500',
-                          textTransform: 'uppercase',
-                          letterSpacing: 0.5,
-                          color: isDarkMode ? '#9ca3af' : '#6b7280'
-                        }}>Print Link</Text>
-                      </View>
-                    </View>
-                    {filteredRecords.map((record) => (
-                      <Pressable 
-                        key={record.id}
-                        style={({ pressed }) => ({
-                          flexDirection: 'row',
-                          borderBottomWidth: 1,
-                          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-                          backgroundColor: pressed 
-                            ? (isDarkMode ? '#1f2937' : '#f9fafb')
-                            : (isDarkMode ? '#111827' : '#ffffff')
-                        })}
-                      >
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 80
-                        }}>
-                          <Text style={{ 
-                            fontSize: 14,
-                            color: isDarkMode ? '#d1d5db' : '#111827'
-                          }}>{record.id}</Text>
-                        </View>
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 150
-                        }}>
-                          <Text style={{ 
-                            fontSize: 14,
-                            color: isDarkMode ? '#d1d5db' : '#111827'
-                          }}>{record.account_no || '-'}</Text>
-                        </View>
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 200
-                        }}>
-                          <Text style={{ 
-                            fontSize: 14,
-                            color: isDarkMode ? '#d1d5db' : '#111827'
-                          }}>{record.full_name || '-'}</Text>
-                        </View>
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 150
-                        }}>
-                          <Text style={{ 
-                            fontSize: 14,
-                            color: isDarkMode ? '#d1d5db' : '#111827'
-                          }}>{formatDate(record.dc_notice_date)}</Text>
-                        </View>
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 120
-                        }}>
-                          <Text style={{ 
-                            fontSize: 14,
-                            color: isDarkMode ? '#d1d5db' : '#111827'
-                          }}>{record.invoice_id || '-'}</Text>
-                        </View>
-                        <View style={{ 
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          width: 120
-                        }}>
-                          {record.print_link ? (
-                            <Pressable onPress={() => handleOpenLink(record.print_link!)}>
-                              <Text style={{ color: '#3b82f6' }}>View</Text>
-                            </Pressable>
-                          ) : (
-                            <Text style={{ 
-                              fontSize: 14,
-                              color: isDarkMode ? '#d1d5db' : '#111827'
-                            }}>-</Text>
-                          )}
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className={`min-w-full divide-y text-sm ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                      }`}>
+                      <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                        }`}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>ID</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>Account No</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>Customer Name</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>DC Notice Date</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>Invoice ID</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}>Print Link</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDarkMode ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-200'
+                        }`}>
+                        {filteredRecords.map((record) => (
+                          <tr
+                            key={record.id}
+                            className={`${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                              }`}
+                          >
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>{record.id}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>{record.account_no || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>{record.full_name || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>{formatDate(record.dc_notice_date)}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>{record.invoice_id || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'
+                              }`}>
+                              {record.print_link ? (
+                                <a
+                                  href={record.print_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-500 hover:text-blue-400"
+                                >
+                                  View
+                                </a>
+                              ) : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls />
+                </>
               ) : (
-                <View style={{ 
-                  height: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Text style={{ 
-                    color: isDarkMode ? '#6b7280' : '#9ca3af'
-                  }}>
-                    No items
-                  </Text>
-                </View>
+                <div className={`h-full flex items-center justify-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`}>
+                  No items
+                </div>
               )}
-            </ScrollView>
-          </View>
-        </View>
-      </View>
-    </View>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

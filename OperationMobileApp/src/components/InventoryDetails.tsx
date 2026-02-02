@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Trash2, X, FileText, Copy, Printer, ChevronLeft, ChevronRight as ChevronRightNav, Maximize2, AlertTriangle } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { relatedDataService } from '../services/relatedDataService';
+import RelatedDataTable from './RelatedDataTable';
+import { relatedDataColumns } from '../config/relatedDataColumns';
 
 interface InventoryItem {
   item_name: string;
@@ -104,6 +107,20 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
     defectiveLogs: false
   });
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Related data counts
+  const [inventoryLogsCount, setInventoryLogsCount] = useState(inventoryLogs.length);
+  const [borrowedLogsCount, setBorrowedLogsCount] = useState(borrowedLogs.length);
+  const [jobOrdersCount, setJobOrdersCount] = useState(jobOrders.length);
+  const [serviceOrdersCount, setServiceOrdersCount] = useState(serviceOrders.length);
+  const [defectiveLogsCount, setDefectiveLogsCount] = useState(defectiveLogs.length);
+  
+  // Related data
+  const [inventoryLogsData, setInventoryLogsData] = useState<any[]>(inventoryLogs);
+  const [borrowedLogsData, setBorrowedLogsData] = useState<any[]>(borrowedLogs);
+  const [jobOrdersData, setJobOrdersData] = useState<any[]>(jobOrders);
+  const [serviceOrdersData, setServiceOrdersData] = useState<any[]>(serviceOrders);
+  const [defectiveLogsData, setDefectiveLogsData] = useState<any[]>(defectiveLogs);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -133,6 +150,44 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
 
     return () => observer.disconnect();
   }, []);
+  
+  // Fetch related data when item_id changes
+  useEffect(() => {
+    const fetchRelatedData = async () => {
+      if (!item.item_id) {
+        console.log('❌ No item_id found in item');
+        return;
+      }
+      
+      const itemId = item.item_id;
+      console.log('🔍 Fetching related data for item:', itemId);
+      
+      // Fetch all related data
+      const fetchPromises = [
+        { key: 'inventoryLogs', fn: relatedDataService.getRelatedInventoryLogs, setState: setInventoryLogsData, setCount: setInventoryLogsCount },
+        { key: 'borrowedLogs', fn: relatedDataService.getRelatedBorrowedLogs, setState: setBorrowedLogsData, setCount: setBorrowedLogsCount },
+        { key: 'defectiveLogs', fn: relatedDataService.getRelatedDefectiveLogs, setState: setDefectiveLogsData, setCount: setDefectiveLogsCount },
+        { key: 'jobOrders', fn: relatedDataService.getRelatedJobOrdersByItem, setState: setJobOrdersData, setCount: setJobOrdersCount },
+        { key: 'serviceOrders', fn: relatedDataService.getRelatedServiceOrdersByItem, setState: setServiceOrdersData, setCount: setServiceOrdersCount }
+      ];
+      
+      for (const { key, fn, setState, setCount } of fetchPromises) {
+        try {
+          console.log(`⏳ Fetching ${key}...`);
+          const result = await fn(itemId);
+          console.log(`✅ ${key} fetched:`, { count: result.count || 0, hasData: (result.data || []).length > 0 });
+          setState(result.data || []);
+          setCount(result.count || 0);
+        } catch (error) {
+          console.error(`❌ Error fetching ${key}:`, error);
+          setState([]);
+          setCount(0);
+        }
+      }
+    };
+    
+    fetchRelatedData();
+  }, [item.item_id]);
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -385,16 +440,16 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                         ? 'bg-gray-600 text-white'
                         : 'bg-gray-300 text-gray-700'
                     }`}>
-                      {inventoryLogs.length}
+                      {inventoryLogsCount}
                     </span>
                   </div>
                 </div>
                 
-                {inventoryLogs.length > 0 ? (
+                {inventoryLogsData.length > 0 ? (
                   <div className={`divide-y ${
                     isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
                   }`}>
-                    {inventoryLogs.map((log) => (
+                    {inventoryLogsData.map((log) => (
                       <div key={log.id} className={`px-6 py-4 flex items-center justify-between transition-colors group ${
                         isDarkMode ? 'hover:bg-gray-750' : 'hover:bg-gray-50'
                       }`}>
@@ -493,7 +548,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                         ? 'bg-gray-600 text-white'
                         : 'bg-gray-300 text-gray-700'
                     }`}>
-                      {borrowedLogs.length}
+                      {borrowedLogsCount}
                     </span>
                   </div>
                 </div>
@@ -522,7 +577,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                         ? 'bg-gray-600 text-white'
                         : 'bg-gray-300 text-gray-700'
                     }`}>
-                      {jobOrders.length}
+                      {jobOrdersCount}
                     </span>
                   </div>
                 </div>
@@ -551,7 +606,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                         ? 'bg-gray-600 text-white'
                         : 'bg-gray-300 text-gray-700'
                     }`}>
-                      {serviceOrders.length}
+                      {serviceOrdersCount}
                     </span>
                   </div>
                 </div>
@@ -580,7 +635,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                         ? 'bg-gray-600 text-white'
                         : 'bg-gray-300 text-gray-700'
                     }`}>
-                      {defectiveLogs.length}
+                      {defectiveLogsCount}
                     </span>
                   </div>
                 </div>
@@ -816,7 +871,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     ? 'bg-gray-600 text-white'
                     : 'bg-gray-300 text-gray-700'
                 }`}>
-                  {inventoryLogs.length}
+                  {inventoryLogsCount}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -830,7 +885,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
 
             {expandedSections.inventoryLogs && (
               <div className={isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}>
-                {inventoryLogs.length > 0 ? (
+                {inventoryLogsData.length > 0 ? (
                   <div>
                     {/* Table Header */}
                     <div className={`grid grid-cols-4 gap-4 px-6 py-3 text-sm font-medium ${
@@ -847,7 +902,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     </div>
                     
                     {/* Table Row */}
-                    {inventoryLogs.map((log) => (
+                    {inventoryLogsData.map((log) => (
                       <div key={log.id} className={`grid grid-cols-4 gap-4 px-6 py-3 border-b last:border-b-0 ${
                         isDarkMode ? 'border-gray-700' : 'border-gray-200'
                       }`}>
@@ -930,7 +985,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     ? 'bg-gray-600 text-white'
                     : 'bg-gray-300 text-gray-700'
                 }`}>
-                  {borrowedLogs.length}
+                  {borrowedLogsCount}
                 </span>
               </div>
               {expandedSections.borrowedLogs ? (
@@ -968,7 +1023,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     ? 'bg-gray-600 text-white'
                     : 'bg-gray-300 text-gray-700'
                 }`}>
-                  {jobOrders.length}
+                  {jobOrdersCount}
                 </span>
               </div>
               {expandedSections.jobOrders ? (
@@ -1006,7 +1061,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     ? 'bg-gray-600 text-white'
                     : 'bg-gray-300 text-gray-700'
                 }`}>
-                  {serviceOrders.length}
+                  {serviceOrdersCount}
                 </span>
               </div>
               {expandedSections.serviceOrders ? (
@@ -1042,7 +1097,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     ? 'bg-gray-600 text-white'
                     : 'bg-gray-300 text-gray-700'
                 }`}>
-                  {defectiveLogs.length}
+                  {defectiveLogsCount}
                 </span>
               </div>
               {expandedSections.defectiveLogs ? (

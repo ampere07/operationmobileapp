@@ -1,3 +1,6 @@
+// Import localStorage polyfill before anything else
+import './src/polyfills/localStorage';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapPin, Search, Plus, Edit2, Trash2, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { MapPin, Search, Plus, Edit2, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import AddLocationModal from '../modals/AddLocationModal';
 import EditLocationModal from '../modals/EditLocationModal';
 import LocationDetailsModal from '../modals/LocationDetailsModal';

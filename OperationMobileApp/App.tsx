@@ -1,3 +1,6 @@
+// Import localStorage polyfill first
+import './src/polyfills/localStorage';
+
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';

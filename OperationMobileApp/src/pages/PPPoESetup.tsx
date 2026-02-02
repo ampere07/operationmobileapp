@@ -13,6 +13,9 @@ const usernameComponents = [
   { type: 'mobile_number', label: 'Mobile Number' },
   { type: 'mobile_number_last_4', label: 'Mobile (Last 4)' },
   { type: 'mobile_number_last_6', label: 'Mobile (Last 6)' },
+  { type: 'lcp', label: 'LCP' },
+  { type: 'nap', label: 'NAP' },
+  { type: 'port', label: 'Port' },
   { type: 'tech_input', label: 'Tech Input' }
 ];
 
@@ -26,6 +29,9 @@ const passwordComponents = [
   { type: 'mobile_number', label: 'Mobile Number' },
   { type: 'mobile_number_last_4', label: 'Mobile (Last 4)' },
   { type: 'mobile_number_last_6', label: 'Mobile (Last 6)' },
+  { type: 'lcp', label: 'LCP' },
+  { type: 'nap', label: 'NAP' },
+  { type: 'port', label: 'Port' },
   { type: 'random_4_digits', label: 'Random 4 Digits' },
   { type: 'random_6_digits', label: 'Random 6 Digits' },
   { type: 'random_letters_4', label: 'Random 4 Letters' },
@@ -77,7 +83,7 @@ const PPPoESetup: React.FC = () => {
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
     fetchPatterns();
   }, []);
@@ -184,7 +190,7 @@ const PPPoESetup: React.FC = () => {
 
   const updateCustomPasswordValue = (value: string) => {
     setCustomPasswordValue(value);
-    setCurrentSequence(prev => prev.map(item => 
+    setCurrentSequence(prev => prev.map(item =>
       item.type === 'custom_password' ? { ...item, value } : item
     ));
   };
@@ -213,7 +219,7 @@ const PPPoESetup: React.FC = () => {
 
     try {
       setShowLoading(true);
-      
+
       const payload = {
         pattern_name: patternName,
         pattern_type: patternType,
@@ -222,10 +228,10 @@ const PPPoESetup: React.FC = () => {
       };
 
       const response = await pppoeService.savePattern(payload);
-      
+
       if (response.action === 'updated') {
         setMessage(`${patternType} pattern updated successfully`);
-        setPatterns(prev => prev.map(p => 
+        setPatterns(prev => prev.map(p =>
           p.pattern_type === patternType ? response.data : p
         ));
       } else {
@@ -256,12 +262,12 @@ const PPPoESetup: React.FC = () => {
     setPatternName(pattern.pattern_name);
     setPatternType(pattern.pattern_type as 'username' | 'password');
     setCurrentSequence(pattern.sequence);
-    
+
     const customPwdItem = pattern.sequence.find(item => item.type === 'custom_password');
     if (customPwdItem?.value) {
       setCustomPasswordValue(customPwdItem.value);
     }
-    
+
     setIsEditing(true);
   };
 
@@ -319,21 +325,21 @@ const PPPoESetup: React.FC = () => {
   const isComponentDisabled = (componentType: string) => {
     if (patternType === 'password') {
       const hasCustomPwd = hasCustomPassword();
-      
+
       if (componentType === 'custom_password') {
         return hasCustomPwd;
       }
-      
+
       return hasCustomPwd;
     }
 
     if (patternType === 'username') {
       const hasTechInp = hasTechInput();
-      
+
       if (componentType === 'tech_input') {
         return hasTechInp;
       }
-      
+
       return hasTechInp;
     }
 
@@ -393,15 +399,14 @@ const PPPoESetup: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               {usernamePattern ? (
                 <div>
                   <div className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     {usernamePattern.pattern_name}
                   </div>
-                  <code className={`block px-4 py-3 rounded-lg font-mono text-sm ${
-                    isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
-                  }`}>
+                  <code className={`block px-4 py-3 rounded-lg font-mono text-sm ${isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
+                    }`}>
                     {getPreviewText(usernamePattern.sequence)}
                   </code>
                 </div>
@@ -435,15 +440,14 @@ const PPPoESetup: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               {passwordPattern ? (
                 <div>
                   <div className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     {passwordPattern.pattern_name}
                   </div>
-                  <code className={`block px-4 py-3 rounded-lg font-mono text-sm ${
-                    isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
-                  }`}>
+                  <code className={`block px-4 py-3 rounded-lg font-mono text-sm ${isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
+                    }`}>
                     {getPreviewText(passwordPattern.sequence)}
                   </code>
                 </div>
@@ -472,18 +476,16 @@ const PPPoESetup: React.FC = () => {
                       setCurrentSequence([]);
                       setCustomPasswordValue('');
                     }}
-                    className={`w-full px-4 py-2 border rounded-lg appearance-none ${
-                      isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white' 
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
+                    className={`w-full px-4 py-2 border rounded-lg appearance-none ${isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-900'
+                      }`}
                   >
                     <option value="username">Username</option>
                     <option value="password">Password</option>
                   </select>
-                  <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
+                  <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`} size={20} />
                 </div>
               </div>
 
@@ -496,11 +498,10 @@ const PPPoESetup: React.FC = () => {
                   value={patternName}
                   onChange={(e) => setPatternName(e.target.value)}
                   placeholder={`Enter ${patternType} pattern name...`}
-                  className={`w-full px-4 py-2 border rounded-lg ${
-                    isDarkMode 
-                      ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                  }`}
+                  className={`w-full px-4 py-2 border rounded-lg ${isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                    }`}
                 />
               </div>
             </div>
@@ -517,15 +518,14 @@ const PPPoESetup: React.FC = () => {
                       key={component.type}
                       draggable={!disabled}
                       onDragStart={() => !disabled && handleDragStart(component)}
-                      className={`px-3 py-2 rounded-lg border-2 border-dashed text-center text-sm transition-colors ${
-                        disabled
-                          ? isDarkMode
-                            ? 'bg-gray-800 border-gray-700 text-gray-600 cursor-not-allowed opacity-50'
-                            : 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                          : isDarkMode
-                            ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 cursor-move'
-                            : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100 cursor-move'
-                      }`}
+                      className={`px-3 py-2 rounded-lg border-2 border-dashed text-center text-sm transition-colors ${disabled
+                        ? isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-gray-600 cursor-not-allowed opacity-50'
+                          : 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
+                        : isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 cursor-move'
+                          : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100 cursor-move'
+                        }`}
                     >
                       <GripVertical className="h-4 w-4 mx-auto mb-1" />
                       {component.label}
@@ -542,11 +542,10 @@ const PPPoESetup: React.FC = () => {
               <div
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e)}
-                className={`min-h-32 p-4 rounded-lg border-2 border-dashed ${
-                  isDarkMode
-                    ? 'bg-gray-700 border-gray-600'
-                    : 'bg-gray-50 border-gray-300'
-                }`}
+                className={`min-h-32 p-4 rounded-lg border-2 border-dashed ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600'
+                  : 'bg-gray-50 border-gray-300'
+                  }`}
               >
                 {currentSequence.length === 0 ? (
                   <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -562,19 +561,18 @@ const PPPoESetup: React.FC = () => {
                             onDragStart={() => (item.type !== 'custom_password' && item.type !== 'tech_input') && handleDragStart(item)}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, index)}
-                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${
-                              item.type === 'custom_password' 
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${item.type === 'custom_password'
+                              ? isDarkMode
+                                ? 'bg-purple-900 text-white'
+                                : 'bg-purple-100 text-purple-900'
+                              : item.type === 'tech_input'
                                 ? isDarkMode
-                                  ? 'bg-purple-900 text-white'
-                                  : 'bg-purple-100 text-purple-900'
-                                : item.type === 'tech_input'
-                                  ? isDarkMode
-                                    ? 'bg-orange-900 text-white'
-                                    : 'bg-orange-100 text-orange-900'
-                                  : isDarkMode
-                                    ? 'bg-gray-600 text-white cursor-move'
-                                    : 'bg-blue-100 text-blue-900 cursor-move'
-                            }`}
+                                  ? 'bg-orange-900 text-white'
+                                  : 'bg-orange-100 text-orange-900'
+                                : isDarkMode
+                                  ? 'bg-gray-600 text-white cursor-move'
+                                  : 'bg-blue-100 text-blue-900 cursor-move'
+                              }`}
                           >
                             {(item.type !== 'custom_password' && item.type !== 'tech_input') && <GripVertical className="h-4 w-4" />}
                             <span className="text-sm font-medium">{item.label}</span>
@@ -585,7 +583,7 @@ const PPPoESetup: React.FC = () => {
                               <X className="h-4 w-4" />
                             </button>
                           </div>
-                          
+
                           {item.type === 'custom_password' && (
                             <div className="mt-2">
                               <input
@@ -593,11 +591,10 @@ const PPPoESetup: React.FC = () => {
                                 value={customPasswordValue}
                                 onChange={(e) => updateCustomPasswordValue(e.target.value)}
                                 placeholder="Enter custom password..."
-                                className={`w-full px-3 py-2 border rounded-lg ${
-                                  isDarkMode 
-                                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                                }`}
+                                className={`w-full px-3 py-2 border rounded-lg ${isDarkMode
+                                  ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                                  }`}
                               />
                             </div>
                           )}
@@ -613,9 +610,8 @@ const PPPoESetup: React.FC = () => {
                   <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                     Preview
                   </label>
-                  <div className={`px-4 py-3 rounded-lg font-mono text-sm ${
-                    isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
-                  }`}>
+                  <div className={`px-4 py-3 rounded-lg font-mono text-sm ${isDarkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-700'
+                    }`}>
                     {getPreviewText(currentSequence)}
                   </div>
                 </div>
@@ -639,11 +635,10 @@ const PPPoESetup: React.FC = () => {
               <button
                 onClick={handleCancel}
                 disabled={showLoading}
-                className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
-                  isDarkMode 
-                    ? 'bg-gray-700 text-white hover:bg-gray-600' 
-                    : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                }`}
+                className={`px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${isDarkMode
+                  ? 'bg-gray-700 text-white hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+                  }`}
               >
                 Cancel
               </button>
@@ -654,9 +649,8 @@ const PPPoESetup: React.FC = () => {
 
       {showSuccess && (
         <div className="fixed bottom-4 right-4 z-50">
-          <div className={`${
-            isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-          } rounded-lg shadow-lg p-4 flex items-center gap-3`}>
+          <div className={`${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+            } rounded-lg shadow-lg p-4 flex items-center gap-3`}>
             <CheckCircle className="h-5 w-5 text-green-500" />
             <p className="font-medium">{message}</p>
           </div>
@@ -665,26 +659,22 @@ const PPPoESetup: React.FC = () => {
 
       {showError && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          } rounded-lg p-8 flex flex-col items-center gap-4`}>
+          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'
+            } rounded-lg p-8 flex flex-col items-center gap-4`}>
             <XCircle className="h-16 w-16 text-red-500" />
-            <p className={`font-medium text-lg ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{errorMessage}</p>
+            <p className={`font-medium text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>{errorMessage}</p>
           </div>
         </div>
       )}
 
       {showLoading && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          } rounded-lg p-8 flex flex-col items-center gap-4`}>
+          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'
+            } rounded-lg p-8 flex flex-col items-center gap-4`}>
             <Loader2 className="h-16 w-16 animate-spin" style={{ color: colorPalette?.primary || '#ea580c' }} />
-            <p className={`font-medium text-lg ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Saving pattern...</p>
+            <p className={`font-medium text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Saving pattern...</p>
           </div>
         </div>
       )}

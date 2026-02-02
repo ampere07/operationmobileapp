@@ -47,9 +47,16 @@ export interface SOAResponse {
 }
 
 export const soaService = {
-  async getAllStatements(): Promise<SOARecord[]> {
+  async getAllStatements(fastMode: boolean = false, page: number = 1, perPage: number = 100): Promise<SOARecord[]> {
     try {
-      const response = await apiClient.get<SOAResponse>('/billing-generation/statements');
+      // Using the dedicated SOA records endpoint that directly queries statement_of_accounts table
+      const response = await apiClient.get<SOAResponse>('/soa-records', {
+        params: {
+          fast: fastMode ? '1' : '0',
+          page,
+          per_page: perPage
+        }
+      });
       if (response.data.success) {
         return response.data.data;
       }

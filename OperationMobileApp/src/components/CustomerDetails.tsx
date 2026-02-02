@@ -9,9 +9,12 @@ import StaggeredInstallationFormModal from '../modals/StaggeredInstallationFormM
 import DiscountFormModal from '../modals/DiscountFormModal';
 import SORequestFormModal from '../modals/SORequestFormModal';
 import CustomerDetailsEditModal from '../modals/CustomerDetailsEditModal';
+import RelatedDataTable from './RelatedDataTable';
+import { relatedDataColumns } from '../config/relatedDataColumns';
 import { BillingDetailRecord } from '../types/billing';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { customerDetailUpdateService } from '../services/customerDetailUpdateService';
+import { relatedDataService } from '../services/relatedDataService';
 
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -43,7 +46,7 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 }) => {
   console.log('CustomerDetails - Received billingRecord:', billingRecord);
   console.log('CustomerDetails - houseFrontPicture value:', billingRecord.houseFrontPicture);
-  
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     invoices: false,
@@ -78,6 +81,59 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [showColumnVisibility, setShowColumnVisibility] = useState(false);
+  const [expandedModalSection, setExpandedModalSection] = useState<string | null>(null);
+
+  // Related data states
+  const [relatedData, setRelatedData] = useState<Record<string, any[]>>({
+    invoices: [],
+    paymentPortalLogs: [],
+    transactions: [],
+    staggered: [],
+    discounts: [],
+    serviceOrders: [],
+    reconnectionLogs: [],
+    disconnectedLogs: [],
+    detailsUpdateLogs: [],
+    planChangeLogs: [],
+    serviceChargeLogs: [],
+    changeDueLogs: [],
+    securityDeposits: []
+  });
+
+  // Full related data (not limited to 5 items)
+  const [fullRelatedData, setFullRelatedData] = useState<Record<string, any[]>>({
+    invoices: [],
+    paymentPortalLogs: [],
+    transactions: [],
+    staggered: [],
+    discounts: [],
+    serviceOrders: [],
+    reconnectionLogs: [],
+    disconnectedLogs: [],
+    detailsUpdateLogs: [],
+    planChangeLogs: [],
+    serviceChargeLogs: [],
+    changeDueLogs: [],
+    securityDeposits: []
+  });
+
+  const [relatedDataCounts, setRelatedDataCounts] = useState<Record<string, number>>({
+    invoices: 0,
+    paymentPortalLogs: 0,
+    transactions: 0,
+    staggered: 0,
+    discounts: 0,
+    serviceOrders: 0,
+    reconnectionLogs: 0,
+    disconnectedLogs: 0,
+    detailsUpdateLogs: 0,
+    planChangeLogs: 0,
+    serviceChargeLogs: 0,
+    changeDueLogs: 0,
+    securityDeposits: 0
+  });
+
+  const [loadingData, setLoadingData] = useState<Record<string, boolean>>({});
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
 
@@ -166,7 +222,7 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
@@ -177,6 +233,71 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
   useEffect(() => {
     localStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
   }, [fieldOrder]);
+
+  // Fetch related data when account number changes
+  useEffect(() => {
+    const fetchRelatedData = async () => {
+      if (!billingRecord.applicationId) {
+        console.log('❌ No applicationId found in billingRecord');
+        return;
+      }
+
+      const accountNo = billingRecord.applicationId;
+      console.log('🔍 Fetching related data for account:', accountNo);
+
+      // Fetch all related data
+      const fetchPromises = [
+        { key: 'invoices', fn: relatedDataService.getRelatedInvoices },
+        { key: 'paymentPortalLogs', fn: relatedDataService.getRelatedPaymentPortalLogs },
+        { key: 'transactions', fn: relatedDataService.getRelatedTransactions },
+        { key: 'staggered', fn: relatedDataService.getRelatedStaggered },
+        { key: 'discounts', fn: relatedDataService.getRelatedDiscounts },
+        { key: 'serviceOrders', fn: relatedDataService.getRelatedServiceOrders },
+        { key: 'reconnectionLogs', fn: relatedDataService.getRelatedReconnectionLogs },
+        { key: 'disconnectedLogs', fn: relatedDataService.getRelatedDisconnectedLogs },
+        { key: 'detailsUpdateLogs', fn: relatedDataService.getRelatedDetailsUpdateLogs },
+        { key: 'planChangeLogs', fn: relatedDataService.getRelatedPlanChangeLogs },
+        { key: 'serviceChargeLogs', fn: relatedDataService.getRelatedServiceChargeLogs },
+        { key: 'changeDueLogs', fn: relatedDataService.getRelatedChangeDueLogs },
+        { key: 'securityDeposits', fn: relatedDataService.getRelatedSecurityDeposits }
+      ];
+
+      const results = await Promise.all(
+        fetchPromises.map(async ({ key, fn }) => {
+          try {
+            console.log(`⏳ Fetching ${key}...`);
+            const result = await fn(accountNo);
+            console.log(`✅ ${key} fetched:`, { count: result.count || 0, hasData: (result.data || []).length > 0 });
+            return { key, data: result.data || [], count: result.count || 0 };
+          } catch (error) {
+            console.error(`❌ Error fetching ${key}:`, error);
+            return { key, data: [], count: 0 };
+          }
+        })
+      );
+
+      const newRelatedData: Record<string, any[]> = {};
+      const newFullRelatedData: Record<string, any[]> = {};
+      const newCounts: Record<string, number> = {};
+
+      results.forEach(({ key, data, count }) => {
+        // Store full data for modal view
+        newFullRelatedData[key] = data;
+        // Limit to 5 latest items for dropdown display
+        newRelatedData[key] = data.slice(0, 5);
+        newCounts[key] = count;
+      });
+
+      console.log('📦 Setting related data:', newCounts);
+      console.log('📦 Data details:', newRelatedData);
+
+      setRelatedData(newRelatedData);
+      setFullRelatedData(newFullRelatedData);
+      setRelatedDataCounts(newCounts);
+    };
+
+    fetchRelatedData();
+  }, [billingRecord.applicationId]);
 
   const toggleColumnVisibility = (column: string) => {
     setColumnVisibility((prev: Record<string, boolean>) => ({
@@ -273,114 +394,93 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
     const fieldRenderers: Record<string, () => React.ReactElement | null> = {
       fullName: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Full Name</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.customerName}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Full Name</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.customerName}</span>
         </div>
       ),
       emailAddress: () => (billingRecord.emailAddress || billingRecord.email) ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Email Address</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.emailAddress || billingRecord.email}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Email Address</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.emailAddress || billingRecord.email}</span>
         </div>
       ) : null,
       contactNumber: () => billingRecord.contactNumber ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Contact Number</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.contactNumber}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Contact Number</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.contactNumber}</span>
         </div>
       ) : null,
       secondContactNumber: () => billingRecord.secondContactNumber ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Second Contact Number</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.secondContactNumber}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Second Contact Number</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.secondContactNumber}</span>
         </div>
       ) : null,
       address: () => billingRecord.address?.split(',')[0] ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Address</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.address.split(',')[0]}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Address</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.address.split(',')[0]}</span>
         </div>
       ) : null,
       barangay: () => billingRecord.barangay ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Barangay</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.barangay}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Barangay</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.barangay}</span>
         </div>
       ) : null,
       city: () => billingRecord.city ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>City</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.city}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>City</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.city}</span>
         </div>
       ) : null,
       region: () => billingRecord.region ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Region</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.region}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Region</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.region}</span>
         </div>
       ) : null,
       referredBy: () => billingRecord.referredBy ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Referred By</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.referredBy}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Referred By</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.referredBy}</span>
         </div>
       ) : null,
       addressCoordinates: () => {
         if (!billingRecord.addressCoordinates) return null;
-        
+
         // Parse coordinates - expecting format like "14.1234,121.5678" or "14.1234, 121.5678"
         const coords = billingRecord.addressCoordinates.split(',').map(c => parseFloat(c.trim()));
-        
+
         if (coords.length !== 2 || isNaN(coords[0]) || isNaN(coords[1])) {
           return (
             <div className="space-y-2">
-              <span className={`text-sm ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>Address Coordinates</span>
-              <div className={`w-full h-24 border rounded flex items-center justify-center ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-gray-100 border-gray-300'
-              }`}>
-                <span className={`text-sm ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`}>{billingRecord.addressCoordinates}</span>
+              <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>Address Coordinates</span>
+              <div className={`w-full h-24 border rounded flex items-center justify-center ${isDarkMode
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-gray-100 border-gray-300'
+                }`}>
+                <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`}>{billingRecord.addressCoordinates}</span>
               </div>
             </div>
           );
@@ -390,18 +490,16 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
         return (
           <div className="space-y-2">
-            <span className={`text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Address Coordinates</span>
-            <div className={`w-full h-64 border rounded overflow-hidden ${
-              isDarkMode
+            <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>Address Coordinates</span>
+            <div className={`w-full h-64 border rounded overflow-hidden relative ${isDarkMode
                 ? 'border-gray-700'
                 : 'border-gray-300'
-            }`}>
+              }`} style={{ zIndex: 1 }}>
               <MapContainer
                 center={[lat, lng]}
                 zoom={16}
-                style={{ height: '100%', width: '100%' }}
+                style={{ height: '100%', width: '100%', zIndex: 1 }}
                 scrollWheelZoom={false}
               >
                 <TileLayer
@@ -416,9 +514,8 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                 </Marker>
               </MapContainer>
             </div>
-            <div className={`text-xs ${
-              isDarkMode ? 'text-gray-500' : 'text-gray-600'
-            }`}>
+            <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+              }`}>
               Latitude: {lat}, Longitude: {lng}
             </div>
           </div>
@@ -426,10 +523,9 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
       },
       houseFrontPicture: () => billingRecord.houseFrontPicture ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>House Front Picture</span>
-          <button 
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>House Front Picture</span>
+          <button
             onClick={() => window.open(billingRecord.houseFrontPicture, '_blank')}
             className={isDarkMode
               ? 'text-blue-400 hover:text-blue-300 flex items-center space-x-1'
@@ -443,177 +539,142 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
       ) : null,
       usageType: () => billingRecord.usageType ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Usage Type</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.usageType}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Usage Type</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.usageType}</span>
         </div>
       ) : null,
       dateInstalled: () => billingRecord.dateInstalled ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Date Installed</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.dateInstalled}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Date Installed</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.dateInstalled}</span>
         </div>
       ) : null,
       username: () => billingRecord.username ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>PPPOE Username</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.username}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>PPPOE Username</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.username}</span>
         </div>
       ) : null,
       connectionType: () => billingRecord.connectionType ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Connection Type</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.connectionType}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Connection Type</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.connectionType}</span>
         </div>
       ) : null,
       routerModel: () => billingRecord.routerModel ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Router Model</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.routerModel}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Router Model</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.routerModel}</span>
         </div>
       ) : null,
       routerModemSN: () => billingRecord.routerModemSN ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Router Serial Number</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.routerModemSN}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Router Serial Number</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.routerModemSN}</span>
         </div>
       ) : null,
       onlineStatus: () => billingRecord.onlineStatus ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Online Status</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Online Status</span>
           <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${
-              billingRecord.onlineStatus === 'Online' ? 'bg-green-400' : 'bg-red-400'
-            }`}></div>
-            <span className={`font-medium ${
-              billingRecord.onlineStatus === 'Online' ? 'text-green-400' : 'text-red-400'
-            }`}>{billingRecord.onlineStatus}</span>
+            <div className={`w-2 h-2 rounded-full ${billingRecord.onlineStatus === 'Online' ? 'bg-green-400' : 'bg-red-400'
+              }`}></div>
+            <span className={`font-medium ${billingRecord.onlineStatus === 'Online' ? 'text-green-400' : 'text-red-400'
+              }`}>{billingRecord.onlineStatus}</span>
           </div>
         </div>
       ) : null,
       mikrotikId: () => billingRecord.mikrotikId ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Mikrotik ID</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.mikrotikId}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Mikrotik ID</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.mikrotikId}</span>
         </div>
       ) : null,
       lcpnap: () => billingRecord.lcpnap ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>LCP NAP PORT</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.lcpnap}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>LCP NAP PORT</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.lcpnap}</span>
         </div>
       ) : null,
       vlan: () => billingRecord.vlan ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>VLAN</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.vlan}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>VLAN</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.vlan}</span>
         </div>
       ) : null,
       sessionIp: () => (billingRecord.sessionIp || billingRecord.sessionIP) ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>SESSION IP</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.sessionIp || billingRecord.sessionIP}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>SESSION IP</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.sessionIp || billingRecord.sessionIP}</span>
         </div>
       ) : null,
       accountNumber: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Account Number</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.applicationId}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Account Number</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.applicationId}</span>
         </div>
       ),
       billingStatus: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Billing Status</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.status}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Billing Status</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.status}</span>
         </div>
       ),
       billingDay: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Billing Day</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.billingDay === 0 ? 'Every end of month' : (billingRecord.billingDay || '-')}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Billing Day</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.billingDay === 0 ? 'Every end of month' : (billingRecord.billingDay || '-')}</span>
         </div>
       ),
       plan: () => billingRecord.plan ? (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Plan</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{billingRecord.plan}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Plan</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{billingRecord.plan}</span>
         </div>
       ) : null,
       accountBalance: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Account Balance</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>₱{billingRecord.accountBalance || billingRecord.balance || '0.00'}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Account Balance</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>₱{billingRecord.accountBalance || billingRecord.balance || '0.00'}</span>
         </div>
       ),
       totalPaid: () => (
         <div className="flex justify-between items-center">
-          <span className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>Total Paid</span>
-          <span className={`font-medium ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>₱{billingRecord.totalPaid || '0.00'}</span>
+          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>Total Paid</span>
+          <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>₱{billingRecord.totalPaid || '0.00'}</span>
         </div>
       )
     };
@@ -634,10 +695,10 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-      
+
       const diff = startXRef.current - e.clientX;
       const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
+
       setDetailsWidth(newWidth);
     };
 
@@ -764,9 +825,9 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
         );
         console.log('Technical details updated successfully');
       }
-      
+
       setShowDetailsEditModal(false);
-      
+
       // TODO: Refresh the customer details to show updated data
       // You may want to call a parent component refresh function here
     } catch (error) {
@@ -777,6 +838,14 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
   const handleDetailsEditClose = () => {
     setShowDetailsEditModal(false);
+  };
+
+  const handleExpandModalOpen = (sectionKey: string) => {
+    setExpandedModalSection(sectionKey);
+  };
+
+  const handleExpandModalClose = () => {
+    setExpandedModalSection(null);
   };
 
   const defaultOnlineStatus: OnlineStatusRecord[] = onlineStatusRecords.length > 0 ? onlineStatusRecords : [
@@ -791,11 +860,10 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
   ];
 
   return (
-    <div className={`h-full flex flex-col border-l relative ${
-      isDarkMode
-        ? 'bg-gray-900 text-white border-white border-opacity-30'
-        : 'bg-white text-gray-900 border-gray-300'
-    }`} style={{ width: `${detailsWidth}px` }}>
+    <div className={`h-full flex flex-col border-l relative ${isDarkMode
+      ? 'bg-gray-900 text-white border-white border-opacity-30'
+      : 'bg-white text-gray-900 border-gray-300'
+      }`} style={{ width: `${detailsWidth}px` }}>
       <div
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
         style={{
@@ -813,38 +881,34 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
         }}
         onMouseDown={handleMouseDownResize}
       />
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-700'
-          : 'bg-gray-100 border-gray-200'
-      }`}>
-        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${
-          isDarkMode ? 'text-white' : 'text-gray-900'
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode
+        ? 'bg-gray-800 border-gray-700'
+        : 'bg-gray-100 border-gray-200'
         }`}>
+        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>
           {billingRecord.applicationId} | {billingRecord.customerName} | {billingRecord.address}
         </h1>
         <div className="flex items-center space-x-2 flex-shrink-0">
-          <button 
+          <button
             onClick={handleWrenchClick}
-            className={`p-2 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-            }`}
+            className={`p-2 rounded transition-colors ${isDarkMode
+              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+              }`}
           >
             <Wrench size={18} />
           </button>
-          <button 
+          <button
             onClick={handleEditClick}
-            className={`p-2 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-            }`}
+            className={`p-2 rounded transition-colors ${isDarkMode
+              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+              }`}
           >
             <Edit size={18} />
           </button>
-          <button 
+          <button
             onClick={handleTransactClick}
             className="px-3 py-1 rounded text-sm transition-colors text-white"
             style={{
@@ -866,27 +930,23 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowColumnVisibility(!showColumnVisibility)}
-              className={`p-2 rounded transition-colors ${
-                isDarkMode
-                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-              }`}
+              className={`p-2 rounded transition-colors ${isDarkMode
+                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                }`}
               title="Column Visibility"
             >
               <Settings size={18} />
             </button>
             {showColumnVisibility && (
-              <div className={`absolute right-0 mt-2 w-80 rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-white border-gray-200'
-              }`}>
-                <div className={`px-4 py-3 border-b flex items-center justify-between ${
-                  isDarkMode ? 'border-gray-700' : 'border-gray-200'
+              <div className={`absolute right-0 mt-2 w-80 rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto ${isDarkMode
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-white border-gray-200'
                 }`}>
-                  <h3 className={`font-semibold ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Column Visibility & Order</h3>
+                <div className={`px-4 py-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                  }`}>
+                  <h3 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>Column Visibility & Order</h3>
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={selectAllColumns}
@@ -916,13 +976,11 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                     technicalDetails: 'Technical Details',
                     billingDetails: 'Billing Details'
                   }).map(([sectionKey, sectionLabel]) => (
-                    <div key={sectionKey} className={`mb-2 border rounded ${
-                      isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                    }`}>
+                    <div key={sectionKey} className={`mb-2 border rounded ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                      }`}>
                       <div
-                        className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                        }`}
+                        className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                          }`}
                         onClick={() => toggleSectionExpansion(sectionKey)}
                       >
                         <div className="flex items-center space-x-2">
@@ -936,9 +994,8 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                             onClick={(e) => e.stopPropagation()}
                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                           />
-                          <span className={`font-medium text-sm ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>{sectionLabel}</span>
+                          <span className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{sectionLabel}</span>
                         </div>
                         {expandedSection === sectionKey ? (
                           <ChevronDown size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
@@ -947,12 +1004,10 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                         )}
                       </div>
                       {expandedSection === sectionKey && (
-                        <div className={`px-2 pb-2 border-t ${
-                          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                        }`}>
-                          <div className={`text-xs mt-2 mb-1 px-2 ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        <div className={`px-2 pb-2 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
                           }`}>
+                          <div className={`text-xs mt-2 mb-1 px-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
                             Drag to reorder fields
                           </div>
                           {fieldOrder[sectionKey].map((fieldKey: string, index: number) => (
@@ -963,20 +1018,16 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                               onDragOver={handleDragOver}
                               onDrop={() => handleDrop(sectionKey, index)}
                               onDragEnd={handleDragEnd}
-                              className={`flex items-center space-x-2 px-2 py-1.5 rounded cursor-move transition-colors ${
-                                isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                              } ${
-                                draggedItem?.section === sectionKey && draggedItem?.index === index
+                              className={`flex items-center space-x-2 px-2 py-1.5 rounded cursor-move transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                                } ${draggedItem?.section === sectionKey && draggedItem?.index === index
                                   ? isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
                                   : ''
-                              }`}
+                                }`}
                             >
-                              <span className={`text-xs ${
-                                isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                              }`}>☰</span>
-                              <span className={`text-sm ${
-                                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>
+                              <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                                }`}>☰</span>
+                              <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                                }`}>
                                 {getFieldLabel(fieldKey)}
                               </span>
                             </div>
@@ -989,13 +1040,12 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
               </div>
             )}
           </div>
-          <button 
+          <button
             onClick={handleClose}
-            className={`p-2 rounded transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-            }`}
+            className={`p-2 rounded transition-colors ${isDarkMode
+              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+              }`}
           >
             <X size={18} />
           </button>
@@ -1005,9 +1055,8 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {columnVisibility.customerDetails && (
           <div className="space-y-4">
-            <h3 className={`font-semibold text-sm mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Customer Details</h3>
+            <h3 className={`font-semibold text-sm mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Customer Details</h3>
             {fieldOrder.customerDetails.map((fieldKey: string) => (
               <React.Fragment key={fieldKey}>
                 {renderField(fieldKey, billingRecord)}
@@ -1018,9 +1067,8 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
         {columnVisibility.technicalDetails && (
           <div className="space-y-4">
-            <h3 className={`font-semibold text-sm mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Technical Details</h3>
+            <h3 className={`font-semibold text-sm mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Technical Details</h3>
             {fieldOrder.technicalDetails.map((fieldKey: string) => (
               <React.Fragment key={fieldKey}>
                 {renderField(fieldKey, billingRecord)}
@@ -1031,9 +1079,8 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
         {columnVisibility.billingDetails && (
           <div className="space-y-4">
-            <h3 className={`font-semibold text-sm mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Billing Details</h3>
+            <h3 className={`font-semibold text-sm mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Billing Details</h3>
             {fieldOrder.billingDetails.map((fieldKey: string) => (
               <React.Fragment key={fieldKey}>
                 {renderField(fieldKey, billingRecord)}
@@ -1043,112 +1090,211 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
         )}
       </div>
 
-      <div className={`border-t ${
-        isDarkMode ? 'border-gray-700' : 'border-gray-200'
-      }`}></div>
+      <div className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+        }`}></div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className={`border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <button
-            onClick={() => toggleSection('invoices')}
-            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-              isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}
-          >
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
             <div className="flex items-center space-x-2">
-              <span className={`font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Related Invoices</span>
-              <span className={`text-xs px-2 py-1 rounded ${
-                isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-              }`}>0</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Invoices</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>{relatedDataCounts.invoices}</span>
             </div>
-            {expandedSections.invoices ? (
-              <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            ) : (
-              <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            )}
-          </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('invoices');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedSections.invoices ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => toggleSection('invoices')}
+                className="flex items-center"
+              >
+                {expandedSections.invoices ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
 
           {expandedSections.invoices && (
             <div className="px-6 pb-4">
-              <div className={`text-center py-8 ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-600'
-              }`}>No items</div>
+              {relatedData.invoices.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                    }`}>
+                    <thead>
+                      <tr>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Invoice ID</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Amount</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Status</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                      }`}>
+                      {relatedData.invoices.map((invoice: any, index: number) => (
+                        <tr key={index} className={isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{invoice.id || invoice.invoice_id}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>₱{invoice.amount || invoice.total_amount || '0.00'}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{invoice.status || 'N/A'}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{invoice.created_at || invoice.date || 'N/A'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`}>No items</div>
+              )}
             </div>
           )}
         </div>
 
-        <div className={`border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <button
-            onClick={() => toggleSection('paymentPortalLogs')}
-            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-              isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}
-          >
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
             <div className="flex items-center space-x-2">
-              <span className={`font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Related Payment Portal Logs</span>
-              <span className={`text-xs px-2 py-1 rounded ${
-                isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-              }`}>0</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Payment Portal Logs</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>{relatedDataCounts.paymentPortalLogs}</span>
             </div>
-            {expandedSections.paymentPortalLogs ? (
-              <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            ) : (
-              <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            )}
-          </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('paymentPortalLogs');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedSections.paymentPortalLogs ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => toggleSection('paymentPortalLogs')}
+                className="flex items-center"
+              >
+                {expandedSections.paymentPortalLogs ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
 
           {expandedSections.paymentPortalLogs && (
             <div className="px-6 pb-4">
-              <div className={`text-center py-8 ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-600'
-              }`}>No items</div>
+              {relatedData.paymentPortalLogs.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                    }`}>
+                    <thead>
+                      <tr>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Transaction ID</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Amount</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Status</th>
+                        <th className={`px-4 py-2 text-left text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
+                      }`}>
+                      {relatedData.paymentPortalLogs.map((log: any, index: number) => (
+                        <tr key={index} className={isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{log.transaction_id || log.id}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>₱{log.amount || '0.00'}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{log.status || 'N/A'}</td>
+                          <td className={`px-4 py-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>{log.created_at || log.date || 'N/A'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`}>No items</div>
+              )}
             </div>
           )}
         </div>
 
-        <div className={`border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <button
-            onClick={() => toggleSection('transactions')}
-            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-              isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}
-          >
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
             <div className="flex items-center space-x-2">
-              <span className={`font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Related Transactions</span>
-              <span className={`text-xs px-2 py-1 rounded ${
-                isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-              }`}>0</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Transactions</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>{relatedDataCounts.transactions}</span>
             </div>
-            {expandedSections.transactions ? (
-              <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            ) : (
-              <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            )}
-          </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('transactions');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedSections.transactions ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => toggleSection('transactions')}
+                className="flex items-center"
+              >
+                {expandedSections.transactions ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
 
           {expandedSections.transactions && (
             <div className="px-6 pb-4">
-              <div className={`text-center py-8 ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-600'
-              }`}>No items</div>
+              <RelatedDataTable
+                data={relatedData.transactions}
+                columns={relatedDataColumns.transactions}
+                isDarkMode={isDarkMode}
+              />
               <div className="flex justify-end">
                 <button className={isDarkMode
                   ? 'text-red-400 hover:text-red-300 text-sm'
@@ -1159,39 +1305,51 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
           )}
         </div>
 
-        <div className={`border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <button
-            onClick={() => toggleSection('staggeredInstallations')}
-            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-              isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}
-          >
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
             <div className="flex items-center space-x-2">
-              <span className={`font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Related Staggered</span>
-              <span className={`text-xs px-2 py-1 rounded ${
-                isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-              }`}>0</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Staggered</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>{relatedDataCounts.staggered}</span>
             </div>
-            {expandedSections.staggeredInstallations ? (
-              <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            ) : (
-              <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            )}
-          </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('staggered');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedSections.staggeredInstallations ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => toggleSection('staggeredInstallations')}
+                className="flex items-center"
+              >
+                {expandedSections.staggeredInstallations ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
 
           {expandedSections.staggeredInstallations && (
             <div className="px-6 pb-4">
-              <div className={`text-center py-8 ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-600'
-              }`}>No items</div>
+              <RelatedDataTable
+                data={relatedData.staggered}
+                columns={relatedDataColumns.staggered}
+                isDarkMode={isDarkMode}
+              />
               <div className="flex justify-end">
-                <button 
+                <button
                   onClick={handleStaggeredInstallationAdd}
                   className={isDarkMode
                     ? 'text-red-400 hover:text-red-300 text-sm'
@@ -1205,39 +1363,51 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
           )}
         </div>
 
-        <div className={`border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <button
-            onClick={() => toggleSection('discounts')}
-            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-              isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}
-          >
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
             <div className="flex items-center space-x-2">
-              <span className={`font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Related Discounts</span>
-              <span className={`text-xs px-2 py-1 rounded ${
-                isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-              }`}>0</span>
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Discounts</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>{relatedDataCounts.discounts}</span>
             </div>
-            {expandedSections.discounts ? (
-              <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            ) : (
-              <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-            )}
-          </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('discounts');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedSections.discounts ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => toggleSection('discounts')}
+                className="flex items-center"
+              >
+                {expandedSections.discounts ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
 
           {expandedSections.discounts && (
             <div className="px-6 pb-4">
-              <div className={`text-center py-8 ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-600'
-              }`}>No items</div>
+              <RelatedDataTable
+                data={relatedData.discounts}
+                columns={relatedDataColumns.discounts}
+                isDarkMode={isDarkMode}
+              />
               <div className="flex justify-end">
-                <button 
+                <button
                   onClick={handleDiscountAdd}
                   className={isDarkMode
                     ? 'text-red-400 hover:text-red-300 text-sm'
@@ -1251,46 +1421,58 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
           )}
         </div>
         {[
-          { key: 'serviceOrders', label: 'Related Service Orders' },
-          { key: 'reconnectionLogs', label: 'Related Reconnection Logs' },
-          { key: 'disconnectedLogs', label: 'Related Disconnected Logs' },
-          { key: 'detailsUpdateLogs', label: 'Related Details Update Logs' },
-          { key: 'planChangeLogs', label: 'Related Plan Change Logs' },
-          { key: 'serviceChargeLogs', label: 'Related Service Charge Logs' },
-          { key: 'changeDueLogs', label: 'Related Change Due Logs' },
-          { key: 'securityDeposits', label: 'Related Security Deposits' }
+          { key: 'serviceOrders', label: 'Related Service Orders', dataKey: 'serviceOrders' },
+          { key: 'reconnectionLogs', label: 'Related Reconnection Logs', dataKey: 'reconnectionLogs' },
+          { key: 'disconnectedLogs', label: 'Related Disconnected Logs', dataKey: 'disconnectedLogs' },
+          { key: 'detailsUpdateLogs', label: 'Related Details Update Logs', dataKey: 'detailsUpdateLogs' },
+          { key: 'planChangeLogs', label: 'Related Plan Change Logs', dataKey: 'planChangeLogs' },
+          { key: 'serviceChargeLogs', label: 'Related Service Charge Logs', dataKey: 'serviceChargeLogs' },
+          { key: 'changeDueLogs', label: 'Related Change Due Logs', dataKey: 'changeDueLogs' },
+          { key: 'securityDeposits', label: 'Related Security Deposits', dataKey: 'securityDeposits' }
         ].map((section) => (
-          <div key={section.key} className={`border-b ${
-            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-            <button
-              onClick={() => toggleSection(section.key)}
-              className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              }`}
-            >
+          <div key={section.key} className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+            }`}>
+            <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+              }`}>
               <div className="flex items-center space-x-2">
-                <span className={`font-medium ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{section.label}</span>
-                <span className={`text-xs px-2 py-1 rounded ${
-                  isDarkMode
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-300 text-gray-900'
-                }`}>0</span>
+                <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>{section.label}</span>
+                <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                  ? 'bg-gray-600 text-white'
+                  : 'bg-gray-300 text-gray-900'
+                  }`}>{relatedDataCounts[section.key]}</span>
               </div>
-              {expandedSections[section.key] ? (
-                <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-              ) : (
-                <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-              )}
-            </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleExpandModalOpen(section.key);
+                  }}
+                  className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                    }`}
+                >
+                  {expandedSections[section.key] ? 'Collapse' : 'Expand'}
+                </button>
+                <button
+                  onClick={() => toggleSection(section.key)}
+                  className="flex items-center"
+                >
+                  {expandedSections[section.key] ? (
+                    <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                  ) : (
+                    <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                  )}
+                </button>
+              </div>
+            </div>
 
             {expandedSections[section.key] && (
               <div className="px-6 pb-4">
-                <div className={`text-center py-8 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`}>No items</div>
+                <RelatedDataTable
+                  data={relatedData[section.key]}
+                  columns={relatedDataColumns[section.dataKey as keyof typeof relatedDataColumns]}
+                  isDarkMode={isDarkMode}
+                />
                 <div className="flex justify-end">
                   <button className={isDarkMode
                     ? 'text-red-400 hover:text-red-300 text-sm'
@@ -1348,27 +1530,22 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
 
       {showSORequestConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <h3 className={`text-xl font-semibold mb-4 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Create Service Order Request</h3>
-            <p className={`mb-6 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          <div className={`rounded-lg p-6 max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'
             }`}>
-              Do you want to create a service order request for account <span className={`font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>{billingRecord.applicationId}</span>?
+            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Create Service Order Request</h3>
+            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
+              Do you want to create a service order request for account <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{billingRecord.applicationId}</span>?
             </p>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleSORequestCancel}
-                className={`px-4 py-2 rounded transition-colors ${
-                  isDarkMode
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-300 hover:bg-gray-400 text-gray-900'
-                }`}
+                className={`px-4 py-2 rounded transition-colors ${isDarkMode
+                  ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                  : 'bg-gray-300 hover:bg-gray-400 text-gray-900'
+                  }`}
               >
                 Cancel
               </button>
@@ -1413,6 +1590,60 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
       />
 
 
+
+
+
+      {/* Expanded Modal for Related Data */}
+      {expandedModalSection && (
+        <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 9999 }}>
+          {/* Modal Header */}
+          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+            }`}>
+            <div className="flex items-center space-x-3">
+              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                {expandedModalSection === 'invoices' && 'All Related Invoices'}
+                {expandedModalSection === 'paymentPortalLogs' && 'All Related Payment Portal Logs'}
+                {expandedModalSection === 'transactions' && 'All Related Transactions'}
+                {expandedModalSection === 'staggered' && 'All Related Staggered'}
+                {expandedModalSection === 'discounts' && 'All Related Discounts'}
+                {expandedModalSection === 'serviceOrders' && 'All Related Service Orders'}
+                {expandedModalSection === 'reconnectionLogs' && 'All Related Reconnection Logs'}
+                {expandedModalSection === 'disconnectedLogs' && 'All Related Disconnected Logs'}
+                {expandedModalSection === 'detailsUpdateLogs' && 'All Related Details Update Logs'}
+                {expandedModalSection === 'planChangeLogs' && 'All Related Plan Change Logs'}
+                {expandedModalSection === 'serviceChargeLogs' && 'All Related Service Charge Logs'}
+                {expandedModalSection === 'changeDueLogs' && 'All Related Change Due Logs'}
+                {expandedModalSection === 'securityDeposits' && 'All Related Security Deposits'}
+              </h2>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
+                }`}>
+                {relatedDataCounts[expandedModalSection]} items
+              </span>
+            </div>
+            <button
+              onClick={handleExpandModalClose}
+              className={`p-2 rounded transition-colors ${isDarkMode
+                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                }`}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <RelatedDataTable
+              data={fullRelatedData[expandedModalSection] || []}
+              columns={relatedDataColumns[expandedModalSection as keyof typeof relatedDataColumns]}
+              isDarkMode={isDarkMode}
+            />
+          </div>
+        </div>
+      )}
 
       <CustomerDetailsEditModal
         isOpen={showDetailsEditModal}

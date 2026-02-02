@@ -45,9 +45,16 @@ export interface InvoiceResponse {
 }
 
 export const invoiceService = {
-  async getAllInvoices(): Promise<InvoiceRecord[]> {
+  async getAllInvoices(fastMode: boolean = false, page: number = 1, perPage: number = 100): Promise<InvoiceRecord[]> {
     try {
-      const response = await apiClient.get<InvoiceResponse>('/billing-generation/invoices');
+      // Using the dedicated invoice records endpoint that directly queries invoices table
+      const response = await apiClient.get<InvoiceResponse>('/invoice-records', {
+        params: {
+          fast: fastMode ? '1' : '0',
+          page,
+          per_page: perPage
+        }
+      });
       if (response.data.success) {
         return response.data.data;
       }

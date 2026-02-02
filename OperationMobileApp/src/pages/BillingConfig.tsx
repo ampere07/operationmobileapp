@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Modal as RNModal } from 'react-native';
-import { Receipt, Hash, Edit2, Trash2, Save, X, Calendar, RefreshCw } from 'lucide-react-native';
+import { Receipt, Hash, Edit2, Trash2, Save, X, Calendar } from 'lucide-react';
 import { customAccountNumberService, CustomAccountNumber } from '../services/customAccountNumberService';
 import apiClient from '../config/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface BillingConfigData {
   advance_generation_day: number;
@@ -92,12 +90,23 @@ const BillingConfig: React.FC = () => {
   };
 
   useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
+
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -219,7 +228,7 @@ const BillingConfig: React.FC = () => {
     try {
       setLoadingBillingConfig(true);
       
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let userEmail = 'unknown@user.com';
       
       if (authData) {
@@ -410,335 +419,530 @@ const BillingConfig: React.FC = () => {
   };
 
   return (
-    <ScrollView style={{ padding: 24, flex: 1, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
-      <View style={{ marginBottom: 24, paddingBottom: 24, borderBottomWidth: 1, borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Text style={{ fontSize: 24, fontWeight: '600', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+    <div className={`p-6 min-h-full ${
+      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+    }`}>
+      <div className={`mb-6 pb-6 border-b ${
+        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className={`text-2xl font-semibold mb-2 flex items-center gap-3 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               Billing Configurations
-            </Text>
-          </View>
-        </View>
-      </View>
+            </h2>
+          </div>
+        </div>
+      </div>
 
-      <View style={{ gap: 24 }}>
-        <View style={{ paddingBottom: 24, borderBottomWidth: 1, borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+      <div className="space-y-6">
+        <div className={`space-y-4 pb-6 border-b ${
+          isDarkMode ? 'border-gray-700' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <h3 className={`text-lg font-semibold ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               Starting Account Number
-            </Text>
-          </View>
+            </h3>
+          </div>
           
-          <View style={{ gap: 16 }}>
-            <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+          <div className="space-y-4">
+            <p className={`text-sm ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               Set a custom starting number for new billing accounts. This can only be created once. You can edit or delete it after creation.
-            </Text>
+            </p>
 
             {loadingAccountNumber ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
-                <ActivityIndicator size="large" color="#ea580c" />
-              </View>
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+              </div>
             ) : customAccountNumber && !isEditingAccountNumber ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ height: 40, width: 40, borderRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)' }}>
-                    <Hash size={20} color={colorPalette?.primary || '#fb923c'} />
-                  </View>
-                  <View>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{customAccountNumber.starting_number}</Text>
-                    <Text style={{ fontSize: 12, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Current starting number</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable
-                    onPress={() => setIsEditingAccountNumber(true)}
-                    style={{ padding: 8, borderRadius: 6 }}
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
+                    }}>
+                    <Hash className="h-5 w-5" style={{
+                      color: colorPalette?.primary || '#fb923c'
+                    }} />
+                  </div>
+                  <div>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{customAccountNumber.starting_number}</p>
+                    <p className={`text-xs ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Current starting number</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsEditingAccountNumber(true)}
+                    className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-900 rounded transition-colors"
+                    title="Edit"
                   >
-                    <Edit2 size={18} color="#60a5fa" />
-                  </Pressable>
-                  <Pressable
-                    onPress={handleDeleteAccountNumber}
-                    style={{ padding: 8, borderRadius: 6 }}
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    onClick={handleDeleteAccountNumber}
+                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900 rounded transition-colors"
+                    title="Delete"
                   >
-                    <Trash2 size={18} color="#f87171" />
-                  </Pressable>
-                </View>
-              </View>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
             ) : (
-              <View style={{ gap: 16 }}>
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
                     Starting Number
-                  </Text>
-                  <TextInput
+                  </label>
+                  <input
+                    type="text"
                     value={accountNumberInput}
-                    onChangeText={setAccountNumberInput}
+                    onChange={(e) => setAccountNumberInput(e.target.value)}
                     placeholder="e.g., ABC1234 (optional, max 7 characters)"
-                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
                     maxLength={7}
-                    autoCapitalize="characters"
-                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                    editable={!loadingAccountNumber}
-                  />
-                  <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                    Enter any combination of letters and numbers (max 7 characters). Leave blank to generate without prefix.
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable
-                    onPress={handleSaveAccountNumber}
+                    className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 uppercase ${
+                      isDarkMode
+                        ? 'bg-gray-800 border-gray-700 text-white'
+                        : 'bg-white border-gray-300 text-gray-900'
+                    }`}
                     disabled={loadingAccountNumber}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: loadingAccountNumber ? 0.5 : 1, borderRadius: 6, backgroundColor: loadingAccountNumber ? '#4b5563' : (colorPalette?.primary || '#ea580c') }}
+                  />
+                  <p className={`text-xs mt-2 ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`}>
+                    Enter any combination of letters and numbers (max 7 characters). Leave blank to generate without prefix.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveAccountNumber}
+                    disabled={loadingAccountNumber}
+                    className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white rounded transition-colors"
+                    style={{
+                      backgroundColor: loadingAccountNumber ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!loadingAccountNumber && colorPalette?.accent) {
+                        e.currentTarget.style.backgroundColor = colorPalette.accent;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!loadingAccountNumber && colorPalette?.primary) {
+                        e.currentTarget.style.backgroundColor = colorPalette.primary;
+                      }
+                    }}
                   >
-                    <Save size={18} color="#ffffff" />
-                    <Text style={{ color: '#ffffff' }}>{customAccountNumber ? 'Update' : 'Create'}</Text>
-                  </Pressable>
+                    <Save size={18} />
+                    <span>{customAccountNumber ? 'Update' : 'Create'}</span>
+                  </button>
                   {customAccountNumber && (
-                    <Pressable
-                      onPress={handleCancelEdit}
+                    <button
+                      onClick={handleCancelEdit}
                       disabled={loadingAccountNumber}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: loadingAccountNumber ? 0.5 : 1, borderRadius: 6, backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }}
+                      className={`flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white rounded transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 hover:bg-gray-600'
+                          : 'bg-gray-400 hover:bg-gray-500'
+                      }`}
                     >
-                      <X size={18} color="#ffffff" />
-                      <Text style={{ color: '#ffffff' }}>Cancel</Text>
-                    </Pressable>
+                      <X size={18} />
+                      <span>Cancel</span>
+                    </button>
                   )}
-                </View>
-              </View>
+                </div>
+              </div>
             )}
-          </View>
-        </View>
+          </div>
+        </div>
 
-        <View style={{ paddingBottom: 24, borderBottomWidth: 1, borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+        <div className={`space-y-4 pb-6 border-b ${
+          isDarkMode ? 'border-gray-700' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <h3 className={`text-lg font-semibold ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               Billing Day Configuration
-            </Text>
-          </View>
+            </h3>
+          </div>
           
-          <View style={{ gap: 16 }}>
-            <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+          <div className="space-y-4">
+            <p className={`text-sm ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               Configure the day intervals for billing operations. This can only be created once. You can edit or delete it after creation.
-            </Text>
+            </p>
 
             {loadingBillingConfig ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
-                <ActivityIndicator size="large" color="#ea580c" />
-              </View>
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+              </div>
             ) : billingConfig && !isEditingBillingConfig ? (
-              <View style={{ gap: 16 }}>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-                  <View style={{ flex: 1, minWidth: 200, padding: 16, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
-                    <Text style={{ fontSize: 12, marginBottom: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Advance Generation Day</Text>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{billingConfig.advance_generation_day}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 200, padding: 16, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
-                    <Text style={{ fontSize: 12, marginBottom: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Due Date Day</Text>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{billingConfig.due_date_day}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 200, padding: 16, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
-                    <Text style={{ fontSize: 12, marginBottom: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Disconnection Day</Text>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{billingConfig.disconnection_day}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 200, padding: 16, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
-                    <Text style={{ fontSize: 12, marginBottom: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Overdue Day</Text>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{billingConfig.overdue_day}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 200, padding: 16, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
-                    <Text style={{ fontSize: 12, marginBottom: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Disconnection Notice</Text>
-                    <Text style={{ fontWeight: '500', fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>{billingConfig.disconnection_notice}</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8 }}>
-                  <Pressable
-                    onPress={() => setIsEditingBillingConfig(true)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`p-4 rounded ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}>
+                    <p className={`text-xs mb-1 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Advance Generation Day</p>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{billingConfig.advance_generation_day}</p>
+                  </div>
+                  <div className={`p-4 rounded ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}>
+                    <p className={`text-xs mb-1 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Due Date Day</p>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{billingConfig.due_date_day}</p>
+                  </div>
+                  <div className={`p-4 rounded ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}>
+                    <p className={`text-xs mb-1 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Disconnection Day</p>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{billingConfig.disconnection_day}</p>
+                  </div>
+                  <div className={`p-4 rounded ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}>
+                    <p className={`text-xs mb-1 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Overdue Day</p>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{billingConfig.overdue_day}</p>
+                  </div>
+                  <div className={`p-4 rounded ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}>
+                    <p className={`text-xs mb-1 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Disconnection Notice</p>
+                    <p className={`font-medium text-lg ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{billingConfig.disconnection_notice}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={() => setIsEditingBillingConfig(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-blue-400 hover:text-blue-300 hover:bg-blue-900 rounded transition-colors"
                   >
-                    <Edit2 size={18} color="#60a5fa" />
-                    <Text style={{ color: '#60a5fa' }}>Edit</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={handleDeleteBillingConfig}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6 }}
+                    <Edit2 size={18} />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={handleDeleteBillingConfig}
+                    className="flex items-center gap-2 px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-900 rounded transition-colors"
                   >
-                    <Trash2 size={18} color="#f87171" />
-                    <Text style={{ color: '#f87171' }}>Delete</Text>
-                  </Pressable>
-                </View>
-              </View>
+                    <Trash2 size={18} />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
             ) : (
-              <View style={{ gap: 16 }}>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
-                  <View style={{ flex: 1, minWidth: 200 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: '#d1d5db', marginBottom: 8 }}>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       Advance Generation Day
-                    </Text>
-                    <TextInput
-                      value={String(billingConfigInput.advance_generation_day)}
-                      onChangeText={(value) => handleBillingConfigInputChange('advance_generation_day', value)}
-                      keyboardType="numeric"
-                      style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                      editable={!loadingBillingConfig}
-                    />
-                    <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                      Days before billing day to generate bills (0-31, 0 = disabled)
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 200 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                      Due Date Day
-                    </Text>
-                    <TextInput
-                      value={String(billingConfigInput.due_date_day)}
-                      onChangeText={(value) => handleBillingConfigInputChange('due_date_day', value)}
-                      keyboardType="numeric"
-                      style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                      editable={!loadingBillingConfig}
-                    />
-                    <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                      Days after billing day for payment due date (0-31, 0 = same day)
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 200 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                      Disconnection Day
-                    </Text>
-                    <TextInput
-                      value={String(billingConfigInput.disconnection_day)}
-                      onChangeText={(value) => handleBillingConfigInputChange('disconnection_day', value)}
-                      keyboardType="numeric"
-                      style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                      editable={!loadingBillingConfig}
-                    />
-                    <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                      Days after due date to disconnect service (0-31, 0 = disabled)
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 200 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                      Overdue Day
-                    </Text>
-                    <TextInput
-                      value={String(billingConfigInput.overdue_day)}
-                      onChangeText={(value) => handleBillingConfigInputChange('overdue_day', value)}
-                      keyboardType="numeric"
-                      style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                      editable={!loadingBillingConfig}
-                    />
-                    <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                      Days after due date to mark as overdue (0-31, 0 = same day)
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 200 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                      Disconnection Notice
-                    </Text>
-                    <TextInput
-                      value={String(billingConfigInput.disconnection_notice)}
-                      onChangeText={(value) => handleBillingConfigInputChange('disconnection_notice', value)}
-                      keyboardType="numeric"
-                      style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 6, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#d1d5db', color: isDarkMode ? '#ffffff' : '#111827' }}
-                      editable={!loadingBillingConfig}
-                    />
-                    <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
-                      Days before disconnection to send notice (0-31, 0 = disabled)
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable
-                    onPress={handleSaveBillingConfig}
-                    disabled={loadingBillingConfig}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: loadingBillingConfig ? 0.5 : 1, borderRadius: 6, backgroundColor: loadingBillingConfig ? '#4b5563' : (colorPalette?.primary || '#ea580c') }}
-                  >
-                    <Save size={18} color="#ffffff" />
-                    <Text style={{ color: '#ffffff' }}>{billingConfig ? 'Update' : 'Create'}</Text>
-                  </Pressable>
-                  {billingConfig && (
-                    <Pressable
-                      onPress={handleCancelBillingConfigEdit}
+                    </label>
+                    <input
+                      type="number"
+                      value={billingConfigInput.advance_generation_day}
+                      onChange={(e) => handleBillingConfigInputChange('advance_generation_day', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 ${
+                        isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-white'
+                          : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      min="0"
+                      max="31"
                       disabled={loadingBillingConfig}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, opacity: loadingBillingConfig ? 0.5 : 1, borderRadius: 6, backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }}
+                    />
+                    <p className={`text-xs mt-2 ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`}>
+                      Days before billing day to generate bills (0-31, 0 = disabled)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      Due Date Day
+                    </label>
+                    <input
+                      type="number"
+                      value={billingConfigInput.due_date_day}
+                      onChange={(e) => handleBillingConfigInputChange('due_date_day', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 ${
+                        isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-white'
+                          : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      min="1"
+                      max="31"
+                      disabled={loadingBillingConfig}
+                    />
+                    <p className={`text-xs mt-2 ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`}>
+                      Days after billing day for payment due date (0-31, 0 = same day)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      Disconnection Day
+                    </label>
+                    <input
+                      type="number"
+                      value={billingConfigInput.disconnection_day}
+                      onChange={(e) => handleBillingConfigInputChange('disconnection_day', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 ${
+                        isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-white'
+                          : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      min="1"
+                      max="31"
+                      disabled={loadingBillingConfig}
+                    />
+                    <p className={`text-xs mt-2 ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`}>
+                      Days after due date to disconnect service (0-31, 0 = disabled)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      Overdue Day
+                    </label>
+                    <input
+                      type="number"
+                      value={billingConfigInput.overdue_day}
+                      onChange={(e) => handleBillingConfigInputChange('overdue_day', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 ${
+                        isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-white'
+                          : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      min="1"
+                      max="31"
+                      disabled={loadingBillingConfig}
+                    />
+                    <p className={`text-xs mt-2 ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`}>
+                      Days after due date to mark as overdue (0-31, 0 = same day)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}>
+                      Disconnection Notice
+                    </label>
+                    <input
+                      type="number"
+                      value={billingConfigInput.disconnection_notice}
+                      onChange={(e) => handleBillingConfigInputChange('disconnection_notice', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      className={`w-full px-4 py-2 border rounded focus:outline-none focus:border-orange-500 ${
+                        isDarkMode
+                          ? 'bg-gray-800 border-gray-700 text-white'
+                          : 'bg-white border-gray-300 text-gray-900'
+                      }`}
+                      min="1"
+                      max="31"
+                      disabled={loadingBillingConfig}
+                    />
+                    <p className={`text-xs mt-2 ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`}>
+                      Days before disconnection to send notice (0-31, 0 = disabled)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveBillingConfig}
+                    disabled={loadingBillingConfig}
+                    className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white rounded transition-colors"
+                    style={{
+                      backgroundColor: loadingBillingConfig ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!loadingBillingConfig && colorPalette?.accent) {
+                        e.currentTarget.style.backgroundColor = colorPalette.accent;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!loadingBillingConfig && colorPalette?.primary) {
+                        e.currentTarget.style.backgroundColor = colorPalette.primary;
+                      }
+                    }}
+                  >
+                    <Save size={18} />
+                    <span>{billingConfig ? 'Update' : 'Create'}</span>
+                  </button>
+                  {billingConfig && (
+                    <button
+                      onClick={handleCancelBillingConfigEdit}
+                      disabled={loadingBillingConfig}
+                      className={`flex items-center gap-2 px-4 py-2 disabled:opacity-50 text-white rounded transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 hover:bg-gray-600'
+                          : 'bg-gray-400 hover:bg-gray-500'
+                      }`}
                     >
-                      <X size={18} color="#ffffff" />
-                      <Text style={{ color: '#ffffff' }}>Cancel</Text>
-                    </Pressable>
+                      <X size={18} />
+                      <span>Cancel</span>
+                    </button>
                   )}
-                </View>
-              </View>
+                </div>
+              </div>
             )}
-          </View>
-        </View>
+          </div>
+        </div>
 
-        <View style={{ paddingBottom: 24, borderBottomWidth: 1, borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+        <div className={`space-y-4 pb-6 border-b ${
+          isDarkMode ? 'border-gray-700' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <h3 className={`text-lg font-semibold ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               Test Billing Generation
-            </Text>
-          </View>
+            </h3>
+          </div>
           
-          <View style={{ gap: 16 }}>
-            <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+          <div className="space-y-4">
+            <p className={`text-sm ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               Test the billing generation system by generating SOA and invoices for all active accounts. This will create new billing records for testing purposes.
-            </Text>
+            </p>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Pressable
-                onPress={handleTestGeneration}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleTestGeneration}
                 disabled={loadingBillingConfig}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#2563eb', opacity: loadingBillingConfig ? 0.5 : 1, borderRadius: 6 }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded transition-colors"
               >
-                <RefreshCw size={18} color="#ffffff" />
-                <Text style={{ color: '#ffffff' }}>Test Generate All Billings</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </View>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                <span>Test Generate All Billings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <RNModal
-        visible={modal.isOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModal({ ...modal, isOpen: false })}
-      >
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          <View style={{ borderRadius: 8, padding: 24, maxWidth: 448, width: '100%', marginHorizontal: 16, backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 16, color: isDarkMode ? '#ffffff' : '#111827' }}>{modal.title}</Text>
-            <Text style={{ marginBottom: 24, color: isDarkMode ? '#d1d5db' : '#374151' }}>{modal.message}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+      {modal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={`rounded-lg p-6 max-w-md w-full mx-4 ${
+            isDarkMode
+              ? 'bg-gray-900 border border-gray-700'
+              : 'bg-white border border-gray-200'
+          }`}>
+            <h3 className={`text-lg font-semibold mb-4 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>{modal.title}</h3>
+            <p className={`mb-6 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>{modal.message}</p>
+            <div className="flex items-center justify-end gap-3">
               {modal.type === 'confirm' ? (
                 <>
-                  <Pressable
-                    onPress={modal.onCancel}
-                    style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }}
+                  <button
+                    onClick={modal.onCancel}
+                    className={`px-4 py-2 text-white rounded transition-colors ${
+                      isDarkMode
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-400 hover:bg-gray-500'
+                    }`}
                   >
-                    <Text style={{ color: '#ffffff' }}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={modal.onConfirm}
-                    style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: colorPalette?.primary || '#ea580c' }}
+                    Cancel
+                  </button>
+                  <button
+                    onClick={modal.onConfirm}
+                    className="px-4 py-2 text-white rounded transition-colors"
+                    style={{
+                      backgroundColor: colorPalette?.primary || '#ea580c'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (colorPalette?.accent) {
+                        e.currentTarget.style.backgroundColor = colorPalette.accent;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (colorPalette?.primary) {
+                        e.currentTarget.style.backgroundColor = colorPalette.primary;
+                      }
+                    }}
                   >
-                    <Text style={{ color: '#ffffff' }}>Confirm</Text>
-                  </Pressable>
+                    Confirm
+                  </button>
                 </>
               ) : (
-                <Pressable
-                  onPress={() => setModal({ ...modal, isOpen: false })}
-                  style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: colorPalette?.primary || '#ea580c' }}
+                <button
+                  onClick={() => setModal({ ...modal, isOpen: false })}
+                  className="px-4 py-2 text-white rounded transition-colors"
+                  style={{
+                    backgroundColor: colorPalette?.primary || '#ea580c'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (colorPalette?.accent) {
+                      e.currentTarget.style.backgroundColor = colorPalette.accent;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (colorPalette?.primary) {
+                      e.currentTarget.style.backgroundColor = colorPalette.primary;
+                    }
+                  }}
                 >
-                  <Text style={{ color: '#ffffff' }}>OK</Text>
-                </Pressable>
+                  OK
+                </button>
               )}
-            </View>
-          </View>
-        </View>
-      </RNModal>
-    </ScrollView>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, Image, ScrollView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { login, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
 import { formUIService } from '../services/formUIService';
@@ -26,6 +24,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     
     console.log('[Logo] Original URL:', url);
     
+    // Use backend proxy to avoid CORS issues
     const apiUrl = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
     const proxyUrl = `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
     
@@ -71,7 +70,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     fetchColorPalette();
   }, []);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!identifier || !password) {
       setError('Please enter your username/email and password');
       return;
@@ -117,7 +117,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!forgotEmail) {
       setError('Please enter your email address');
       return;
@@ -140,183 +141,371 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   if (showForgotPassword) {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: '#ffffff' }} contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 20 }}>
-        <View style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0', width: '100%', maxWidth: 400, shadowColor: 'rgba(147, 51, 234, 0.1)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 20, elevation: 4 }}>
-          <View style={{ textAlign: 'center', marginBottom: 30 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#ffffff',
+        padding: '20px'
+      }}>
+        <div style={{
+          backgroundColor: '#ffffff',
+          padding: '40px',
+          borderRadius: '12px',
+          border: '1px solid #e0e0e0',
+          width: '100%',
+          maxWidth: '400px',
+          boxShadow: '0 4px 20px rgba(147, 51, 234, 0.1)'
+        }}>
+          <div style={{
+            textAlign: 'center',
+            marginBottom: '30px'
+          }}>
             {logoUrl && (
-              <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 20 }}>
-                <Image 
-                  source={{ uri: logoUrl }} 
-                  style={{ height: 80, resizeMode: 'contain' }}
-                  onError={() => {
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                marginBottom: '20px'
+              }}>
+                <img 
+                  src={logoUrl} 
+                  alt="Logo" 
+                  style={{
+                    height: '80px',
+                    objectFit: 'contain'
+                  }}
+                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
                     console.error('[Logo] Failed to load image from:', logoUrl);
                     console.error('[Logo] Make sure the Google Drive file is shared as "Anyone with the link"');
+                    e.currentTarget.style.display = 'none';
                   }}
                 />
-              </View>
+              </div>
             )}
-            <Text style={{ fontSize: 24, marginBottom: 10, textAlign: 'center', color: primaryColor }}>
-              Reset Password
-            </Text>
-          </View>
+            <h2 style={{
+            color: primaryColor,
+            fontSize: '24px',
+            marginBottom: '10px'
+            }}>
+            Reset Password
+            </h2>
+          </div>
           
           {forgotMessage ? (
-            <View>
-              <View style={{ textAlign: 'center', marginBottom: 20, padding: 15, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#16a34a' }}>
-                <Text style={{ color: '#16a34a', textAlign: 'center' }}>
-                  {forgotMessage}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => {
+            <div>
+              <div style={{
+                color: '#16a34a',
+                textAlign: 'center',
+                marginBottom: '20px',
+                padding: '15px',
+                backgroundColor: '#f0fdf4',
+                borderRadius: '8px',
+                border: '1px solid #16a34a'
+              }}>
+                {forgotMessage}
+              </div>
+              <button
+                onClick={() => {
                   setShowForgotPassword(false);
                   setForgotMessage('');
                   setForgotEmail('');
                   setError('');
                 }}
-                style={{ width: '100%', padding: 12, borderRadius: 8, backgroundColor: primaryColor }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: primaryColor,
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
               >
-                <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '600' }}>
-                  Back to Login
-                </Text>
-              </Pressable>
-            </View>
+                Back to Login
+              </button>
+            </div>
           ) : (
-            <View>
-              <View style={{ marginBottom: 20 }}>
-                <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
+            <form onSubmit={handleForgotPassword}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  color: '#6b7280',
+                  marginBottom: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}>
                   Email Address
-                </Text>
-                <TextInput
+                </label>
+                <input
+                  type="email"
                   value={forgotEmail}
-                  onChangeText={setForgotEmail}
-                  style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: '#f9fafb',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    color: '#111827',
+                    fontSize: '16px'
+                  }}
                   placeholder="Enter your email address"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
                 />
-              </View>
+              </div>
               
               {error && (
-                <View style={{ marginBottom: 20, textAlign: 'center' }}>
-                  <Text style={{ color: '#dc2626', fontSize: 14, textAlign: 'center' }}>
-                    {error}
-                  </Text>
-                </View>
+                <div style={{
+                  color: '#dc2626',
+                  marginBottom: '20px',
+                  textAlign: 'center',
+                  fontSize: '14px'
+                }}>
+                  {error}
+                </div>
               )}
               
-              <Pressable
-                onPress={handleForgotPassword}
+              <button
+                type="submit"
                 disabled={isLoading}
-                style={{ width: '100%', padding: 12, borderRadius: 8, marginBottom: 15, backgroundColor: isLoading ? '#d1d5db' : '#16a34a' }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: isLoading ? '#d1d5db' : '#16a34a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  marginBottom: '15px',
+                  fontWeight: '600'
+                }}
               >
-                <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '600' }}>
-                  {isLoading ? 'Sending...' : 'Send Reset Instructions'}
-                </Text>
-              </Pressable>
+                {isLoading ? 'Sending...' : 'Send Reset Instructions'}
+              </button>
               
-              <Pressable
-                onPress={() => {
+              <button
+                type="button"
+                onClick={() => {
                   setShowForgotPassword(false);
                   setError('');
                 }}
-                style={{ width: '100%', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: primaryColor }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'transparent',
+                  color: primaryColor,
+                  border: `1px solid ${primaryColor}`,
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
               >
-                <Text style={{ textAlign: 'center', fontSize: 16, fontWeight: '600', color: primaryColor }}>
-                  Back to Login
-                </Text>
-              </Pressable>
-            </View>
+                Back to Login
+              </button>
+            </form>
           )}
-        </View>
-      </ScrollView>
+        </div>
+      </div>
     );
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#ffffff' }} contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: 20 }}>
-      <View style={{ backgroundColor: '#ffffff', padding: 40, borderRadius: 12, borderWidth: 1, borderColor: '#e0e0e0', width: '100%', maxWidth: 400, shadowColor: 'rgba(147, 51, 234, 0.1)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 20, elevation: 4 }}>
-        <View style={{ textAlign: 'center', marginBottom: 30 }}>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      backgroundColor: '#ffffff',
+      padding: '20px'
+    }}>
+      <div style={{
+        backgroundColor: '#ffffff',
+        padding: '40px',
+        borderRadius: '12px',
+        border: '1px solid #e0e0e0',
+        width: '100%',
+        maxWidth: '400px',
+        boxShadow: '0 4px 20px rgba(147, 51, 234, 0.1)'
+      }}>
+        <div style={{
+          textAlign: 'center',
+          marginBottom: '30px'
+        }}>
           {logoUrl && (
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 20 }}>
-              <Image 
-                source={{ uri: logoUrl }} 
-                style={{ height: 80, resizeMode: 'contain' }}
-                onError={() => {
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginBottom: '20px'
+            }}>
+              <img 
+                src={logoUrl} 
+                alt="Logo" 
+                style={{
+                  height: '80px',
+                  objectFit: 'contain'
+                }}
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
                   console.error('[Logo] Failed to load image from:', logoUrl);
                   console.error('[Logo] Make sure the Google Drive file is shared as "Anyone with the link"');
+                  e.currentTarget.style.display = 'none';
                 }}
               />
-            </View>
+            </div>
           )}
-          <Text style={{ fontSize: 28, marginBottom: 10, fontWeight: '700', textAlign: 'center', color: primaryColor }}>
+          <h1 style={{
+            color: primaryColor,
+            fontSize: '16px',
+            marginBottom: '10px',
+            fontWeight: '700'
+          }}>
             Powered by Sync
-          </Text>
-          <Text style={{ color: '#6b7280', fontSize: 16, textAlign: 'center' }}>
+          </h1>
+          <p style={{
+            color: '#6b7280',
+            fontSize: '16px'
+          }}>
             Sign in to your account
-          </Text>
-        </View>
+          </p>
+        </div>
         
-        <View>
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}>
               Email or Username
-            </Text>
-            <TextInput
+            </label>
+            <input
+              type="text"
               value={identifier}
-              onChangeText={setIdentifier}
-              style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
+              onChange={(e) => setIdentifier(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#f9fafb',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                color: '#111827',
+                fontSize: '16px'
+              }}
               placeholder="Enter your email or username"
-              autoCapitalize="none"
             />
-          </View>
+          </div>
           
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{ display: 'flex', color: '#6b7280', marginBottom: 8, fontSize: 14, fontWeight: '500' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}>
               Password
-            </Text>
-            <TextInput
+            </label>
+            <input
+              type="password"
               value={password}
-              onChangeText={setPassword}
-              style={{ width: '100%', padding: 12, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, color: '#111827', fontSize: 16 }}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#f9fafb',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                color: '#111827',
+                fontSize: '16px'
+              }}
               placeholder="Enter your password"
-              secureTextEntry
             />
-          </View>
+          </div>
           
           {error && (
-            <View style={{ marginBottom: 20, textAlign: 'center' }}>
-              <Text style={{ color: '#dc2626', fontSize: 14, textAlign: 'center' }}>
-                {error}
-              </Text>
-            </View>
+            <div style={{
+              color: '#dc2626',
+              marginBottom: '20px',
+              textAlign: 'center',
+              fontSize: '14px'
+            }}>
+              {error}
+            </div>
           )}
           
-          <Pressable
-            onPress={handleSubmit}
+          <button
+            type="submit"
             disabled={isLoading}
-            style={{ width: '100%', padding: 12, borderRadius: 8, marginBottom: 15, backgroundColor: isLoading ? '#d1d5db' : primaryColor }}
+            style={{
+              width: '100%',
+              padding: '12px',
+              backgroundColor: isLoading ? '#d1d5db' : primaryColor,
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              marginBottom: '15px'
+            }}
           >
-            <Text style={{ color: '#ffffff', textAlign: 'center', fontSize: 16, fontWeight: '700' }}>
-              {isLoading ? 'Signing In...' : 'Sign In'}
-            </Text>
-          </Pressable>
+            {isLoading ? 'Signing In...' : 'Sign In'}
+          </button>
           
-          <View style={{ textAlign: 'center' }}>
-            <Pressable
-              onPress={() => {
+          <div style={{
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+          }}>
+            <button
+              type="button"
+              onClick={() => {
                 setShowForgotPassword(true);
                 setError('');
               }}
+              style={{
+                backgroundColor: 'transparent',
+                color: primaryColor,
+                border: 'none',
+                fontSize: '14px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontWeight: '500'
+              }}
             >
-              <Text style={{ fontSize: 14, fontWeight: '500', textDecorationLine: 'underline', textAlign: 'center', color: primaryColor }}>
-                Forgot your password?
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
+              Forgot your password?
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.open('https://apply.atssfiber.ph', '_blank');
+              }}
+              style={{
+                backgroundColor: 'transparent',
+                color: primaryColor,
+                border: 'none',
+                fontSize: '14px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontWeight: '500'
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
-import { ExternalLink, X, Info } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ExternalLink, X, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { relatedDataService } from '../services/relatedDataService';
+import RelatedDataTable from './RelatedDataTable';
+import { relatedDataColumns } from '../config/relatedDataColumns';
 
 interface InvoiceRecord {
   id: string;
@@ -42,14 +43,33 @@ interface InvoiceDetailsProps {
 const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoiceRecord }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [detailsWidth, setDetailsWidth] = useState<number>(600);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+
+  // Related staggered payments state
+  const [expandedStaggered, setExpandedStaggered] = useState(false);
+  const [relatedStaggered, setRelatedStaggered] = useState<any[]>([]);
+  const [fullRelatedStaggered, setFullRelatedStaggered] = useState<any[]>([]);
+  const [staggeredCount, setStaggeredCount] = useState(0);
+  const [expandedModalSection, setExpandedModalSection] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadTheme = async () => {
-      const theme = await AsyncStorage.getItem('theme');
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-    loadTheme();
+
+    checkDarkMode();
+
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -61,141 +81,320 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoiceRecord }) => {
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
+  // Fetch related staggered payments when account number changes
+  useEffect(() => {
+    const fetchRelatedStaggered = async () => {
+      if (!invoiceRecord.accountNo) {
+        console.log('❌ No accountNo found in invoice record');
+        return;
+      }
+
+      const accountNo = invoiceRecord.accountNo;
+      console.log('🔍 Fetching related staggered payments for account:', accountNo);
+
+      try {
+        const result = await relatedDataService.getRelatedStaggered(accountNo);
+        console.log('✅ Staggered payments fetched:', { count: result.count || 0, hasData: (result.data || []).length > 0 });
+        // Store full data for modal view
+        setFullRelatedStaggered(result.data || []);
+        // Limit to 5 latest items for dropdown display
+        setRelatedStaggered((result.data || []).slice(0, 5));
+        setStaggeredCount(result.count || 0);
+      } catch (error) {
+        console.error('❌ Error fetching staggered payments:', error);
+        setRelatedStaggered([]);
+        setFullRelatedStaggered([]);
+        setStaggeredCount(0);
+      }
+    };
+
+    fetchRelatedStaggered();
+  }, [invoiceRecord.accountNo]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const diff = startXRef.current - e.clientX;
+      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
+
+      setDetailsWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    startXRef.current = e.clientX;
+    startWidthRef.current = detailsWidth;
+  };
+
+  const handleExpandModalOpen = (sectionKey: string) => {
+    setExpandedModalSection(sectionKey);
+  };
+
+  const handleExpandModalClose = () => {
+    setExpandedModalSection(null);
+  };
+
   return (
-    <View style={{ height: '100%', flexDirection: 'column', borderLeftWidth: 1, position: 'relative', backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderLeftColor: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : '#d1d5db', width: detailsWidth }}>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-        <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '600', paddingRight: 16, minWidth: 0, flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
+    <div className={`h-full flex flex-col border-l relative ${isDarkMode
+        ? 'bg-gray-900 text-white border-white border-opacity-30'
+        : 'bg-white text-gray-900 border-gray-300'
+      }`} style={{ width: `${detailsWidth}px` }}>
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
+        style={{
+          backgroundColor: isResizing ? (colorPalette?.primary || '#ea580c') : 'transparent'
+        }}
+        onMouseEnter={(e) => {
+          if (!isResizing) {
+            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#ea580c';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isResizing) {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }
+        }}
+        onMouseDown={handleMouseDownResize}
+      />
+      {/* Header with Invoice No and Actions */}
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode
+          ? 'bg-gray-800 border-gray-700'
+          : 'bg-gray-100 border-gray-200'
+        }`}>
+        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>
           {invoiceRecord.invoiceNo || '2508182' + invoiceRecord.id}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Pressable style={{ padding: 8, borderRadius: 4 }}>
-            <X size={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-          </Pressable>
-        </View>
-      </View>
+        </h1>
+        <div className="flex items-center space-x-2 flex-shrink-0">
+          <button className={`p-2 rounded transition-colors ${isDarkMode
+              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+            }`}>
+            <X size={18} />
+          </button>
+        </div>
+      </div>
 
-      <ScrollView style={{ flex: 1 }}>
-        <View>
-          <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Invoice No.</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.invoiceNo || '2508182' + invoiceRecord.id}</Text>
-            </View>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className={`divide-y ${isDarkMode ? 'divide-gray-800' : 'divide-gray-200'
+          }`}>
+          {/* Invoice Info */}
+          <div className="px-5 py-4">
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice No.</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.invoiceNo || '2508182' + invoiceRecord.id}</span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Account No.</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: '#ef4444' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Account No.</span>
+              <div className="flex items-center">
+                <span className="text-red-500">
                   {invoiceRecord.accountNo} | {invoiceRecord.fullName} | {invoiceRecord.address}
-                </Text>
-                <Info size={16} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginLeft: 8 }} />
-              </View>
-            </View>
-            
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Full Name</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.fullName}</Text>
-            </View>
+                </span>
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+              </div>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Invoice Date</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.invoiceDate}</Text>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Full Name</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.fullName}</span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Contact Number</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.contactNumber}</Text>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Date</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.invoiceDate}</span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Email Address</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.emailAddress}</Text>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Contact Number</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.contactNumber}</span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Plan</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.plan}</Text>
-                <Info size={16} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginLeft: 8 }} />
-              </View>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Email Address</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.emailAddress}</span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Provider</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.provider || 'SWITCH'}</Text>
-                <Info size={16} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={{ marginLeft: 8 }} />
-              </View>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Plan</span>
+              <div className="flex items-center">
+                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.plan}</span>
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+              </div>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Remarks</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.remarks || 'System Generated'}</Text>
-            </View>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Provider</span>
+              <div className="flex items-center">
+                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.provider || 'SWITCH'}</span>
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+              </div>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Invoice Balance</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Remarks</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.remarks || 'System Generated'}</span>
+            </div>
+
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Balance</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
                 ₱{invoiceRecord.invoiceBalance?.toFixed(2) || '0.00'}
-              </Text>
-            </View>
+              </span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Invoice Status</Text>
-              <Text style={{ color: invoiceRecord.invoiceStatus === 'Unpaid' ? '#ef4444' : '#22c55e' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Status</span>
+              <span className={`${invoiceRecord.invoiceStatus === 'Unpaid' ? 'text-red-500' : 'text-green-500'}`}>
                 {invoiceRecord.invoiceStatus || 'Unpaid'}
-              </Text>
-            </View>
+              </span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Others and Basic Charges</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Others and Basic Charges</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
                 ₱{invoiceRecord.otherCharges?.toFixed(2) || '0.00'}
-              </Text>
-            </View>
+              </span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Total Amount</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Total Amount</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
                 ₱{invoiceRecord.totalAmountDue?.toFixed(2) || '0.00'}
-              </Text>
-            </View>
+              </span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Invoice Payment</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Payment</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
                 ₱{invoiceRecord.invoicePayment?.toFixed(2) || '0.00'}
-              </Text>
-            </View>
+              </span>
+            </div>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Due Date</Text>
-              <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{invoiceRecord.dueDate || '9/30/2025'}</Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+            <div className="flex justify-between items-center py-2">
+              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Due Date</span>
+              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.dueDate || '9/30/2025'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <View style={{ marginTop: 'auto', borderTopWidth: 1, borderTopColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-        <View style={{ paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827' }}>Related Staggered Payments</Text>
-            <View style={{ marginLeft: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999, backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }}>
-              <Text style={{ fontSize: 12, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                {invoiceRecord.staggeredPaymentsCount || 0}
-              </Text>
-            </View>
-          </View>
-        </View>
-        <View style={{ paddingHorizontal: 20, paddingVertical: 64, alignItems: 'center', color: isDarkMode ? '#6b7280' : '#9ca3af' }}>
-          <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>No items</Text>
-        </View>
-      </View>
-    </View>
+      {/* Related Staggered Payments Section */}
+      <div className={`mt-auto border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
+        }`}>
+        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+          }`}>
+          <div className={`w-full px-5 py-3 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+            }`}>
+            <div className="flex items-center space-x-2">
+              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Related Staggered Payments</span>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                  ? 'bg-gray-600 text-white'
+                  : 'bg-gray-300 text-gray-900'
+                }`}>{staggeredCount}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleExpandModalOpen('staggered');
+                }}
+                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
+                  }`}
+              >
+                {expandedStaggered ? 'Collapse' : 'Expand'}
+              </button>
+              <button
+                onClick={() => setExpandedStaggered(!expandedStaggered)}
+                className="flex items-center"
+              >
+                {expandedStaggered ? (
+                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                ) : (
+                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {expandedStaggered && (
+            <div className="px-5 pb-4">
+              <RelatedDataTable
+                data={relatedStaggered}
+                columns={relatedDataColumns.staggered}
+                isDarkMode={isDarkMode}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded Modal for Related Data */}
+      {expandedModalSection && (
+        <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 9999 }}>
+          {/* Modal Header */}
+          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+            }`}>
+            <div className="flex items-center space-x-3">
+              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                All Related Staggered Payments
+              </h2>
+              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
+                  ? 'bg-gray-600 text-white'
+                  : 'bg-gray-300 text-gray-900'
+                }`}>
+                {staggeredCount} items
+              </span>
+            </div>
+            <button
+              onClick={handleExpandModalClose}
+              className={`p-2 rounded transition-colors ${isDarkMode
+                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                }`}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <RelatedDataTable
+              data={fullRelatedStaggered}
+              columns={relatedDataColumns.staggered}
+              isDarkMode={isDarkMode}
+            />
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

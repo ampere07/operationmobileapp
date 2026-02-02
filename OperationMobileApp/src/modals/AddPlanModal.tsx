@@ -107,6 +107,12 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
       ...notification,
       isOpen: false
     });
+    
+    // If it was a success notification, close the modal and refresh
+    if (notification.type === 'success') {
+      handleClose();
+      onSave();
+    }
   };
 
   const validateForm = (): boolean => {
@@ -161,8 +167,7 @@ const AddPlanModal: React.FC<AddPlanModalProps> = ({
           'Success',
           data.message || `Plan ${editingPlan ? 'updated' : 'added'} successfully`
         );
-        onSave();
-        handleClose();
+        // Don't close immediately - wait for user to click OK on notification
       } else {
         if (data.errors) {
           const errorMessages = Object.values(data.errors).flat().join('\n');

@@ -20,7 +20,7 @@ export interface UsernamePattern {
 
 interface PatternCreateData {
   pattern_name: string;
-  pattern_type: 'username' | 'password';
+  pattern_type: 'username' | 'password' | 'port';
   sequence: SequenceItem[];
   created_by?: string;
 }
@@ -38,7 +38,7 @@ interface PatternsListResponse {
 }
 
 export const pppoeService = {
-  getPatterns: async (type?: 'username' | 'password'): Promise<UsernamePattern[]> => {
+  getPatterns: async (type?: 'username' | 'password' | 'port'): Promise<UsernamePattern[]> => {
     const params = type ? { pattern_type: type } : {};
     const response = await api.get<PatternsListResponse>('/pppoe/patterns', { params });
     return response.data.data;

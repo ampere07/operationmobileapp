@@ -22,11 +22,24 @@ interface ApiResponse<T> {
   success: boolean;
   data?: T;
   message?: string;
+  pagination?: {
+    current_page: number;
+    per_page: number;
+    has_more: boolean;
+  };
 }
 
 export const dcNoticeService = {
-  async getAll(params?: { page?: number; limit?: number; search?: string; date?: string }): Promise<ApiResponse<DCNotice[]>> {
-    const response = await api.get('/dc-notices', { params });
+  async getAll(fastMode: boolean = false, page: number = 1, limit: number = 50, search?: string, date?: string): Promise<ApiResponse<DCNotice[]>> {
+    const response = await api.get('/dc-notices', {
+      params: {
+        fast: fastMode ? '1' : '0',
+        page,
+        limit,
+        search,
+        date
+      }
+    });
     return response.data as ApiResponse<DCNotice[]>;
   },
 
