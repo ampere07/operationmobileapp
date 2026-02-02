@@ -32,7 +32,22 @@ export const initializeCsrf = async (): Promise<void> => {
 apiClient.interceptors.request.use(
   async (config) => {
     // Check for auth token in AsyncStorage if you use Bearer tokens
-    const token = await AsyncStorage.getItem('authToken');
+    // Check for auth token in AsyncStorage
+    let token = await AsyncStorage.getItem('authToken');
+
+    // Fallback: Check authData object
+    if (!token) {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.token) token = parsed.token;
+        } catch (e) {
+          console.error('Error parsing authData in interceptor', e);
+        }
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

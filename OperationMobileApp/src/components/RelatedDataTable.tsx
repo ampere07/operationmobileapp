@@ -54,17 +54,12 @@ const RelatedDataTable: React.FC<RelatedDataTableProps> = ({
           >
             {columns.map((column) => (
               <View key={column.key} className="px-4 py-3 w-32 justify-center">
-                {column.render ? (
-                  // We need to ensure the render function returns a RN element.
-                  // If the original render returned <span>, it will crash. 
-                  // However, for migration sake, we assume render is either not used or updated elsewhere.
-                  // If it's just raw text, we wrap it.
-                  <View>{column.render(row[column.key], row)}</View>
-                ) : (
-                  <Text className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    {row[column.key] !== undefined && row[column.key] !== null ? String(row[column.key]) : 'N/A'}
-                  </Text>
-                )}
+                <Text className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {column.render
+                    ? column.render(row[column.key], row) as React.ReactNode
+                    : (row[column.key] !== undefined && row[column.key] !== null ? String(row[column.key]) : 'N/A')
+                  }
+                </Text>
               </View>
             ))}
           </View>
