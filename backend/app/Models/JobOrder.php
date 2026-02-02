@@ -78,4 +78,9 @@ class JobOrder extends Model
     {
         return $this->hasMany(JobOrderItem::class, 'job_order_id', 'id');
     }
+
+    public function lcpnapLocation()
+    {
+        return $this->belongsTo(LCPNAPLocation::class, 'lcpnap', 'lcpnap_name');
+    }
 }

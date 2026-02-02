@@ -118,6 +118,19 @@ class PppoeUsernameService
                 $cleaned = preg_replace('/[^0-9]/', '', $mobileNumber);
                 return substr($cleaned, -6);
             
+            case 'lcp':
+                // Get LCP value directly from customerData (already has LP prefix in database)
+                $lcpValue = $customerData['lcp'] ?? '';
+                return strtoupper($lcpValue);
+            
+            case 'nap':
+                // Get NAP value directly from customerData (already has NP prefix in database)
+                $napValue = $customerData['nap'] ?? '';
+                return strtoupper($napValue);
+
+            case 'port':
+                return strtoupper($customerData['port'] ?? '');
+            
             case 'random_4_digits':
                 return str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
             
@@ -188,8 +201,8 @@ class PppoeUsernameService
 
     private function sanitizeUsername(string $username): string
     {
-        $username = strtolower($username);
-        $username = preg_replace('/[^a-z0-9]/', '', $username);
+        // Remove special characters but keep alphanumeric (both upper and lowercase)
+        $username = preg_replace('/[^a-zA-Z0-9]/', '', $username);
         $username = preg_replace('/\s+/', '', $username);
         
         return $username;

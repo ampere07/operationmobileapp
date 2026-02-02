@@ -1,5 +1,6 @@
 import apiClient from '../config/api';
 import { JobOrderData } from '../types/jobOrder';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Export JobOrderData for backwards compatibility
 export type { JobOrderData } from '../types/jobOrder';
@@ -27,12 +28,12 @@ export const createJobOrder = async (jobOrderData: JobOrderData) => {
 export const getJobOrders = async (assignedEmail?: string) => {
   try {
     const params: { assigned_email?: string; user_role?: string } = {};
-    
+
     if (assignedEmail) {
       params.assigned_email = assignedEmail;
     }
-    
-    const authData = localStorage.getItem('authData');
+
+    const authData = await AsyncStorage.getItem('authData');
     if (authData) {
       try {
         const userData = JSON.parse(authData);
@@ -43,32 +44,27 @@ export const getJobOrders = async (assignedEmail?: string) => {
         console.error('Failed to parse authData:', err);
       }
     }
-    
+
     const response = await apiClient.get<ApiResponse<JobOrderData[]>>('/job-orders', { params });
-    
+
     // Process the data to ensure it matches our expected format
     if (response.data && response.data.success && Array.isArray(response.data.data)) {
-      // Map any database field names that might be different from our interface
       const processedData = response.data.data.map(item => {
         return {
           ...item,
-          // Add any field mappings here if the database column names differ from our interface
-          // For example, if the database returns job_order_id but our interface expects JobOrder_ID:
-          // JobOrder_ID: item.job_order_id,
-          id: item.id || item.JobOrder_ID
+          id: item.id || (item as any).JobOrder_ID
         };
       });
-      
+
       return {
         ...response.data,
         data: processedData
       };
     }
-    
+
     return response.data;
   } catch (error) {
     console.error('Error fetching job orders:', error);
-    // Return a formatted error response instead of throwing
     return {
       success: false,
       data: [],
@@ -79,7 +75,6 @@ export const getJobOrders = async (assignedEmail?: string) => {
 
 export const getJobOrder = async (id: string | number) => {
   try {
-    // Ensure ID is a string for the API URL
     const idStr = id.toString();
     const response = await apiClient.get<ApiResponse<JobOrderData>>(`/job-orders/${idStr}`);
     return response.data;
@@ -91,7 +86,6 @@ export const getJobOrder = async (id: string | number) => {
 
 export const updateJobOrder = async (id: string | number, jobOrderData: Partial<JobOrderData>) => {
   try {
-    // Ensure ID is a string for the API URL
     const idStr = id.toString();
     const response = await apiClient.put<ApiResponse<JobOrderData>>(`/job-orders/${idStr}`, jobOrderData);
     return response.data;

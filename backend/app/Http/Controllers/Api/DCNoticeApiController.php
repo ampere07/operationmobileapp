@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DCNotice;
-use App\Models\BillingDetail;
+use App\Models\BillingAccount;
 use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,34 +16,86 @@ class DCNoticeApiController extends Controller
     {
         try {
             $page = $request->input('page', 1);
-            $limit = $request->input('limit', 100);
+            $limit = $request->input('limit', 50); // Reduced to 50 for faster response
             $search = $request->input('search', '');
             $date = $request->input('date', '');
+            $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
 
-            $query = DCNotice::with(['account', 'invoice'])
-                ->orderBy('dc_notice_date', 'desc');
+            // Build query based on fast mode
+            if ($fastMode) {
+                // Fast mode: No eager loading
+                $query = DCNotice::orderBy('dc_notice_date', 'desc');
+            } else {
+                // Normal mode: Include relationships
+                $query = DCNotice::with(['account.customer', 'invoice'])
+                    ->orderBy('dc_notice_date', 'desc');
+            }
 
             if ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->whereHas('account', function ($accountQuery) use ($search) {
-                        $accountQuery->where('account_no', 'LIKE', "%{$search}%")
-                            ->orWhere('full_name', 'LIKE', "%{$search}%");
+                if ($fastMode) {
+                    // Simple search in fast mode
+                    $query->where('account_id', 'LIKE', "%{$search}%");
+                } else {
+                    // Complex search with relationships in normal mode
+                    $query->where(function ($q) use ($search) {
+                        $q->whereHas('account', function ($accountQuery) use ($search) {
+                            $accountQuery->where('account_no', 'LIKE', "%{$search}%");
+                        })->orWhereHas('account.customer', function ($customerQuery) use ($search) {
+                            $customerQuery->where('first_name', 'LIKE', "%{$search}%")
+                                          ->orWhere('last_name', 'LIKE', "%{$search}%");
+                        });
                     });
-                });
+                }
             }
 
             if ($date) {
                 $query->whereDate('dc_notice_date', $date);
             }
 
-            $total = $query->count();
-
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
             $dcNotices = $query->skip(($page - 1) * $limit)
-                ->take($limit)
+                ->take($limit + 1) // Fetch one extra
                 ->get();
 
+            // Check if there are more pages
+            $hasMore = $dcNotices->count() > $limit;
+
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $dcNotices = $dcNotices->slice(0, $limit);
+            }
+
+            // Fast mode: Return data immediately without customer details
+            if ($fastMode) {
+                $enrichedData = $dcNotices->map(function ($notice) {
+                    return [
+                        'id' => $notice->id,
+                        'account_id' => $notice->account_id,
+                        'invoice_id' => $notice->invoice_id,
+                        'dc_notice_date' => $notice->dc_notice_date?->format('Y-m-d H:i:s'),
+                        'print_link' => $notice->print_link,
+                        'created_at' => $notice->created_at?->format('Y-m-d H:i:s'),
+                        'created_by_user_id' => $notice->created_by_user_id,
+                        'updated_at' => $notice->updated_at?->format('Y-m-d H:i:s'),
+                        'updated_by_user_id' => $notice->updated_by_user_id,
+                    ];
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $enrichedData->values(),
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'has_more' => $hasMore
+                    ]
+                ]);
+            }
+
+            // Normal mode: Include customer data
             $enrichedData = $dcNotices->map(function ($notice) {
                 $account = $notice->account;
+                $customer = $account?->customer;
                 
                 return [
                     'id' => $notice->id,
@@ -56,24 +108,21 @@ class DCNoticeApiController extends Controller
                     'updated_at' => $notice->updated_at?->format('Y-m-d H:i:s'),
                     'updated_by_user_id' => $notice->updated_by_user_id,
                     'account_no' => $account?->account_no ?? null,
-                    'full_name' => $account?->full_name ?? null,
-                    'contact_number' => $account?->contact_number ?? null,
-                    'email_address' => $account?->email_address ?? null,
-                    'address' => $account?->address ?? null,
-                    'plan' => $account?->plan ?? null,
+                    'full_name' => $customer?->full_name ?? null,
+                    'contact_number' => $customer?->contact_number_primary ?? null,
+                    'email_address' => $customer?->email_address ?? null,
+                    'address' => $customer?->address ?? null,
+                    'plan' => $customer?->desired_plan ?? null,
                 ];
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $enrichedData,
+                'data' => $enrichedData->values(),
                 'pagination' => [
                     'current_page' => (int) $page,
-                    'total_pages' => (int) ceil($total / $limit),
-                    'total_items' => $total,
                     'per_page' => (int) $limit,
-                    'from' => (($page - 1) * $limit) + 1,
-                    'to' => min($page * $limit, $total)
+                    'has_more' => $hasMore
                 ]
             ]);
 
@@ -96,9 +145,10 @@ class DCNoticeApiController extends Controller
     public function show($id)
     {
         try {
-            $dcNotice = DCNotice::with(['account', 'invoice'])->findOrFail($id);
+            $dcNotice = DCNotice::with(['account.customer', 'invoice'])->findOrFail($id);
 
             $account = $dcNotice->account;
+            $customer = $account?->customer;
             
             $data = [
                 'id' => $dcNotice->id,
@@ -111,11 +161,11 @@ class DCNoticeApiController extends Controller
                 'updated_at' => $dcNotice->updated_at?->format('Y-m-d H:i:s'),
                 'updated_by_user_id' => $dcNotice->updated_by_user_id,
                 'account_no' => $account?->account_no ?? null,
-                'full_name' => $account?->full_name ?? null,
-                'contact_number' => $account?->contact_number ?? null,
-                'email_address' => $account?->email_address ?? null,
-                'address' => $account?->address ?? null,
-                'plan' => $account?->plan ?? null,
+                'full_name' => $customer?->full_name ?? null,
+                'contact_number' => $customer?->contact_number_primary ?? null,
+                'email_address' => $customer?->email_address ?? null,
+                'address' => $customer?->address ?? null,
+                'plan' => $customer?->desired_plan ?? null,
             ];
 
             return response()->json([

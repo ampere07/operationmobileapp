@@ -25,7 +25,7 @@ class Overdue extends Model
 
     public function account()
     {
-        return $this->belongsTo(BillingDetail::class, 'account_no', 'account_no');
+        return $this->belongsTo(BillingAccount::class, 'account_no', 'account_no');
     }
 
     public function invoice()
@@ -43,3 +43,4 @@ class Overdue extends Model
         return $this->belongsTo(User::class, 'updated_by_user_id');
     }
 }
+

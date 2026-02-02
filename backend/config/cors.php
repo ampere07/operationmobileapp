@@ -19,9 +19,7 @@ return [
         'https://sync.atssfiber.ph',
         'https://backend.atssfiber.ph',
         'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        '192.168.100.119:8081',
-        'exp://192.168.100.119:8081'
+        'http://127.0.0.1:3000'
     ],
 
     'allowed_origins_patterns' => [],

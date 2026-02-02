@@ -15,7 +15,17 @@ class ServiceOrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            Log::info('Fetching service orders with related data');
+            $page = $request->input('page', 1);
+            $limit = $request->input('limit', 50);
+            $search = $request->input('search', '');
+            $fastMode = $request->input('fast', false);
+
+            Log::info('ServiceOrderController: Starting to fetch service orders', [
+                'page' => $page,
+                'limit' => $limit,
+                'search' => $search,
+                'fast_mode' => $fastMode
+            ]);
             
             $query = "SELECT * FROM service_orders";
             $params = [];
@@ -35,14 +45,71 @@ class ServiceOrderController extends Controller
                     'cutoff_date' => $sevenDaysAgo
                 ]);
             }
+
+            // Apply search filter
+            if ($search) {
+                $whereClauses[] = "(account_no LIKE ? OR assigned_email LIKE ? OR support_status LIKE ?)";
+                $searchTerm = "%{$search}%";
+                $params[] = $searchTerm;
+                $params[] = $searchTerm;
+                $params[] = $searchTerm;
+            }
             
             if (!empty($whereClauses)) {
                 $query .= " WHERE " . implode(' AND ', $whereClauses);
             }
             
             $query .= " ORDER BY created_at DESC";
+            
+            // Add pagination with +1 for hasMore check
+            $offset = ($page - 1) * $limit;
+            $query .= " LIMIT ? OFFSET ?";
+            $params[] = $limit + 1;
+            $params[] = $offset;
+            
             $serviceOrders = DB::select($query, $params);
             
+            // Check if there are more pages
+            $hasMore = count($serviceOrders) > $limit;
+            
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                array_pop($serviceOrders);
+            }
+
+            Log::info('ServiceOrderController: Fetched ' . count($serviceOrders) . ' service orders');
+
+            // Fast mode: Return minimal data
+            if ($fastMode) {
+                $enrichedOrders = [];
+                foreach ($serviceOrders as $order) {
+                    $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
+                    
+                    $enrichedOrders[] = [
+                        'id' => $order->id,
+                        'ticket_id' => $order->ticket_id ?? $order->id,
+                        'timestamp' => $order->timestamp,
+                        'account_no' => $order->account_no,
+                        'full_name' => $customer ? trim(($customer->first_name ?? '') . ' ' . ($customer->middle_initial ?? '') . ' ' . ($customer->last_name ?? '')) : null,
+                        'support_status' => $order->support_status,
+                        'assigned_email' => $order->assigned_email,
+                        'visit_status' => $order->visit_status,
+                        'updated_at' => $order->updated_at,
+                    ];
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $enrichedOrders,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'has_more' => $hasMore
+                    ]
+                ]);
+            }
+
+            // Normal mode: Return full data with all relationships
             $enrichedOrders = [];
             foreach ($serviceOrders as $order) {
                 $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
@@ -118,23 +185,23 @@ class ServiceOrderController extends Controller
                 ];
             }
 
-            $count = count($enrichedOrders);
-            Log::info('Found ' . $count . ' service orders');
-
             return response()->json([
                 'success' => true,
                 'data' => $enrichedOrders,
-                'count' => $count
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'has_more' => $hasMore
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching service orders: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Trace: ' . $e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch service orders: ' . $e->getMessage(),
+                'message' => 'Failed to fetch service orders',
                 'error' => $e->getMessage(),
-                'file' => $e->getFile() . ':' . $e->getLine()
             ], 500);
         }
     }

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Overdue;
-use App\Models\BillingDetail;
+use App\Models\BillingAccount;
 use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,9 +16,10 @@ class OverdueApiController extends Controller
     {
         try {
             $page = $request->input('page', 1);
-            $limit = $request->input('limit', 100);
+            $limit = $request->input('limit', 50); // Reduced to 50 for faster response
             $search = $request->input('search', '');
             $date = $request->input('date', '');
+            $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
 
             $query = Overdue::orderBy('overdue_date', 'desc');
 
@@ -32,14 +33,58 @@ class OverdueApiController extends Controller
                 $query->whereDate('overdue_date', $date);
             }
 
-            $total = $query->count();
-
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
             $overdues = $query->skip(($page - 1) * $limit)
-                ->take($limit)
+                ->take($limit + 1) // Fetch one extra
                 ->get();
 
-            $enrichedData = $overdues->map(function ($overdue) {
-                $billingDetail = BillingDetail::where('account_no', $overdue->account_no)->first();
+            // Check if there are more pages
+            $hasMore = $overdues->count() > $limit;
+
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $overdues = $overdues->slice(0, $limit);
+            }
+
+            // Fast mode: Return data immediately without customer details
+            if ($fastMode) {
+                $enrichedData = $overdues->map(function ($overdue) {
+                    return [
+                        'id' => $overdue->id,
+                        'account_no' => $overdue->account_no,
+                        'invoice_id' => $overdue->invoice_id,
+                        'overdue_date' => $overdue->overdue_date?->format('Y-m-d H:i:s'),
+                        'print_link' => $overdue->print_link,
+                        'created_at' => $overdue->created_at?->format('Y-m-d H:i:s'),
+                        'created_by_user_id' => $overdue->created_by_user_id,
+                        'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
+                        'updated_by_user_id' => $overdue->updated_by_user_id,
+                    ];
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $enrichedData->values(),
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'has_more' => $hasMore
+                    ]
+                ]);
+            }
+
+            // Normal mode: Fetch customer data in bulk to avoid N+1 queries
+            $accountNos = $overdues->pluck('account_no')->unique()->toArray();
+
+            // Bulk fetch accounts with customers
+            $accounts = BillingAccount::whereIn('account_no', $accountNos)
+                ->with('customer')
+                ->get()
+                ->keyBy('account_no');
+
+            $enrichedData = $overdues->map(function ($overdue) use ($accounts) {
+                $billingAccount = $accounts->get($overdue->account_no);
+                $customer = $billingAccount?->customer;
                 
                 return [
                     'id' => $overdue->id,
@@ -51,24 +96,21 @@ class OverdueApiController extends Controller
                     'created_by_user_id' => $overdue->created_by_user_id,
                     'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
                     'updated_by_user_id' => $overdue->updated_by_user_id,
-                    'full_name' => $billingDetail?->full_name ?? null,
-                    'contact_number' => $billingDetail?->contact_number ?? null,
-                    'email_address' => $billingDetail?->email_address ?? null,
-                    'address' => $billingDetail?->address ?? null,
-                    'plan' => $billingDetail?->plan ?? null,
+                    'full_name' => $customer?->full_name ?? null,
+                    'contact_number' => $customer?->contact_number_primary ?? null,
+                    'email_address' => $customer?->email_address ?? null,
+                    'address' => $customer?->address ?? null,
+                    'plan' => $customer?->desired_plan ?? null,
                 ];
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $enrichedData,
+                'data' => $enrichedData->values(),
                 'pagination' => [
                     'current_page' => (int) $page,
-                    'total_pages' => (int) ceil($total / $limit),
-                    'total_items' => $total,
                     'per_page' => (int) $limit,
-                    'from' => (($page - 1) * $limit) + 1,
-                    'to' => min($page * $limit, $total)
+                    'has_more' => $hasMore
                 ]
             ]);
 
@@ -93,7 +135,8 @@ class OverdueApiController extends Controller
         try {
             $overdue = Overdue::findOrFail($id);
 
-            $billingDetail = BillingDetail::where('account_no', $overdue->account_no)->first();
+            $billingAccount = BillingAccount::where('account_no', $overdue->account_no)->with('customer')->first();
+            $customer = $billingAccount?->customer;
             
             $data = [
                 'id' => $overdue->id,
@@ -105,11 +148,11 @@ class OverdueApiController extends Controller
                 'created_by_user_id' => $overdue->created_by_user_id,
                 'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
                 'updated_by_user_id' => $overdue->updated_by_user_id,
-                'full_name' => $billingDetail?->full_name ?? null,
-                'contact_number' => $billingDetail?->contact_number ?? null,
-                'email_address' => $billingDetail?->email_address ?? null,
-                'address' => $billingDetail?->address ?? null,
-                'plan' => $billingDetail?->plan ?? null,
+                'full_name' => $customer?->full_name ?? null,
+                'contact_number' => $customer?->contact_number_primary ?? null,
+                'email_address' => $customer?->email_address ?? null,
+                'address' => $customer?->address ?? null,
+                'plan' => $customer?->desired_plan ?? null,
             ];
 
             return response()->json([

@@ -1,107 +1,67 @@
 import React, { useState, useEffect } from 'react';
+import { View, Text, Modal, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface ConfirmationModalProps {
   title: string;
   message: string;
-  confirmText: string;
-  cancelText: string;
+  confirmText?: string;
+  cancelText?: string;
   onConfirm: () => void;
   onCancel: () => void;
   isOpen: boolean;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
+const MoveToJoModal: React.FC<ConfirmationModalProps> = ({
   title,
   message,
-  confirmText,
-  cancelText,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
   onConfirm,
   onCancel,
   isOpen
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
+    const init = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme !== 'light');
+      const palette = await settingsColorPaletteService.getActive();
+      setColorPalette(palette);
     };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    init();
   }, []);
 
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-    fetchColorPalette();
-  }, []);
-
-  if (!isOpen) return null;
-  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className={`rounded shadow-lg p-6 max-w-md ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
-      }`}>
-        <div className="mb-4">
-          <h3 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{title}</h3>
-        </div>
-        <p className={`mb-6 ${
-          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-        }`}>{message}</p>
-        <div className="flex justify-end space-x-4">
-          <button 
-            className={`px-4 py-2 rounded transition-colors ${
-              isDarkMode 
-                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-            }`}
-            onClick={onCancel}
-          >
-            {cancelText}
-          </button>
-          <button 
-            className="text-white px-4 py-2 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-            }}
-            onClick={onConfirm}
-          >
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal visible={isOpen} transparent animationType="fade">
+      <View className="flex-1 bg-black/50 justify-center items-center p-4">
+        <View className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm shadow-xl">
+          <Text className="text-xl font-bold mb-4 text-gray-900 dark:text-white">{title}</Text>
+          <Text className="mb-6 text-gray-700 dark:text-gray-300">{message}</Text>
+
+          <View className="flex-row justify-end space-x-3">
+            <TouchableOpacity
+              onPress={onCancel}
+              className="bg-gray-200 dark:bg-gray-700 px-4 py-2 rounded"
+            >
+              <Text className="text-gray-900 dark:text-white font-medium">{cancelText}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onConfirm}
+              className="px-4 py-2 rounded"
+              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+            >
+              <Text className="text-white font-medium">{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
-export default ConfirmationModal;
+export default MoveToJoModal;

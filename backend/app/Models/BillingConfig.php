@@ -19,6 +19,8 @@ class BillingConfig extends Model
         'disconnection_day',
         'overdue_day',
         'disconnection_notice',
+        'disconnection_fee',
+        'pullout_offset',
         'updated_by'
     ];
 
@@ -28,6 +30,8 @@ class BillingConfig extends Model
         'disconnection_day' => 'integer',
         'overdue_day' => 'integer',
         'disconnection_notice' => 'integer',
+        'disconnection_fee' => 'decimal:2',
+        'pullout_offset' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

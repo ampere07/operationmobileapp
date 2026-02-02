@@ -25,7 +25,7 @@ class DCNotice extends Model
 
     public function account()
     {
-        return $this->belongsTo(BillingDetail::class, 'account_id', 'account_no');
+        return $this->belongsTo(BillingAccount::class, 'account_id');
     }
 
     public function invoice()

@@ -52,7 +52,7 @@ class RadiusReconnectionService
             }
 
             // Get RADIUS configuration
-            $radiusConfigs = DB::table('radius_configs')
+            $radiusConfigs = DB::table('radius_config')
                 ->orderBy('id')
                 ->get();
 

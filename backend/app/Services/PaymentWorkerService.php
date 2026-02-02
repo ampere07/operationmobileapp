@@ -12,10 +12,12 @@ class PaymentWorkerService
     private $lockTimeout = 300; // 5 minutes max execution time
     private $hasLock = false;
     private $radiusReconnectionService;
+    private $manualRadiusService;
 
     public function __construct()
     {
         $this->radiusReconnectionService = new RadiusReconnectionService();
+        $this->manualRadiusService = new ManualRadiusOperationsService();
     }
 
     /**
@@ -158,25 +160,29 @@ class PaymentWorkerService
                         'updated_at' => now()
                     ]);
 
-                // Insert transaction log
+                // Parse callback payload for payment details
                 $json = json_decode($rawPayload, true);
                 $checkoutID = $json['id'] ?? $payment->payment_id ?? 'N/A';
-                $paymentChannel = $json['payment_channel'] ?? $json['bank_code'] ?? 'Xendit';
+                $paymentChannel = $json['payment_channel'] ?? $json['bank_code'] ?? null;
+                $ewalletType = $json['ewallet_type'] ?? null;
+                $status = $json['status'] ?? 'PAID';
+                $type = $json['type'] ?? null;
 
-                DB::table('transactions')->insert([
-                    'account_no' => $accountNo,
-                    'transaction_type' => 'Recurring Fee',
-                    'received_payment' => $amount,
-                    'payment_method' => "Online - Xendit ($paymentChannel)",
+                // Insert into payment_portal_logs
+                DB::table('payment_portal_logs')->insert([
                     'reference_no' => $ref,
-                    'or_no' => $ref,
-                    'remarks' => "Payment via Xendit Portal - Invoice: $checkoutID - {$result['distribution_summary']}",
-                    'status' => 'Approved',
-                    'payment_date' => now(),
-                    'date_processed' => now(),
-                    'created_by_user' => 'Payment Worker',
-                    'updated_by_user' => 'Payment Worker',
-                    'created_at' => now(),
+                    'account_id' => $account->account_id,
+                    'total_amount' => $amount,
+                    'date_time' => now(),
+                    'checkout_id' => $checkoutID,
+                    'status' => $status,
+                    'transaction_status' => 'COMPLETED',
+                    'ewallet_type' => $ewalletType,
+                    'payment_channel' => $paymentChannel,
+                    'type' => $type,
+                    'payment_url' => $payment->payment_url ?? null,
+                    'json_payload' => $payment->json_payload ?? null,
+                    'callback_payload' => $rawPayload,
                     'updated_at' => now()
                 ]);
 
@@ -336,20 +342,100 @@ class PaymentWorkerService
 
     /**
      * Attempt to reconnect user account
+     * Enhanced version: Checks session_status from online_status table
      */
     private function attemptReconnect($account)
     {
         try {
-            $this->workerLog("Reconnect triggered for account: {$account->account_no}");
+            $accountNo = $account->account_no;
+            $this->workerLog("[RECONNECT CHECK] Starting for account: {$accountNo}");
             
-            $result = $this->radiusReconnectionService->attemptReconnect($account->account_no);
+            // Step 1: Get account details with PPPoE username and plan
+            $accountDetails = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'billing_accounts.id as account_id',
+                    'billing_accounts.account_no',
+                    'billing_accounts.pppoe_username',
+                    'billing_accounts.account_balance',
+                    'customers.desired_plan'
+                )
+                ->first();
+
+            if (!$accountDetails) {
+                $this->workerLog("[RECONNECT SKIP] Account not found: {$accountNo}");
+                return 'account_not_found';
+            }
+
+            $username = $accountDetails->pppoe_username;
+            if (!$username) {
+                $this->workerLog("[RECONNECT SKIP] No PPPoE username found for account: {$accountNo}");
+                return 'no_username';
+            }
+
+            // Step 2: Check session_status from online_status table
+            $onlineStatus = DB::table('online_status')
+                ->where('account_id', $accountDetails->account_id)
+                ->orWhere('username', $username)
+                ->select('session_status', 'username')
+                ->first();
+
+            if (!$onlineStatus) {
+                $this->workerLog("[RECONNECT SKIP] No online_status record found for account: {$accountNo} (username: {$username})");
+                return 'no_online_status';
+            }
+
+            $sessionStatus = strtolower($onlineStatus->session_status ?? '');
+            $this->workerLog("[SESSION STATUS] Account: {$accountNo}, Username: {$username}, Status: {$sessionStatus}");
+
+            // Step 3: Only proceed if session_status is 'inactive' or 'blocked'
+            if (!in_array($sessionStatus, ['inactive', 'blocked'])) {
+                $this->workerLog("[RECONNECT SKIP] Session status is '{$sessionStatus}' (not inactive/blocked). No reconnection needed.");
+                return 'status_not_disconnected';
+            }
+
+            // Step 4: Verify account_balance is 0 or negative
+            $balance = floatval($accountDetails->account_balance);
+            if ($balance > 0) {
+                $this->workerLog("[RECONNECT SKIP] Account still has positive balance: ₱{$balance}");
+                return 'balance_remaining';
+            }
+
+            $this->workerLog("[RECONNECT PROCEED] Conditions met - Session: {$sessionStatus}, Balance: ₱{$balance}");
+
+            // Step 5: Prepare parameters for ManualRadiusOperationsService
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $username,
+                'plan' => $accountDetails->desired_plan ?? '',
+                'updatedBy' => 'Payment Worker Auto-Reconnect'
+            ];
+
+            // Step 6: Call ManualRadiusOperationsService reconnectUser
+            $this->workerLog("[RECONNECT EXECUTE] Calling ManualRadiusOperationsService for {$username}");
+            $result = $this->manualRadiusService->reconnectUser($params);
             
-            $this->workerLog("Reconnect result for {$account->account_no}: {$result}");
-            
-            return $result;
+            if ($result['status'] === 'success') {
+                // Step 7: Update billing_status_id to 5 (Active status)
+                DB::table('billing_accounts')
+                    ->where('account_no', $accountNo)
+                    ->update([
+                        'billing_status_id' => 5,
+                        'updated_at' => now(),
+                        'updated_by' => 'Payment Worker'
+                    ]);
+                
+                $this->workerLog("[RECONNECT SUCCESS] {$result['message']} - billing_status_id updated to 5");
+                return 'success';
+            } else {
+                $this->workerLog("[RECONNECT FAILED] {$result['message']}");
+                return 'failed';
+            }
             
         } catch (Exception $e) {
-            $this->workerLog("Reconnect failed for {$account->account_no}: {$e->getMessage()}");
+            $this->workerLog("[RECONNECT EXCEPTION] Failed for {$account->account_no}: {$e->getMessage()}");
+            $this->workerLog("[RECONNECT EXCEPTION] Trace: {$e->getTraceAsString()}");
             return 'exception';
         }
     }

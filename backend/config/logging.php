@@ -140,10 +140,10 @@ return [
         ],
 
         'overdue' => [
-            'driver' => 'daily',
-            'path' => storage_path('logs/overdue/overduelogs.log'),
+            'driver' => 'single',
+            'path' => storage_path('logs/overdue.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 30,
+            'replace_placeholders' => true,
         ],
 
         'radiussync' => [
@@ -154,10 +154,10 @@ return [
         ],
 
         'disconnection' => [
-            'driver' => 'daily',
-            'path' => storage_path('logs/disconnectionlogs.log'),
+            'driver' => 'single',
+            'path' => storage_path('logs/disconnectionnotice.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'days' => 30,
+            'replace_placeholders' => true,
         ],
     ],
 

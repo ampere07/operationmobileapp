@@ -111,6 +111,28 @@ class Kernel extends ConsoleKernel
                  });
 
         // ===================================================================
+        // AUTO DISCONNECT & PULLOUT
+        // ===================================================================
+
+        // Automatically disconnect overdue accounts and create pullout requests
+        // Runs at 2:00 AM daily (after billing generation)
+        // Uses: AutoDisconnectService, ManualRadiusOperationsService
+        // Dependencies: BillingConfig for DC fee and offset settings
+        // Disconnects accounts X days overdue (configurable via billing_config.disconnection_day)
+        // Creates pullout requests for accounts Y days overdue (configurable via billing_config.pullout_offset)
+        // Logs: storage/logs/disconnectionday.log
+        $schedule->command('cron:auto-disconnect-pullout')
+                 ->dailyAt('02:00')
+                 ->withoutOverlapping()
+                 ->runInBackground()
+                 ->onSuccess(function () {
+                     \Illuminate\Support\Facades\Log::info('Auto disconnect/pullout completed successfully');
+                 })
+                 ->onFailure(function () {
+                     \Illuminate\Support\Facades\Log::error('Auto disconnect/pullout failed');
+                 });
+
+        // ===================================================================
         // EMAIL QUEUE PROCESSING (DEDICATED CRON JOBS)
         // ===================================================================
 

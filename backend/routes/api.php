@@ -26,9 +26,23 @@ use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\BillingGenerationController;
 use App\Http\Controllers\ImageProxyController;
 use App\Http\Controllers\SettingsColorPaletteController;
+use App\Http\Controllers\RelatedDataController;
+use App\Http\Controllers\InventoryRelatedDataController;
 use App\Http\Controllers\PPPoEController;
 use App\Models\User;
 use App\Models\MassRebate;
+use App\Http\Controllers\Api\MonitorController;
+use App\Http\Controllers\Api\SmsBlastController;
+use App\Http\Controllers\Api\ExpensesLogController;
+use App\Http\Controllers\Api\DisconnectionLogsController;
+use App\Http\Controllers\Api\ReconnectionLogsController;
+
+Route::get('/monitor/handle', [MonitorController::class, 'handle']);
+Route::post('/monitor/handle', [MonitorController::class, 'handle']); // Ensure POST is also handled for save_template actions if not using REST
+Route::get('/sms-blast', [SmsBlastController::class, 'index']);
+Route::get('/expenses-logs', [ExpensesLogController::class, 'index']);
+Route::get('/disconnection-logs', [DisconnectionLogsController::class, 'index']);
+Route::get('/reconnection-logs', [ReconnectionLogsController::class, 'index']);
 
 // Handle all OPTIONS requests
 Route::options('{any}', function() {
@@ -1831,6 +1845,11 @@ Route::prefix('billing-generation')->group(function () {
     Route::get('/statements', [\App\Http\Controllers\BillingGenerationController::class, 'getStatements']);
 });
 
+// Billing Records Routes - Direct database fetch (separate from billing-generation)
+Route::get('/soa-records', [\App\Http\Controllers\BillingRecordsController::class, 'getSOARecords']);
+Route::get('/invoice-records', [\App\Http\Controllers\BillingRecordsController::class, 'getInvoiceRecords']);
+
+
 // Advanced Payment Routes
 Route::prefix('advanced-payments')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\AdvancedPaymentApiController::class, 'index']);
@@ -2738,6 +2757,12 @@ Route::prefix('job-order-notifications')->group(function () {
     Route::put('/mark-all-read', [\App\Http\Controllers\JobOrderNotificationController::class, 'markAllAsRead']);
 });
 
+Route::prefix('payment-portal-logs')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\PaymentPortalLogsController::class, 'index']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\PaymentPortalLogsController::class, 'show']);
+    Route::get('/account/{accountNo}', [\App\Http\Controllers\Api\PaymentPortalLogsController::class, 'getByAccountNo']);
+});
+
 // PPPoE Debug route
 Route::get('/pppoe/debug', function() {
     try {
@@ -2900,26 +2925,77 @@ Route::get('/monitor/debug', function() {
     ]);
 });
 
-// Live Monitor Routes - All methods explicitly defined
+// Live Monitor Routes - All methods use unified getData endpoint
 Route::prefix('monitor')->group(function () {
-    Route::match(['GET', 'OPTIONS'], '/billing_status', [App\Http\Controllers\LiveMonitorController::class, 'billingStatus']);
-    Route::match(['GET', 'OPTIONS'], '/online_status', [App\Http\Controllers\LiveMonitorController::class, 'onlineStatus']);
-    Route::match(['GET', 'OPTIONS'], '/app_status', [App\Http\Controllers\LiveMonitorController::class, 'appStatus']);
-    Route::match(['GET', 'OPTIONS'], '/so_status', [App\Http\Controllers\LiveMonitorController::class, 'soStatus']);
-    Route::match(['GET', 'OPTIONS'], '/jo_status', [App\Http\Controllers\LiveMonitorController::class, 'joStatus']);
-    Route::match(['GET', 'OPTIONS'], '/queue_mon', [App\Http\Controllers\LiveMonitorController::class, 'queueMon']);
-    Route::match(['GET', 'OPTIONS'], '/tech_mon_jo', [App\Http\Controllers\LiveMonitorController::class, 'techMonJo']);
-    Route::match(['GET', 'OPTIONS'], '/tech_mon_so', [App\Http\Controllers\LiveMonitorController::class, 'techMonSo']);
-    Route::match(['GET', 'OPTIONS'], '/expenses_mon', [App\Http\Controllers\LiveMonitorController::class, 'expensesMon']);
-    Route::match(['GET', 'OPTIONS'], '/pay_method_mon', [App\Http\Controllers\LiveMonitorController::class, 'payMethodMon']);
-    Route::match(['GET', 'OPTIONS'], '/invoice_mon', [App\Http\Controllers\LiveMonitorController::class, 'invoiceMon']);
-    Route::match(['GET', 'OPTIONS'], '/transactions_mon', [App\Http\Controllers\LiveMonitorController::class, 'transactionsMon']);
-    Route::match(['GET', 'OPTIONS'], '/portal_mon', [App\Http\Controllers\LiveMonitorController::class, 'portalMon']);
-    Route::match(['GET', 'OPTIONS'], '/jo_refer_rank', [App\Http\Controllers\LiveMonitorController::class, 'joReferRank']);
-    Route::match(['GET', 'OPTIONS'], '/invoice_overall', [App\Http\Controllers\LiveMonitorController::class, 'invoiceOverall']);
-    Route::match(['GET', 'OPTIONS'], '/app_map', [App\Http\Controllers\LiveMonitorController::class, 'appMap']);
+    // Unified endpoint for all widget data
+    Route::match(['GET', 'OPTIONS'], '/{action}', [MonitorController::class, 'getData']);
     
-    Route::match(['GET', 'OPTIONS'], '/templates', [App\Http\Controllers\LiveMonitorController::class, 'getTemplates']);
-    Route::match(['POST', 'OPTIONS'], '/templates', [App\Http\Controllers\LiveMonitorController::class, 'saveTemplate']);
-    Route::match(['DELETE', 'OPTIONS'], '/templates/{id}', [App\Http\Controllers\LiveMonitorController::class, 'deleteTemplate']);
+    // Template management
+    Route::match(['GET', 'OPTIONS'], '/templates', [MonitorController::class, 'listTemplates']);
+    Route::match(['POST', 'OPTIONS'], '/templates', [MonitorController::class, 'saveTemplate']);
+    Route::match(['PUT', 'OPTIONS'], '/templates/{id}', [MonitorController::class, 'updateTemplate']);
+    Route::match(['GET', 'OPTIONS'], '/templates/{id}', [MonitorController::class, 'loadTemplate']);
+    Route::match(['DELETE', 'OPTIONS'], '/templates/{id}', [MonitorController::class, 'deleteTemplate']);
+});
+
+Route::get('/invoices/by-account/{accountNo}', [RelatedDataController::class, 'getInvoicesByAccount']);
+Route::get('/payment-portal-logs/by-account/{accountNo}', [RelatedDataController::class, 'getPaymentPortalLogsByAccount']);
+Route::get('/transactions/by-account/{accountNo}', [RelatedDataController::class, 'getTransactionsByAccount']);
+Route::get('/staggered-installations/by-account/{accountNo}', [RelatedDataController::class, 'getStaggeredByAccount']);
+Route::get('/discounts/by-account/{accountNo}', [RelatedDataController::class, 'getDiscountsByAccount']);
+Route::get('/service-orders/by-account/{accountNo}', [RelatedDataController::class, 'getServiceOrdersByAccount']);
+Route::get('/reconnection-logs/by-account/{accountNo}', [RelatedDataController::class, 'getReconnectionLogsByAccount']);
+Route::get('/disconnected-logs/by-account/{accountNo}', [RelatedDataController::class, 'getDisconnectedLogsByAccount']);
+Route::get('/details-update-logs/by-account/{accountNo}', [RelatedDataController::class, 'getDetailsUpdateLogsByAccount']);
+Route::get('/plan-change-logs/by-account/{accountNo}', [RelatedDataController::class, 'getPlanChangeLogsByAccount']);
+Route::get('/service-charge-logs/by-account/{accountNo}', [RelatedDataController::class, 'getServiceChargeLogsByAccount']);
+Route::get('/change-due-logs/by-account/{accountNo}', [RelatedDataController::class, 'getChangeDueLogsByAccount']);
+Route::get('/security-deposits/by-account/{accountNo}', [RelatedDataController::class, 'getSecurityDepositsByAccount']);
+
+// Inventory Related Data Routes
+Route::get('/inventory-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getInventoryLogsByItem']);
+Route::get('/borrowed-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getBorrowedLogsByItem']);
+Route::get('/defective-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getDefectiveLogsByItem']);
+Route::get('/job-orders/by-item/{itemId}', [InventoryRelatedDataController::class, 'getJobOrdersByItem']);
+Route::get('/service-orders/by-item/{itemId}', [InventoryRelatedDataController::class, 'getServiceOrdersByItem']);
+
+// Cron Test Routes (for manual testing via URL)
+Route::prefix('cron-test')->group(function () {
+    Route::get('/process-overdue-notifications', [\App\Http\Controllers\CronTestController::class, 'processOverdueNotifications']);
+    Route::get('/process-disconnection-notices', [\App\Http\Controllers\CronTestController::class, 'processDisconnectionNotices']);
+    Route::get('/test-logging', [\App\Http\Controllers\CronTestController::class, 'testLogging']);
+    Route::get('/clear-cache', function() {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('config:clear');
+            \Illuminate\Support\Facades\Artisan::call('cache:clear');
+            \Illuminate\Support\Facades\Artisan::call('route:clear');
+            \Illuminate\Support\Facades\Artisan::call('view:clear');
+            return response()->json([
+                'success' => true,
+                'message' => 'All caches cleared successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cache clear failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    });
+    Route::get('/run-migrations', function() {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Migrations completed successfully',
+                'output' => \Illuminate\Support\Facades\Artisan::output()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Migration failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    });
 });

@@ -9,14 +9,78 @@ use Illuminate\Support\Facades\Http;
 
 class ApplicationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
-            Log::info('ApplicationController: Starting to fetch applications');
-            
-            $applications = Application::all();
+            $page = $request->input('page', 1);
+            $limit = $request->input('limit', 50); // Default 50 for faster response
+            $search = $request->input('search', '');
+            $fastMode = $request->input('fast', false); // Fast mode: skip heavy processing
+
+            Log::info('ApplicationController: Starting to fetch applications', [
+                'page' => $page,
+                'limit' => $limit,
+                'search' => $search,
+                'fast_mode' => $fastMode
+            ]);
+
+            $query = Application::orderBy('id', 'desc');
+
+            // Apply search filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('first_name', 'LIKE', "%{$search}%")
+                      ->orWhere('last_name', 'LIKE', "%{$search}%")
+                      ->orWhere('email_address', 'LIKE', "%{$search}%")
+                      ->orWhere('mobile_number', 'LIKE', "%{$search}%")
+                      ->orWhere('installation_address', 'LIKE', "%{$search}%")
+                      ->orWhere('city', 'LIKE', "%{$search}%");
+                });
+            }
+
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+            $applications = $query->skip(($page - 1) * $limit)
+                ->take($limit + 1) // Fetch one extra
+                ->get();
+
+            // Check if there are more pages
+            $hasMore = $applications->count() > $limit;
+
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $applications = $applications->slice(0, $limit);
+            }
+
             Log::info('ApplicationController: Fetched ' . $applications->count() . ' applications');
-            
+
+            // Fast mode: Return minimal data immediately
+            if ($fastMode) {
+                $formattedApplications = $applications->map(function ($app) {
+                    return [
+                        'id' => (string)$app->id,
+                        'customer_name' => $this->getFullName($app),
+                        'timestamp' => $app->timestamp ? $app->timestamp->format('Y-m-d H:i:s') : null,
+                        'status' => $app->status ?? 'pending',
+                        'first_name' => $app->first_name,
+                        'last_name' => $app->last_name,
+                        'city' => $app->city,
+                        'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
+                        'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null
+                    ];
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'applications' => $formattedApplications->values(),
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'has_more' => $hasMore
+                    ]
+                ]);
+            }
+
+            // Normal mode: Return full data
             $formattedApplications = $applications->map(function ($app) {
                 return [
                     'id' => (string)$app->id,
@@ -62,8 +126,13 @@ class ApplicationController extends Controller
             });
             
             return response()->json([
-                'applications' => $formattedApplications,
-                'success' => true
+                'success' => true,
+                'applications' => $formattedApplications->values(),
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'has_more' => $hasMore
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('ApplicationController error: ' . $e->getMessage());

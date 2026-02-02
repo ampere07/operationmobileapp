@@ -72,7 +72,57 @@ class LcpNapLocationController extends Controller
     public function getLocations(Request $request)
     {
         try {
-            $lcpnapLocations = LCPNAPLocation::whereNotNull('coordinates')
+            // Enable query logging for debugging
+            \DB::enableQueryLog();
+            
+            $lcpnapLocations = LCPNAPLocation::select('lcpnap.*')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    LEFT JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                    AND os.session_status = "Online"
+                ) as active_sessions')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    LEFT JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                    AND os.session_status = "Inactive"
+                ) as inactive_sessions')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    LEFT JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                    AND os.session_status = "Offline"
+                ) as offline_sessions')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    LEFT JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                    AND os.session_status = "Blocked"
+                ) as blocked_sessions')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    LEFT JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                    AND os.session_status = "Not Found"
+                ) as not_found_sessions')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT td.id)
+                    FROM technical_details td
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                ) as total_technical_details')
+                ->selectRaw('(
+                    SELECT COUNT(DISTINCT os.id)
+                    FROM technical_details td
+                    INNER JOIN online_status os ON td.account_id = os.account_id
+                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
+                ) as total_sessions')
+                ->whereNotNull('coordinates')
                 ->where('coordinates', '!=', '')
                 ->orderBy('id', 'desc')
                 ->get()
@@ -93,13 +143,25 @@ class LcpNapLocationController extends Controller
                         'image1_url' => $item->image1_url,
                         'image2_url' => $item->image2_url,
                         'modified_by' => $item->modified_by,
-                        'modified_date' => $item->modified_date
+                        'modified_date' => $item->modified_date,
+                        'active_sessions' => (int) $item->active_sessions,
+                        'inactive_sessions' => (int) $item->inactive_sessions,
+                        'offline_sessions' => (int) $item->offline_sessions,
+                        'blocked_sessions' => (int) $item->blocked_sessions,
+                        'not_found_sessions' => (int) $item->not_found_sessions,
+                        'total_technical_details' => (int) $item->total_technical_details,
+                        'total_sessions' => (int) $item->total_sessions
                     ];
                 });
             
+            // Log the queries for debugging
+            $queries = \DB::getQueryLog();
+            Log::info('LCP/NAP Location Queries', ['queries' => $queries]);
+            
             return response()->json([
                 'success' => true,
-                'data' => $lcpnapLocations
+                'data' => $lcpnapLocations,
+                'debug_queries' => $queries // Temporary for debugging
             ]);
             
         } catch (\Exception $e) {

@@ -45,6 +45,8 @@ class Application extends Model
         'other_isp_bill_url',
         'terms_agreed',
         'status',
+        'pppoe_username',
+        'pppoe_password',
         'created_by_user_id',
         'updated_by_user_id'
     ];

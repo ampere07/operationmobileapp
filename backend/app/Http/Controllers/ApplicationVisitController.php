@@ -13,16 +13,88 @@ class ApplicationVisitController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = ApplicationVisit::with('application');
+            $page = $request->input('page', 1);
+            $limit = $request->input('limit', 50); // Default 50 for faster response
+            $search = $request->input('search', '');
+            $fastMode = $request->input('fast', false); // Fast mode: skip heavy processing
+
+            Log::info('ApplicationVisitController: Starting to fetch visits', [
+                'page' => $page,
+                'limit' => $limit,
+                'search' => $search,
+                'fast_mode' => $fastMode
+            ]);
+
+            $query = ApplicationVisit::with('application')->orderBy('id', 'desc');
             
             // Filter by assigned email if provided
             if ($request->has('assigned_email')) {
                 $query->where('assigned_email', $request->input('assigned_email'));
                 Log::info('Filtering application visits by email: ' . $request->input('assigned_email'));
             }
-            
-            $visits = $query->get();
-            
+
+            // Apply search filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('assigned_email', 'LIKE', "%{$search}%")
+                      ->orWhere('visit_status', 'LIKE', "%{$search}%")
+                      ->orWhere('application_status', 'LIKE', "%{$search}%")
+                      ->orWhereHas('application', function ($appQuery) use ($search) {
+                          $appQuery->where('first_name', 'LIKE', "%{$search}%")
+                                   ->orWhere('last_name', 'LIKE', "%{$search}%")
+                                   ->orWhere('city', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+            $visits = $query->skip(($page - 1) * $limit)
+                ->take($limit + 1) // Fetch one extra
+                ->get();
+
+            // Check if there are more pages
+            $hasMore = $visits->count() > $limit;
+
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $visits = $visits->slice(0, $limit);
+            }
+
+            Log::info('ApplicationVisitController: Fetched ' . $visits->count() . ' visits');
+
+            // Fast mode: Return minimal data immediately
+            if ($fastMode) {
+                $visitsData = $visits->map(function ($visit) {
+                    $application = $visit->application;
+                    $fullName = $application 
+                        ? trim("{$application->first_name} {$application->middle_initial} {$application->last_name}")
+                        : '';
+
+                    return [
+                        'id' => $visit->id,
+                        'application_id' => $visit->application_id,
+                        'timestamp' => $visit->timestamp,
+                        'assigned_email' => $visit->assigned_email,
+                        'visit_status' => $visit->visit_status,
+                        'application_status' => $visit->application_status,
+                        'full_name' => $fullName,
+                        'created_at' => $visit->created_at,
+                        'updated_at' => $visit->updated_at,
+                    ];
+                });
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $visitsData->values(),
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $limit,
+                        'has_more' => $hasMore
+                    ]
+                ]);
+            }
+
+            // Normal mode: Return full data with application details
             $visitsWithApplicationData = $visits->map(function ($visit) {
                 $application = $visit->application;
                 
@@ -33,13 +105,6 @@ class ApplicationVisitController extends Controller
                 $fullAddress = $application
                     ? trim("{$application->installation_address}, {$application->location}, {$application->barangay}, {$application->city}, {$application->region}")
                     : '';
-                
-                Log::info('Mapping visit data:', [
-                    'visit_id' => $visit->id,
-                    'visit_by' => $visit->visit_by,
-                    'visit_with' => $visit->visit_with,
-                    'visit_with_other' => $visit->visit_with_other,
-                ]);
                 
                 return [
                     'id' => $visit->id,
@@ -75,15 +140,20 @@ class ApplicationVisitController extends Controller
                 ];
             });
             
-            Log::info("Fetched {$visits->count()} application visits from database");
-            
             return response()->json([
                 'success' => true,
-                'data' => $visitsWithApplicationData,
-                'count' => $visits->count()
+                'data' => $visitsWithApplicationData->values(),
+                'count' => $visits->count(),
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'has_more' => $hasMore
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching application visits: ' . $e->getMessage());
+            Log::error('Trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch application visits',
