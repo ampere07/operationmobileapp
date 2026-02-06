@@ -1,13 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { login, forgotPassword } from '../services/api';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Linking,
+  Dimensions
+} from 'react-native';
+import { login as loginUser, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
 import { formUIService } from '../services/formUIService';
-import { settingsColorPaletteService } from '../services/settingsColorPaletteService';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react-native';
 
 interface LoginProps {
   onLogin: (userData: UserData) => void;
 }
+
+const { width } = Dimensions.get('window');
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [accountNo, setAccountNo] = useState('');
@@ -21,7 +35,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
-    const apiUrl = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+    // Use the native environment variable logic or fallback
+    const apiUrl = 'https://backend.atssfiber.ph/api';
     return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
   };
 
@@ -40,8 +55,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     fetchLogo();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!accountNo || !mobileNo) {
       setError('Please enter your account number and mobile number');
       return;
@@ -51,7 +65,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      const response = await login(accountNo, mobileNo);
+      const response = await loginUser(accountNo, mobileNo);
       if (response.status === 'success') {
         const userData: UserData = {
           id: response.data.user.id,
@@ -73,8 +87,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleForgotPassword = async () => {
     if (!forgotEmail) {
       setError('Please enter your email address');
       return;
@@ -97,428 +110,300 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   if (showForgotPassword) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f3f4f6',
-        padding: '20px'
-      }}>
-        <div style={{
-          backgroundColor: '#ffffff',
-          padding: '40px',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '400px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-        }}>
-          <div style={{
-            textAlign: 'center',
-            marginBottom: '30px'
-          }}>
-            <h2 style={{
-              color: '#6d28d9',
-              fontSize: '24px',
-              marginBottom: '10px',
-              fontWeight: '600'
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
+            <View style={{
+              backgroundColor: '#ffffff',
+              padding: 30,
+              borderRadius: 16,
+              width: '100%',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 6,
+              elevation: 5,
             }}>
-              Reset Password
-            </h2>
-          </div>
+              <View style={{ alignItems: 'center', marginBottom: 30 }}>
+                <Text style={{ color: '#6d28d9', fontSize: 24, fontWeight: '600' }}>Reset Password</Text>
+              </View>
 
-          {forgotMessage ? (
-            <div>
-              <div style={{
-                color: '#16a34a',
-                textAlign: 'center',
-                marginBottom: '20px',
-                padding: '15px',
-                backgroundColor: '#f0fdf4',
-                borderRadius: '30px',
-                border: '1px solid #16a34a'
-              }}>
-                {forgotMessage}
-              </div>
-              <button
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setForgotMessage('');
-                  setForgotEmail('');
-                  setError('');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: '#6d28d9',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '30px',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                Back to Login
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleForgotPassword}>
-              <div style={{ marginBottom: '20px' }}>
-                <input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '30px',
-                    color: '#111827',
-                    fontSize: '16px'
-                  }}
-                  placeholder="Enter your email address"
-                />
-              </div>
+              {forgotMessage ? (
+                <View>
+                  <View style={{
+                    backgroundColor: '#f0fdf4',
+                    padding: 15,
+                    borderRadius: 30,
+                    borderWidth: 1,
+                    borderColor: '#16a34a',
+                    marginBottom: 20,
+                  }}>
+                    <Text style={{ color: '#16a34a', textAlign: 'center' }}>{forgotMessage}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowForgotPassword(false);
+                      setForgotMessage('');
+                      setForgotEmail('');
+                      setError('');
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: 14,
+                      backgroundColor: '#6d28d9',
+                      borderRadius: 30,
+                      alignItems: 'center',
+                      marginBottom: 15,
+                    }}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <View style={{ marginBottom: 20 }}>
+                    <TextInput
+                      style={{
+                        width: '100%',
+                        padding: 14,
+                        backgroundColor: '#ffffff',
+                        borderWidth: 1,
+                        borderColor: '#d1d5db',
+                        borderRadius: 12,
+                        color: '#111827',
+                        fontSize: 16,
+                      }}
+                      value={forgotEmail}
+                      onChangeText={setForgotEmail}
+                      placeholder="Enter your email address"
+                      placeholderTextColor="#9ca3af"
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                  </View>
 
-              {error && (
-                <div style={{
-                  color: '#dc2626',
-                  marginBottom: '20px',
-                  textAlign: 'center',
-                  fontSize: '14px'
-                }}>
-                  {error}
-                </div>
+                  {error ? (
+                    <Text style={{
+                      color: '#dc2626',
+                      marginBottom: 20,
+                      textAlign: 'center',
+                      fontSize: 14,
+                    }}>{error}</Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={handleForgotPassword}
+                    disabled={isLoading}
+                    style={{
+                      width: '100%',
+                      padding: 14,
+                      backgroundColor: isLoading ? '#d1d5db' : '#16a34a',
+                      borderRadius: 30,
+                      alignItems: 'center',
+                      marginBottom: 15,
+                    }}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '600' }}>
+                      {isLoading ? 'Sending...' : 'Send Reset Instructions'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowForgotPassword(false);
+                      setError('');
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: 14,
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: '#6d28d9',
+                      borderRadius: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#6d28d9', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
+                  </TouchableOpacity>
+                </View>
               )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: isLoading ? '#d1d5db' : '#16a34a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '30px',
-                  fontSize: '16px',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  marginBottom: '15px',
-                  fontWeight: '600'
-                }}
-              >
-                {isLoading ? 'Sending...' : 'Send Reset Instructions'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setError('');
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: 'transparent',
-                  color: '#6d28d9',
-                  border: '1px solid #6d28d9',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                Back to Login
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <>
-      <style>{`
-        * {
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-          text-rendering: optimizeLegibility;
-        }
-        @media (max-width: 768px) {
-          .login-container {
-            flex-direction: column !important;
-          }
-          .login-left {
-            order: 2 !important;
-            border-radius: 0 0 16px 16px !important;
-            box-shadow: none !important;
-          }
-          .login-right {
-            order: 1 !important;
-            padding: 40px 30px !important;
-          }
-        }
-      `}</style>
-      <div style={{
-        display: 'flex',
-        minHeight: '100vh',
-        backgroundColor: '#f3f4f6'
-      }}>
-        <div style={{
-          display: 'flex',
-          width: '100%',
-          maxWidth: '1200px',
-          margin: 'auto',
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)'
-        }} className="login-container">
-          <div style={{
-            flex: 1,
-            background: 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%)',
-            padding: '60px 50px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            borderTopRightRadius: '16px',
-            borderBottomRightRadius: '16px',
-            boxShadow: '4px 0 15px rgba(0, 0, 0, 0.1)'
-          }} className="login-left">
-            <div style={{ marginBottom: '40px' }}>
-              <h1 style={{
-                fontSize: '32px',
-                fontWeight: '700',
-                color: '#ffffff',
-                marginBottom: '10px'
-              }}>
-                Welcome Back
-              </h1>
-              <p style={{
-                fontSize: '14px',
-                color: '#ffffff',
-                opacity: 0.9,
-                fontWeight: '700'
-              }}>
-                Please login to your account.
-              </p>
-            </div>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} showsVerticalScrollIndicator={false}>
+          {/* Logo Section */}
+          <View style={{ alignItems: 'center', marginBottom: 30, marginTop: 20 }}>
+            {logoUrl && (
+              <Image
+                source={{ uri: logoUrl }}
+                style={{ height: 100, width: 200, marginBottom: 10 }}
+                resizeMode="contain"
+              />
+            )}
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#6b7280', marginTop: 5 }}>
+              Powered by <Text style={{ color: '#6d28d9' }}>Sync</Text>
+            </Text>
+          </View>
 
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: '24px' }}>
-                <input
-                  type="text"
+          {/* Login Form Section */}
+          <View style={{
+            backgroundColor: '#6d28d9',
+            borderRadius: 24,
+            padding: 30,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.1,
+            shadowRadius: 20,
+            elevation: 8,
+            marginBottom: 30,
+          }}>
+            <View style={{ marginBottom: 30 }}>
+              <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Welcome Back</Text>
+              <Text style={{ fontSize: 14, color: '#ffffff', opacity: 0.9, fontWeight: '600' }}>Please login to your account.</Text>
+            </View>
+
+            <View style={{ width: '100%' }}>
+              <View style={{ marginBottom: 16 }}>
+                <TextInput
+                  style={{
+                    width: '100%',
+                    padding: 14,
+                    backgroundColor: '#ffffff',
+                    borderWidth: 1,
+                    borderColor: '#d1d5db',
+                    borderRadius: 12,
+                    color: '#111827',
+                    fontSize: 16,
+                  }}
                   value={accountNo}
-                  onChange={(e) => setAccountNo(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '14px',
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    color: '#111827',
-                    fontSize: '15px',
-                    outline: 'none',
-                    fontWeight: '600'
-                  }}
+                  onChangeText={setAccountNo}
                   placeholder="Username or Email"
+                  placeholderTextColor="#6b7280"
+                  autoCapitalize="none"
                 />
-              </div>
+              </View>
 
-              <div style={{ marginBottom: '32px' }}>
-                <input
-                  type="password"
-                  value={mobileNo}
-                  onChange={(e) => setMobileNo(e.target.value)}
+              <View style={{ marginBottom: 16 }}>
+                <TextInput
                   style={{
                     width: '100%',
-                    padding: '14px',
+                    padding: 14,
                     backgroundColor: '#ffffff',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
+                    borderWidth: 1,
+                    borderColor: '#d1d5db',
+                    borderRadius: 12,
                     color: '#111827',
-                    fontSize: '15px',
-                    outline: 'none',
-                    fontWeight: '600'
+                    fontSize: 16,
                   }}
+                  value={mobileNo}
+                  onChangeText={setMobileNo}
                   placeholder="Password"
+                  placeholderTextColor="#6b7280"
+                  secureTextEntry
                 />
-              </div>
+              </View>
 
-              {error && (
-                <div style={{
-                  color: '#dc2626',
-                  marginBottom: '20px',
-                  fontSize: '14px',
+              {error ? (
+                <View style={{
                   backgroundColor: '#fee2e2',
-                  padding: '12px',
-                  borderRadius: '6px'
+                  padding: 12,
+                  borderRadius: 6,
+                  marginBottom: 20,
                 }}>
-                  {error}
-                </div>
-              )}
+                  <Text style={{ color: '#dc2626', fontSize: 14 }}>{error}</Text>
+                </View>
+              ) : null}
 
-              <button
-                type="submit"
+              <TouchableOpacity
+                onPress={handleSubmit}
                 disabled={isLoading}
                 style={{
                   width: '100%',
-                  padding: '16px',
+                  padding: 16,
                   backgroundColor: isLoading ? '#6b7280' : '#ffffff',
-                  color: isLoading ? '#ffffff' : '#6d28d9',
-                  border: 'none',
-                  borderRadius: '30px',
-                  fontSize: '16px',
-                  fontWeight: '700',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
+                  borderRadius: 30,
+                  flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-                  }
+                  gap: 8,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 2,
                 }}
               >
-                {isLoading ? 'LOGGING IN...' : 'SECURE LOGIN'}
-                {!isLoading && <ArrowRight size={20} />}
-              </button>
+                <Text style={{
+                  color: isLoading ? '#ffffff' : '#6d28d9',
+                  fontSize: 16,
+                  fontWeight: '700',
+                }}>
+                  {isLoading ? 'LOGGING IN...' : 'SECURE LOGIN'}
+                </Text>
+                {!isLoading && <ArrowRight color={isLoading ? '#ffffff' : '#6d28d9'} size={20} />}
+              </TouchableOpacity>
 
-              <div style={{
-                textAlign: 'center',
-                marginTop: '20px'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForgotPassword(true);
-                    setError('');
-                  }}
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    textDecoration: 'none',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    margin: '0 auto'
-                  }}
-                >
-                  Forgot Password?
-                </button>
-              </div>
-            </form>
-          </div>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowForgotPassword(true);
+                  setError('');
+                }}
+                style={{ alignItems: 'center', marginTop: 20 }}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>Forgot Password?</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-          <div style={{
-            flex: 1,
-            backgroundColor: '#ffffff',
-            padding: '60px 50px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }} className="login-right">
-            <div style={{
+          {/* New Here Section */}
+          <View style={{ alignItems: 'center', marginBottom: 40, paddingHorizontal: 20 }}>
+            <Text style={{
+              fontSize: 30,
+              fontWeight: '700',
+              marginBottom: 10,
+              color: '#6d28d9',
               textAlign: 'center',
-              marginBottom: '40px'
-            }}>
-              {logoUrl && (
-                <img
-                  src={logoUrl}
-                  alt="Logo"
-                  style={{
-                    height: '120px',
-                    objectFit: 'contain',
-                    marginBottom: '10px'
-                  }}
-                  crossOrigin="anonymous"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              )}
-              <p style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#6b7280',
-                marginTop: '10px'
-              }}>
-                Powered by <span style={{ color: '#6d28d9' }}>Sync</span>
-              </p>
-            </div>
-
-            <div style={{
+            }}>New Here?</Text>
+            <Text style={{
+              fontSize: 16,
+              color: '#6b7280',
+              marginBottom: 20,
               textAlign: 'center',
-              marginBottom: '30px'
-            }}>
-              <h2 style={{
-                fontSize: '36px',
-                fontWeight: '700',
-                marginBottom: '15px',
-                color: '#6d28d9'
-              }}>
-                New Here?
-              </h2>
-              <p style={{
-                fontSize: '16px',
-                color: '#6b7280'
-              }}>
-                Apply online in just 2 minutes.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                window.open('https://apply.atssfiber.ph', '_blank');
-              }}
+            }}>Apply online in just 2 minutes.</Text>
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://apply.atssfiber.ph')}
               style={{
-                padding: '16px 48px',
+                paddingVertical: 16,
+                paddingHorizontal: 48,
                 backgroundColor: '#6d28d9',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '30px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'transform 0.2s',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                borderRadius: 30,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 6,
+                elevation: 4,
               }}
             >
-              APPLY NOW
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
+              <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>APPLY NOW</Text>
+            </TouchableOpacity>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 

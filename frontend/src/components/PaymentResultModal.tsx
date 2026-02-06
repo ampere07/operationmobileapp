@@ -1,5 +1,6 @@
-import React from 'react';
-import { CheckCircle, XCircle, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { CheckCircle, XCircle, X } from 'lucide-react-native';
 
 interface PaymentResultModalProps {
   isOpen: boolean;
@@ -16,95 +17,171 @@ const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
   referenceNo,
   isDarkMode = true
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className={`${
-        isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'
-      } rounded-lg shadow-xl max-w-md w-full p-6 relative`}>
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className={`absolute top-4 right-4 ${
-            isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={isOpen}
+      onRequestClose={onClose}
+    >
+      <View style={{
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16
+      }}>
+        <View style={{
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          borderRadius: 12,
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 2,
+          },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+          maxWidth: 400,
+          width: '100%',
+          padding: 24,
+          position: 'relative'
+        }}>
+          {/* Close button */}
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              zIndex: 10
+            }}
+          >
+            <X
+              size={20}
+              color={isDarkMode ? '#9ca3af' : '#6b7280'}
+            />
+          </TouchableOpacity>
 
-        {/* Icon and Title */}
-        <div className="text-center mb-6">
-          {success ? (
-            <div className="flex justify-center mb-4">
-              <CheckCircle className="w-16 h-16 text-green-500" />
-            </div>
-          ) : (
-            <div className="flex justify-center mb-4">
-              <XCircle className="w-16 h-16 text-red-500" />
-            </div>
-          )}
-          
-          <h2 className="text-2xl font-bold mb-2">
-            {success ? 'Payment Successful!' : 'Payment Failed'}
-          </h2>
-          
-          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            {success 
-              ? 'Your payment has been received and is being processed.'
-              : 'We were unable to process your payment. Please try again.'
-            }
-          </p>
-        </div>
+          {/* Icon and Title */}
+          <View style={{ alignItems: 'center', marginBottom: 24 }}>
+            {success ? (
+              <View style={{ marginBottom: 16 }}>
+                <CheckCircle size={64} color="#22c55e" />
+              </View>
+            ) : (
+              <View style={{ marginBottom: 16 }}>
+                <XCircle size={64} color="#ef4444" />
+              </View>
+            )}
 
-        {/* Reference Number */}
-        <div className={`${
-          isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-        } rounded-lg p-4 mb-6`}>
-          <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-            Reference Number
-          </p>
-          <p className="font-mono text-sm font-medium break-all">
-            {referenceNo}
-          </p>
-        </div>
+            <Text style={{
+              fontSize: 24,
+              fontWeight: '700',
+              marginBottom: 8,
+              color: isDarkMode ? '#f3f4f6' : '#111827',
+              textAlign: 'center'
+            }}>
+              {success ? 'Payment Successful!' : 'Payment Failed'}
+            </Text>
 
-        {/* Message */}
-        <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-6`}>
-          {success ? (
-            <>
-              <p className="mb-2">
-                ✓ Payment confirmation sent
-              </p>
-              <p className="mb-2">
-                ✓ Account balance will be updated shortly
-              </p>
-              <p>
-                ✓ You can check your transaction history for details
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="mb-2">
+            <Text style={{
+              fontSize: 14,
+              color: isDarkMode ? '#9ca3af' : '#4b5563',
+              textAlign: 'center'
+            }}>
+              {success
+                ? 'Your payment has been received and is being processed.'
+                : 'We were unable to process your payment. Please try again.'
+              }
+            </Text>
+          </View>
+
+          {/* Reference Number */}
+          <View style={{
+            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 24
+          }}>
+            <Text style={{
+              fontSize: 12,
+              color: isDarkMode ? '#9ca3af' : '#4b5563',
+              marginBottom: 4
+            }}>
+              Reference Number
+            </Text>
+            <Text style={{
+              // monospace font family support varies by platform, but 'monospace' is a good web safe fallback and works on some android
+              // For better cross platform monospace: Platform.OS === 'ios' ? 'Courier' : 'monospace' 
+              fontFamily: 'monospace',
+              fontSize: 14,
+              fontWeight: '500',
+              color: isDarkMode ? '#f3f4f6' : '#111827'
+            }}>
+              {referenceNo}
+            </Text>
+          </View>
+
+          {/* Message */}
+          <View style={{ marginBottom: 24 }}>
+            {success ? (
+              <View>
+                <Text style={{
+                  fontSize: 14,
+                  color: isDarkMode ? '#d1d5db' : '#374151',
+                  marginBottom: 8
+                }}>
+                  ✓ Payment confirmation sent
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: isDarkMode ? '#d1d5db' : '#374151',
+                  marginBottom: 8
+                }}>
+                  ✓ Account balance will be updated shortly
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: isDarkMode ? '#d1d5db' : '#374151'
+                }}>
+                  ✓ You can check your transaction history for details
+                </Text>
+              </View>
+            ) : (
+              <Text style={{
+                fontSize: 14,
+                color: isDarkMode ? '#d1d5db' : '#374151',
+                marginBottom: 8
+              }}>
                 If you encountered any issues, please contact support or try again.
-              </p>
-            </>
-          )}
-        </div>
+              </Text>
+            )}
+          </View>
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-            success
-              ? 'bg-green-600 hover:bg-green-700 text-white'
-              : 'bg-red-600 hover:bg-red-700 text-white'
-          }`}
-        >
-          Close
-        </button>
-      </div>
-    </div>
+          {/* Close Button */}
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              width: '100%',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              alignItems: 'center',
+              backgroundColor: success ? '#16a34a' : '#dc2626'
+            }}
+          >
+            <Text style={{
+              color: '#ffffff',
+              fontSize: 16,
+              fontWeight: '500'
+            }}>
+              Close
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
