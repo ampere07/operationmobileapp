@@ -1,41 +1,30 @@
 {
-    "expo": {
-        "name": "Operation Mobile",
-        "slug": "operation-mobile-app",
-        "version": "1.0.0",
-        "orientation": "portrait",
-        "icon": "./src/assets/logo1.png",
-        "userInterfaceStyle": "automatic",
-        "splash": {
-            "image": "./src/assets/logo1.png",
-            "resizeMode": "contain",
-            "backgroundColor": "#ffffff"
-        },
-        "assetBundlePatterns": [
-            "**/*"
-        ],
-        "ios": {
-            "supportsTablet": true
-        },
-        "android": {
-            "adaptiveIcon": {
-                "foregroundImage": "./src/assets/logo1.png",
-                "backgroundColor": "#ffffff"
-            },
-            "package": "com.atss.operationmobile"
-        },
-        "web": {
-            "favicon": "./src/assets/logo1.png"
-        },
-        "plugins": [
-            [
-                "expo-build-properties",
-                {
-                    "android": {
-                        "usesCleartextTraffic": true
-                    }
-                }
-            ]
-        ]
+  "expo": {
+    "name": "frontend",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     }
+  }
 }
