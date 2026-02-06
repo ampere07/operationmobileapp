@@ -435,12 +435,13 @@ class ProcessOverdueNotifications extends Command
         $timestamp = Carbon::now()->format('Y-m-d H:i:s');
         $logMessage = "[{$timestamp}] {$message}";
         
-        try {
-            Log::channel('overdue')->info($message);
-        } catch (\Exception $e) {
-            $logFile = storage_path('logs/overdue.log');
-            file_put_contents($logFile, $logMessage . PHP_EOL, FILE_APPEND);
+        $logPath = storage_path('logs/overdue');
+        if (!file_exists($logPath)) {
+            mkdir($logPath, 0755, true);
         }
+        
+        $logFile = $logPath . '/overdue_notifications.log';
+        file_put_contents($logFile, $logMessage . PHP_EOL, FILE_APPEND);
         
         $this->line($logMessage);
     }

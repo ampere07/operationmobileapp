@@ -118,7 +118,7 @@ class ApplicationController extends Controller
                     'created_at' => $app->created_at ? $app->created_at->format('Y-m-d H:i:s') : null,
                     'updated_at' => $app->updated_at ? $app->updated_at->format('Y-m-d H:i:s') : null,
                     'created_by_user_id' => $app->created_by_user_id,
-                    'updated_by_user_id' => $app->updated_by_user_id,
+                    'updated_by' => $app->updated_by,
                     
                     'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
                     'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null
@@ -326,7 +326,7 @@ class ApplicationController extends Controller
                 'created_at' => $application->created_at ? $application->created_at->format('Y-m-d H:i:s') : null,
                 'updated_at' => $application->updated_at ? $application->updated_at->format('Y-m-d H:i:s') : null,
                 'created_by_user_id' => $application->created_by_user_id,
-                'updated_by_user_id' => $application->updated_by_user_id,
+                'updated_by' => $application->updated_by,
                 
                 'create_date' => $application->timestamp ? $application->timestamp->format('Y-m-d') : null,
                 'create_time' => $application->timestamp ? $application->timestamp->format('H:i:s') : null
@@ -370,7 +370,7 @@ class ApplicationController extends Controller
             ]);
 
             $application = Application::findOrFail($id);
-            $validatedData['updated_by_user_id'] = auth()->id();
+            $validatedData['updated_by'] = auth()->user()->email ?? 'system';
             $application->update($validatedData);
 
             return response()->json([

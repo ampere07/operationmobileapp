@@ -60,13 +60,6 @@ export interface ServiceOrderData {
   updated_by_user?: string;
 }
 
-// React Native "File" object for FormData
-export interface RNFile {
-  uri: string;
-  type: string;
-  name: string;
-}
-
 export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderData>) => {
   try {
     const response = await apiClient.post<ApiResponse<ServiceOrderData>>('/service-orders', serviceOrderData);
@@ -77,17 +70,32 @@ export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderD
   }
 };
 
-export const getServiceOrders = async (assignedEmail?: string) => {
+export const getServiceOrders = async (assignedEmail?: string, page: number = 1, limit: number = 50, search: string = '') => {
   try {
-    const params: { assigned_email?: string; user_role?: string; fast: string } = { fast: '1' };
+    const params: { assigned_email?: string; user_role?: string; page: number; limit: number; search?: string } = {
+      page,
+      limit
+    };
 
     if (assignedEmail) {
       params.assigned_email = assignedEmail;
     }
 
-    // Auth handling needs to be async for React Native
-    // This part should technically be passed FROM the component or handled via async storage helper
-    // For now we assume the caller handles auth token in headers via interceptor or similar
+    if (search) {
+      params.search = search;
+    }
+
+    const authData = localStorage.getItem('authData');
+    if (authData) {
+      try {
+        const userData = JSON.parse(authData);
+        if (userData.role) {
+          params.user_role = userData.role;
+        }
+      } catch (err) {
+        console.error('Failed to parse authData:', err);
+      }
+    }
 
     const response = await apiClient.get<ApiResponse<ServiceOrderData[]>>('/service-orders', { params });
     return response.data;
@@ -123,51 +131,6 @@ export const deleteServiceOrder = async (id: string) => {
     return response.data;
   } catch (error) {
     console.error('Error deleting service order:', error);
-    throw error;
-  }
-};
-
-export const uploadServiceOrderImages = async (
-  id: string,
-  images: {
-    image1?: RNFile | null;
-    image2?: RNFile | null;
-    image3?: RNFile | null;
-    client_signature?: RNFile | null
-  }
-) => {
-  try {
-    const formData = new FormData();
-
-    if (images.image1) {
-      // @ts-ignore
-      formData.append('image1', images.image1);
-    }
-    if (images.image2) {
-      // @ts-ignore
-      formData.append('image2', images.image2);
-    }
-    if (images.image3) {
-      // @ts-ignore
-      formData.append('image3', images.image3);
-    }
-    if (images.client_signature) {
-      // @ts-ignore
-      formData.append('client_signature', images.client_signature);
-    }
-
-    const response = await apiClient.post<ApiResponse<{ image1_url?: string; image2_url?: string; image3_url?: string }>>(
-      `/service-orders/${id}/upload-images`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }
-    );
-
-    return response.data;
-  } catch (error: any) {
     throw error;
   }
 };

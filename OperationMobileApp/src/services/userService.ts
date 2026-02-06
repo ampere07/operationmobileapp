@@ -1,7 +1,7 @@
 import apiClient from '../config/api';
-import { 
+import {
   User,
-  Organization, 
+  Organization,
   Group,
   Role,
   CreateUserRequest,
@@ -29,6 +29,17 @@ export const userService = {
       return response.data;
     } catch (error: any) {
       console.error('Get users by role API error:', error.message);
+      throw error;
+    }
+  },
+
+  // Get users by role ID
+  getUsersByRoleId: async (roleId: number): Promise<ApiResponse<User[]>> => {
+    try {
+      const response = await apiClient.get<ApiResponse<User[]>>(`/users?role_id=${roleId}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Get users by role ID API error:', error.message);
       throw error;
     }
   },
@@ -110,8 +121,8 @@ export const organizationService = {
   },
 
   // Create new organization
-  createOrganization: async (orgData: { 
-    organization_name: string; 
+  createOrganization: async (orgData: {
+    organization_name: string;
     address?: string | null;
     contact_number?: string | null;
     email_address?: string | null;
@@ -127,7 +138,7 @@ export const organizationService = {
   },
 
   // Update organization
-  updateOrganization: async (orgId: number, orgData: { 
+  updateOrganization: async (orgId: number, orgData: {
     organization_name?: string;
     address?: string | null;
     contact_number?: string | null;
@@ -153,7 +164,7 @@ export const groupService = {
   },
 
   // Create new group
-  createGroup: async (groupData: { 
+  createGroup: async (groupData: {
     group_name: string;
     fb_page_link?: string | null;
     fb_messenger_link?: string | null;
@@ -175,7 +186,7 @@ export const groupService = {
   },
 
   // Update group
-  updateGroup: async (groupId: number, groupData: { 
+  updateGroup: async (groupId: number, groupData: {
     group_name?: string;
     fb_page_link?: string | null;
     fb_messenger_link?: string | null;
@@ -301,7 +312,7 @@ export const logsService = {
     if (params?.level) {
       queryParams.append('level', params.level);
     }
-    
+
     const url = `/logs/clear${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const response = await apiClient.delete<ApiResponse<any>>(url);
     return response.data;

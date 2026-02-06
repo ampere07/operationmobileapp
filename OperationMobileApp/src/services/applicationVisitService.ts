@@ -47,13 +47,6 @@ export interface ApplicationVisitData {
   installation_address?: string;
 }
 
-// React Native "File" object for FormData
-interface RNFile {
-  uri: string;
-  type: string;
-  name: string;
-}
-
 export const createApplicationVisit = async (visitData: ApplicationVisitData) => {
   try {
     if (!visitData.application_id) {
@@ -168,7 +161,7 @@ export const uploadApplicationVisitImages = async (
   firstName: string,
   middleInitial: string | undefined,
   lastName: string,
-  images: { image1: RNFile | null; image2: RNFile | null; image3: RNFile | null }
+  images: { image1: File | null; image2: File | null; image3: File | null }
 ) => {
   try {
     const formData = new FormData();
@@ -177,15 +170,12 @@ export const uploadApplicationVisitImages = async (
     formData.append('last_name', lastName);
 
     if (images.image1) {
-      // @ts-ignore
       formData.append('image1', images.image1);
     }
     if (images.image2) {
-      // @ts-ignore
       formData.append('image2', images.image2);
     }
     if (images.image3) {
-      // @ts-ignore
       formData.append('image3', images.image3);
     }
 

@@ -14,7 +14,7 @@ class BillingController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $billingData = BillingAccount::with(['customer', 'technicalDetails'])
+            $billingData = BillingAccount::with(['customer', 'technicalDetails', 'onlineStatus', 'billingStatus'])
                 ->get()
                 ->map(function ($billingAccount) {
                     $customer = $billingAccount->customer;
@@ -26,7 +26,9 @@ class BillingController extends Controller
                         'Date_Installed' => $billingAccount->date_installed ? $billingAccount->date_installed->format('Y-m-d') : null,
                         'Billing_Day' => $billingAccount->billing_day == 0 ? 'Every end of month' : $billingAccount->billing_day,
                         'Billing_Status_ID' => $billingAccount->billing_status_id,
+                        'Billing_Status_Name' => $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null,
                         'Account_Balance' => $billingAccount->account_balance,
+                        'account_balance' => $billingAccount->account_balance,
                         'Balance_Update_Date' => $billingAccount->balance_update_date ? $billingAccount->balance_update_date->format('Y-m-d H:i:s') : null,
                         
                         'First_Name' => $customer ? $customer->first_name : null,
@@ -61,13 +63,14 @@ class BillingController extends Controller
                         'LCPNAP' => $technicalDetail ? $technicalDetail->lcpnap : null,
                         'Usage_Type' => $technicalDetail ? $technicalDetail->usage_type : null,
                         
-                        'Status' => $billingAccount->billing_status_id == 2 ? 'Active' : 'Inactive',
+                        'Status' => $billingAccount->billing_status_id == 1 ? 'Active' : ($billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : 'Inactive'),
                         'Modified_By' => $customer ? $customer->updated_by : null,
                         'Modified_Date' => $billingAccount->updated_at ? $billingAccount->updated_at->format('Y-m-d H:i:s') : null,
                         
                         'Plan' => $customer ? $customer->desired_plan : null,
                         'Provider' => null,
                         'LCPNAPPORT' => $technicalDetail ? ($technicalDetail->lcpnap . ($technicalDetail->port ? '-' . $technicalDetail->port : '')) : null,
+                        'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
                     ];
                 });
 
@@ -91,7 +94,7 @@ class BillingController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $billingAccount = BillingAccount::with(['customer', 'technicalDetails'])->findOrFail($id);
+            $billingAccount = BillingAccount::with(['customer', 'technicalDetails', 'onlineStatus', 'billingStatus'])->findOrFail($id);
             $customer = $billingAccount->customer;
             $technicalDetail = $billingAccount->technicalDetails->first();
             
@@ -107,7 +110,9 @@ class BillingController extends Controller
                 'Date_Installed' => $billingAccount->date_installed ? $billingAccount->date_installed->format('Y-m-d') : null,
                 'Billing_Day' => $billingAccount->billing_day == 0 ? 'Every end of month' : $billingAccount->billing_day,
                 'Billing_Status_ID' => $billingAccount->billing_status_id,
+                'Billing_Status_Name' => $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null,
                 'Account_Balance' => $billingAccount->account_balance,
+                'account_balance' => $billingAccount->account_balance,
                 'Balance_Update_Date' => $billingAccount->balance_update_date ? $billingAccount->balance_update_date->format('Y-m-d H:i:s') : null,
                 
                 'First_Name' => $customer ? $customer->first_name : null,
@@ -142,13 +147,14 @@ class BillingController extends Controller
                 'LCPNAP' => $technicalDetail ? $technicalDetail->lcpnap : null,
                 'Usage_Type' => $technicalDetail ? $technicalDetail->usage_type : null,
                 
-                'Status' => $billingAccount->billing_status_id == 2 ? 'Active' : 'Inactive',
+                'Status' => $billingAccount->billing_status_id == 1 ? 'Active' : ($billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : 'Inactive'),
                 'Modified_By' => $customer ? $customer->updated_by : null,
                 'Modified_Date' => $billingAccount->updated_at ? $billingAccount->updated_at->format('Y-m-d H:i:s') : null,
                 
                 'Plan' => $customer ? $customer->desired_plan : null,
                 'Provider' => null,
                 'LCPNAPPORT' => $technicalDetail ? ($technicalDetail->lcpnap . ($technicalDetail->port ? '-' . $technicalDetail->port : '')) : null,
+                'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
             ];
 
             return response()->json([

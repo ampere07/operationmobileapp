@@ -19,7 +19,7 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
   try {
     const response = await apiClient.get<any>('/billing');
     const responseData = response.data;
-    
+
     if (responseData?.data && Array.isArray(responseData.data)) {
       return responseData.data.map((item: any): BillingRecord => ({
         id: item.Account_No || item.id,
@@ -33,12 +33,12 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         address: item.Address || '',
         location: item.Location || item.location || '',
         status: item.Status || 'Inactive',
-        balance: parseFloat(item.Account_Balance) || 0,
-        onlineStatus: item.Status === 'Active' ? 'Online' : 'Offline',
+        balance: parseFloat(item.account_balance) || parseFloat(item.Account_Balance) || 0,
+        onlineStatus: item.Online_Session_Status || 'Offline',
         cityId: null,
         regionId: null,
         timestamp: item.Modified_Date || '',
-        billingStatus: item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : '',
+        billingStatus: item.Billing_Status_Name || (item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : ''),
         dateInstalled: item.Date_Installed || '',
         contactNumber: item.Contact_Number || '',
         secondContactNumber: item.Second_Contact_Number || '',
@@ -64,7 +64,7 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         usageType: item.Usage_Type || item.usage_type || ''
       }));
     }
-    
+
     return [];
   } catch (error) {
     console.error('Error fetching billing records:', error);
@@ -76,10 +76,10 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
   try {
     const response = await apiClient.get<any>(`/billing/${id}`);
     const responseData = response.data;
-    
+
     console.log('Raw API Response:', responseData);
     console.log('House Front Picture URL from API:', responseData?.data?.house_front_picture_url);
-    
+
     if (responseData?.data) {
       const item = responseData.data;
       const basicRecord: BillingRecord = {
@@ -88,12 +88,12 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         customerName: item.Full_Name || '',
         address: item.Address || '',
         status: item.Status || 'Inactive',
-        balance: parseFloat(item.Account_Balance) || 0,
-        onlineStatus: item.Status === 'Active' ? 'Online' : 'Offline',
+        balance: parseFloat(item.account_balance) || parseFloat(item.Account_Balance) || 0,
+        onlineStatus: item.Online_Session_Status || 'Offline',
         cityId: null,
         regionId: null,
         timestamp: item.Modified_Date || '',
-        billingStatus: item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : '',
+        billingStatus: item.Billing_Status_Name || (item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : ''),
         dateInstalled: item.Date_Installed || '',
         contactNumber: item.Contact_Number || '',
         secondContactNumber: item.Second_Contact_Number || '',
@@ -118,7 +118,7 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         region: item.Region || '',
         usageType: item.Usage_Type || item.usage_type || ''
       };
-      
+
       const detailRecord: BillingDetailRecord = {
         ...basicRecord,
         lcpnapport: item.LCPNAPPORT || '',
@@ -165,13 +165,13 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         relatedAttachments: '',
         logs: 'Logs (0)'
       };
-      
+
       console.log('Mapped houseFrontPicture value:', detailRecord.houseFrontPicture);
       console.log('Full detailRecord:', detailRecord);
-      
+
       return detailRecord;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error fetching billing record details:', error);
@@ -208,9 +208,9 @@ export const updateBillingRecord = async (id: string, data: Partial<BillingDetai
       Second_Contact_Number: data.secondContactNumber,
       Referrers_Account_Number: data.referrersAccountNumber
     };
-    
+
     await apiClient.put<any>(`/billing-details/${id}`, backendData);
-    
+
     return getBillingRecordDetails(id);
   } catch (error) {
     console.error('Error updating billing record:', error);
@@ -251,13 +251,13 @@ export const createBillingRecord = async (data: Partial<BillingDetailRecord>): P
       Modified_Date: new Date().toISOString(),
       Modified_By: 'System'
     };
-    
+
     const response = await apiClient.post<any>('/billing-details', backendData);
-    
+
     if (response.data.status === 'success' && response.data.data) {
       return getBillingRecordDetails(response.data.data.Account_No);
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error creating billing record:', error);

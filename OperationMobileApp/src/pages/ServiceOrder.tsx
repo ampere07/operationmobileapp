@@ -1,29 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  ActivityIndicator,
-  Modal,
-  SafeAreaView
-} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  FileText,
-  Search,
-  Filter,
-  ArrowLeft,
-  X,
-  ArrowUp,
-  ArrowDown
-} from 'lucide-react-native';
-import { getServiceOrders, ServiceOrderData } from '../services/serviceOrderService';
-import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { applyFilters } from '../utils/filterUtils';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, Filter, RefreshCw } from 'lucide-react';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
-import ServiceOrderFunnelFilter, { FilterValues } from '../components/filters/ServiceOrderFunnelFilter';
+import ServiceOrderFunnelFilter from '../components/filters/ServiceOrderFunnelFilter';
+import { useServiceOrderContext, type ServiceOrder } from '../contexts/ServiceOrderContext';
+import { getCities, City } from '../services/cityService';
+import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+
 
 interface LocationItem {
   id: string;
@@ -31,406 +13,1248 @@ interface LocationItem {
   count: number;
 }
 
-interface SortConfig {
-  key: string;
-  direction: 'asc' | 'desc';
-}
+type DisplayMode = 'card' | 'table';
+type MobileView = 'locations' | 'orders' | 'details';
 
 const allColumns = [
-  { key: 'timestamp', label: 'Timestamp' },
-  { key: 'full_name', label: 'Full Name' },
-  { key: 'contact_number', label: 'Contact #' },
-  { key: 'support_status', label: 'Status' },
+  { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
+  { key: 'supportStatus', label: 'Support Status', width: 'min-w-32' },
+  { key: 'visitStatus', label: 'Visit Status', width: 'min-w-32' },
+  { key: 'fullName', label: 'Full Name', width: 'min-w-40' },
+  { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
+  { key: 'fullAddress', label: 'Full Address', width: 'min-w-56' },
+  { key: 'concern', label: 'Concern', width: 'min-w-36' },
+  { key: 'concernRemarks', label: 'Concern Remarks', width: 'min-w-48' },
+  { key: 'requestedBy', label: 'Requested By', width: 'min-w-36' },
+  { key: 'assignedEmail', label: 'Assigned Email', width: 'min-w-48' },
+  { key: 'repairCategory', label: 'Repair Category', width: 'min-w-36' },
+  { key: 'modifiedBy', label: 'Modified By', width: 'min-w-32' },
+  { key: 'modifiedDate', label: 'Modified Date', width: 'min-w-40' }
 ];
 
 const ServiceOrderPage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedOrder, setSelectedOrder] = useState<ServiceOrderData | null>(null);
-  const [serviceOrders, setServiceOrders] = useState<ServiceOrderData[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedServiceOrder, setSelectedServiceOrder] = useState<ServiceOrder | null>(null);
+  const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
+  const [cities, setCities] = useState<City[]>([]);
   const [userRole, setUserRole] = useState<string>('');
-
-  // Mobile UI States
-  const [mobileView, setMobileView] = useState<'locations' | 'orders' | 'details'>('locations');
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(allColumns.map(col => col.key));
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [columnOrder, setColumnOrder] = useState<string[]>(allColumns.map(col => col.key));
+  const [sidebarWidth, setSidebarWidth] = useState<number>(256);
+  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [mobileView, setMobileView] = useState<MobileView>('locations');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
-  const [isSortModalOpen, setIsSortModalOpen] = useState<boolean>(false);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'timestamp', direction: 'desc' });
-  const [activeFilters, setActiveFilters] = useState<FilterValues>({});
-
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+  const sidebarStartXRef = useRef<number>(0);
+  const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [activeFilters, setActiveFilters] = useState<any>(() => {
+    const saved = localStorage.getItem('serviceOrderFilters');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        console.error('Failed to load filters:', err);
+      }
+    }
+    return {};
+  });
+
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 50;
+
+  const formatDate = (dateStr?: string): string => {
+    if (!dateStr) return 'Not scheduled';
+    try {
+      return new Date(dateStr).toLocaleString();
+    } catch (e) {
+      return dateStr;
+    }
+  };
 
   useEffect(() => {
-    const init = async () => {
+    const fetchColorPalette = async () => {
       try {
-        const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme !== 'light');
         const activePalette = await settingsColorPaletteService.getActive();
         setColorPalette(activePalette);
-        const savedFilters = await AsyncStorage.getItem('serviceOrderFunnelFilters');
-        if (savedFilters) setActiveFilters(JSON.parse(savedFilters));
-        const authData = await AsyncStorage.getItem('authData');
-        if (authData) {
-          const userData = JSON.parse(authData);
-          setUserRole(userData.role || '');
-        }
-      } catch (e) {
-        console.error('Init error', e);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
       }
     };
-    init();
+
+    fetchColorPalette();
+    fetchColorPalette();
   }, []);
 
-  const fetchServiceOrders = useCallback(async (isInitialLoad: boolean = false) => {
-    try {
-      if (isInitialLoad) setLoading(true);
-      setError(null);
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedLocation, searchQuery, activeFilters, sortColumn, sortDirection]);
 
-      const authData = await AsyncStorage.getItem('authData');
-      let assignedEmail: string | undefined;
-      let roleId: number | null = null;
-      let userRoleString = '';
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const theme = localStorage.getItem('theme');
+      setIsDarkMode(theme !== 'light');
+    });
 
-      if (authData) {
-        const userData = JSON.parse(authData);
-        roleId = userData.role_id || null;
-        userRoleString = (userData.role || '').toLowerCase();
-        if (userRoleString === 'technician' && userData.email) {
-          assignedEmail = userData.email;
-        }
-      }
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
 
-      const response = await getServiceOrders(assignedEmail);
+    const theme = localStorage.getItem('theme');
+    setIsDarkMode(theme !== 'light');
 
-      if (response && Array.isArray(response)) {
-        const orders = response;
-
-        // Technician Filter Logic (Last 7 days for Resolved)
-        const isTechnician = Number(roleId) === 2 || userRoleString === 'technician';
-        let filteredOrders = orders;
-
-        if (isTechnician) {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-          filteredOrders = orders.filter(order => {
-            const status = (order.support_status || '').toLowerCase().trim();
-
-            // If resolved, verify timestamp
-            if (status === 'resolved') {
-              const updatedAt = order.updated_at ? new Date(order.updated_at) : null;
-              if (updatedAt && !isNaN(updatedAt.getTime()) && updatedAt < sevenDaysAgo) {
-                return false; // Hide old resolved tickets
-              }
-            }
-            return true;
-          });
-        }
-
-        setServiceOrders(filteredOrders);
-      } else {
-        setServiceOrders([]);
-        // @ts-ignore
-        setError(response?.message || 'Failed to load service orders');
-      }
-    } catch (err: any) {
-      if (isInitialLoad) setError(err.message || 'Error loading data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    fetchServiceOrders(true);
-  }, [fetchServiceOrders]);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setFilterDropdownOpen(false);
+      }
+    };
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    fetchServiceOrders(false);
-  };
+    document.addEventListener('mousedown', handleClickOutside);
 
-  // Location Groups
-  const locationItems: LocationItem[] = [{ id: 'all', name: 'All', count: serviceOrders.length }];
-  const locationSet = new Set<string>();
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownRef, filterDropdownRef]);
 
-  serviceOrders.forEach(v => {
-    // Heuristic: try to parse city from address string "Street, Barangay, City, Province"
-    // or "Street, City"
-    if (v.full_address) {
-      const parts = v.full_address.split(',');
-      // Attempt to grab city - typically 2nd to last or last item depending on format
-      // Assuming "Barangay, City" or "Barangay, City, Province"
-      if (parts.length >= 2) {
-        const city = parts[parts.length > 2 ? parts.length - 2 : parts.length - 1].trim();
-        if (city) locationSet.add(city.toLowerCase());
-      } else {
-        const city = parts[0].trim();
-        if (city) locationSet.add(city.toLowerCase());
+  useEffect(() => {
+    const authData = localStorage.getItem('authData');
+    if (authData) {
+      try {
+        const userData = JSON.parse(authData);
+        setUserRole(userData.role || '');
+        setUserEmail(userData.email || '');
+      } catch (error) {
+        console.error('Error parsing auth data:', error);
       }
     }
-  });
+  }, []);
 
-  Array.from(locationSet).sort().forEach(loc => {
-    if (loc) {
-      locationItems.push({
-        id: loc,
-        name: loc.charAt(0).toUpperCase() + loc.slice(1),
-        count: serviceOrders.filter(v =>
-          (v.full_address || '').toLowerCase().includes(loc)
-        ).length
+  // Fetch cities
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const citiesData = await getCities();
+        setCities(citiesData || []);
+      } catch (err) {
+        console.error('Failed to fetch cities:', err);
+      }
+    };
+
+    fetchCities();
+  }, []);
+
+  // Trigger silent refresh on mount to ensure data is fresh but no spinner if cached
+  useEffect(() => {
+    silentRefresh();
+  }, [silentRefresh]);
+
+  const handleRefresh = async () => {
+    await refreshServiceOrders();
+  };
+
+  const locationItems: LocationItem[] = useMemo(() => {
+    const items: LocationItem[] = [
+      {
+        id: 'all',
+        name: 'All',
+        count: serviceOrders.length
+      }
+    ];
+
+    if (cities.length > 0) {
+      cities.forEach(city => {
+        const cityCount = serviceOrders.filter(so =>
+          so.fullAddress.toLowerCase().includes(city.name.toLowerCase())
+        ).length;
+
+        items.push({
+          id: city.name.toLowerCase(),
+          name: city.name,
+          count: cityCount
+        });
+      });
+    } else {
+      const locationSet = new Set<string>();
+
+      serviceOrders.forEach(so => {
+        const addressParts = so.fullAddress.split(',');
+        if (addressParts.length >= 2) {
+          const cityPart = addressParts[addressParts.length - 2].trim().toLowerCase();
+          if (cityPart && cityPart !== '') {
+            locationSet.add(cityPart);
+          }
+        }
+      });
+
+      Array.from(locationSet).forEach(location => {
+        const cityCount = serviceOrders.filter(so =>
+          so.fullAddress.toLowerCase().includes(location)
+        ).length;
+
+        items.push({
+          id: location,
+          name: location.charAt(0).toUpperCase() + location.slice(1),
+          count: cityCount
+        });
       });
     }
-  });
 
-  // Filter Logic
-  let filteredData = serviceOrders.filter(order => {
-    const locMatch = selectedLocation === 'all' ||
-      (order.full_address || '').toLowerCase().includes(selectedLocation);
+    return items;
+  }, [cities, serviceOrders]);
 
-    const searchMatch = searchQuery === '' ||
-      (order.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (order.account_no || '').includes(searchQuery) ||
-      (order.ticket_id || '').toLowerCase().includes(searchQuery.toLowerCase());
+  // Helper function to apply funnel filters
+  const applyFunnelFilters = (orders: ServiceOrder[], filters: any): ServiceOrder[] => {
+    if (!filters || Object.keys(filters).length === 0) return orders;
 
-    return locMatch && searchMatch;
-  });
+    return orders.filter(order => {
+      return Object.entries(filters).every(([key, filter]: [string, any]) => {
+        const orderValue = (order as any)[key];
 
-  // Apply Funnel Filters
-  // @ts-ignore - applyFilters typed for objects, should work if data matches keys
-  filteredData = applyFilters(filteredData, activeFilters);
+        if (filter.type === 'text') {
+          if (!filter.value) return true;
+          const value = String(orderValue || '').toLowerCase();
+          return value.includes(filter.value.toLowerCase());
+        }
 
-  // Sort Logic
-  const sortedData = [...filteredData].sort((a, b) => {
-    let valA: any = (a as any)[sortConfig.key] || '';
-    let valB: any = (b as any)[sortConfig.key] || '';
+        if (filter.type === 'number') {
+          const numValue = Number(orderValue);
+          if (isNaN(numValue)) return false;
+          if (filter.from !== undefined && filter.from !== '' && numValue < Number(filter.from)) return false;
+          if (filter.to !== undefined && filter.to !== '' && numValue > Number(filter.to)) return false;
+          return true;
+        }
 
-    if (sortConfig.key === 'timestamp' || sortConfig.key.includes('_at')) {
-      valA = new Date(valA).getTime();
-      valB = new Date(valB).getTime();
-    } else {
-      valA = String(valA).toLowerCase();
-      valB = String(valB).toLowerCase();
+        if (filter.type === 'date') {
+          if (!orderValue) return false;
+          const dateValue = new Date(orderValue).getTime();
+          if (filter.from && dateValue < new Date(filter.from).getTime()) return false;
+          if (filter.to && dateValue > new Date(filter.to).getTime()) return false;
+          return true;
+        }
+
+        return true;
+      });
+    });
+  };
+
+  const filteredServiceOrders = useMemo(() => {
+    // Robust detection for Technician role (Role ID 2 or role name 'technician')
+    const numericRoleId = Number(userRole); // Using userRole from state which was populated from authData
+    let userRoleString = '';
+
+    // Double check authData directly for robustness similar to ApplicationVisit.tsx
+    try {
+      const authData = localStorage.getItem('authData');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        userRoleString = (parsed.role || '').toLowerCase();
+      }
+    } catch (e) { }
+
+    const isTechnician = numericRoleId === 2 || userRoleString === 'technician';
+
+    let filtered = serviceOrders.filter(serviceOrder => {
+      // 1. Technician 7-Day Filter for 'Resolved' tickets
+      if (isTechnician) {
+        const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
+
+        // Only filter if status is 'Resolved'
+        if (supportStatus === 'resolved') {
+          const updatedAt = serviceOrder.rawUpdatedAt;
+
+          // If we have a date, check if it's older than 7 days
+          if (updatedAt) {
+            const updatedDate = new Date(updatedAt);
+            if (!isNaN(updatedDate.getTime())) {
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+              // If older than 7 days, HIDE it (return false)
+              if (updatedDate < sevenDaysAgo) {
+                return false;
+              }
+            }
+          }
+        }
+      }
+
+      const matchesLocation = selectedLocation === 'all' ||
+        serviceOrder.fullAddress.toLowerCase().includes(selectedLocation.toLowerCase());
+
+      const matchesSearch = searchQuery === '' ||
+        serviceOrder.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        serviceOrder.fullAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (serviceOrder.concern && serviceOrder.concern.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      return matchesLocation && matchesSearch;
+    });
+
+    // Apply funnel filters
+    filtered = applyFunnelFilters(filtered, activeFilters);
+
+    filtered.sort((a, b) => {
+      const idA = parseInt(a.id) || 0;
+      const idB = parseInt(b.id) || 0;
+      return idB - idA;
+    });
+
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        let aValue: any = '';
+        let bValue: any = '';
+
+        switch (sortColumn) {
+          case 'timestamp':
+            aValue = a.timestamp || '';
+            bValue = b.timestamp || '';
+            break;
+          case 'supportStatus':
+            aValue = a.supportStatus || '';
+            bValue = b.supportStatus || '';
+            break;
+          case 'visitStatus':
+            aValue = a.visitStatus || '';
+            bValue = b.visitStatus || '';
+            break;
+          case 'fullName':
+            aValue = a.fullName || '';
+            bValue = b.fullName || '';
+            break;
+          case 'contactNumber':
+            aValue = a.contactNumber || '';
+            bValue = b.contactNumber || '';
+            break;
+          case 'fullAddress':
+            aValue = a.fullAddress || '';
+            bValue = b.fullAddress || '';
+            break;
+          case 'concern':
+            aValue = a.concern || '';
+            bValue = b.concern || '';
+            break;
+          case 'concernRemarks':
+            aValue = a.concernRemarks || '';
+            bValue = b.concernRemarks || '';
+            break;
+          case 'requestedBy':
+            aValue = a.requestedBy || '';
+            bValue = b.requestedBy || '';
+            break;
+          case 'assignedEmail':
+            aValue = a.assignedEmail || '';
+            bValue = b.assignedEmail || '';
+            break;
+          case 'repairCategory':
+            aValue = a.repairCategory || '';
+            bValue = b.repairCategory || '';
+            break;
+          case 'modifiedBy':
+            aValue = a.modifiedBy || '';
+            bValue = b.modifiedBy || '';
+            break;
+          case 'modifiedDate':
+            aValue = a.modifiedDate || '';
+            bValue = b.modifiedDate || '';
+            break;
+          default:
+            return 0;
+        }
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+        }
+
+        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
     }
 
-    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
+    return filtered;
+  }, [serviceOrders, selectedLocation, searchQuery, sortColumn, sortDirection, activeFilters]);
 
-  const getStatusColorClass = (status: string | undefined) => {
-    if (!status) return 'text-gray-400';
-    const s = status.toLowerCase();
-    if (['completed', 'resolved'].includes(s)) return 'text-green-500';
-    if (['pending', 'in progress', 'in-progress', 'open'].includes(s)) return 'text-orange-500';
-    if (['cancelled', 'failed', 'rejected', 'closed'].includes(s)) return 'text-red-500';
-    return 'text-blue-500';
+  // Derived paginated records
+  const paginatedServiceOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredServiceOrders.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredServiceOrders, currentPage]);
+
+  const totalPages = Math.ceil(filteredServiceOrders.length / itemsPerPage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
-  const formatDate = (d?: string) => {
-    if (!d) return '-';
-    try { return new Date(d).toLocaleDateString(); } catch { return d; }
+  const StatusText = ({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
+    if (!status) return <span className="text-gray-400">Unknown</span>;
+
+    let textColor = '';
+
+    if (type === 'support') {
+      switch (status.toLowerCase()) {
+        case 'resolved':
+        case 'completed':
+          textColor = 'text-green-400';
+          break;
+        case 'in-progress':
+        case 'in progress':
+          textColor = 'text-blue-400';
+          break;
+        case 'pending':
+          textColor = 'text-orange-400';
+          break;
+        case 'closed':
+        case 'cancelled':
+          textColor = 'text-gray-400';
+          break;
+        default:
+          textColor = 'text-gray-400';
+      }
+    } else {
+      switch (status.toLowerCase()) {
+        case 'completed':
+          textColor = 'text-green-400';
+          break;
+        case 'scheduled':
+        case 'reschedule':
+        case 'in progress':
+          textColor = 'text-blue-400';
+          break;
+        case 'pending':
+          textColor = 'text-orange-400';
+          break;
+        case 'cancelled':
+        case 'failed':
+          textColor = 'text-red-500';
+          break;
+        default:
+          textColor = 'text-gray-400';
+      }
+    }
+
+    return (
+      <span className={`${textColor} font-bold uppercase`}>
+        {status === 'in-progress' ? 'In Progress' : status}
+      </span>
+    );
   };
 
-  const renderLocationItem = ({ item }: { item: LocationItem }) => (
-    <TouchableOpacity
-      onPress={() => {
-        setSelectedLocation(item.id);
-        setMobileView('orders');
-      }}
-      className={`flex-row items-center justify-between p-4 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-        } ${selectedLocation === item.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-    >
-      <View className="flex-row items-center">
-        <FileText size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        <Text className={`ml-3 text-base capitalize ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-          {item.name}
-        </Text>
-      </View>
-      {item.count > 0 && (
-        <View className="bg-orange-600 px-2 py-1 rounded-full">
-          <Text className="text-white text-xs">{item.count}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+  const handleRowClick = (serviceOrder: ServiceOrder) => {
+    setSelectedServiceOrder(serviceOrder);
+    if (window.innerWidth < 768) {
+      setMobileView('details');
+    }
+  };
 
-  const renderOrderItem = ({ item }: { item: ServiceOrderData }) => (
-    <TouchableOpacity
-      onPress={() => {
-        setSelectedOrder(item);
-        setMobileView('details');
-      }}
-      className={`p-4 border-b mb-1 ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
-        }`}
-    >
-      <View className="flex-row justify-between items-start">
-        <View className="flex-1 mr-2">
-          <Text className={`font-bold text-base mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            {item.full_name}
-          </Text>
-          <Text className={`text-xs mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Ticket: {item.ticket_id} • {formatDate(item.timestamp)}
-          </Text>
-          <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`} numberOfLines={2}>
-            {item.concern} - {item.full_address}
-          </Text>
-        </View>
-        <View className="items-end">
-          <Text className={`text-xs font-bold uppercase ${getStatusColorClass(item.support_status)}`}>
-            {item.support_status || 'OPEN'}
-          </Text>
-          {item.visit_status && (
-            <Text className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-              Visit: {item.visit_status}
-            </Text>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const handleLocationSelect = (locationId: string) => {
+    setSelectedLocation(locationId);
+    setMobileMenuOpen(false);
+    setMobileView('orders');
+  };
 
-  if (loading && !isRefreshing) {
-    return (
-      <View className={`flex-1 justify-center items-center ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-        <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
-        <Text className={`mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Loading service orders...</Text>
-      </View>
-    );
-  }
+  const handleMobileBack = () => {
+    if (mobileView === 'details') {
+      setSelectedServiceOrder(null);
+      setMobileView('orders');
+    } else if (mobileView === 'orders') {
+      setMobileView('locations');
+    }
+  };
 
-  // --- Mobile View: Locations ---
-  if (mobileView === 'locations') {
-    return (
-      <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-        <View className={`p-4 border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
-          <Text className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            Service Orders
-          </Text>
-        </View>
-        <FlatList
-          data={locationItems}
-          keyExtractor={(item) => item.id}
-          renderItem={renderLocationItem}
-        />
-      </SafeAreaView>
-    );
-  }
+  const handleMobileRowClick = (serviceOrder: ServiceOrder) => {
+    setSelectedServiceOrder(serviceOrder);
+    setMobileView('details');
+  };
 
-  // --- Mobile View: Details ---
-  if (mobileView === 'details' && selectedOrder) {
-    return (
-      <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-        <ServiceOrderDetails
-          serviceOrder={selectedOrder}
-          onClose={() => setMobileView('orders')}
-          onRefresh={handleRefresh}
-          isMobile={true}
-        />
-      </SafeAreaView>
-    )
-  }
+  const handleToggleColumn = (columnKey: string) => {
+    setVisibleColumns(prev => {
+      if (prev.includes(columnKey)) {
+        return prev.filter(key => key !== columnKey);
+      } else {
+        return [...prev, columnKey];
+      }
+    });
+  };
 
-  // --- Mobile View: Orders List ---
+  const handleSelectAllColumns = () => {
+    setVisibleColumns(allColumns.map(col => col.key));
+  };
+
+  const handleDeselectAllColumns = () => {
+    setVisibleColumns([]);
+  };
+
+  const handleSort = (columnKey: string) => {
+    if (sortColumn === columnKey) {
+      if (sortDirection === 'desc') {
+        setSortColumn(null);
+        setSortDirection('asc');
+      } else {
+        setSortDirection('desc');
+      }
+    } else {
+      setSortColumn(columnKey);
+      setSortDirection('asc');
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
+    setDraggedColumn(columnKey);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedColumn && draggedColumn !== columnKey) {
+      setDragOverColumn(columnKey);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
+    e.preventDefault();
+
+    if (!draggedColumn || draggedColumn === targetColumnKey) {
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+      return;
+    }
+
+    const newOrder = [...columnOrder];
+    const draggedIndex = newOrder.indexOf(draggedColumn);
+    const targetIndex = newOrder.indexOf(targetColumnKey);
+
+    newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedColumn);
+
+    setColumnOrder(newOrder);
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
+
+  const handleMouseDownResize = (e: React.MouseEvent, columnKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColumn(columnKey);
+    startXRef.current = e.clientX;
+
+    const th = (e.target as HTMLElement).closest('th');
+    if (th) {
+      startWidthRef.current = th.offsetWidth;
+    }
+  };
+
+  useEffect(() => {
+    if (!resizingColumn) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingColumn) return;
+
+      const diff = e.clientX - startXRef.current;
+      const newWidth = Math.max(100, startWidthRef.current + diff);
+
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizingColumn]: newWidth
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setResizingColumn(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingColumn]);
+
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return;
+
+      const diff = e.clientX - sidebarStartXRef.current;
+      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
+
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingSidebar]);
+
+  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingSidebar(true);
+    sidebarStartXRef.current = e.clientX;
+    sidebarStartWidthRef.current = sidebarWidth;
+  };
+
+  const filteredColumns = allColumns
+    .filter(col => visibleColumns.includes(col.key))
+    .sort((a, b) => {
+      const indexA = columnOrder.indexOf(a.key);
+      const indexB = columnOrder.indexOf(b.key);
+      return indexA - indexB;
+    });
+
+  const renderCellValue = (serviceOrder: ServiceOrder, columnKey: string) => {
+    switch (columnKey) {
+      case 'timestamp':
+        return serviceOrder.timestamp;
+      case 'supportStatus':
+        return <StatusText status={serviceOrder.supportStatus} type="support" />;
+      case 'visitStatus':
+        return <StatusText status={serviceOrder.visitStatus} type="visit" />;
+      case 'fullName':
+        return serviceOrder.fullName;
+      case 'contactNumber':
+        return serviceOrder.contactNumber;
+      case 'fullAddress':
+        return <span title={serviceOrder.fullAddress}>{serviceOrder.fullAddress}</span>;
+      case 'concern':
+        return serviceOrder.concern;
+      case 'concernRemarks':
+        return serviceOrder.concernRemarks || '-';
+      case 'requestedBy':
+        return serviceOrder.requestedBy || '-';
+      case 'assignedEmail':
+        return serviceOrder.assignedEmail || '-';
+      case 'repairCategory':
+        return serviceOrder.repairCategory || '-';
+      case 'modifiedBy':
+        return serviceOrder.modifiedBy || '-';
+      case 'modifiedDate':
+        return serviceOrder.modifiedDate;
+      default:
+        return '-';
+    }
+  };
+
   return (
-    <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-      <View className={`p-4 border-b flex-row items-center space-x-2 ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
-        <TouchableOpacity onPress={() => setMobileView('locations')} className="mr-1">
-          <ArrowLeft size={24} color={isDarkMode ? 'white' : 'black'} />
-        </TouchableOpacity>
-        <View className="flex-1 relative">
-          <TextInput
-            placeholder="Search Ticket/Name..."
-            placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            className={`pl-9 pr-4 py-2 rounded-lg border ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-gray-100 text-gray-900 border-gray-300'
-              }`}
-          />
-          <View className="absolute left-3 top-3">
-            <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-          </View>
-        </View>
-        <TouchableOpacity onPress={() => setIsSortModalOpen(true)} className={`p-2 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
-          <ArrowUp size={20} color={isDarkMode ? 'white' : 'black'} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setIsFunnelFilterOpen(true)}
-          className={`p-2 rounded-lg ${Object.keys(activeFilters).length > 0 ? 'bg-orange-500' : (isDarkMode ? 'bg-gray-800' : 'bg-gray-200')}`}
-        >
-          <Filter size={20} color={Object.keys(activeFilters).length > 0 ? 'white' : (isDarkMode ? 'white' : 'black')} />
-        </TouchableOpacity>
-      </View>
+    <div className={`${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+      } h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0`}>
+      {/* Desktop Sidebar - Hidden on mobile */}
+      {userRole.toLowerCase() !== 'technician' && (
+        <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+          }`} style={{ width: `${sidebarWidth}px` }}>
+          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+            }`}>
+            <div className="flex items-center mb-1">
+              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Service Orders</h2>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {locationItems.map((location) => (
+              <button
+                key={location.id}
+                onClick={() => setSelectedLocation(location.id)}
+                className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+                  }`}
+                style={selectedLocation === location.id ? {
+                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
+                  color: colorPalette?.primary || '#fb923c',
+                  fontWeight: 500
+                } : {
+                  color: isDarkMode ? '#d1d5db' : '#374151'
+                }}
+              >
+                <div className="flex items-center">
+                  <FileText className="h-4 w-4 mr-2" />
+                  <span className="capitalize">{location.name}</span>
+                </div>
+                {location.count > 0 && (
+                  <span
+                    className="px-2 py-1 rounded-full text-xs"
+                    style={selectedLocation === location.id ? {
+                      backgroundColor: colorPalette?.primary || '#ea580c',
+                      color: 'white'
+                    } : {
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                      color: isDarkMode ? '#d1d5db' : '#374151'
+                    }}
+                  >
+                    {location.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-      <FlatList
-        data={sortedData}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderOrderItem}
-        refreshing={isRefreshing}
-        onRefresh={handleRefresh}
-        ListEmptyComponent={
-          <View className="p-8 items-center">
-            <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
-              No service orders found.
-            </Text>
-          </View>
-        }
-      />
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-orange-500 transition-colors z-10"
+            onMouseDown={handleMouseDownSidebarResize}
+          />
+        </div>
+      )}
+
+      {/* Mobile Location View */}
+      {mobileView === 'locations' && (
+        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+          }`}>
+          <div className={`p-4 border-b ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
+            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>Service Orders</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {locationItems.map((location) => (
+              <button
+                key={location.id}
+                onClick={() => handleLocationSelect(location.id)}
+                className={`w-full flex items-center justify-between px-4 py-4 text-sm transition-colors border-b ${isDarkMode
+                  ? 'hover:bg-gray-800 border-gray-800 text-gray-300'
+                  : 'hover:bg-gray-100 border-gray-200 text-gray-700'
+                  }`}
+              >
+                <div className="flex items-center">
+                  <FileText className="h-5 w-5 mr-3" />
+                  <span className="capitalize text-base">{location.name}</span>
+                </div>
+                {location.count > 0 && (
+                  <span className={`px-3 py-1 rounded-full text-sm ${isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                    {location.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Overlay Menu */}
+      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
+          <div className={`absolute inset-y-0 left-0 w-64 shadow-xl flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
+            }`}>
+            <div className={`p-4 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Filters</h2>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {locationItems.map((location) => (
+                <button
+                  key={location.id}
+                  onClick={() => handleLocationSelect(location.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-gray-800 ${selectedLocation === location.id
+                    ? 'bg-orange-500 bg-opacity-20 text-orange-400'
+                    : 'text-gray-300'
+                    }`}
+                >
+                  <div className="flex items-center">
+                    <FileText className="h-4 w-4 mr-2" />
+                    <span className="capitalize">{location.name}</span>
+                  </div>
+                  {location.count > 0 && (
+                    <span className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-700 text-gray-300'
+                      }`}>
+                      {location.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className={`overflow-hidden flex-1 flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
+        } ${mobileView === 'locations' || mobileView === 'details' ? 'hidden md:flex' : ''}`}>
+        <div className="flex flex-col h-full">
+          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
+            <div className="flex items-center space-x-3">
+              {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="md:hidden bg-gray-700 hover:bg-gray-600 text-white p-2 rounded text-sm transition-colors flex items-center justify-center"
+                  aria-label="Open filter menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              )}
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search service orders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full rounded pl-10 pr-4 py-2 border focus:outline-none ${isDarkMode
+                    ? 'bg-gray-800 text-white border-gray-700'
+                    : 'bg-gray-100 text-gray-900 border-gray-300'
+                    }`}
+                  onFocus={(e) => {
+                    if (colorPalette?.primary) {
+                      e.currentTarget.style.borderColor = colorPalette.primary;
+                      e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
+                    }
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                />
+                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`} />
+              </div>
+              <div className="hidden md:flex space-x-2">
+                <button
+                  onClick={() => setIsFunnelFilterOpen(true)}
+                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
+                    ? 'hover:bg-gray-700 text-white'
+                    : 'hover:bg-gray-200 text-gray-900'
+                    }`}
+                >
+                  <Filter className="h-5 w-5" />
+                </button>
+                {displayMode === 'table' && (
+                  <div className="relative" ref={filterDropdownRef}>
+                    <button
+                      className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
+                        ? 'hover:bg-gray-800 text-white'
+                        : 'hover:bg-gray-100 text-gray-900'
+                        }`}
+                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                    >
+                      <ListFilter className="h-5 w-5" />
+                    </button>
+                    {filterDropdownOpen && (
+                      <div className={`absolute top-full right-0 mt-2 w-80 border rounded shadow-lg z-50 max-h-96 flex flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                        }`}>
+                        <div className={`p-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          }`}>
+                          <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>Column Visibility</span>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={handleSelectAllColumns}
+                              className="text-xs transition-colors"
+                              style={{
+                                color: colorPalette?.primary || '#f97316'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (colorPalette?.accent) {
+                                  e.currentTarget.style.color = colorPalette.accent;
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (colorPalette?.primary) {
+                                  e.currentTarget.style.color = colorPalette.primary;
+                                }
+                              }}
+                            >
+                              Select All
+                            </button>
+                            <span className="text-gray-600">|</span>
+                            <button
+                              onClick={handleDeselectAllColumns}
+                              className="text-xs transition-colors"
+                              style={{
+                                color: colorPalette?.primary || '#f97316'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (colorPalette?.accent) {
+                                  e.currentTarget.style.color = colorPalette.accent;
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (colorPalette?.primary) {
+                                  e.currentTarget.style.color = colorPalette.primary;
+                                }
+                              }}
+                            >
+                              Deselect All
+                            </button>
+                          </div>
+                        </div>
+                        <div className="overflow-y-auto flex-1">
+                          {allColumns.map((column) => (
+                            <label
+                              key={column.key}
+                              className={`flex items-center px-4 py-2 cursor-pointer text-sm ${isDarkMode
+                                ? 'hover:bg-gray-700 text-white'
+                                : 'hover:bg-gray-100 text-gray-900'
+                                }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.includes(column.key)}
+                                onChange={() => handleToggleColumn(column.key)}
+                                className={`mr-3 h-4 w-4 rounded text-orange-600 focus:ring-orange-500 ${isDarkMode
+                                  ? 'border-gray-600 bg-gray-700 focus:ring-offset-gray-800'
+                                  : 'border-gray-300 bg-white focus:ring-offset-white'
+                                  }`}
+                              />
+                              <span>{column.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="relative z-50" ref={dropdownRef}>
+                  <button
+                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
+                      ? 'hover:bg-gray-800 text-white'
+                      : 'hover:bg-gray-100 text-gray-900'
+                      }`}
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                  >
+                    <span>{displayMode === 'card' ? 'Card View' : 'Table View'}</span>
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {dropdownOpen && (
+                    <div className={`fixed right-auto mt-1 w-36 border rounded shadow-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                      }`}>
+                      <button
+                        onClick={() => {
+                          setDisplayMode('card');
+                          setDropdownOpen(false);
+                        }}
+                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                          }`}
+                        style={displayMode === 'card' ? {
+                          color: colorPalette?.primary || '#f97316'
+                        } : {
+                          color: isDarkMode ? '#ffffff' : '#111827'
+                        }}
+                      >
+                        Card View
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDisplayMode('table');
+                          setDropdownOpen(false);
+                        }}
+                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+                          }`}
+                        style={displayMode === 'table' ? {
+                          color: colorPalette?.primary || '#f97316'
+                        } : {
+                          color: isDarkMode ? '#ffffff' : '#111827'
+                        }}
+                      >
+                        Table View
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="text-white px-3 py-2 rounded text-sm flex items-center transition-colors disabled:bg-gray-600"
+                  style={{
+                    backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLoading && colorPalette?.accent) {
+                      e.currentTarget.style.backgroundColor = colorPalette.accent;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isLoading && colorPalette?.primary) {
+                      e.currentTarget.style.backgroundColor = colorPalette.primary;
+                    }
+                  }}
+                >
+                  <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                  </div>
+                  <p className="mt-4">Loading service orders...</p>
+                </div>
+              ) : error ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                  <p>{error}</p>
+                  <button
+                    onClick={handleRefresh}
+                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
+                    Retry
+                  </button>
+                </div>
+              ) : displayMode === 'card' ? (
+                paginatedServiceOrders.length > 0 ? (
+                  <div className="space-y-0">
+                    {paginatedServiceOrders.map((serviceOrder) => (
+                      <div
+                        key={serviceOrder.id}
+                        onClick={() => window.innerWidth < 768 ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
+                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${isDarkMode
+                          ? `hover:bg-gray-800 border-gray-800 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-800' : ''}`
+                          : `hover:bg-gray-100 border-gray-200 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-100' : ''}`
+                          }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-sm mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
+                              }`}>
+                              {serviceOrder.fullName}
+                            </div>
+                            <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
+                              {serviceOrder.timestamp} | {serviceOrder.fullAddress}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end space-y-1 ml-4 flex-shrink-0">
+                            <StatusText status={serviceOrder.supportStatus} type="support" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                    No service orders found matching your filters
+                  </div>
+                )
+              ) : (
+                <div className="overflow-x-auto overflow-y-hidden">
+                  <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
+                    <thead>
+                      <tr className={`border-b sticky top-0 z-10 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'
+                        }`}>
+                        {filteredColumns.map((column, index) => (
+                          <th
+                            key={column.key}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, column.key)}
+                            onDragOver={(e) => handleDragOver(e, column.key)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, column.key)}
+                            onDragEnd={handleDragEnd}
+                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${isDarkMode
+                              ? `text-gray-400 bg-gray-800 ${index < filteredColumns.length - 1 ? 'border-r border-gray-700' : ''}`
+                              : `text-gray-600 bg-gray-100 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
+                              } ${draggedColumn === column.key ? 'opacity-50' : ''
+                              } ${dragOverColumn === column.key ? 'bg-orange-500 bg-opacity-20' : ''
+                              }`}
+                            style={{ width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined }}
+                            onMouseEnter={() => setHoveredColumn(column.key)}
+                            onMouseLeave={() => setHoveredColumn(null)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>{column.label}</span>
+                              {(hoveredColumn === column.key || sortColumn === column.key) && (
+                                <button
+                                  onClick={() => handleSort(column.key)}
+                                  className="ml-2 transition-colors"
+                                >
+                                  {sortColumn === column.key && sortDirection === 'desc' ? (
+                                    <ArrowDown className="h-4 w-4 text-orange-400" />
+                                  ) : (
+                                    <ArrowUp className="h-4 w-4 text-gray-400 hover:text-orange-400" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            {index < filteredColumns.length - 1 && (
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-orange-500 group-hover:bg-gray-600"
+                                onMouseDown={(e) => handleMouseDownResize(e, column.key)}
+                              />
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedServiceOrders.length > 0 ? (
+                        paginatedServiceOrders.map((serviceOrder) => (
+                          <tr
+                            key={serviceOrder.id}
+                            className={`border-b cursor-pointer transition-colors ${isDarkMode
+                              ? `border-gray-800 hover:bg-gray-900 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-800' : ''}`
+                              : `border-gray-200 hover:bg-gray-100 ${selectedServiceOrder?.id === serviceOrder.id ? 'bg-gray-100' : ''}`
+                              }`}
+                            onClick={() => window.innerWidth < 768 ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
+                          >
+                            {filteredColumns.map((column, index) => (
+                              <td
+                                key={column.key}
+                                className={`py-4 px-3 ${isDarkMode
+                                  ? `text-white ${index < filteredColumns.length - 1 ? 'border-r border-gray-800' : ''}`
+                                  : `text-gray-900 ${index < filteredColumns.length - 1 ? 'border-r border-gray-200' : ''}`
+                                  }`}
+                                style={{
+                                  width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
+                                  maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
+                                }}
+                              >
+                                <div className="truncate">
+                                  {renderCellValue(serviceOrder, column.key)}
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${isDarkMode ? 'text-gray-400 border-gray-800' : 'text-gray-600 border-gray-200'
+                            }`}>
+                            No service orders found matching your filters
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            {!isLoading && filteredServiceOrders.length > 0 && totalPages > 1 && (
+              <div className={`border-t p-4 flex items-center justify-between ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredServiceOrders.length)}</span> of <span className="font-medium">{filteredServiceOrders.length}</span> results
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
+                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
+                      }`}
+                  >
+                    Previous
+                  </button>
+
+                  <div className="flex items-center space-x-1">
+                    <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
+                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
+                      }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {selectedServiceOrder && mobileView === 'details' && (
+        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+          }`}>
+          <ServiceOrderDetails
+            serviceOrder={selectedServiceOrder}
+            onClose={handleMobileBack}
+            isMobile={true}
+          />
+        </div>
+      )}
+
+      {selectedServiceOrder && mobileView !== 'details' && (
+        <div className="hidden md:block flex-shrink-0 overflow-hidden">
+          <ServiceOrderDetails
+            serviceOrder={selectedServiceOrder}
+            onClose={() => setSelectedServiceOrder(null)}
+            isMobile={false}
+          />
+        </div>
+      )}
 
       <ServiceOrderFunnelFilter
         isOpen={isFunnelFilterOpen}
         onClose={() => setIsFunnelFilterOpen(false)}
-        onApplyFilters={setActiveFilters}
+        onApplyFilters={(filters) => {
+          console.log('Applied filters:', filters);
+          setActiveFilters(filters);
+          localStorage.setItem('serviceOrderFilters', JSON.stringify(filters));
+          setIsFunnelFilterOpen(false);
+        }}
         currentFilters={activeFilters}
       />
-
-      <Modal visible={isSortModalOpen} transparent animationType="slide">
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className={`rounded-t-xl p-4 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Sort By</Text>
-              <TouchableOpacity onPress={() => setIsSortModalOpen(false)}>
-                <X size={24} color={isDarkMode ? 'white' : 'black'} />
-              </TouchableOpacity>
-            </View>
-
-            {allColumns.map(col => (
-              <TouchableOpacity
-                key={col.key}
-                onPress={() => {
-                  setSortConfig({
-                    key: col.key,
-                    direction: sortConfig.key === col.key && sortConfig.direction === 'asc' ? 'desc' : 'asc'
-                  });
-                  setIsSortModalOpen(false);
-                }}
-                className={`flex-row justify-between items-center py-4 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}
-              >
-                <Text className={isDarkMode ? 'text-white' : 'text-gray-800'}>{col.label}</Text>
-                {sortConfig.key === col.key && (
-                  sortConfig.direction === 'asc'
-                    ? <ArrowUp size={18} color="orange" />
-                    : <ArrowDown size={18} color="orange" />
-                )}
-              </TouchableOpacity>
-            ))}
-
-            <TouchableOpacity
-              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-              className="mt-4 p-3 rounded-lg items-center"
-              onPress={() => setIsSortModalOpen(false)}
-            >
-              <Text className="text-white font-bold">Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-    </SafeAreaView>
+    </div>
   );
 };
 

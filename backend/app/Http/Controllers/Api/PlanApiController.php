@@ -25,7 +25,7 @@ class PlanApiController extends Controller
                     'description',
                     'price',
                     'modified_date',
-                    'modified_by_user_id as modified_by'
+                    'modified_by_user as modified_by'
                 )
                 ->orderBy('plan_name')
                 ->get();
@@ -70,7 +70,7 @@ class PlanApiController extends Controller
                 'description' => $request->input('description', ''),
                 'price' => $request->input('price'),
                 'modified_date' => $now,
-                'modified_by_user_id' => $currentUserId
+                'modified_by_user' => $currentUserId
             ]);
             
             $plan = DB::table('plan_list')
@@ -111,7 +111,7 @@ class PlanApiController extends Controller
                     'description',
                     'price',
                     'modified_date',
-                    'modified_by_user_id as modified_by'
+                    'modified_by_user as modified_by'
                 )
                 ->where('id', $id)
                 ->first();
@@ -182,7 +182,7 @@ class PlanApiController extends Controller
                     'description' => $request->input('description', ''),
                     'price' => $request->input('price'),
                     'modified_date' => $now,
-                    'modified_by_user_id' => $currentUserId
+                    'modified_by_user' => $currentUserId
                 ]);
             
             $plan = DB::table('plan_list')
@@ -192,7 +192,7 @@ class PlanApiController extends Controller
                     'description',
                     'price',
                     'modified_date',
-                    'modified_by_user_id as modified_by'
+                    'modified_by_user as modified_by'
                 )
                 ->where('id', $id)
                 ->first();

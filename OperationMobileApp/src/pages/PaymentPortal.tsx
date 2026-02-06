@@ -4,6 +4,9 @@ import PaymentPortalDetails from '../components/PaymentPortalDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { paymentPortalLogsService, PaymentPortalLog } from '../services/paymentPortalLogsService';
 import { usePaymentPortalContext, PaymentPortalRecord } from '../contexts/PaymentPortalContext';
+import BillingDetails from '../components/CustomerDetails';
+import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
+import { BillingDetailRecord } from '../types/billing';
 
 // Interfaces for payment portal data (PaymentPortalRecord is imported now)
 // Removed local PaymentPortalRecord interface
@@ -14,6 +17,56 @@ interface LocationItem {
   count: number;
 }
 
+const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => {
+  return {
+    id: customerData.billingAccount?.accountNo || '',
+    applicationId: customerData.billingAccount?.accountNo || '',
+    customerName: customerData.fullName,
+    address: customerData.address,
+    status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
+    balance: customerData.billingAccount?.accountBalance || 0,
+    onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
+    cityId: null,
+    regionId: null,
+    timestamp: customerData.updatedAt || '',
+    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
+    dateInstalled: customerData.billingAccount?.dateInstalled || '',
+    contactNumber: customerData.contactNumberPrimary,
+    secondContactNumber: customerData.contactNumberSecondary || '',
+    emailAddress: customerData.emailAddress || '',
+    plan: customerData.desiredPlan || '',
+    username: customerData.technicalDetails?.username || '',
+    connectionType: customerData.technicalDetails?.connectionType || '',
+    routerModel: customerData.technicalDetails?.routerModel || '',
+    routerModemSN: customerData.technicalDetails?.routerModemSn || '',
+    lcpnap: customerData.technicalDetails?.lcpnap || '',
+    port: customerData.technicalDetails?.port || '',
+    vlan: customerData.technicalDetails?.vlan || '',
+    billingDay: customerData.billingAccount?.billingDay || 0,
+    totalPaid: 0,
+    provider: '',
+    lcp: customerData.technicalDetails?.lcp || '',
+    nap: customerData.technicalDetails?.nap || '',
+    modifiedBy: '',
+    modifiedDate: customerData.updatedAt || '',
+    barangay: customerData.barangay || '',
+    city: customerData.city || '',
+    region: customerData.region || '',
+
+    usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
+    referredBy: customerData.referredBy || '',
+    referralContactNo: '',
+    groupName: customerData.groupName || '',
+    mikrotikId: '',
+    sessionIp: customerData.technicalDetails?.ipAddress || '',
+    houseFrontPicture: customerData.houseFrontPictureUrl || '',
+    accountBalance: customerData.billingAccount?.accountBalance || 0,
+    housingStatus: customerData.housingStatus || '',
+    location: customerData.location || '',
+    addressCoordinates: customerData.addressCoordinates || '',
+  };
+};
+
 const PaymentPortal: React.FC = () => {
   const { paymentPortalRecords: records, isLoading: loading, error, silentRefresh } = usePaymentPortalContext();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
@@ -22,6 +75,8 @@ const PaymentPortal: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<PaymentPortalRecord | null>(null);
   // Removed local records, loading, error state
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -187,6 +242,21 @@ const PaymentPortal: React.FC = () => {
 
   const handleRowClick = (record: PaymentPortalRecord) => {
     setSelectedRecord(record);
+    setSelectedCustomer(null); // Clear customer view when switching records
+  };
+
+  const handleViewCustomer = async (accountNo: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const detail = await getCustomerDetail(accountNo);
+      if (detail) {
+        setSelectedCustomer(detail);
+      }
+    } catch (err) {
+      console.error('Error fetching customer details:', err);
+    } finally {
+      setIsLoadingDetails(false);
+    }
   };
 
   // Status text color component
@@ -219,59 +289,11 @@ const PaymentPortal: React.FC = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <div className={`flex items-center justify-center h-full ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-        <div className="flex flex-col items-center">
-          <div
-            className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 mb-3"
-            style={{ borderTopColor: colorPalette?.primary || '#ea580c', borderBottomColor: colorPalette?.primary || '#ea580c' }}
-          ></div>
-          <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Loading payment portal records...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`flex items-center justify-center h-full ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-        <div className={`rounded-md p-6 max-w-lg ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-          }`}>
-          <h3 className="text-red-500 text-lg font-medium mb-2">Error</h3>
-          <p className={`mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-white py-2 px-4 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
       }`}>
       {/* Location Sidebar Container */}
-      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+      <div className={`hidden md:flex w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         }`}>
         <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
           }`}>
@@ -363,116 +385,135 @@ const PaymentPortal: React.FC = () => {
           </div>
 
           {/* Table Container */}
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-x-auto overflow-y-auto pb-4">
-              <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
-                }`}>
-                <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-x-auto overflow-y-auto">
+              {loading ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                  </div>
+                  <p className="mt-4">Loading payment portal records...</p>
+                </div>
+              ) : error ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                  <p>{error}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
                   }`}>
-                  <tr>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Date Time
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Account No
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Received Payment
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Status
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Reference No
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Contact No
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Account Balance
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Checkout ID
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Transaction Status
-                    </th>
-                    <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      Provider
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
-                  }`}>
-                  {paginatedRecords.length > 0 ? (
-                    paginatedRecords.map((record) => (
-                      <tr
-                        key={record.id}
-                        className={`cursor-pointer ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                          } ${selectedRecord?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                        onClick={() => handleRowClick(record)}
-                      >
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    }`}>
+                    <tr>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Date Time
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Status
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Transaction Status
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Account No
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Received Payment
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Reference No
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Contact No
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Account Balance
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Checkout ID
+                      </th>
+                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Provider
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
+                    }`}>
+                    {paginatedRecords.length > 0 ? (
+                      paginatedRecords.map((record) => (
+                        <tr
+                          key={record.id}
+                          className={`cursor-pointer ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                            } ${selectedRecord?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
+                          onClick={() => handleRowClick(record)}
+                        >
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {record.date_time || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">
+                            {record.accountNo || record.account_id}
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
+                            {formatCurrency(record.total_amount || 0)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <StatusText status={record.status || 'N/A'} />
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {record.reference_no || 'N/A'}
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {record.contactNo || 'N/A'}
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {formatCurrency(record.accountBalance || 0)}
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {record.checkout_id || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <StatusText status={record.transaction_status || 'N/A'} />
+                          </td>
+                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                            {record.provider || 'N/A'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={10} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                           }`}>
-                          {record.date_time || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">
-                          {record.accountNo || record.account_id}
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>
-                          {formatCurrency(record.total_amount || 0)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <StatusText status={record.status || 'N/A'} />
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                          {record.reference_no || 'N/A'}
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                          {record.contactNo || 'N/A'}
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                          {formatCurrency(record.accountBalance || 0)}
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                          {record.checkout_id || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <StatusText status={record.transaction_status || 'N/A'} />
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
-                          {record.provider || 'N/A'}
+                          {records.length > 0
+                            ? 'No payment portal records found matching your filters'
+                            : 'No payment portal records found.'}
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={10} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        {records.length > 0
-                          ? 'No payment portal records found matching your filters'
-                          : 'No payment portal records found.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
             <PaginationControls />
           </div>
@@ -485,7 +526,33 @@ const PaymentPortal: React.FC = () => {
           <PaymentPortalDetails
             record={selectedRecord}
             onClose={() => setSelectedRecord(null)}
+            onViewCustomer={handleViewCustomer}
           />
+        </div>
+      )}
+
+      {(selectedCustomer || isLoadingDetails) && (
+        <div className="flex-shrink-0 overflow-hidden">
+          {isLoadingDetails ? (
+            <div className={`w-[600px] h-full flex items-center justify-center border-l ${isDarkMode
+              ? 'bg-gray-900 text-white border-white border-opacity-30'
+              : 'bg-white text-gray-900 border-gray-300'
+              }`}>
+              <div className="text-center">
+                <div
+                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
+                  style={{ borderBottomColor: colorPalette?.primary || '#ea580c' }}
+                ></div>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
+              </div>
+            </div>
+          ) : selectedCustomer ? (
+            <BillingDetails
+              billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
+              onlineStatusRecords={[]}
+              onClose={() => setSelectedCustomer(null)}
+            />
+          ) : null}
         </div>
       )}
     </div>

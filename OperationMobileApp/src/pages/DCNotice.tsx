@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { dcNoticeService, DCNotice } from '../services/dcNoticeService';
+import { useDCNoticeContext } from '../contexts/DCNoticeContext';
+import { DCNotice } from '../services/dcNoticeService';
 
 const DCNoticePage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [selectedDate, setSelectedDate] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [dcNoticeRecords, setDCNoticeRecords] = useState<DCNotice[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const { dcNoticeRecords, isLoading, error, refreshDCNoticeRecords, silentRefresh } = useDCNoticeContext();
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  // Pagination State with session storage
-  const [currentPage, setCurrentPage] = useState(() => {
-    const saved = sessionStorage.getItem('dcNoticePage');
-    return saved ? parseInt(saved) : 1;
-  });
-  const [hasMore, setHasMore] = useState(false);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 50;
+
+  // Reset page when search or date filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedDate]);
 
   const dateItems = [
     { date: 'All', id: '' },
@@ -57,54 +57,13 @@ const DCNoticePage: React.FC = () => {
     fetchColorPalette();
   }, []);
 
-  // Fetch data when page changes
+  // Trigger silent refresh on mount to ensure data is fresh but no spinner if cached
   useEffect(() => {
-    fetchDCNoticeData();
-    // Save current page to session storage
-    sessionStorage.setItem('dcNoticePage', currentPage.toString());
-  }, [currentPage]);
-
-  const fetchDCNoticeData = async () => {
-    try {
-      setIsLoading(true);
-
-      // PHASE 1: Fast load - Get basic data INSTANTLY (50 records, no customer details)
-      const fastResponse = await dcNoticeService.getAll(true, currentPage, itemsPerPage);
-
-      if (fastResponse.success) {
-        setDCNoticeRecords(fastResponse.data || []);
-        setHasMore(fastResponse.pagination?.has_more || false);
-        setIsLoading(false);
-        setError(null);
-
-        // PHASE 2: Load full data in background
-        setTimeout(async () => {
-          try {
-            const fullResponse = await dcNoticeService.getAll(false, 1, 50);
-
-            if (fullResponse.success) {
-              setDCNoticeRecords(fullResponse.data || []);
-            }
-          } catch (bgError) {
-            console.warn('Background full data load failed:', bgError);
-            // Keep showing fast data even if full load fails
-          }
-        }, 100);
-      } else {
-        setError('Failed to load DC Notice records');
-        setDCNoticeRecords([]);
-      }
-    } catch (err) {
-      console.error('Failed to fetch DC Notice records:', err);
-      setError('Failed to load DC Notice records. Please try again.');
-      setDCNoticeRecords([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    silentRefresh();
+  }, [silentRefresh]);
 
   const handleRefresh = async () => {
-    await fetchDCNoticeData();
+    await refreshDCNoticeRecords();
   };
 
   const filteredRecords = dcNoticeRecords.filter(record => {
@@ -115,45 +74,52 @@ const DCNoticePage: React.FC = () => {
     return matchesSearch;
   });
 
+  const paginatedRecords = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredRecords, currentPage]);
+
+  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+
   const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   const PaginationControls = () => {
+    if (totalPages <= 1) return null;
+
     return (
       <div className={`flex items-center justify-between px-4 py-3 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
         <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Page <span className="font-medium">{currentPage}</span> - Showing <span className="font-medium">{filteredRecords.length}</span> records
+          Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRecords.length)}</span> of <span className="font-medium">{filteredRecords.length}</span> results
         </div>
         <div className="flex items-center space-x-2">
           <button
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className={`px-3 py-2 rounded text-sm transition-colors flex items-center space-x-1 ${currentPage === 1
+            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
               ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
               : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
               }`}
           >
-            <ChevronLeft className="h-4 w-4" />
-            <span>Back</span>
+            Previous
           </button>
-
           <div className="flex items-center space-x-1">
             <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Page {currentPage}
+              Page {currentPage} of {totalPages}
             </span>
           </div>
-
           <button
             onClick={() => handlePageChange(currentPage + 1)}
-            disabled={!hasMore}
-            className={`px-3 py-2 rounded text-sm transition-colors flex items-center space-x-1 ${!hasMore
+            disabled={currentPage === totalPages}
+            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
               ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
               : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
               }`}
           >
-            <span>Next</span>
-            <ChevronRight className="h-4 w-4" />
+            Next
           </button>
         </div>
       </div>
@@ -167,9 +133,9 @@ const DCNoticePage: React.FC = () => {
   };
 
   return (
-    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
       }`}>
-      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+      <div className={`hidden md:flex w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         }`}>
         <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
           }`}>
@@ -261,8 +227,8 @@ const DCNoticePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}>
@@ -287,7 +253,7 @@ const DCNoticePage: React.FC = () => {
                     Retry
                   </button>
                 </div>
-              ) : filteredRecords.length > 0 ? (
+              ) : paginatedRecords.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
                     <table className={`min-w-full divide-y text-sm ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'
@@ -311,7 +277,7 @@ const DCNoticePage: React.FC = () => {
                       </thead>
                       <tbody className={`divide-y ${isDarkMode ? 'bg-gray-900 divide-gray-800' : 'bg-white divide-gray-200'
                         }`}>
-                        {filteredRecords.map((record) => (
+                        {paginatedRecords.map((record) => (
                           <tr
                             key={record.id}
                             className={`${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
@@ -345,7 +311,6 @@ const DCNoticePage: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
-                  <PaginationControls />
                 </>
               ) : (
                 <div className={`h-full flex items-center justify-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
@@ -354,6 +319,7 @@ const DCNoticePage: React.FC = () => {
                 </div>
               )}
             </div>
+            {!isLoading && !error && filteredRecords.length > 0 && <PaginationControls />}
           </div>
         </div>
       </div>

@@ -433,19 +433,8 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     protected function calculateProrateAmount(BillingAccount $account, float $monthlyFee, Carbon $currentDate): float
     {
-        if ($account->balance_update_date) {
-            return $monthlyFee;
-        }
-
-        if (!$account->date_installed) {
-            return $monthlyFee;
-        }
-
-        $dateInstalled = Carbon::parse($account->date_installed);
-        $daysToCalculate = $this->getDaysBetweenDatesIncludingDueDate($dateInstalled, $currentDate);
-        $dailyRate = $monthlyFee / self::DAYS_IN_MONTH;
-        
-        return round($dailyRate * $daysToCalculate, 2);
+        // Always return the fixed monthly plan price (No Prorating)
+        return $monthlyFee;
     }
 
     protected function getDaysBetweenDatesIncludingDueDate(Carbon $startDate, Carbon $endDate): int

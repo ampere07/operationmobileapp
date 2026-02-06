@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity } from 'react-native';
-import { CheckCircle, XCircle, X } from 'lucide-react-native';
+import { CheckCircle, XCircle, X } from 'lucide-react';
 
 interface PaymentResultModalProps {
   isOpen: boolean;
@@ -17,94 +16,95 @@ const PaymentResultModal: React.FC<PaymentResultModalProps> = ({
   referenceNo,
   isDarkMode = true
 }) => {
+  if (!isOpen) return null;
+
   return (
-    <Modal
-      visible={isOpen}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View className="flex-1 bg-black/50 items-center justify-center p-4">
-        <View className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'
-          } rounded-lg shadow-xl w-full max-w-md p-6 relative`}>
-          {/* Close button */}
-          <TouchableOpacity
-            onPress={onClose}
-            className="absolute top-4 right-4 z-10"
-          >
-            <X size={24} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-          </TouchableOpacity>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className={`${
+        isDarkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'
+      } rounded-lg shadow-xl max-w-md w-full p-6 relative`}>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className={`absolute top-4 right-4 ${
+            isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <X className="w-5 h-5" />
+        </button>
 
-          {/* Icon and Title */}
-          <View className="items-center mb-6">
-            <View className="mb-4">
-              {success ? (
-                <CheckCircle size={64} color="#22c55e" />
-              ) : (
-                <XCircle size={64} color="#ef4444" />
-              )}
-            </View>
+        {/* Icon and Title */}
+        <div className="text-center mb-6">
+          {success ? (
+            <div className="flex justify-center mb-4">
+              <CheckCircle className="w-16 h-16 text-green-500" />
+            </div>
+          ) : (
+            <div className="flex justify-center mb-4">
+              <XCircle className="w-16 h-16 text-red-500" />
+            </div>
+          )}
+          
+          <h2 className="text-2xl font-bold mb-2">
+            {success ? 'Payment Successful!' : 'Payment Failed'}
+          </h2>
+          
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {success 
+              ? 'Your payment has been received and is being processed.'
+              : 'We were unable to process your payment. Please try again.'
+            }
+          </p>
+        </div>
 
-            <Text className={`text-2xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-              {success ? 'Payment Successful!' : 'Payment Failed'}
-            </Text>
+        {/* Reference Number */}
+        <div className={`${
+          isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+        } rounded-lg p-4 mb-6`}>
+          <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
+            Reference Number
+          </p>
+          <p className="font-mono text-sm font-medium break-all">
+            {referenceNo}
+          </p>
+        </div>
 
-            <Text className={`text-sm text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
-              {success
-                ? 'Your payment has been received and is being processed.'
-                : 'We were unable to process your payment. Please try again.'
-              }
-            </Text>
-          </View>
-
-          {/* Reference Number */}
-          <View className={`${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-            } rounded-lg p-4 mb-6`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
-              Reference Number
-            </Text>
-            <Text className={`font-medium text-sm ${isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              }`}>
-              {referenceNo}
-            </Text>
-          </View>
-
-          {/* Message */}
-          <View className="mb-6">
-            {success ? (
-              <View>
-                <Text className={`mb-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  ✓ Payment confirmation sent
-                </Text>
-                <Text className={`mb-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  ✓ Account balance will be updated shortly
-                </Text>
-                <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  ✓ You can check your transaction history for details
-                </Text>
-              </View>
-            ) : (
-              <Text className={`mb-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        {/* Message */}
+        <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-6`}>
+          {success ? (
+            <>
+              <p className="mb-2">
+                ✓ Payment confirmation sent
+              </p>
+              <p className="mb-2">
+                ✓ Account balance will be updated shortly
+              </p>
+              <p>
+                ✓ You can check your transaction history for details
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mb-2">
                 If you encountered any issues, please contact support or try again.
-              </Text>
-            )}
-          </View>
+              </p>
+            </>
+          )}
+        </div>
 
-          {/* Close Button */}
-          <TouchableOpacity
-            onPress={onClose}
-            className={`w-full py-3 px-4 rounded-lg items-center ${success
-                ? 'bg-green-600'
-                : 'bg-red-600'
-              }`}
-          >
-            <Text className="text-white font-medium">Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+            success
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-red-600 hover:bg-red-700 text-white'
+          }`}
+        >
+          Close
+        </button>
+      </div>
+    </div>
   );
 };
 

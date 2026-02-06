@@ -48,7 +48,7 @@ class Application extends Model
         'pppoe_username',
         'pppoe_password',
         'created_by_user_id',
-        'updated_by_user_id'
+        'updated_by'
     ];
     
     protected $casts = [
@@ -57,7 +57,7 @@ class Application extends Model
         'terms_agreed' => 'boolean',
         'referrer_account_id' => 'integer',
         'created_by_user_id' => 'integer',
-        'updated_by_user_id' => 'integer',
+        'updated_by' => 'string',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s'
     ];

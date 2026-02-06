@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  SafeAreaView
-} from 'react-native';
-import { X, ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../../services/settingsColorPaletteService';
-import { FilterValues } from '../../utils/filterUtils';
 
-export { FilterValues };
+interface ApplicationVisitFunnelFilterProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onApplyFilters: (filters: FilterValues) => void;
+  currentFilters?: FilterValues;
+}
+
+export interface FilterValues {
+  [key: string]: {
+    type: 'text' | 'number' | 'date';
+    value?: string;
+    from?: string | number;
+    to?: string | number;
+  };
+}
 
 interface Column {
   key: string;
@@ -57,197 +60,387 @@ const allColumns: Column[] = [
   { key: 'image3_url', label: 'Image 3 URL', table: 'application_visits', dataType: 'text' },
 ];
 
-interface ApplicationVisitFunnelFilterProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onApplyFilters: (filters: FilterValues) => void;
-  currentFilters?: FilterValues;
-}
-
 const ApplicationVisitFunnelFilter: React.FC<ApplicationVisitFunnelFilterProps> = ({
   isOpen,
   onClose,
   onApplyFilters,
   currentFilters
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<Column | null>(null);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
 
   useEffect(() => {
-    const init = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme !== 'light');
-      const activePalette = await settingsColorPaletteService.getActive();
-      setColorPalette(activePalette);
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(localStorage.getItem('theme') === 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
-      const savedFilters = await AsyncStorage.getItem(STORAGE_KEY);
+  useEffect(() => {
+    const fetchColorPalette = async () => {
+      try {
+        const activePalette = await settingsColorPaletteService.getActive();
+        setColorPalette(activePalette);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
+      }
+    };
+    fetchColorPalette();
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const savedFilters = localStorage.getItem(STORAGE_KEY);
       if (savedFilters) {
-        setFilterValues(JSON.parse(savedFilters));
+        try {
+          setFilterValues(JSON.parse(savedFilters));
+        } catch (err) {
+          console.error('Failed to load saved filters:', err);
+        }
       } else if (currentFilters) {
         setFilterValues(currentFilters);
       }
-    };
-    if (isOpen) init();
+    }
   }, [isOpen, currentFilters]);
 
-  const handleApply = async () => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filterValues));
+  const handleColumnClick = (column: Column) => {
+    setSelectedColumn(column);
+  };
+
+  const handleBack = () => {
+    setSelectedColumn(null);
+  };
+
+  const handleApply = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filterValues));
     onApplyFilters(filterValues);
     onClose();
   };
 
-  const handleReset = async () => {
+  const handleReset = () => {
     setFilterValues({});
     setSelectedColumn(null);
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
-  const isNumericType = (dataType: string) => ['int', 'bigint', 'decimal'].includes(dataType);
-  const isDateType = (dataType: string) => ['date', 'datetime'].includes(dataType);
+  const isNumericType = (dataType: string) => {
+    return ['int', 'bigint', 'decimal'].includes(dataType);
+  };
+
+  const isDateType = (dataType: string) => {
+    return ['date', 'datetime'].includes(dataType);
+  };
+
+  const handleTextChange = (columnKey: string, value: string) => {
+    setFilterValues(prev => ({
+      ...prev,
+      [columnKey]: {
+        type: 'text',
+        value
+      }
+    }));
+  };
+
+  const handleRangeChange = (columnKey: string, field: 'from' | 'to', value: string) => {
+    setFilterValues(prev => ({
+      ...prev,
+      [columnKey]: {
+        ...prev[columnKey],
+        type: 'number',
+        [field]: value
+      }
+    }));
+  };
+
+  const handleDateChange = (columnKey: string, field: 'from' | 'to', value: string) => {
+    setFilterValues(prev => ({
+      ...prev,
+      [columnKey]: {
+        ...prev[columnKey],
+        type: 'date',
+        [field]: value
+      }
+    }));
+  };
+
+  const getActiveFilterCount = () => {
+    return Object.keys(filterValues).filter(key => {
+      const filter = filterValues[key];
+      if (filter.type === 'text') {
+        return filter.value && filter.value.trim() !== '';
+      }
+      return filter.from !== undefined || filter.to !== undefined;
+    }).length;
+  };
+
+  const groupedColumns = {
+    application_visits: allColumns.filter(col => col.table === 'application_visits')
+  };
 
   const renderFilterInput = () => {
     if (!selectedColumn) return null;
-    const currentValue = filterValues[selectedColumn.key] || {};
 
-    if (isNumericType(selectedColumn.dataType) || isDateType(selectedColumn.dataType)) {
+    const currentValue = filterValues[selectedColumn.key];
+
+    if (isNumericType(selectedColumn.dataType)) {
       return (
-        <View className="space-y-4">
-          <View className="mb-4">
-            <Text className={`mb-2 font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>From</Text>
-            <TextInput
-              value={String(currentValue.from || '')}
-              onChangeText={(t) => setFilterValues(prev => ({
-                ...prev,
-                [selectedColumn.key]: {
-                  ...prev[selectedColumn.key],
-                  type: isNumericType(selectedColumn.dataType) ? 'number' : 'date',
-                  from: t
-                }
-              }))}
-              placeholder={isDateType(selectedColumn.dataType) ? "YYYY-MM-DD" : "Min Value"}
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              className={`p-3 rounded border ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+        <div className="space-y-4">
+          <div>
+            <label className={`text-sm font-medium mb-2 block ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>
+              From
+            </label>
+            <input
+              type="number"
+              value={currentValue?.from || ''}
+              onChange={(e) => handleRangeChange(selectedColumn.key, 'from', e.target.value)}
+              placeholder="Minimum value"
+              className={`w-full px-3 py-2 rounded border ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white' 
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
             />
-          </View>
-          <View>
-            <Text className={`mb-2 font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>To</Text>
-            <TextInput
-              value={String(currentValue.to || '')}
-              onChangeText={(t) => setFilterValues(prev => ({
-                ...prev,
-                [selectedColumn.key]: {
-                  ...prev[selectedColumn.key],
-                  type: isNumericType(selectedColumn.dataType) ? 'number' : 'date',
-                  to: t
-                }
-              }))}
-              placeholder={isDateType(selectedColumn.dataType) ? "YYYY-MM-DD" : "Max Value"}
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              className={`p-3 rounded border ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+          </div>
+          <div>
+            <label className={`text-sm font-medium mb-2 block ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>
+              To
+            </label>
+            <input
+              type="number"
+              value={currentValue?.to || ''}
+              onChange={(e) => handleRangeChange(selectedColumn.key, 'to', e.target.value)}
+              placeholder="Maximum value"
+              className={`w-full px-3 py-2 rounded border ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white' 
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
             />
-          </View>
-        </View>
+          </div>
+        </div>
+      );
+    }
+
+    if (isDateType(selectedColumn.dataType)) {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className={`text-sm font-medium mb-2 block ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>
+              From
+            </label>
+            <input
+              type={selectedColumn.dataType === 'datetime' ? 'datetime-local' : 'date'}
+              value={currentValue?.from || ''}
+              onChange={(e) => handleDateChange(selectedColumn.key, 'from', e.target.value)}
+              className={`w-full px-3 py-2 rounded border ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white' 
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            />
+          </div>
+          <div>
+            <label className={`text-sm font-medium mb-2 block ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}>
+              To
+            </label>
+            <input
+              type={selectedColumn.dataType === 'datetime' ? 'datetime-local' : 'date'}
+              value={currentValue?.to || ''}
+              onChange={(e) => handleDateChange(selectedColumn.key, 'to', e.target.value)}
+              className={`w-full px-3 py-2 rounded border ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white' 
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            />
+          </div>
+        </div>
       );
     }
 
     return (
-      <View>
-        <Text className={`mb-2 font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Search Value</Text>
-        <TextInput
-          value={String(currentValue.value || '')}
-          onChangeText={(t) => setFilterValues(prev => ({
-            ...prev,
-            [selectedColumn.key]: {
-              ...prev[selectedColumn.key],
-              type: 'text',
-              value: t
-            }
-          }))}
-          placeholder={`Enter ${selectedColumn.label}`}
-          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-          className={`p-3 rounded border ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+      <div>
+        <label className={`text-sm font-medium mb-2 block ${
+          isDarkMode ? 'text-gray-300' : 'text-gray-700'
+        }`}>
+          Search Value
+        </label>
+        <input
+          type="text"
+          value={typeof currentValue?.value === 'string' ? currentValue.value : ''}
+          onChange={(e) => handleTextChange(selectedColumn.key, e.target.value)}
+          placeholder={`Enter ${selectedColumn.label.toLowerCase()}`}
+          className={`w-full px-3 py-2 rounded border ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700 text-white' 
+              : 'bg-white border-gray-300 text-gray-900'
+          }`}
         />
-      </View>
+      </div>
     );
   };
 
   if (!isOpen) return null;
 
+  const activeFilterCount = getActiveFilterCount();
+
   return (
-    <Modal visible={isOpen} animationType="slide" transparent>
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        {/* Header */}
-        <SafeAreaView className={`border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-          <View className="flex-row items-center justify-between p-4">
-            <View className="flex-row items-center space-x-2">
-              {selectedColumn && (
-                <TouchableOpacity onPress={() => setSelectedColumn(null)} className="mr-2">
-                  <ChevronLeft size={24} color={isDarkMode ? 'white' : 'black'} />
-                </TouchableOpacity>
-              )}
-              <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                {selectedColumn ? selectedColumn.label : 'Filters'}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={onClose}>
-              <X size={24} color={isDarkMode ? 'white' : 'black'} />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-
-        {/* Content */}
-        <ScrollView className="flex-1 p-4">
-          {selectedColumn ? (
-            renderFilterInput()
-          ) : (
-            <View>
-              <Text className={`text-sm font-bold mb-3 uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Application Visit Details
-              </Text>
-              {allColumns.map(col => {
-                const hasFilter = filterValues[col.key] && (filterValues[col.key].value || filterValues[col.key].from || filterValues[col.key].to);
-                return (
-                  <TouchableOpacity
-                    key={col.key}
-                    onPress={() => setSelectedColumn(col)}
-                    className={`flex-row items-center justify-between p-4 border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}
-                  >
-                    <View className="flex-row items-center space-x-2">
-                      <Text className={isDarkMode ? 'text-white' : 'text-gray-900'}>{col.label}</Text>
-                      {hasFilter && (
-                        <View style={{ backgroundColor: colorPalette?.primary || '#ea580c' }} className="w-2 h-2 rounded-full ml-2" />
+    <div className="fixed inset-0 z-50 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
+        <div 
+          className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
+          onClick={onClose}
+        />
+        
+        <div className="fixed inset-y-0 right-0 max-w-full flex">
+          <div className={`w-screen max-w-md transform transition-transform ${
+            isDarkMode ? 'bg-gray-900' : 'bg-white'
+          }`}>
+            <div className="h-full flex flex-col">
+              <div className={`px-6 py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {selectedColumn && (
+                      <button
+                        onClick={handleBack}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isDarkMode 
+                            ? 'hover:bg-gray-800 text-gray-400' 
+                            : 'hover:bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                    )}
+                    <div>
+                      <h2 className={`text-lg font-semibold ${
+                        isDarkMode ? 'text-white' : 'text-gray-900'
+                      }`}>
+                        {selectedColumn ? selectedColumn.label : 'Filter'}
+                      </h2>
+                      {!selectedColumn && activeFilterCount > 0 && (
+                        <p className={`text-xs mt-1 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                          {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                        </p>
                       )}
-                    </View>
-                    <ChevronRight size={16} color={isDarkMode ? 'gray' : 'lightgray'} />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className={`p-2 rounded-lg transition-colors ${
+                      isDarkMode 
+                        ? 'hover:bg-gray-800 text-gray-400' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
 
-        {/* Footer */}
-        <SafeAreaView className={`p-4 border-t ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-          <View className="flex-row space-x-3">
-            <TouchableOpacity
-              onPress={handleReset}
-              className={`flex-1 py-3 rounded-lg flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
-            >
-              <Text className={isDarkMode ? 'text-white' : 'text-gray-900'}>Clear All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleApply}
-              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-              className="flex-1 py-3 rounded-lg flex items-center justify-center"
-            >
-              <Text className="text-white font-bold">Apply Filters</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </View>
-    </Modal>
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {selectedColumn ? (
+                  renderFilterInput()
+                ) : (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className={`text-sm font-semibold mb-3 uppercase tracking-wider ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>
+                        Application Visit Details
+                      </h3>
+                      <div className="flex flex-col gap-2 w-full">
+                        {groupedColumns.application_visits.map(column => {
+                          const hasFilter = filterValues[column.key] && (
+                            filterValues[column.key].value || 
+                            filterValues[column.key].from !== undefined || 
+                            filterValues[column.key].to !== undefined
+                          );
+
+                          return (
+                            <div
+                              key={column.key}
+                              onClick={() => handleColumnClick(column)}
+                              className={`w-full p-3 cursor-pointer transition-all flex items-center justify-between border-b ${
+                                isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className={`text-sm font-medium ${
+                                  isDarkMode ? 'text-white' : 'text-gray-900'
+                                }`}>
+                                  {column.label}
+                                </span>
+                                {hasFilter && (
+                                  <span 
+                                    className="w-2 h-2 rounded-full"
+                                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                                  />
+                                )}
+                              </div>
+                              <ChevronRight className={`h-4 w-4 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={`px-6 py-4 border-t ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-200'
+              }`}>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleReset}
+                    className={`flex-1 px-4 py-2 rounded transition-colors ${
+                      isDarkMode 
+                        ? 'bg-gray-800 hover:bg-gray-700 text-white' 
+                        : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                    }`}
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={handleApply}
+                    className="flex-1 px-4 py-2 text-white rounded transition-colors"
+                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                    onMouseEnter={(e) => {
+                      if (colorPalette?.accent) {
+                        e.currentTarget.style.backgroundColor = colorPalette.accent;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                    }}
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

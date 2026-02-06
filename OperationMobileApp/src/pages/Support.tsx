@@ -18,11 +18,15 @@ interface SupportRequest {
   };
 }
 
-const Support: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+interface SupportProps {
+  forceLightMode?: boolean;
+}
+
+const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(forceLightMode ? false : true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
-  const [details, setDetails] = useState<string>('');  
+  const [details, setDetails] = useState<string>('');
   const [requests, setRequests] = useState<SupportRequest[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitMessage, setSubmitMessage] = useState<string>('');
@@ -45,6 +49,11 @@ const Support: React.FC = () => {
   ];
 
   useEffect(() => {
+    if (forceLightMode) {
+      setIsDarkMode(false);
+      return;
+    }
+
     const checkDarkMode = () => {
       const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
@@ -62,7 +71,7 @@ const Support: React.FC = () => {
     });
 
     return () => observer.disconnect();
-  }, []);
+  }, [forceLightMode]);
 
   const [userEmail, setUserEmail] = useState<string>('');
 
@@ -95,7 +104,7 @@ const Support: React.FC = () => {
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
@@ -116,17 +125,17 @@ const Support: React.FC = () => {
     try {
       setIsLoading(true);
       console.log('[Support] Fetching service orders for account:', userAccountNo);
-      
+
       const response = await getServiceOrders();
       console.log('[Support] Service orders response:', response);
-      
+
       if (response.success && response.data) {
         console.log('[Support] Total service orders:', response.data.length);
-        
+
         const filteredOrders = response.data
           .filter(order => {
-            const matches = order.account_no === userAccountNo || 
-                          order.username === userAccountNo;
+            const matches = order.account_no === userAccountNo ||
+              order.username === userAccountNo;
             if (matches) {
               console.log('[Support] Matched order:', order);
             }
@@ -146,7 +155,7 @@ const Support: React.FC = () => {
               status: order.visit_status || 'Pending'
             }
           }));
-        
+
         console.log('[Support] Filtered orders count:', filteredOrders.length);
         setRequests(filteredOrders);
       } else {
@@ -163,7 +172,7 @@ const Support: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!details.trim()) {
       setSubmitMessage('Please provide details about your issue');
       setTimeout(() => setSubmitMessage(''), 3000);
@@ -204,7 +213,7 @@ const Support: React.FC = () => {
       console.log('[Support] Submitting service order:', newServiceOrder);
       const response = await createServiceOrder(newServiceOrder);
       console.log('[Support] Submit response:', response);
-      
+
       if (response.success) {
         setShowLoadingModal(false);
         setShowSuccessModal(true);
@@ -248,11 +257,10 @@ const Support: React.FC = () => {
                 <select
                   value={selectedConcern}
                   onChange={(e) => setSelectedConcern(e.target.value)}
-                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
+                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 ${isDarkMode
+                    ? 'bg-gray-800 text-white border-gray-700'
+                    : 'bg-white text-gray-900 border-gray-300'
+                    }`}
                   style={{
                     '--tw-ring-color': colorPalette?.primary || '#ea580c'
                   } as React.CSSProperties}
@@ -274,11 +282,10 @@ const Support: React.FC = () => {
                   onChange={(e) => setDetails(e.target.value)}
                   placeholder="Describe your issue..."
                   rows={5}
-                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 resize-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700 placeholder-gray-500'
-                      : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'
-                  }`}
+                  className={`w-full px-3 py-2 rounded border focus:outline-none focus:ring-1 resize-none ${isDarkMode
+                    ? 'bg-gray-800 text-white border-gray-700 placeholder-gray-500'
+                    : 'bg-white text-gray-900 border-gray-300 placeholder-gray-400'
+                    }`}
                   style={{
                     '--tw-ring-color': colorPalette?.primary || '#ea580c'
                   } as React.CSSProperties}
@@ -312,11 +319,10 @@ const Support: React.FC = () => {
               </div>
 
               {submitMessage && (
-                <div className={`mt-3 p-3 rounded text-sm text-center ${
-                  submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
-                    ? isDarkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-100 text-red-700'
-                    : isDarkMode ? 'bg-green-900/50 text-green-200' : 'bg-green-100 text-green-700'
-                }`}>
+                <div className={`mt-3 p-3 rounded text-sm text-center ${submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
+                  ? isDarkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-100 text-red-700'
+                  : isDarkMode ? 'bg-green-900/50 text-green-200' : 'bg-green-100 text-green-700'
+                  }`}>
                   {submitMessage}
                 </div>
               )}
@@ -324,11 +330,10 @@ const Support: React.FC = () => {
 
             <button
               onClick={handleRequestPlanUpdate}
-              className={`w-full mt-4 py-3 rounded font-medium border-2 transition-colors ${
-                isDarkMode
-                  ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
+              className={`w-full mt-4 py-3 rounded font-medium border-2 transition-colors ${isDarkMode
+                ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
             >
               <Upload className="inline mr-2" size={16} />
               Request Plan Update
@@ -344,12 +349,10 @@ const Support: React.FC = () => {
               {isLoading ? (
                 <div className={`py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                   <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                    }`}></div>
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+                      }`}></div>
                   </div>
                   <p className="mt-4">Loading support requests...</p>
                 </div>
@@ -368,70 +371,68 @@ const Support: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                      {requests.map((request) => (
-                        <tr key={request.id} className={`border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {request.date}
-                          </td>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {request.requestId}
-                          </td>
-                          <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            <div>{request.issue}</div>
-                            <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                              {request.issueDetails}
-                            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <div className={`inline-flex items-center px-3 py-1 rounded ${
-                              isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              <Info className="mr-1" size={14} />
-                              {request.status}
-                            </div>
-                            <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                              Note: {request.statusNote || 'N/A'}
-                            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <div className={`inline-flex items-center px-3 py-2 rounded ${
-                              request.visitInfo.status === 'Done'
+                        {requests.map((request) => (
+                          <tr key={request.id} className={`border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+                            <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              {request.date}
+                            </td>
+                            <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              {request.requestId}
+                            </td>
+                            <td className={`py-4 px-3 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              <div>{request.issue}</div>
+                              <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                {request.issueDetails}
+                              </div>
+                            </td>
+                            <td className={`py-4 px-3`}>
+                              <div className={`inline-flex items-center px-3 py-1 rounded ${isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                <Info className="mr-1" size={14} />
+                                {request.status}
+                              </div>
+                              <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                Note: {request.statusNote || 'N/A'}
+                              </div>
+                            </td>
+                            <td className={`py-4 px-3`}>
+                              <div className={`inline-flex items-center px-3 py-2 rounded ${request.visitInfo.status === 'Done'
                                 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/50'
                                 : isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              <CheckCircle className="mr-1" size={14} />
-                              {request.visitInfo.status}
-                            </div>
-            <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Techs: {request.assignedEmail || 'Not assigned'}
-            </div>
-            <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              Note: {request.visitNote || 'N/A'}
-            </div>
-                          </td>
-                          <td className={`py-4 px-3`}>
-                            <button
-                              className="px-4 py-1 rounded text-sm transition-colors"
-                              style={{
-                                color: colorPalette?.primary || '#3b82f6',
-                                border: `1px solid ${colorPalette?.primary || '#3b82f6'}`
-                              }}
-                              onMouseEnter={(e) => {
-                                if (colorPalette?.primary) {
-                                  e.currentTarget.style.backgroundColor = `${colorPalette.primary}20`;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'transparent';
-                              }}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                                }`}>
+                                <CheckCircle className="mr-1" size={14} />
+                                {request.visitInfo.status}
+                              </div>
+                              <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                Techs: {request.assignedEmail || 'Not assigned'}
+                              </div>
+                              <div className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                Note: {request.visitNote || 'N/A'}
+                              </div>
+                            </td>
+                            <td className={`py-4 px-3`}>
+                              <button
+                                className="px-4 py-1 rounded text-sm transition-colors"
+                                style={{
+                                  color: colorPalette?.primary || '#3b82f6',
+                                  border: `1px solid ${colorPalette?.primary || '#3b82f6'}`
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (colorPalette?.primary) {
+                                    e.currentTarget.style.backgroundColor = `${colorPalette.primary}20`;
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
 
                   {requests.length === 0 && (
@@ -470,11 +471,10 @@ const Support: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className={`flex-1 py-2 px-4 rounded font-medium transition-colors ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`flex-1 py-2 px-4 rounded font-medium transition-colors ${isDarkMode
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
               >
                 Cancel
               </button>

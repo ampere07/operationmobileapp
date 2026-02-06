@@ -1,12 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native';
-import {
-  LayoutDashboard, Users, FileText, LogOut, ChevronRight, User, Building2, Shield,
-  FileCheck, Wrench, Map, MapPinned, MapPin, Package, CreditCard, List, Router,
-  DollarSign, Receipt, FileBarChart, Clock, Calendar, UserCheck, AlertTriangle,
-  Tag, MessageSquare, Settings, Network, Activity, AlertCircle
-} from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LayoutDashboard, Users, FileText, LogOut, ChevronRight, User, Building2, Shield, FileCheck, Wrench, Map, MapPinned, MapPin, Package, CreditCard, List, Router, DollarSign, Receipt, FileBarChart, Clock, Calendar, UserCheck, AlertTriangle, Tag, MessageSquare, Settings, Network, Activity, AlertCircle } from 'lucide-react';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface SidebarProps {
@@ -54,8 +47,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
         minute: '2-digit',
         hour12: true
       };
-
-      // Basic formatting for React Native
       const dateStr = now.toLocaleDateString('en-US', dateOptions);
       const timeStr = now.toLocaleTimeString('en-US', timeOptions);
       setCurrentDateTime(`${dateStr} ${timeStr}`);
@@ -68,12 +59,23 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
+
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -93,6 +95,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
     fetchColorPalette();
   }, []);
 
+  if (userRole?.toLowerCase() === 'customer') return null;
+
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['administrator', 'customer'] },
     { id: 'live-monitor', label: 'Live Monitor', icon: Activity, allowedRoles: ['administrator'] },
@@ -105,8 +109,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
         { id: 'customer', label: 'Customer', icon: User, allowedRoles: ['administrator'] },
         { id: 'transaction-list', label: 'Transaction List', icon: Receipt, allowedRoles: ['administrator'] },
         { id: 'payment-portal', label: 'Payment Portal', icon: DollarSign, allowedRoles: ['administrator'] },
-        { id: 'soa', label: 'SOA', icon: FileText, allowedRoles: ['administrator', 'customer'] },
-        { id: 'invoice', label: 'Invoice', icon: Receipt, allowedRoles: ['administrator', 'customer'] },
+        { id: 'soa', label: 'SOA', icon: FileText, allowedRoles: ['administrator'] },
+        { id: 'invoice', label: 'Invoice', icon: Receipt, allowedRoles: ['administrator'] },
         { id: 'overdue', label: 'Overdue', icon: Clock, allowedRoles: ['administrator'] },
         { id: 'dc-notice', label: 'DC Notice', icon: AlertTriangle, allowedRoles: ['administrator'] },
         { id: 'mass-rebate', label: 'Rebates', icon: DollarSign, allowedRoles: ['administrator'] },
@@ -122,7 +126,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
       allowedRoles: ['administrator', 'technician'],
       children: [
         { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
-        { id: 'application-visit', label: 'Application Visit', icon: MapPin, allowedRoles: ['administrator', 'technician'] },
+        // { id: 'application-visit', label: 'Application Visit', icon: MapPin, allowedRoles: ['administrator', 'technician'] },
         { id: 'promo-list', label: 'Promo', icon: Tag, allowedRoles: ['administrator'] },
         { id: 'plan-list', label: 'Plan', icon: List, allowedRoles: ['administrator'] },
         { id: 'location-list', label: 'Location', icon: MapPin, allowedRoles: ['administrator'] },
@@ -154,9 +158,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
       id: 'support',
       label: 'Support',
       icon: Wrench,
-      allowedRoles: ['administrator', 'technician', 'customer'],
+      allowedRoles: ['administrator', 'technician'],
       children: [
-        { id: 'support', label: 'Support Ticket', icon: FileText, allowedRoles: ['customer'] },
         { id: 'service-order', label: 'Service Order', icon: Wrench, allowedRoles: ['administrator', 'technician'] }
       ]
     },
@@ -179,6 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
         { id: 'lcp-nap-location', label: 'LCP/NAP Location', icon: MapPinned, allowedRoles: ['administrator', 'technician'] },
         { id: 'radius-config', label: 'Radius Config', icon: MapPin, allowedRoles: ['administrator'] },
         { id: 'sms-config', label: 'SMS Config', icon: MessageSquare, allowedRoles: ['administrator'] },
+        { id: 'sms-template', label: 'SMS Template', icon: MessageSquare, allowedRoles: ['administrator'] },
         { id: 'email-templates', label: 'Email Templates', icon: FileText, allowedRoles: ['administrator'] },
         { id: 'pppoe-setup', label: 'PPPoE Setup', icon: Router, allowedRoles: ['administrator'] },
         { id: 'concern-config', label: 'Concern Config', icon: AlertCircle, allowedRoles: ['administrator'] }
@@ -211,50 +215,33 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {
+    // If the user is a customer, always return an empty menu (hide sidebar content)
+    const normalizedUserRole = userRole ? userRole.toLowerCase().trim() : '';
+    if (normalizedUserRole === 'customer') {
+      return [];
+    }
+
     return items.filter(item => {
       if (!item.allowedRoles || item.allowedRoles.length === 0) {
         return true;
       }
-
-      const normalizedUserRole = userRole ? userRole.toLowerCase().trim() : '';
 
       const hasAccess = item.allowedRoles.some(role =>
         role.toLowerCase().trim() === normalizedUserRole
       );
 
       if (hasAccess && item.children) {
-        // Recursively filter children
-        // We need to return a new object with filtered children to avoid mutation issues 
-        // if we were reusing objects, though here we recreate via map below.
-        // For simplicity in this logic:
-        const filteredChildren = filterMenuByRole(item.children); // This filters eagerly
-
-        // If children exist but none are accessible, and it was a group, max hide it?
-        // Original logic: "if (item.children.length === 0) return false;"
-        if (filteredChildren.length === 0) {
+        item.children = filterMenuByRole(item.children); // Recursive call
+        if (item.children.length === 0) {
           return false;
         }
-
-        // WE MUST ASSIGN IT back to a new item object effectively
-        item.children = filteredChildren;
       }
 
       return hasAccess;
     });
   };
 
-  const getFilteredItems = () => {
-    // Deep clone items to prevent mutation of the const definition during filtering
-    const deepClone = (items: MenuItem[]): MenuItem[] =>
-      items.map(item => ({
-        ...item,
-        children: item.children ? deepClone(item.children) : undefined
-      }));
-
-    return filterMenuByRole(deepClone(menuItems));
-  };
-
-  const filteredMenuItems = getFilteredItems();
+  const filteredMenuItems = filterMenuByRole(menuItems);
 
   const toggleExpanded = (itemId: string) => {
     setExpandedItems(prev =>
@@ -272,116 +259,104 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
     const isCurrentItemActive = activeSection === item.id;
     const IconComponent = item.icon;
 
-    const basePadding = 16;
-    const indent = level * 16;
-
-    const activeStyle = isCurrentItemActive ? {
-      backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : isDarkMode ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.1)',
-    } : {};
-
-    const activeTextStyle = isCurrentItemActive ? {
-      color: colorPalette?.primary || (isDarkMode ? '#fb923c' : '#ea580c'),
-    } : {
-      color: isDarkMode ? '#d1d5db' : '#374151'
-    };
-
     return (
-      <View key={item.id}>
-        <TouchableOpacity
-          onPress={() => {
+      <div key={item.id}>
+        <button
+          onClick={() => {
             if (hasChildren) {
               toggleExpanded(item.id);
             } else {
               onSectionChange(item.id);
             }
           }}
-          className={`flex-row items-center justify-between py-3 pr-4`}
-          style={[
-            { paddingLeft: basePadding + indent },
-            activeStyle,
-            isCurrentItemActive ? {
-              borderRightWidth: 4,
-              borderRightColor: colorPalette?.primary || '#ea580c'
-            } : {}
-          ]}
+          className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${level > 0 ? 'pl-8' : 'pl-4'
+            } ${isCurrentItemActive
+              ? ''
+              : isDarkMode
+                ? 'text-gray-300 hover:text-white hover:bg-gray-700'
+                : 'text-gray-700 hover:text-black hover:bg-gray-100'
+            }`}
+          style={isCurrentItemActive ? {
+            backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : isDarkMode ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.1)',
+            color: colorPalette?.primary || (isDarkMode ? '#fb923c' : '#ea580c'),
+            borderRightWidth: '2px',
+            borderRightStyle: 'solid',
+            borderRightColor: colorPalette?.primary || '#ea580c'
+          } : {}}
         >
-          <View className="flex-row items-center flex-1">
-            <IconComponent
-              size={20}
-              color={isCurrentItemActive ? (activeTextStyle.color as string) : (isDarkMode ? '#9ca3af' : '#4b5563')}
-              style={{ marginRight: 12 }}
-            />
-            {(!isCollapsed || level > 0) && ( // Always show text for children or if not collapsed
-              <Text style={activeTextStyle} className="text-sm font-medium">
-                {item.label}
-              </Text>
-            )}
-          </View>
-
+          <div className="flex items-center">
+            <IconComponent className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              } ${!isCollapsed ? 'mr-3' : ''}`} />
+            {!isCollapsed && <span>{item.label}</span>}
+          </div>
           {hasChildren && !isCollapsed && (
             <ChevronRight
-              size={16}
-              color={isDarkMode ? '#9ca3af' : '#4b5563'}
-              style={{ transform: [{ rotate: isExpanded ? '90deg' : '0deg' }] }}
+              className={`h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                } transition-transform ${isExpanded ? 'transform rotate-90' : ''
+                } ${isCollapsed ? 'hidden' : ''}`}
             />
           )}
-        </TouchableOpacity>
+        </button>
 
         {hasChildren && isExpanded && !isCollapsed && (
-          <View>
+          <div>
             {item.children!.map(child => renderMenuItem(child, level + 1))}
-          </View>
+          </div>
         )}
-      </View>
+      </div>
     );
   };
 
   return (
-    <View className={`flex-1 flex-col ${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
-      }`}>
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+    <div className={`${isCollapsed ? 'w-0 border-none' : 'w-64 border-r'
+      } h-full ${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
+      } flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}>
+      <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden scrollbar-none">
         {filteredMenuItems.map(item => renderMenuItem(item))}
-      </ScrollView>
+      </nav>
 
-      <View className={`p-3 border-t ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-        {/* Footer User Info */}
-        <View className="mb-3">
-          <Text className={`text-xs mb-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            {currentDateTime}
-          </Text>
-          <View className="flex-row items-center mb-2">
-            <View className={`w-10 h-10 rounded-full items-center justify-center border-2 ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-300'
+      <div className={`px-3 py-3 ${isDarkMode ? 'border-gray-600' : 'border-gray-300'
+        } border-t flex-shrink-0`}>
+        {!isCollapsed && (
+          <div className="mb-3">
+            <div className={`text-xs mb-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}>
-              <User size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-            </View>
-            {!isCollapsed && (
-              <View className="ml-3 flex-1">
-                <Text className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`} numberOfLines={1}>
+              {currentDateTime}
+            </div>
+            <div className="flex items-center mb-2">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-300'
+                } border-2`}>
+                <User className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`} />
+              </div>
+              <div className="ml-3 flex-1 min-w-0">
+                <div className={`text-sm font-medium truncate ${isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                  }`}>
                   {userEmail || 'user@example.com'}
-                </Text>
-                <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} numberOfLines={1}>
+                </div>
+                <div className={`text-xs truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
                   {userRole}
-                </Text>
-              </View>
-            )}
-          </View>
-          <View className={`h-[1px] ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'} mb-2`} />
-        </View>
+                </div>
+              </div>
+            </div>
+            <div className={`h-px ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
+              } mb-2`} />
+          </div>
+        )}
 
-        <TouchableOpacity
-          onPress={onLogout}
-          className={`w-full px-3 py-2 rounded flex-row items-center justify-center ${isDarkMode ? 'bg-transparent' : 'bg-transparent'
-            }`}
+        <button
+          onClick={onLogout}
+          className={`w-full px-3 py-2 ${isDarkMode
+            ? 'text-gray-300 hover:text-white hover:bg-gray-700'
+            : 'text-gray-700 hover:text-black hover:bg-gray-100'
+            } rounded transition-colors text-sm flex items-center justify-center`}
         >
-          <LogOut size={16} color={isDarkMode ? '#d1d5db' : '#374151'} />
-          {!isCollapsed && (
-            <Text className={`ml-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              Logout
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
+          <LogOut className={`h-4 w-4 ${!isCollapsed ? 'mr-2' : ''}`} />
+          {!isCollapsed && <span>Logout</span>}
+        </button>
+      </div>
+    </div>
   );
 };
 

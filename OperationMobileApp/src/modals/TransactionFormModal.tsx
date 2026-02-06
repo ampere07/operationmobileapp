@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ChevronDown, Minus, Plus, Camera } from 'lucide-react';
+import { Calendar, ChevronDown, Minus, Plus, Camera } from 'lucide-react';
 import { transactionService } from '../services/transactionService';
 import { planService, Plan } from '../services/planService';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { userService } from '../services/userService';
+import { User } from '../types/api';
 
 interface TransactionFormModalProps {
   isOpen: boolean;
@@ -13,7 +15,6 @@ interface TransactionFormModalProps {
 }
 
 interface TransactionFormData {
-  provider: string;
   accountNo: string;
   fullName: string;
   contactNo: string;
@@ -39,6 +40,7 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [processors, setProcessors] = useState<User[]>([]);
 
   const getCurrentDateTime = () => {
     const now = new Date();
@@ -46,7 +48,6 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   };
 
   const [formData, setFormData] = useState<TransactionFormData>(() => ({
-    provider: '',
     accountNo: billingRecord?.applicationId || '',
     fullName: billingRecord?.customerName || '',
     contactNo: billingRecord?.contactNumber || '',
@@ -101,9 +102,21 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
       const fetchedPlans = await planService.getAllPlans();
       setPlans(fetchedPlans);
     };
-    
+
+    const fetchProcessors = async () => {
+      try {
+        const response = await userService.getUsersByRoleId(1);
+        if (response.success && response.data) {
+          setProcessors(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch processors:', error);
+      }
+    };
+
     if (isOpen) {
       fetchPlans();
+      fetchProcessors();
     }
   }, [isOpen]);
 
@@ -118,7 +131,7 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
         }
       }
     };
-    
+
     fetchImageSizeSettings();
   }, [isOpen]);
 
@@ -177,12 +190,12 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     try {
       let processedFile = file;
       const originalSize = (file.size / 1024 / 1024).toFixed(2);
-      
+
       if (activeImageSize && activeImageSize.image_size_value < 100) {
         try {
           const resizedFile = await resizeImage(file, activeImageSize.image_size_value);
           const resizedSize = (resizedFile.size / 1024 / 1024).toFixed(2);
-          
+
           if (resizedFile.size < file.size) {
             processedFile = resizedFile;
             console.log(`[RESIZE SUCCESS] Payment Proof: ${originalSize}MB → ${resizedSize}MB (${activeImageSize.image_size_value}%, saved ${((1 - resizedFile.size / file.size) * 100).toFixed(1)}%)`);
@@ -194,30 +207,30 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
           processedFile = file;
         }
       }
-      
+
       setFormData(prev => ({ ...prev, image: processedFile }));
-      
+
       if (imagePreview && imagePreview.startsWith('blob:')) {
         URL.revokeObjectURL(imagePreview);
       }
-      
+
       const previewUrl = URL.createObjectURL(processedFile);
       setImagePreview(previewUrl);
-      
+
       if (errors.image) {
         setErrors(prev => ({ ...prev, image: '' }));
       }
     } catch (error) {
       console.error('[UPLOAD ERROR] Payment Proof:', error);
       setFormData(prev => ({ ...prev, image: file }));
-      
+
       if (imagePreview && imagePreview.startsWith('blob:')) {
         URL.revokeObjectURL(imagePreview);
       }
-      
+
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
-      
+
       if (errors.image) {
         setErrors(prev => ({ ...prev, image: '' }));
       }
@@ -227,7 +240,6 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.provider.trim()) newErrors.provider = 'Provider is required';
     if (!formData.accountNo.trim()) newErrors.accountNo = 'Account No. is required';
     if (!formData.plan.trim()) newErrors.plan = 'Plan is required';
     if (!formData.accountBalance.trim()) newErrors.accountBalance = 'Account Balance is required';
@@ -245,10 +257,10 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
   const handleSave = async () => {
     console.log('Transaction save button clicked!', formData);
-    
+
     const isValid = validateForm();
     console.log('Transaction form validation result:', isValid);
-    
+
     if (!isValid) {
       console.log('Transaction form validation failed. Errors:', errors);
       alert('Please fill in all required fields before saving.');
@@ -258,20 +270,20 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     setLoading(true);
     try {
       console.log('Creating transaction with data:', formData);
-      
+
       let imageUrl = undefined;
-      
+
       if (formData.image) {
         try {
           const imageFormData = new FormData();
           const folderName = `transactionform - ${formData.fullName}`;
           imageFormData.append('folder_name', folderName);
           imageFormData.append('payment_proof_image', formData.image, formData.image.name);
-          
+
           console.log(`[UPLOAD] Uploading image to Google Drive folder: ${folderName}`);
-          
+
           const uploadResponse = await transactionService.uploadTransactionImage(imageFormData);
-          
+
           if (uploadResponse.success && uploadResponse.data?.payment_proof_image_url) {
             imageUrl = uploadResponse.data.payment_proof_image_url;
             console.log('[UPLOAD SUCCESS] Image uploaded to:', imageUrl);
@@ -283,7 +295,7 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
           alert(`Warning: Failed to upload image: ${uploadError.message}`);
         }
       }
-      
+
       const payload = {
         account_no: formData.accountNo || undefined,
         transaction_type: formData.transactionType,
@@ -298,9 +310,9 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
         status: 'Pending',
         image_url: imageUrl
       };
-      
+
       const result = await transactionService.createTransaction(payload);
-      
+
       if (result.success) {
         alert('Transaction created successfully!');
         onSave(formData);
@@ -324,22 +336,18 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-      <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
-        {/* Header */}
-        <div className={`px-6 py-4 flex items-center justify-between border-b ${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+      <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
         }`}>
-          <h2 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Transactions Form</h2>
+        {/* Header */}
+        <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+          }`}>
+          <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>Transactions Form</h2>
           <div className="flex items-center space-x-3">
             <button
               onClick={handleCancel}
-              className={`px-4 py-2 rounded text-sm transition-colors ${
-                isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-900'
-              }`}
+              className={`px-4 py-2 rounded text-sm transition-colors ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-900'
+                }`}
             >
               Cancel
             </button>
@@ -370,62 +378,27 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                 'Save'
               )}
             </button>
-            <button
-              onClick={onClose}
-              className={`transition-colors ${
-                isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <X size={24} />
-            </button>
+
           </div>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Provider */}
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Provider<span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
-                value={formData.provider}
-                onChange={(e) => handleInputChange('provider', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                  errors.provider ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-              >
-                <option value="SWITCH">SWITCH</option>
-                <option value="sample">sample</option>
-              </select>
-              <ChevronDown className={`absolute right-3 top-2.5 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`} size={20} />
-            </div>
-            {errors.provider && <p className="text-red-500 text-xs mt-1">{errors.provider}</p>}
-          </div>
+
 
           {/* Account No */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Account No.<span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={formData.accountNo}
                 onChange={(e) => handleInputChange('accountNo', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                  errors.accountNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${errors.accountNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                  } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                  }`}
               >
                 <option value={billingRecord?.applicationId || ''}>{billingRecord?.applicationId || ''} | {billingRecord?.customerName || ''} | {billingRecord?.address || ''}</option>
               </select>
@@ -436,54 +409,47 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Full Name */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Full Name
             </label>
             <input
               type="text"
               value={formData.fullName}
-              onChange={(e) => handleInputChange('fullName', e.target.value)}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
+              readOnly
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 cursor-not-allowed opacity-75 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-600'
+                }`}
             />
           </div>
 
           {/* Contact No */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               ContactNo
             </label>
             <input
               type="text"
               value={formData.contactNo}
-              onChange={(e) => handleInputChange('contactNo', e.target.value)}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
+              readOnly
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 cursor-not-allowed opacity-75 ${isDarkMode ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-600'
+                }`}
             />
           </div>
 
           {/* Plan */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Plan<span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={formData.plan}
                 onChange={(e) => handleInputChange('plan', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                  errors.plan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${errors.plan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                  } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                  }`}
               >
                 <option value="">Select Plan</option>
                 {plans.map((plan) => (
@@ -499,29 +465,24 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Account Balance */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Account Balance<span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={`₱ ${formData.accountBalance}`}
-              onChange={(e) => handleInputChange('accountBalance', e.target.value.replace('₱ ', ''))}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.accountBalance ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
+              readOnly
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 cursor-not-allowed opacity-75 ${errors.accountBalance ? 'border-red-500' : isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-300' : 'border-gray-300 bg-gray-100 text-gray-600'
+                }`}
             />
             {errors.accountBalance && <p className="text-red-500 text-xs mt-1">{errors.accountBalance}</p>}
           </div>
 
           {/* Payment Date */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Payment Date<span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -529,24 +490,20 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                 type="datetime-local"
                 value={formData.paymentDate}
                 onChange={(e) => handleInputChange('paymentDate', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  errors.paymentDate ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${errors.paymentDate ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                  } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                  }`}
               />
-              <Calendar className={`absolute right-3 top-2.5 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`} size={20} />
+              <Calendar className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`} size={20} />
             </div>
             {errors.paymentDate && <p className="text-red-500 text-xs mt-1">{errors.paymentDate}</p>}
           </div>
 
           {/* Received Payment */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Received Payment<span className="text-red-500">*</span>
             </label>
             <div className="flex items-center">
@@ -555,29 +512,25 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                   type="text"
                   value={`₱ ${formData.receivedPayment}`}
                   onChange={(e) => handleInputChange('receivedPayment', e.target.value.replace('₱ ', ''))}
-                  className={`w-full px-3 py-2 border rounded-l focus:outline-none focus:border-orange-500 ${
-                    errors.receivedPayment ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                  } ${
-                    isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-l focus:outline-none focus:border-orange-500 ${errors.receivedPayment ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                    } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                    }`}
                 />
               </div>
               <div className="flex flex-col">
                 <button
                   type="button"
                   onClick={() => handleReceivedPaymentChange('increase')}
-                  className={`px-3 py-1 border text-sm transition-colors ${
-                    isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white border-gray-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border-gray-300'
-                  } border-l-0`}
+                  className={`px-3 py-1 border text-sm transition-colors ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white border-gray-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border-gray-300'
+                    } border-l-0`}
                 >
                   <Plus size={16} />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleReceivedPaymentChange('decrease')}
-                  className={`px-3 py-1 border rounded-r text-sm transition-colors ${
-                    isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white border-gray-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border-gray-300'
-                  } border-l-0 border-t-0`}
+                  className={`px-3 py-1 border rounded-r text-sm transition-colors ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600 text-white border-gray-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-900 border-gray-300'
+                    } border-l-0 border-t-0`}
                 >
                   <Minus size={16} />
                 </button>
@@ -588,25 +541,24 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Processed By */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Processed By<span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={formData.processedBy}
                 onChange={(e) => handleInputChange('processedBy', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                  errors.processedBy ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${errors.processedBy ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                  } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                  }`}
               >
                 <option value="">Select Processor</option>
-                <option value="admin@ampere.com">admin@ampere.com</option>
-                <option value="billing@ampere.com">billing@ampere.com</option>
-                <option value="finance@ampere.com">finance@ampere.com</option>
+                {processors.map((user) => (
+                  <option key={user.id} value={user.email_address}>
+                    {user.email_address}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="absolute right-3 top-2.5 text-gray-400" size={20} />
             </div>
@@ -615,20 +567,17 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Payment Method */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Payment Method<span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={formData.paymentMethod}
                 onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${
-                  errors.paymentMethod ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${errors.paymentMethod ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                  } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                  }`}
               >
                 <option value="">Select Payment Method</option>
                 <option value="Cash">Cash</option>
@@ -644,49 +593,42 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Reference No */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Reference No.<span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={formData.referenceNo}
               onChange={(e) => handleInputChange('referenceNo', e.target.value)}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.referenceNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${errors.referenceNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                }`}
             />
             {errors.referenceNo && <p className="text-red-500 text-xs mt-1">{errors.referenceNo}</p>}
           </div>
 
           {/* OR No */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               OR No.<span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={formData.orNo}
               onChange={(e) => handleInputChange('orNo', e.target.value)}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.orNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${errors.orNo ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
+                } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                }`}
             />
             {errors.orNo && <p className="text-red-500 text-xs mt-1">{errors.orNo}</p>}
           </div>
 
           {/* Transaction Type */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Transaction Type<span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -697,11 +639,10 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                     key={type}
                     type="button"
                     onClick={() => handleTransactionTypeChange(type)}
-                    className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                      isSelected
-                        ? 'text-white'
-                        : isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`px-4 py-2 rounded text-sm font-medium transition-colors ${isSelected
+                      ? 'text-white'
+                      : isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
                     style={isSelected ? {
                       backgroundColor: colorPalette?.primary || '#ea580c'
                     } : undefined}
@@ -726,42 +667,38 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
 
           {/* Remarks */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Remarks
             </label>
             <textarea
               value={formData.remarks}
               onChange={(e) => handleInputChange('remarks', e.target.value)}
               rows={3}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${
-                isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-              }`}
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
+                }`}
             />
           </div>
 
           {/* Image Upload */}
           <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
               Payment Proof Image
             </label>
-            <div className={`relative w-full h-48 border rounded overflow-hidden cursor-pointer ${
-              isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-            }`}>
-              <input 
-                type="file" 
-                accept="image/*" 
+            <div className={`relative w-full h-48 border rounded overflow-hidden cursor-pointer ${isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+              }`}>
+              <input
+                type="file"
+                accept="image/*"
                 onChange={handleImageUpload}
-                className="absolute inset-0 opacity-0 cursor-pointer z-10" 
+                className="absolute inset-0 opacity-0 cursor-pointer z-10"
               />
               {imagePreview ? (
                 <div className="relative w-full h-full">
-                  <img 
-                    src={imagePreview} 
-                    alt="Payment Proof" 
+                  <img
+                    src={imagePreview}
+                    alt="Payment Proof"
                     className="w-full h-full object-contain"
                   />
                   <div className="absolute bottom-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs flex items-center pointer-events-none">
@@ -769,15 +706,13 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className={`w-full h-full flex flex-col items-center justify-center ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>
+                <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
                   <Camera size={32} />
                   <span className="text-sm mt-2">Click to upload payment proof</span>
                   {formData.image && (
-                    <p className={`mt-2 text-xs ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                    }`}>
+                    <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}>
                       Selected: {formData.image.name}
                     </p>
                   )}

@@ -206,8 +206,17 @@ const LcpNapLocation: React.FC = () => {
           },
           {
             featureType: 'poi',
-            elementType: 'geometry',
-            stylers: [{ color: '#1f2937' }]
+            stylers: [{ visibility: 'off' }]
+          },
+          {
+            featureType: 'transit',
+            elementType: 'labels',
+            stylers: [{ visibility: 'off' }]
+          },
+          {
+            featureType: 'road',
+            elementType: 'labels.icon',
+            stylers: [{ visibility: 'off' }]
           },
           {
             elementType: 'labels.text.fill',

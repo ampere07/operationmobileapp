@@ -59,4 +59,14 @@ class BillingAccount extends Model
     {
         return $this->hasMany(StaggeredInstallation::class, 'account_no', 'account_no');
     }
+
+    public function onlineStatus()
+    {
+        return $this->hasOne(OnlineStatus::class, 'account_id');
+    }
+
+    public function billingStatus()
+    {
+        return $this->belongsTo(BillingStatus::class, 'billing_status_id');
+    }
 }

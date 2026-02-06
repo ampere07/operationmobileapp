@@ -588,9 +588,17 @@ class AutoDisconnectService
         $timestamp = Carbon::now()->format('Y-m-d H:i:s');
         $logMessage = "[{$timestamp}] [{$this->logName}] {$message}";
         
+        // Define directory and file path
+        $logDir = storage_path('logs/autodisconnect');
+        $logFile = $logDir . '/auto_disconnect_pullout.log';
+
+        // Check/Create Directory
+        if (!file_exists($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        
         // Write to custom log file
-        $logPath = storage_path('logs/disconnectionday.log');
-        file_put_contents($logPath, $logMessage . PHP_EOL, FILE_APPEND);
+        file_put_contents($logFile, $logMessage . PHP_EOL, FILE_APPEND);
         
         // Also log to Laravel default log
         Log::channel('single')->info("[{$this->logName}] {$message}");

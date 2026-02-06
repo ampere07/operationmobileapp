@@ -8,6 +8,7 @@ export interface LoginResponse {
       email: string;
       full_name: string;
       role: string;
+      role_id: number;
       organization?: {
         id: number;
         name: string;
@@ -43,6 +44,7 @@ export interface UserData {
   email: string;
   full_name: string;
   role: string;
+  role_id: number;
   organization?: {
     id: number;
     name: string;

@@ -1,10 +1,15 @@
 import axios from 'axios';
-// @ts-ignore
-import { REACT_APP_API_BASE_URL } from '@env';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Define the base URL
-const API_BASE_URL = REACT_APP_API_BASE_URL || 'http://10.0.2.2:8000/api'; // Fallback for Android emulator
+const getCookie = (name: string): string | null => {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+};
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+
+if (!API_BASE_URL) {
+  throw new Error('REACT_APP_API_BASE_URL must be defined in .env file');
+}
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -16,46 +21,38 @@ const apiClient = axios.create({
   },
 });
 
+let csrfInitialized = false;
+
 export const initializeCsrf = async (): Promise<void> => {
+  if (csrfInitialized) {
+    return;
+  }
+
   try {
     const baseUrl = API_BASE_URL.replace(/\/api$/, '');
     await axios.get(`${baseUrl}/sanctum/csrf-cookie`, {
       withCredentials: true,
     });
-    // In React Native, cookies are handled by the underlying OS network stack usually.
-    // If you need manual token handling, extract it here.
+    csrfInitialized = true;
   } catch (error) {
-    console.log('CSRF initialization failed', error);
+    // CSRF initialization failed
   }
 };
 
 apiClient.interceptors.request.use(
-  async (config) => {
-    // Check for auth token in AsyncStorage if you use Bearer tokens
-    // Check for auth token in AsyncStorage
-    let token = await AsyncStorage.getItem('authToken');
+  async (config: any) => {
+    const method = config.method?.toUpperCase();
+    const requiresCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '');
 
-    // Fallback: Check authData object
-    if (!token) {
-      const authData = await AsyncStorage.getItem('authData');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.token) token = parsed.token;
-        } catch (e) {
-          console.error('Error parsing authData in interceptor', e);
-        }
-      }
+    if (requiresCsrf && !csrfInitialized) {
+      await initializeCsrf();
     }
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const xsrfToken = getCookie('XSRF-TOKEN');
+    if (xsrfToken && requiresCsrf) {
+      config.headers = config.headers || {};
+      config.headers['X-XSRF-TOKEN'] = xsrfToken;
     }
-
-    // If bridging existing web session logic, cookies might persist automatically.
-    // If you explicitly need XSRF header from a cookie:
-    // const xsrfToken = await getXsrfTokenFromCookieManager();
-    // if (xsrfToken) config.headers['X-XSRF-TOKEN'] = xsrfToken;
 
     return config;
   },
@@ -69,8 +66,25 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    if (error.response?.status === 419) {
-      // CSRF token mismatch refresh logic could go here
+    if (error.response) {
+      if (error.response.status === 419) {
+        csrfInitialized = false;
+        const originalRequest = error.config;
+
+        if (!originalRequest._retry) {
+          originalRequest._retry = true;
+          try {
+            await initializeCsrf();
+            const xsrfToken = getCookie('XSRF-TOKEN');
+            if (xsrfToken) {
+              originalRequest.headers['X-XSRF-TOKEN'] = xsrfToken;
+            }
+            return apiClient(originalRequest);
+          } catch (retryError) {
+            return Promise.reject(retryError);
+          }
+        }
+      }
     }
     return Promise.reject(error);
   }

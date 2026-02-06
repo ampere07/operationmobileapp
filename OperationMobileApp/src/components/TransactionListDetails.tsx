@@ -46,9 +46,11 @@ interface Transaction {
 interface TransactionListDetailsProps {
   transaction: Transaction;
   onClose: () => void;
+  onNavigate?: (section: string, extra?: string) => void;
+  onViewCustomer?: (accountNo: string) => void;
 }
 
-const TransactionListDetails: React.FC<TransactionListDetailsProps> = ({ transaction, onClose }) => {
+const TransactionListDetails: React.FC<TransactionListDetailsProps> = ({ transaction, onClose, onNavigate, onViewCustomer }) => {
   const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
   const [loading, setLoading] = useState(false);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
@@ -343,7 +345,16 @@ const TransactionListDetails: React.FC<TransactionListDetailsProps> = ({ transac
                   }`}>Account No.</div>
                 <div className="text-red-400 flex-1 font-medium flex items-center">
                   {transaction.account?.account_no || '-'}
-                  <button className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}>
+                  <button
+                    onClick={() => {
+                      if (onViewCustomer && transaction.account?.account_no) {
+                        onViewCustomer(transaction.account.account_no);
+                      } else {
+                        onNavigate?.('customer', transaction.account?.account_no);
+                      }
+                    }}
+                    className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}
+                  >
                     <Info size={16} />
                   </button>
                 </div>

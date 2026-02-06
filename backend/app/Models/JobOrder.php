@@ -15,7 +15,7 @@ class JobOrder extends Model
         'date_installed',
         'installation_fee',
         'billing_day',
-        'billing_status_id',
+        'billing_status',
         'modem_router_sn',
         'router_model',
         'group_name',
@@ -48,9 +48,7 @@ class JobOrder extends Model
         'installation_landmark',
         'pppoe_username',
         'pppoe_password',
-        'created_by_user_id',
         'created_by_user_email',
-        'updated_by_user_id',
         'updated_by_user_email',
     ];
 
@@ -64,7 +62,6 @@ class JobOrder extends Model
     protected $casts = [
         'installation_fee' => 'decimal:2',
         'billing_day' => 'integer',
-        'billing_status_id' => 'integer',
         'timestamp' => 'datetime',
         'date_installed' => 'date',
     ];

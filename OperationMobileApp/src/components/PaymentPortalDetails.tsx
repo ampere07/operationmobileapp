@@ -39,9 +39,10 @@ interface PaymentPortalDetailsProps {
     [key: string]: any;
   };
   onClose: () => void;
+  onViewCustomer?: (accountNo: string) => void;
 }
 
-const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onClose }) => {
+const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onClose, onViewCustomer }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,8 +195,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
 
   return (
     <div className={`flex flex-col overflow-hidden border-l relative ${isDarkMode
-        ? 'bg-gray-950 border-white border-opacity-30'
-        : 'bg-white border-gray-300'
+      ? 'bg-gray-950 border-white border-opacity-30'
+      : 'bg-white border-gray-300'
       }`} style={{ width: `${detailsWidth}px`, height: '100%' }}>
       <div
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
@@ -215,8 +216,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
         onMouseDown={handleMouseDownResize}
       />
       <div className={`p-3 flex items-center justify-between border-b ${isDarkMode
-          ? 'bg-gray-800 border-gray-700'
-          : 'bg-gray-100 border-gray-200'
+        ? 'bg-gray-800 border-gray-700'
+        : 'bg-gray-100 border-gray-200'
         }`}>
         <div className="flex items-center min-w-0 flex-1">
           <h2 className={`font-medium truncate pr-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
@@ -237,8 +238,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
 
       {error && (
         <div className={`border p-3 m-3 rounded ${isDarkMode
-            ? 'bg-red-900 bg-opacity-20 border-red-700 text-red-400'
-            : 'bg-red-100 border-red-300 text-red-900'
+          ? 'bg-red-900 bg-opacity-20 border-red-700 text-red-400'
+          : 'bg-red-100 border-red-300 text-red-900'
           }`}>
           {error}
         </div>
@@ -264,7 +265,13 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
                 }`}>Account No</div>
               <div className="text-red-400 flex-1 font-medium flex items-center">
                 {record.accountNo || record.account_id} | {record.fullName || 'Unknown'} | {record.address || 'Address not available'}
-                <button className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}>
+                <button
+                  onClick={() => {
+                    const accNo = record.accountNo || record.account_id;
+                    if (accNo) onViewCustomer?.(String(accNo));
+                  }}
+                  className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}
+                >
                   <Info size={16} />
                 </button>
               </div>
@@ -407,8 +414,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
                 <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
                   }`}>Related Invoices</span>
                 <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-300 text-gray-900'
+                  ? 'bg-gray-600 text-white'
+                  : 'bg-gray-300 text-gray-900'
                   }`}>{invoicesCount}</span>
               </div>
               <div className="flex items-center space-x-2">
@@ -460,8 +467,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
                 All Related Invoices
               </h2>
               <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
+                ? 'bg-gray-600 text-white'
+                : 'bg-gray-300 text-gray-900'
                 }`}>
                 {invoicesCount} items
               </span>
@@ -469,8 +476,8 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
             <button
               onClick={handleExpandModalClose}
               className={`p-2 rounded transition-colors ${isDarkMode
-                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
                 }`}
             >
               <X size={20} />

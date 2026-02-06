@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react';
+import { X, Calendar, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { userService } from '../services/userService';
@@ -8,7 +8,7 @@ import { routerModelService, RouterModel } from '../services/routerModelService'
 import { getAllPorts, Port } from '../services/portService';
 import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
 import { getAllVLANs, VLAN } from '../services/vlanService';
-import { getAllGroups, Group } from '../services/groupService';
+
 import { getAllUsageTypes, UsageType } from '../services/usageTypeService';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
 import { createJobOrderItems, JobOrderItem, deleteJobOrderItems } from '../services/jobOrderItemService';
@@ -43,7 +43,7 @@ interface JobOrderDoneFormData {
   connectionType: string;
   routerModel: string;
   modemSN: string;
-  groupName: string;
+
   region: string;
   city: string;
   barangay: string;
@@ -138,7 +138,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     connectionType: '',
     routerModel: '',
     modemSN: '',
-    groupName: '',
+
     region: '',
     city: '',
     barangay: '',
@@ -182,13 +182,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [lcpnaps, setLcpnaps] = useState<LCPNAP[]>([]);
   const [ports, setPorts] = useState<Port[]>([]);
   const [vlans, setVlans] = useState<VLAN[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+
   const [usageTypes, setUsageTypes] = useState<UsageType[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [allCities, setAllCities] = useState<City[]>([]);
-  const [allBarangays, setAllBarangays] = useState<Barangay[]>([]);
-  const [allLocations, setAllLocations] = useState<LocationDetail[]>([]);
+
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ itemId: '', quantity: '' }]);
   const [imagePreviews, setImagePreviews] = useState<{
     signedContractImage: string | null;
@@ -218,6 +215,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [activeImageSize, setActiveImageSize] = useState<ImageSizeSetting | null>(null);
   const [usernamePattern, setUsernamePattern] = useState<UsernamePattern | null>(null);
   const [techInputValue, setTechInputValue] = useState<string>('');
+  const [lcpnapSearch, setLcpnapSearch] = useState('');
+  const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
 
   const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
@@ -236,7 +235,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   };
 
   const isGoogleDriveUrl = (url: string | null): boolean => {
-    return url ? url.includes('drive.google.com') : false;
+    if (!url) return false;
+    return url.includes('drive.google.com') || url.includes('docs.google.com');
+  };
+
+  const isCloudUrl = (url: string | null): boolean => {
+    if (!url) return false;
+    return url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1');
   };
 
   const ImagePreview: React.FC<{
@@ -248,11 +253,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     const [imageLoadError, setImageLoadError] = useState(false);
     const isGDrive = isGoogleDriveUrl(imageUrl);
     const isBlobUrl = imageUrl?.startsWith('blob:');
+    const isCloud = isCloudUrl(imageUrl);
 
     return (
       <div>
         <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>{label}<span className="text-red-500">*</span></label>
+          }`}>{label}</label>
         <div className={`relative w-full h-48 border rounded overflow-hidden cursor-pointer ${isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
           }`}>
           <input
@@ -266,53 +272,58 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             }}
             className="absolute inset-0 opacity-0 cursor-pointer z-10"
           />
-          {imageUrl ? (
+          {imageUrl && !imageLoadError ? (
             <div className="relative w-full h-full">
-              {isBlobUrl || (!isGDrive && !imageLoadError) ? (
+              {isBlobUrl ? (
                 <img
                   src={imageUrl}
                   alt={label}
                   className="w-full h-full object-contain"
                   onError={() => setImageLoadError(true)}
                 />
-              ) : (
+              ) : isCloud ? (
                 <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}>
+                  <Camera size={48} className="mb-2 opacity-50" />
+                  <span className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {isGDrive ? 'Image stored in Google Drive' : 'Image stored in Cloud'}
+                  </span>
+                  <a
+                    href={imageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium hover:underline z-20"
+                    style={{ color: colorPalette?.primary || '#ea580c' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View in {isGDrive ? 'Drive' : 'Source'}
+                  </a>
+                </div>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center">
                   <Camera size={32} />
-                  <span className="text-sm mt-2 text-center px-4">Image stored in Google Drive</span>
-                  {imageUrl && (
-                    <a
-                      href={imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs mt-2 hover:underline z-20"
-                      style={{ color: colorPalette?.primary || '#ea580c' }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      View in Drive
-                    </a>
-                  )}
+                  <span className="text-sm mt-2">Invalid image source</span>
                 </div>
               )}
-              <div className="absolute bottom-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs flex items-center pointer-events-none">
-                <Camera className="mr-1" size={14} />Uploaded
+              <div className="absolute bottom-3 right-3 bg-[#22c55e] text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-lg pointer-events-none z-30">
+                <Camera className="mr-2" size={16} />Uploaded
               </div>
             </div>
           ) : (
             <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}>
               <Camera size={32} />
-              <span className="text-sm mt-2">Click to upload</span>
+              <span className="text-sm mt-2 font-medium">Click to upload</span>
             </div>
           )}
         </div>
         {error && (
           <div className="flex items-center mt-1">
             <div
-              className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
+              className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2 shadow-sm"
               style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
             >!</div>
-            <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
+            <p className="text-xs font-medium" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
           </div>
         )}
       </div>
@@ -554,23 +565,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchVlans();
   }, [isOpen]);
 
-  useEffect(() => {
-    const fetchGroups = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllGroups();
-          if (response.success && Array.isArray(response.data)) {
-            setGroups(response.data);
-          } else {
-            setGroups([]);
-          }
-        } catch (error) {
-          setGroups([]);
-        }
-      }
-    };
-    fetchGroups();
-  }, [isOpen]);
+
 
   useEffect(() => {
     const fetchUsageTypes = async () => {
@@ -612,85 +607,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchInventoryItems();
   }, [isOpen]);
 
-  useEffect(() => {
-    const fetchRegions = async () => {
-      if (isOpen) {
-        try {
-          const fetchedRegions = await getRegions();
 
-          if (Array.isArray(fetchedRegions)) {
-            setRegions(fetchedRegions);
-          } else {
-            setRegions([]);
-          }
-        } catch (error) {
-          setRegions([]);
-        }
-      }
-    };
-
-    fetchRegions();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchAllCities = async () => {
-      if (isOpen) {
-        try {
-          const fetchedCities = await getCities();
-
-          if (Array.isArray(fetchedCities)) {
-            setAllCities(fetchedCities);
-          } else {
-            setAllCities([]);
-          }
-        } catch (error) {
-          setAllCities([]);
-        }
-      }
-    };
-
-    fetchAllCities();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchAllBarangays = async () => {
-      if (isOpen) {
-        try {
-          const response = await barangayService.getAll();
-
-          if (response.success && Array.isArray(response.data)) {
-            setAllBarangays(response.data);
-          } else {
-            setAllBarangays([]);
-          }
-        } catch (error) {
-          setAllBarangays([]);
-        }
-      }
-    };
-
-    fetchAllBarangays();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchAllLocations = async () => {
-      if (isOpen) {
-        try {
-          const response = await locationDetailService.getAll();
-
-          if (response.success && Array.isArray(response.data)) {
-            setAllLocations(response.data);
-          } else {
-            setAllLocations([]);
-          }
-        } catch (error) {
-          setAllLocations([]);
-        }
-      }
-    };
-
-    fetchAllLocations();
-  }, [isOpen]);
 
   useEffect(() => {
     const fetchTechnicians = async () => {
@@ -799,7 +716,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
                 routerModel: getValue(jobOrderData.Router_Model || jobOrderData.router_model, 'routerModel'),
                 modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
-                groupName: getValue(jobOrderData.group_name || jobOrderData.Group_Name, 'groupName'),
+
                 lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
                 port: getValue(jobOrderData.PORT || jobOrderData.port, 'port'),
                 vlan: getValue(jobOrderData.VLAN || jobOrderData.vlan, 'vlan'),
@@ -822,6 +739,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 ...prev,
                 ...newFormData
               }));
+
+              // Initialize image previews from database values (only if they are actual URLs)
+              const safeConvert = (val: any) => {
+                const url = val || '';
+                if (url && typeof url === 'string' && url.startsWith('http')) {
+                  return convertGoogleDriveUrl(url);
+                }
+                return null;
+              };
+
+              setImagePreviews({
+                signedContractImage: safeConvert(jobOrderData.signed_contract_image_url || jobOrderData.Signed_Contract_Image_URL),
+                setupImage: safeConvert(jobOrderData.setup_image_url || jobOrderData.Setup_Image_URL),
+                boxReadingImage: safeConvert(jobOrderData.box_reading_image_url || jobOrderData.Box_Reading_Image_URL),
+                routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
+                portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
+                clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
+                speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
+              });
             }
           } else {
             loadDefaultFormData();
@@ -839,7 +775,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
           routerModel: getValue(jobOrderData.Router_Model || jobOrderData.router_model, 'routerModel'),
           modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
-          groupName: getValue(jobOrderData.group_name || jobOrderData.Group_Name, 'groupName'),
+
           lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
           port: getValue(jobOrderData.PORT || jobOrderData.port, 'port'),
           vlan: getValue(jobOrderData.VLAN || jobOrderData.vlan, 'vlan'),
@@ -862,6 +798,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           ...prev,
           ...newFormData
         }));
+
+        // Initialize image previews from database values (only if they are actual URLs)
+        const safeConvertDefault = (val: any) => {
+          const url = val || '';
+          if (url && typeof url === 'string' && url.startsWith('http')) {
+            return convertGoogleDriveUrl(url);
+          }
+          return null;
+        };
+
+        setImagePreviews({
+          signedContractImage: safeConvertDefault(jobOrderData.signed_contract_image_url || jobOrderData.Signed_Contract_Image_URL),
+          setupImage: safeConvertDefault(jobOrderData.setup_image_url || jobOrderData.Setup_Image_URL),
+          boxReadingImage: safeConvertDefault(jobOrderData.box_reading_image_url || jobOrderData.Box_Reading_Image_URL),
+          routerReadingImage: safeConvertDefault(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
+          portLabelImage: safeConvertDefault(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
+          clientSignatureImage: safeConvertDefault(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
+          speedTestImage: safeConvertDefault(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
+        });
       };
 
       fetchApplicationData();
@@ -986,7 +941,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
     if (!formData.choosePlan.trim()) newErrors.choosePlan = 'Choose Plan is required';
     if (!formData.onsiteStatus.trim()) newErrors.onsiteStatus = 'Onsite Status is required';
-    if (!formData.groupName.trim()) newErrors.groupName = 'Group is required';
+
     if (!formData.region.trim()) newErrors.region = 'Region is required';
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.barangay.trim()) newErrors.barangay = 'Barangay is required';
@@ -1008,15 +963,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
       if (formData.connectionType === 'Antenna') {
         if (!formData.ip.trim()) newErrors.ip = 'IP is required';
-        const hasPortLabelImageInDb = isValidImageUrl(jobOrderData?.port_label_image_url) || isValidImageUrl(jobOrderData?.Port_Label_Image_URL);
-        if (!formData.portLabelImage && !hasPortLabelImageInDb) newErrors.portLabelImage = 'Port Label Image is required';
+
       } else if (formData.connectionType === 'Fiber') {
         if (!formData.lcpnap.trim()) newErrors.lcpnap = 'LCP-NAP is required';
         if (!formData.port.trim()) newErrors.port = 'PORT is required';
         if (!formData.vlan.trim()) newErrors.vlan = 'VLAN is required';
       } else if (formData.connectionType === 'Local') {
-        const hasPortLabelImageInDb = isValidImageUrl(jobOrderData?.port_label_image_url) || isValidImageUrl(jobOrderData?.Port_Label_Image_URL);
-        if (!formData.portLabelImage && !hasPortLabelImageInDb) newErrors.portLabelImage = 'Port Label Image is required';
+
       }
 
       if (!formData.visit_by.trim()) newErrors.visit_by = 'Visit By is required';
@@ -1039,31 +992,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       }
 
-      const hasSignedContractImageInDb = isValidImageUrl(jobOrderData?.signed_contract_image_url) || isValidImageUrl(jobOrderData?.Signed_Contract_Image_URL);
-      const hasSetupImageInDb = isValidImageUrl(jobOrderData?.setup_image_url) || isValidImageUrl(jobOrderData?.Setup_Image_URL);
-      const hasBoxReadingImageInDb = isValidImageUrl(jobOrderData?.box_reading_image_url) || isValidImageUrl(jobOrderData?.Box_Reading_Image_URL);
-      const hasRouterReadingImageInDb = isValidImageUrl(jobOrderData?.router_reading_image_url) || isValidImageUrl(jobOrderData?.Router_Reading_Image_URL);
 
-      const clientSignatureVariations = [
-        'client_signature_image_url',
-        'Client_Signature_Image_URL',
-        'client_sig_image_url',
-        'signature_image_url',
-        'clientSignatureImageUrl',
-        'ClientSignatureImageURL',
-        'client_signature_url',
-        'clientSignatureUrl'
-      ];
-      const hasClientSignatureImageInDb = clientSignatureVariations.some(field => isValidImageUrl(jobOrderData?.[field]));
-
-      const hasSpeedTestImageInDb = isValidImageUrl(jobOrderData?.speedtest_image_url) || isValidImageUrl(jobOrderData?.Speedtest_Image_URL);
-
-      if (!formData.signedContractImage && !hasSignedContractImageInDb) newErrors.signedContractImage = 'Signed Contract Image is required';
-      if (!formData.setupImage && !hasSetupImageInDb) newErrors.setupImage = 'Setup Image is required';
-      if (!formData.boxReadingImage && !hasBoxReadingImageInDb) newErrors.boxReadingImage = 'Box Reading Image is required';
-      if (!formData.routerReadingImage && !hasRouterReadingImageInDb) newErrors.routerReadingImage = 'Router Reading Image is required';
-      if (!formData.clientSignatureImage && !hasClientSignatureImageInDb) newErrors.clientSignatureImage = 'Client Signature Image is required';
-      if (!formData.speedTestImage && !hasSpeedTestImageInDb) newErrors.speedTestImage = 'Speed Test Image is required';
     }
 
     if (formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') {
@@ -1188,7 +1117,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         jobOrderUpdateData.onsite_remarks = updatedFormData.onsiteRemarks;
         jobOrderUpdateData.address_coordinates = updatedFormData.addressCoordinates || '';
         jobOrderUpdateData.onsite_status = 'Done';
-        jobOrderUpdateData.group_name = updatedFormData.groupName;
+
 
         console.log('[SAVE DEBUG] Address Coordinates:', updatedFormData.addressCoordinates);
 
@@ -1353,7 +1282,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
       if (updatedFormData.onsiteStatus === 'In Progress') {
         jobOrderUpdateData.onsite_status = 'In Progress';
-        jobOrderUpdateData.group_name = updatedFormData.groupName;
+
       }
 
       console.log('[API CALL] ========================================');
@@ -1456,109 +1385,83 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         const validItems = orderItems.filter(item => {
           const quantity = parseInt(item.quantity);
           const isValid = item.itemId && item.itemId.trim() !== '' && !isNaN(quantity) && quantity > 0;
-
           return isValid;
         });
 
+        console.log('[SAVE ITEMS] Valid items found:', validItems.length, validItems);
+
         if (validItems.length > 0) {
           try {
+            // Ensure we have a numeric ID
+            const numericJobOrderId = parseInt((jobOrderData.JobOrder_ID || jobOrderData.id || 0).toString());
+            console.log('[SAVE ITEMS] Using Job Order ID:', numericJobOrderId);
+
+            if (!numericJobOrderId || isNaN(numericJobOrderId)) {
+              throw new Error('Invalid Job Order ID for items saving');
+            }
+
             // Get existing items from database
-            const existingItemsResponse = await apiClient.get<{ success: boolean; data: any[] }>(`/job-order-items?job_order_id=${jobOrderId}`);
+            const existingItemsResponse = await apiClient.get<{ success: boolean; data: any[] }>(`/job-order-items?job_order_id=${numericJobOrderId}`);
 
             if (existingItemsResponse.data.success && Array.isArray(existingItemsResponse.data.data)) {
               const existingItems = existingItemsResponse.data.data;
+              console.log('[SAVE ITEMS] Existing items count:', existingItems.length);
 
-              console.log('[SAVE ITEMS] Existing items from database:', existingItems);
-
-              // Create a map of existing items by item_name for quick lookup
               const existingItemsMap = new Map();
               existingItems.forEach((item: any) => {
                 existingItemsMap.set(item.item_name, item);
               });
 
-              console.log('[SAVE ITEMS] Valid items to process:', validItems);
-
-              // Track which items were processed for updates
+              const itemsToUpdate = [];
+              const itemsToCreate = [];
               const processedItemNames = new Set<string>();
 
-              // Update or create items
               for (const item of validItems) {
-                const existingItem = existingItemsMap.get(item.itemId);
                 processedItemNames.add(item.itemId);
+                const existingItem = existingItemsMap.get(item.itemId);
 
                 if (existingItem) {
-                  // Update existing item
-                  console.log(`[SAVE ITEMS] Updating item: ${item.itemId} (ID: ${existingItem.id})`);
-                  try {
-                    const updateResult = await apiClient.put(`/job-order-items/${existingItem.id}`, {
-                      quantity: parseInt(item.quantity)
-                    });
-                    console.log(`[SAVE ITEMS] Update successful for ${item.itemId}:`, updateResult.data);
-                  } catch (updateErr: any) {
-                    console.error('Failed to update item:', updateErr);
-                    saveMessages.push({
-                      type: 'warning',
-                      text: `Failed to update item ${item.itemId}: ${updateErr.message || 'Unknown error'}`
-                    });
-                  }
+                  itemsToUpdate.push({ id: existingItem.id, item_name: item.itemId, quantity: parseInt(item.quantity) });
                 } else {
-                  // Create new item
-                  console.log(`[SAVE ITEMS] Creating new item: ${item.itemId}`);
-                  try {
-                    const createResult = await apiClient.post('/job-order-items', {
-                      job_order_id: parseInt(jobOrderId.toString()),
-                      item_name: item.itemId,
-                      quantity: parseInt(item.quantity)
-                    });
-                    console.log(`[SAVE ITEMS] Create successful for ${item.itemId}:`, createResult.data);
-                  } catch (createErr: any) {
-                    console.error('Failed to create item:', createErr);
-                    saveMessages.push({
-                      type: 'warning',
-                      text: `Failed to create item ${item.itemId}: ${createErr.message || 'Unknown error'}`
-                    });
-                  }
+                  itemsToCreate.push({ job_order_id: numericJobOrderId, item_name: item.itemId, quantity: parseInt(item.quantity) });
                 }
               }
 
-              // Delete items that are no longer in the form
-              console.log('[SAVE ITEMS] Checking for items to delete...');
+              // Update existing items
+              for (const item of itemsToUpdate) {
+                console.log(`[SAVE ITEMS] Updating: ${item.item_name}`, item);
+                await apiClient.put(`/job-order-items/${item.id}`, { quantity: item.quantity });
+              }
+
+              // Create new items in batch
+              if (itemsToCreate.length > 0) {
+                console.log('[SAVE ITEMS] Batch creating:', itemsToCreate);
+                await apiClient.post('/job-order-items', { items: itemsToCreate });
+              }
+
+              // Delete removed items
               for (const existingItem of existingItems) {
                 if (!processedItemNames.has(existingItem.item_name)) {
-                  console.log(`[SAVE ITEMS] Deleting removed item: ${existingItem.item_name} (ID: ${existingItem.id})`);
-                  try {
-                    await apiClient.delete(`/job-order-items/${existingItem.id}`);
-                    console.log(`[SAVE ITEMS] Delete successful for ${existingItem.item_name}`);
-                  } catch (deleteErr: any) {
-                    console.error('[SAVE ITEMS] Failed to delete item:', deleteErr);
-                  }
+                  console.log(`[SAVE ITEMS] Deleting removed item: ${existingItem.item_name}`);
+                  await apiClient.delete(`/job-order-items/${existingItem.id}`);
                 }
               }
-              console.log('[SAVE ITEMS] All items processed successfully');
             } else {
-              // No existing items, create all new items
-              for (const item of validItems) {
-                try {
-                  await apiClient.post('/job-order-items', {
-                    job_order_id: parseInt(jobOrderId.toString()),
-                    item_name: item.itemId,
-                    quantity: parseInt(item.quantity)
-                  });
-                } catch (createErr: any) {
-                  console.error('Failed to create item:', createErr);
-                  saveMessages.push({
-                    type: 'warning',
-                    text: `Failed to create item ${item.itemId}: ${createErr.message || 'Unknown error'}`
-                  });
-                }
-              }
+              // Fallback: Create all as new if GET failed or returned no success
+              const itemsToCreate = validItems.map(item => ({
+                job_order_id: numericJobOrderId,
+                item_name: item.itemId,
+                quantity: parseInt(item.quantity)
+              }));
+              console.log('[SAVE ITEMS] Fallback batch creation:', itemsToCreate);
+              await apiClient.post('/job-order-items', { items: itemsToCreate });
             }
+            console.log('[SAVE ITEMS] Items processing completed successfully');
           } catch (itemsError: any) {
-            const errorMsg = itemsError.response?.data?.message || itemsError.message || 'Unknown error';
-            console.error('Items operation failed:', errorMsg);
+            console.error('[SAVE ITEMS] ERROR:', itemsError);
             saveMessages.push({
               type: 'warning',
-              text: `Items operation warning: ${errorMsg}`
+              text: `Items saving warning: ${itemsError.message || 'Check connection'}`
             });
           }
         }
@@ -1603,30 +1506,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const fullName = `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim();
 
-  const getFilteredCities = () => {
-    if (!formData.region) return [];
-    const selectedRegion = regions.find(reg => reg.name === formData.region);
-    if (!selectedRegion) return [];
-    return allCities.filter(city => city.region_id === selectedRegion.id);
-  };
 
-  const getFilteredBarangays = () => {
-    if (!formData.city) return [];
-    const selectedCity = allCities.find(city => city.name === formData.city);
-    if (!selectedCity) return [];
-    return allBarangays.filter(brgy => brgy.city_id === selectedCity.id);
-  };
-
-  const getFilteredLocations = () => {
-    if (!formData.barangay) return [];
-    const selectedBarangay = allBarangays.find(brgy => brgy.barangay === formData.barangay);
-    if (!selectedBarangay) return [];
-    return allLocations.filter(loc => loc.barangay_id === selectedBarangay.id);
-  };
-
-  const filteredCities = getFilteredCities();
-  const filteredBarangays = getFilteredBarangays();
-  const filteredLocations = getFilteredLocations();
 
   return (
     <>
@@ -1667,10 +1547,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   <div
                     key={index}
                     className={`flex items-start gap-3 p-3 rounded-lg border ${message.type === 'success'
-                        ? (isDarkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-100 border-green-300')
-                        : message.type === 'warning'
-                          ? (isDarkMode ? 'bg-yellow-900/30 border-yellow-700' : 'bg-yellow-100 border-yellow-300')
-                          : (isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-100 border-red-300')
+                      ? (isDarkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-100 border-green-300')
+                      : message.type === 'warning'
+                        ? (isDarkMode ? 'bg-yellow-900/30 border-yellow-700' : 'bg-yellow-100 border-yellow-300')
+                        : (isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-100 border-red-300')
                       }`}
                   >
                     {message.type === 'success' && (
@@ -1684,10 +1564,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     )}
                     <p
                       className={`text-sm ${message.type === 'success'
-                          ? (isDarkMode ? 'text-green-200' : 'text-green-800')
-                          : message.type === 'warning'
-                            ? (isDarkMode ? 'text-yellow-200' : 'text-yellow-800')
-                            : (isDarkMode ? 'text-red-200' : 'text-red-800')
+                        ? (isDarkMode ? 'text-green-200' : 'text-green-800')
+                        : message.type === 'warning'
+                          ? (isDarkMode ? 'text-yellow-200' : 'text-yellow-800')
+                          : (isDarkMode ? 'text-red-200' : 'text-red-800')
                         }`}
                     >
                       {message.text}
@@ -1727,10 +1607,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
             }`}>
             <div className="flex items-center space-x-3">
-              <button onClick={onClose} className={`${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                }`}>
-                <X size={24} />
-              </button>
+
               <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
                 }`}>{fullName}</h2>
             </div>
@@ -1842,169 +1719,62 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               )}
             </div>
 
+
+
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Affiliate<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.groupName} onChange={(e) => handleInputChange('groupName', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } ${errors.groupName ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                  <option value="">Select Affiliate</option>
-                  {formData.groupName && !groups.some(g => g.group_name === formData.groupName) && (
-                    <option value={formData.groupName}>{formData.groupName}</option>
-                  )}
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.group_name}>
-                      {group.group_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.groupName && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.groupName}</p>
-                </div>
-              )}
+                }`}>Region</label>
+              <input
+                type="text"
+                value={formData.region}
+                readOnly
+                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-300'
+                  : 'bg-gray-100 border-gray-300 text-gray-600'
+                  }`}
+              />
             </div>
 
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Region<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.region} onChange={(e) => handleInputChange('region', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } ${errors.region ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                  <option value="">Select Region</option>
-                  {formData.region && !regions.some(reg => reg.name === formData.region) && (
-                    <option value={formData.region}>{formData.region}</option>
-                  )}
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.name}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.region && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.region}</p>
-                </div>
-              )}
+                }`}>City</label>
+              <input
+                type="text"
+                value={formData.city}
+                readOnly
+                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-300'
+                  : 'bg-gray-100 border-gray-300 text-gray-600'
+                  }`}
+              />
             </div>
 
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>City<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  disabled={!formData.region}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.city ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                >
-                  <option value="">{formData.region ? 'Select City' : 'Select Region First'}</option>
-                  {formData.city && !filteredCities.some(city => city.name === formData.city) && (
-                    <option value={formData.city}>{formData.city}</option>
-                  )}
-                  {filteredCities.map((city) => (
-                    <option key={city.id} value={city.name}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.city && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.city}</p>
-                </div>
-              )}
+                }`}>Barangay</label>
+              <input
+                type="text"
+                value={formData.barangay}
+                readOnly
+                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-300'
+                  : 'bg-gray-100 border-gray-300 text-gray-600'
+                  }`}
+              />
             </div>
 
             <div>
               <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Barangay<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.barangay}
-                  onChange={(e) => handleInputChange('barangay', e.target.value)}
-                  disabled={!formData.city}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.barangay ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                >
-                  <option value="">{formData.city ? 'Select Barangay' : 'Select City First'}</option>
-                  {formData.barangay && !filteredBarangays.some(brgy => brgy.barangay === formData.barangay) && (
-                    <option value={formData.barangay}>{formData.barangay}</option>
-                  )}
-                  {filteredBarangays.map((barangay) => (
-                    <option key={barangay.id} value={barangay.barangay}>
-                      {barangay.barangay}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.barangay && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.barangay}</p>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Location<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!formData.barangay}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.location ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                >
-                  <option value="">{formData.barangay ? 'Select Location' : 'Select Barangay First'}</option>
-                  {formData.location && !filteredLocations.some(loc => loc.location_name === formData.location) && (
-                    <option value={formData.location}>{formData.location}</option>
-                  )}
-                  {filteredLocations.map((location) => (
-                    <option key={location.id} value={location.location_name}>
-                      {location.location_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.location && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.location}</p>
-                </div>
-              )}
+                }`}>Location</label>
+              <input
+                type="text"
+                value={formData.location}
+                readOnly
+                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-300'
+                  : 'bg-gray-100 border-gray-300 text-gray-600'
+                  }`}
+              />
             </div>
 
             {formData.onsiteStatus === 'Done' && (
@@ -2067,8 +1837,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       type="button"
                       onClick={() => handleInputChange('connectionType', 'Antenna')}
                       className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Antenna'
-                          ? 'text-white'
-                          : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
+                        ? 'text-white'
+                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
                         }`}
                       style={formData.connectionType === 'Antenna' ? {
                         backgroundColor: colorPalette?.primary || '#ea580c',
@@ -2079,8 +1849,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       type="button"
                       onClick={() => handleInputChange('connectionType', 'Fiber')}
                       className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Fiber'
-                          ? 'text-white'
-                          : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
+                        ? 'text-white'
+                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
                         }`}
                       style={formData.connectionType === 'Fiber' ? {
                         backgroundColor: colorPalette?.primary || '#ea580c',
@@ -2091,8 +1861,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       type="button"
                       onClick={() => handleInputChange('connectionType', 'Local')}
                       className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Local'
-                          ? 'text-white'
-                          : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
+                        ? 'text-white'
+                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
                         }`}
                       style={formData.connectionType === 'Local' ? {
                         backgroundColor: colorPalette?.primary || '#ea580c',
@@ -2209,27 +1979,95 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 {formData.connectionType === 'Fiber' && (
                   <>
                     <div>
-                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>LCP-NAP<span className="text-red-500">*</span></label>
+                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        LCP-NAP<span className="text-red-500">*</span>
+                      </label>
                       <div className="relative">
-                        <select
-                          value={formData.lcpnap}
-                          onChange={(e) => handleInputChange('lcpnap', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                            } ${errors.lcpnap ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                        {/* Display Field (The "Closed" state) */}
+                        <div
+                          className={`flex items-center justify-between px-3 py-2 border rounded cursor-pointer transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
+                            } ${errors.lcpnap ? 'border-red-500' : 'focus-within:border-orange-500'}`}
+                          onClick={() => setIsLcpnapOpen(!isLcpnapOpen)}
                         >
-                          <option value="">Select LCP-NAP</option>
-                          {formData.lcpnap && !lcpnaps.some(ln => ln.lcpnap_name === formData.lcpnap) && (
-                            <option value={formData.lcpnap}>{formData.lcpnap}</option>
-                          )}
-                          {lcpnaps.map((lcpnap) => (
-                            <option key={lcpnap.id} value={lcpnap.lcpnap_name}>
-                              {lcpnap.lcpnap_name}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`} size={20} />
+                          <span className={`text-sm ${!formData.lcpnap ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : ''}`}>
+                            {formData.lcpnap || 'Select LCP-NAP'}
+                          </span>
+                          <ChevronDown
+                            size={18}
+                            className={`transition-transform duration-200 ${isLcpnapOpen ? 'rotate-180' : ''} ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}
+                          />
+                        </div>
+
+                        {/* Dropdown Menu */}
+                        {isLcpnapOpen && (
+                          <div
+                            className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-md shadow-2xl border overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                              }`}
+                            style={{ minWidth: '100%' }}
+                          >
+                            {/* Search Box at Top of Dropdown */}
+                            <div className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
+                              <div className={`flex items-center px-2 py-1.5 rounded border ${isDarkMode ? 'bg-gray-800 border-gray-700 focus-within:border-orange-500' : 'bg-white border-gray-300 focus-within:border-orange-500'
+                                }`}>
+                                <Search size={14} className="mr-2 text-gray-400" />
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  placeholder="Search LCP-NAP..."
+                                  value={lcpnapSearch}
+                                  onChange={(e) => setLcpnapSearch(e.target.value)}
+                                  className={`w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                    }`}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Options List */}
+                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                              {lcpnaps
+                                .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
+                                .map((lcpnap) => (
+                                  <div
+                                    key={lcpnap.id}
+                                    className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDarkMode
+                                      ? 'hover:bg-gray-700 text-gray-200'
+                                      : 'hover:bg-gray-100 text-gray-700'
+                                      } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20 text-orange-400' : 'bg-orange-50 text-orange-600') : ''}`}
+                                    onClick={() => {
+                                      handleInputChange('lcpnap', lcpnap.lcpnap_name);
+                                      setLcpnapSearch('');
+                                      setIsLcpnapOpen(false);
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span>{lcpnap.lcpnap_name}</span>
+                                      {formData.lcpnap === lcpnap.lcpnap_name && (
+                                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
+                                <div className={`px-4 py-8 text-center text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                  No results found for "{lcpnapSearch}"
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Click outside to close */}
+                        {isLcpnapOpen && (
+                          <div
+                            className="fixed inset-0 z-40 bg-transparent"
+                            onClick={() => {
+                              setIsLcpnapOpen(false);
+                              setLcpnapSearch('');
+                            }}
+                          />
+                        )}
                       </div>
                       {errors.lcpnap && (
                         <div className="flex items-center mt-1">
@@ -2338,7 +2176,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
                         <option value={formData.visit_by}>{formData.visit_by}</option>
                       )}
-                      {technicians.map((technician, index) => (
+                      {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
                         <option key={index} value={technician.name}>{technician.name}</option>
                       ))}
                     </select>
@@ -2367,7 +2205,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
                         <option value={formData.visit_with}>{formData.visit_with}</option>
                       )}
-                      {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
+                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
                         <option key={index} value={technician.name}>{technician.name}</option>
                       ))}
                     </select>
@@ -2396,7 +2234,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
                         <option value={formData.visit_with_other}>{formData.visit_with_other}</option>
                       )}
-                      {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
+                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
                         <option key={index} value={technician.name}>{technician.name}</option>
                       ))}
                     </select>

@@ -1,9 +1,14 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../config/api'; // Using the centralized client is better if possible, but sticking to logic
 
-// Use the existing config or fallback
-const API_BASE_URL = apiClient.defaults.baseURL || 'https://backend-operation-467261466041.asia-southeast1.run.app/api';
+const getApiBaseUrl = (): string => {
+  const baseUrl = process.env.REACT_APP_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("REACT_APP_API_BASE_URL is not defined");
+  }
+  return baseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface PendingPayment {
   reference_no: string;
@@ -36,21 +41,16 @@ export interface PaymentStatusResponse {
   message?: string;
 }
 
-const getAuthToken = async () => {
-  try {
-    const authData = await AsyncStorage.getItem('authData');
-    if (authData) {
-      const parsed = JSON.parse(authData);
-      return parsed.token || '';
-    }
-  } catch { return ''; }
-  return '';
-};
-
 export const paymentService = {
   getAccountBalance: async (accountNo: string): Promise<number> => {
     try {
-      const token = await getAuthToken();
+      const authData = localStorage.getItem('authData');
+      let token = '';
+      
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        token = parsed.token || '';
+      }
 
       const response = await axios.post<{ status: string; account_balance?: number }>(
         `${API_BASE_URL}/payments/account-balance`,
@@ -72,7 +72,13 @@ export const paymentService = {
 
   checkPendingPayment: async (accountNo: string): Promise<PendingPayment | null> => {
     try {
-      const token = await getAuthToken();
+      const authData = localStorage.getItem('authData');
+      let token = '';
+      
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        token = parsed.token || '';
+      }
 
       const response = await axios.post<{ status: string; pending_payment?: PendingPayment }>(
         `${API_BASE_URL}/payments/check-pending`,
@@ -95,17 +101,30 @@ export const paymentService = {
   createPayment: async (accountNo: string, amount: number): Promise<PaymentResponse> => {
     try {
       console.log('Payment Service - Creating payment:', { accountNo, amount });
-
+      
       if (!accountNo || accountNo.trim() === '') {
-        throw new Error('Account number is missing. Please log in again.');
+        throw new Error('Account number is missing from user session. Please log in again.');
       }
 
-      const token = await getAuthToken();
+      const authData = localStorage.getItem('authData');
+      let token = '';
+      
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        token = parsed.token || '';
+        console.log('Auth data:', { 
+          hasToken: !!token, 
+          accountNo: parsed.account_no,
+          username: parsed.username 
+        });
+      }
 
       const payload = {
         account_no: accountNo,
         amount: amount
       };
+
+      console.log('Payment payload:', payload);
 
       const response = await axios.post<PaymentResponse>(
         `${API_BASE_URL}/payments/create`,
@@ -121,7 +140,7 @@ export const paymentService = {
       return response.data as PaymentResponse;
     } catch (error: any) {
       console.error('Payment creation error:', error.response?.data || error.message);
-
+      
       if (error.response?.data) {
         throw new Error(error.response.data.message || 'Payment creation failed');
       }
@@ -131,7 +150,13 @@ export const paymentService = {
 
   checkPaymentStatus: async (referenceNo: string): Promise<PaymentStatusResponse> => {
     try {
-      const token = await getAuthToken();
+      const authData = localStorage.getItem('authData');
+      let token = '';
+      
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        token = parsed.token || '';
+      }
 
       const response = await axios.post<PaymentStatusResponse>(
         `${API_BASE_URL}/payments/status`,

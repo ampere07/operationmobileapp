@@ -16,7 +16,7 @@ class CustomerDetailController extends Controller
             \Log::info('CustomerDetailController - Fetching details for account:', ['account_no' => $accountNo]);
             
             $billingAccount = BillingAccount::where('account_no', $accountNo)
-                ->with(['customer', 'technicalDetails'])
+                ->with(['customer', 'technicalDetails', 'onlineStatus', 'billingStatus'])
                 ->firstOrFail();
             
             $customer = $billingAccount->customer;
@@ -66,6 +66,7 @@ class CustomerDetailController extends Controller
                     'planId' => $billingAccount->plan_id,
                     'billingDay' => $billingAccount->billing_day,
                     'billingStatusId' => $billingAccount->billing_status_id,
+                    'billingStatusName' => $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null,
                     'accountBalance' => $billingAccount->account_balance,
                     'balanceUpdateDate' => $billingAccount->balance_update_date ? $billingAccount->balance_update_date->format('Y-m-d H:i:s') : null,
                     'createdBy' => $billingAccount->created_by,
@@ -93,6 +94,9 @@ class CustomerDetailController extends Controller
                 
                 'createdAt' => $customer->created_at?->format('Y-m-d H:i:s'),
                 'updatedAt' => $customer->updated_at?->format('Y-m-d H:i:s'),
+                
+                'onlineSessionStatus' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
+                'onlineStatusData' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->toArray() : null,
             ];
             
             \Log::info('CustomerDetailController - Response data:', [

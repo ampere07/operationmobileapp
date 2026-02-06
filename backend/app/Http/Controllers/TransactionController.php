@@ -15,9 +15,18 @@ class TransactionController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $transactions = Transaction::with(['account.customer', 'account.technicalDetails', 'processedByUser'])
+            $limit = request()->input('limit');
+            $offset = request()->input('offset');
+
+            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processedByUser'])
                 ->orderBy('created_at', 'desc')
-                ->get();
+                ->orderBy('id', 'desc');
+
+            if ($limit && $limit > 0) {
+                $transactions = $query->skip($offset ?? 0)->take($limit)->get();
+            } else {
+                $transactions = $query->get();
+            }
 
             \Log::info('Fetched transactions', [
                 'count' => $transactions->count(),
@@ -33,7 +42,8 @@ class TransactionController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => $transactions,
-                'count' => $transactions->count()
+                'count' => $transactions->count(),
+                'total' => Transaction::count()
             ]);
         } catch (\Exception $e) {
             \Log::error('Error fetching transactions: ' . $e->getMessage());

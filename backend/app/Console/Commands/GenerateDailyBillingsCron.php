@@ -44,21 +44,47 @@ class GenerateDailyBillingsCron extends Command
         $logger->info('=================================================================');
 
         try {
-            $advanceDays = config('billing.advance_generation_days', 7);
+            // Fetch advance generation days from billing_config
+            $config = \App\Models\BillingConfig::first();
+            $advanceDays = $config ? ($config->advance_generation_day ?? 0) : 0;
+            
+            // Calculate target date by adding advance days to today
             $targetDate = $today->copy()->addDays($advanceDays);
             $targetBillingDay = $targetDate->day;
 
             $logger->info('Configuration loaded', [
-                'advance_generation_days' => $advanceDays,
+                'mode' => 'advance_generation',
+                'description' => "Generating bills {$advanceDays} days in advance",
+                'advance_days' => $advanceDays,
+                'today' => $today->format('Y-m-d'),
                 'target_date' => $targetDate->format('Y-m-d'),
                 'target_billing_day' => $targetBillingDay
             ]);
 
-            $accountsCount = \App\Models\BillingAccount::where('billing_status_id', 2)
+            $logger->info('Checking billing_accounts table for eligible accounts...', [
+                'criteria' => [
+                    'billing_status_id' => 2,
+                    'date_installed' => 'NOT NULL',
+                    'account_no' => 'NOT NULL',
+                    'billing_day' => $targetBillingDay
+                ]
+            ]);
+
+            $matchingAccounts = \App\Models\BillingAccount::where('billing_status_id', 2)
                 ->whereNotNull('date_installed')
                 ->whereNotNull('account_no')
                 ->where('billing_day', $targetBillingDay)
-                ->count();
+                ->select('account_no')
+                ->get();
+
+            $accountsCount = $matchingAccounts->count();
+
+            if ($accountsCount > 0) {
+                $logger->info('Found matching accounts. Will generate billings for:', [
+                    'count' => $accountsCount,
+                    'account_numbers' => $matchingAccounts->pluck('account_no')->toArray()
+                ]);
+            }
 
             $logger->info('Accounts found for processing', [
                 'billing_day' => $targetBillingDay,

@@ -11,7 +11,7 @@ export interface BillingRecord {
   location?: string;
   status: 'Active' | 'Inactive';
   balance: number;
-  onlineStatus: 'Online' | 'Offline';
+  onlineStatus: string;
   cityId?: number | null;
   regionId?: number | null;
   timestamp?: string;
@@ -53,7 +53,7 @@ export interface BillingDetailRecord extends BillingRecord {
   housingStatus?: string;
   location?: string;
   addressCoordinates?: string;
-  
+
   // Extended fields for detailed view
   lcpnapport?: string;
   referrersAccountNumber?: string;

@@ -1,31 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Image, Modal, ScrollView, Animated } from 'react-native';
-import { Bell, RefreshCw, Menu } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Bell, RefreshCw } from 'lucide-react';
 import { notificationService, type Notification as AppNotification } from '../services/notificationService';
 import { formUIService } from '../services/formUIService';
-// @ts-ignore
-import { REACT_APP_API_URL } from '@env';
+import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
   onSearch?: (query: string) => void;
+  onNavigate?: (section: string) => void;
+  onLogout?: () => void;
+  activeSection?: string;
 }
 
-const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch }) => {
+const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, onLogout, activeSection }) => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
+  const previousCountRef = useRef(0);
   const previousNotificationIdsRef = useRef<Set<number>>(new Set());
 
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
-    const apiUrl = REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+    const apiUrl = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
     return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
   };
 
@@ -45,26 +47,125 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch }) => {
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
+    const fetchColorPalette = async () => {
+      try {
+        const activePalette = await settingsColorPaletteService.getActive();
+        setColorPalette(activePalette);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
+      }
     };
-    checkDarkMode();
+    fetchColorPalette();
   }, []);
 
   useEffect(() => {
     mountedRef.current = true;
 
+    if ('Notification' in window) {
+      console.log('[Notification] API available, current permission:', Notification.permission);
+
+      if (Notification.permission === 'default') {
+        console.log('[Notification] Requesting permission...');
+        Notification.requestPermission().then(permission => {
+          console.log('[Notification] Permission result:', permission);
+          if (permission === 'granted') {
+            console.log('[Notification] Permission GRANTED - notifications will work');
+          } else {
+            console.warn('[Notification] Permission DENIED - notifications will not work');
+          }
+        });
+      } else if (Notification.permission === 'granted') {
+        console.log('[Notification] Permission already GRANTED');
+      } else {
+        console.warn('[Notification] Permission DENIED');
+      }
+    } else {
+      console.error('[Notification] API not supported in this browser');
+    }
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark' || theme === null);
+    };
+
+    checkDarkMode();
+
+    const observer = new MutationObserver(() => {
+      checkDarkMode();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const showBrowserNotification = (notification: AppNotification) => {
+    console.log('[Browser Notification] Attempting to show notification:', notification);
+
+    if (!('Notification' in window)) {
+      console.error('[Browser Notification] Browser does not support notifications');
+      return;
+    }
+
+    if (Notification.permission !== 'granted') {
+      console.warn('[Browser Notification] Permission not granted. Current permission:', Notification.permission);
+      return;
+    }
+
+    try {
+      const browserNotification = new Notification('🔔 New Customer Application', {
+        body: `${notification.customer_name}\nPlan: ${notification.plan_name}`,
+        icon: logoUrl || undefined,
+        badge: logoUrl || undefined,
+        tag: `application-${notification.id}`,
+        requireInteraction: false,
+        silent: false
+      });
+
+      browserNotification.onclick = () => {
+        console.log('[Browser Notification] Notification clicked');
+        window.focus();
+        browserNotification.close();
+      };
+
+      console.log('[Browser Notification] Notification created successfully for:', notification.customer_name);
+    } catch (error) {
+      console.error('[Browser Notification] Failed to create notification:', error);
+    }
+  };
+
+  useEffect(() => {
     const fetchInitialData = async () => {
       if (!mountedRef.current) return;
+
+      console.log('[Fetch] Fetching initial notification data...');
+
       try {
         const data = await notificationService.getRecentApplications(10);
         const count = await notificationService.getUnreadCount();
 
+        console.log('[Fetch] Initial data received:', {
+          notificationCount: data.length,
+          unreadCount: count,
+          notifications: data
+        });
+
         if (mountedRef.current) {
+          previousCountRef.current = count;
           setUnreadCount(count);
           setNotifications(data);
           previousNotificationIdsRef.current = new Set(data.map(n => n.id));
+
+          console.log('[Fetch] State updated with initial data');
         }
       } catch (error) {
         console.error('[Fetch] Failed to fetch initial notifications:', error);
@@ -75,11 +176,37 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch }) => {
 
     const interval = setInterval(async () => {
       if (!mountedRef.current) return;
+
+      console.log('[Polling] Checking for new notifications...');
+
       try {
         const data = await notificationService.getRecentApplications(10);
         const count = await notificationService.getUnreadCount();
 
+        console.log('[Polling] Data received:', {
+          notificationCount: data.length,
+          unreadCount: count,
+          previousIds: Array.from(previousNotificationIdsRef.current)
+        });
+
         if (mountedRef.current) {
+          const currentIds = new Set(data.map(n => n.id));
+          const newNotifications = data.filter(n => !previousNotificationIdsRef.current.has(n.id));
+
+          if (newNotifications.length > 0) {
+            console.log('[Polling] NEW NOTIFICATIONS DETECTED:', newNotifications.length);
+            console.log('[Polling] New notification details:', newNotifications);
+
+            newNotifications.forEach((notification, index) => {
+              console.log(`[Polling] Triggering browser notification ${index + 1}/${newNotifications.length}`);
+              showBrowserNotification(notification);
+            });
+          } else {
+            console.log('[Polling] No new notifications');
+          }
+
+          previousNotificationIdsRef.current = currentIds;
+          previousCountRef.current = count;
           setUnreadCount(count);
           setNotifications(data);
         }
@@ -88,148 +215,260 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch }) => {
       }
     }, 30000);
 
+    console.log('[Polling] Interval started - checking every 30 seconds');
+
     return () => {
-      mountedRef.current = false;
+      console.log('[Polling] Interval cleared');
       clearInterval(interval);
     };
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
+
+  const handleToggleClick = () => {
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    }
+  };
+
   const handleRefresh = () => {
-    // In RN, reload isn't standard, usually we refresh data. 
-    // We'll treating this as re-fetch notifications
-    setLoading(true);
-    notificationService.getRecentApplications(10).then(data => {
-      setNotifications(data);
-      setLoading(false);
-    });
+    window.location.reload();
   };
 
   const toggleNotifications = async () => {
+    console.log('[UI] Toggling notifications modal');
     setShowNotifications(!showNotifications);
+
     if (!showNotifications) {
       setLoading(true);
+      console.log('[UI] Loading notifications for modal...');
+
       try {
         const data = await notificationService.getRecentApplications(10);
-        const count = await notificationService.getUnreadCount();
+        console.log('[UI] Notifications loaded for modal:', data);
+
         if (mountedRef.current) {
           setNotifications(data);
-          setUnreadCount(count);
         }
       } catch (error) {
         console.error('[UI] Failed to fetch notifications for modal:', error);
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current) {
+          setLoading(false);
+        }
       }
     }
   };
 
-  return (
-    <View className={`h-16 flex-row items-center px-4 border-b ${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
-      }`}>
-      <View className="flex-row items-center space-x-4">
-        <TouchableOpacity
-          onPress={onToggleSidebar}
-          className={`p-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} rounded-lg`}
-        >
-          <Menu size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        </TouchableOpacity>
+  const [user, setUser] = useState<any>(null);
 
-        <View className="justify-center">
+  useEffect(() => {
+    const storedUser = localStorage.getItem('authData');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse user data");
+      }
+    }
+  }, []);
+
+  // Customer Header (Role: customer)
+  if (user && user.role === 'customer') {
+    return (
+      <header className="bg-white border-b h-16 flex items-center justify-between px-6 md:px-12 w-full shadow-sm z-50">
+        <div className="flex items-center space-x-2">
+          {/* Logo Section */}
+          {logoUrl ? (
+            <img src={logoUrl} alt="ATSS Fiber" className="h-8 object-contain" />
+          ) : (
+            <div className="flex items-center">
+              <div className="w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs mr-2">
+                A
+              </div>
+              <span className="text-slate-900 font-bold text-lg tracking-wide">ATSS FIBER <span className="font-extrabold text-slate-900">PORTAL</span></span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-8">
+          <nav className="hidden md:flex items-center space-x-6 text-sm font-bold">
+            <button
+              onClick={() => onNavigate?.('customer-dashboard')}
+              className="transition"
+              style={{ color: activeSection === 'customer-dashboard' || !activeSection ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => onNavigate?.('customer-bills')}
+              className="transition"
+              style={{ color: activeSection === 'customer-bills' ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
+            >
+              Bills
+            </button>
+            <button
+              onClick={() => onNavigate?.('customer-support')}
+              className="transition"
+              style={{ color: activeSection === 'customer-support' ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
+            >
+              Support
+            </button>
+          </nav>
+
+          <button
+            onClick={() => {
+              // Logout logic
+              localStorage.removeItem('token');
+              localStorage.removeItem('authData');
+              if (onLogout) {
+                onLogout();
+              } else {
+                window.location.href = '/';
+              }
+            }}
+            className="px-6 py-2 border rounded-full text-sm font-bold transition"
+            style={{
+              color: colorPalette?.primary || '#ef4444',
+              borderColor: colorPalette?.primary || '#ef4444'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = `${colorPalette?.primary || '#ef4444'}10`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+    );
+  }
+
+  // Admin/Staff Header (Original)
+  return (
+    <header className={`${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
+      } border-b h-16 flex items-center px-4`}>
+      <div className="flex items-center space-x-4">
+        <button
+          onClick={handleToggleClick}
+          className={`${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
+            } p-2 transition-colors cursor-pointer`}
+          type="button"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div className="flex flex-col items-center space-y-1">
           {logoUrl && (
-            <Image
-              source={{ uri: logoUrl }}
-              className="h-8 w-24"
-              resizeMode="contain"
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className="h-10 object-contain"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                console.error('[Logo] Failed to load image from:', logoUrl);
+                e.currentTarget.style.display = 'none';
+              }}
             />
           )}
-          <Text className={`${isDarkMode ? 'text-white' : 'text-gray-900'
-            } text-xs font-semibold mt-1`}>
+          <h1 className={`${isDarkMode ? 'text-white' : 'text-gray-900'
+            } text-xs font-semibold`}>
             Powered by Sync
-          </Text>
-        </View>
-      </View>
+          </h1>
+        </div>
+      </div>
 
-      <View className="flex-1" />
+      <div className="flex-1"></div>
 
-      <View className="flex-row items-center space-x-2">
-        <TouchableOpacity
-          onPress={handleRefresh}
-          className={`p-2 rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={handleRefresh}
+          className={`p-2 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
+            } transition-colors`}
         >
-          <RefreshCw size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        </TouchableOpacity>
+          <RefreshCw className="h-5 w-5" />
+        </button>
 
-        <View>
-          <TouchableOpacity
-            onPress={toggleNotifications}
-            className={`p-2 rounded-full relative ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
+        <div className="relative" ref={notificationRef}>
+          <button
+            onClick={toggleNotifications}
+            className={`p-2 relative ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
+              } transition-colors`}
           >
-            <Bell size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
-              <View className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-white" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             )}
-          </TouchableOpacity>
-        </View>
-      </View>
+          </button>
 
-      {/* Notifications Modal / Dropdown Overlay */}
-      <Modal
-        visible={showNotifications}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowNotifications(false)}
-      >
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }}
-          activeOpacity={1}
-          onPress={() => setShowNotifications(false)}
-        >
-          <View className="absolute top-16 right-4 w-80 shadow-xl rounded-lg overflow-hidden">
-            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-              <View className={`${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                } rounded-lg overflow-hidden`}>
-                <View className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <Text className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    Recent Applications ({notifications.length})
-                  </Text>
-                </View>
-
-                <ScrollView style={{ maxHeight: 300 }}>
-                  {loading ? (
-                    <View className="p-4 items-center">
-                      <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Loading...</Text>
-                    </View>
-                  ) : notifications.length === 0 ? (
-                    <View className="p-4 items-center">
-                      <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>No new applications</Text>
-                    </View>
-                  ) : (
-                    notifications.map((notification) => (
-                      <View
-                        key={notification.id}
-                        className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                          }`}
-                      >
-                        <Text className={`font-bold mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                          {notification.customer_name}
-                        </Text>
-                        <Text className={`text-sm mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                          Plan: {notification.plan_name}
-                        </Text>
-                        <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                          {notification.formatted_date}
-                        </Text>
-                      </View>
-                    ))
-                  )}
-                </ScrollView>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-    </View>
+          {showNotifications && (
+            <div className={`absolute right-0 mt-2 w-96 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              } border z-50`}>
+              <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                }`}>
+                <h3 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>
+                  Recent Applications ({notifications.length})
+                </h3>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                {loading ? (
+                  <div className={`p-4 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                    Loading...
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className={`p-4 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                    No new applications
+                  </div>
+                ) : (
+                  notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className={`p-4 border-b ${isDarkMode ? 'border-gray-700 hover:bg-gray-750' : 'border-gray-200 hover:bg-gray-50'
+                        } transition-colors cursor-pointer`}
+                    >
+                      <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                        {notification.customer_name}
+                      </div>
+                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Plan: {notification.plan_name}
+                      </div>
+                      <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'
+                        }`}>
+                        {notification.formatted_date}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
   );
 };
 

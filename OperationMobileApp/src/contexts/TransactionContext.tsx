@@ -14,12 +14,28 @@ interface TransactionContextType {
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
 
 export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    // Initialize state from session storage to prevent empty flash
+    const [transactions, setTransactions] = useState<Transaction[]>(() => {
+        try {
+            const cached = sessionStorage.getItem('transactions');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load transactions from session storage:', e);
+        }
+        return [];
+    });
+
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     const fetchTransactions = useCallback(async (force = false, silent = false) => {
+        // Prevent re-fetching if we already have data and not forced
         if (!force && transactions.length > 0) {
             return;
         }
@@ -29,9 +45,22 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
 
         try {
+            console.log('Fetching all transactions in one query...');
+            // Fetch all data in one go (assuming backend handles "no limit" as "all")
             const result = await transactionService.getAllTransactions();
-            if (result.success && result.data) {
-                setTransactions(result.data);
+
+            if (result.success && result.data && Array.isArray(result.data)) {
+                const allData = result.data;
+                console.log(`Received ${allData.length} transactions.`);
+
+                setTransactions(allData);
+
+                try {
+                    sessionStorage.setItem('transactions', JSON.stringify(allData));
+                } catch (e) {
+                    console.error('Failed to save to session storage', e);
+                }
+
                 setLastUpdated(new Date());
                 setError(null);
             } else {
@@ -41,7 +70,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
             }
         } catch (err: any) {
             console.error('Failed to fetch transactions:', err);
-            if (!silent) {
+            // Only set error if we have no data to show
+            if (!silent && transactions.length === 0) {
                 setError('Failed to load transactions. Please try again.');
             }
         } finally {

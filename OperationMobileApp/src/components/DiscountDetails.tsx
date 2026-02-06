@@ -33,9 +33,10 @@ interface DiscountDetailsProps {
   discountRecord: DiscountRecord;
   onClose?: () => void;
   onApproveSuccess?: () => void;
+  onViewCustomer?: (accountNo: string) => void;
 }
 
-const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClose, onApproveSuccess }) => {
+const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClose, onApproveSuccess, onViewCustomer }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   const [showApproveButton, setShowApproveButton] = useState<boolean>(false);
@@ -71,10 +72,10 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
         const userData = JSON.parse(authData);
         const userEmail = userData.email || '';
         setCurrentUserEmail(userEmail);
-        
+
         const isApprovedByUser = discountRecord.approvedByEmail && userEmail && discountRecord.approvedByEmail === userEmail;
         const isPendingStatus = discountRecord.discountStatus === 'Pending';
-        
+
         setShowApproveButton(isApprovedByUser && isPendingStatus);
       } catch (error) {
         console.error('Error parsing auth data:', error);
@@ -91,7 +92,7 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
@@ -100,10 +101,10 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-      
+
       const diff = startXRef.current - e.clientX;
       const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
+
       setDetailsWidth(newWidth);
     };
 
@@ -138,7 +139,7 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
     }
 
     setIsApproving(true);
-    
+
     try {
       const response = await update(parseInt(discountRecord.id), {
         status: 'Unused'
@@ -166,11 +167,10 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
   };
 
   return (
-    <div className={`h-full flex flex-col border-l relative ${
-      isDarkMode
+    <div className={`h-full flex flex-col border-l relative ${isDarkMode
         ? 'bg-gray-900 text-white border-white border-opacity-30'
         : 'bg-white text-gray-900 border-gray-300'
-    }`} style={{ width: `${detailsWidth}px` }}>
+      }`} style={{ width: `${detailsWidth}px` }}>
       <div
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
         onMouseDown={handleMouseDownResize}
@@ -188,19 +188,17 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
           }
         }}
       />
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${
-        isDarkMode
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode
           ? 'bg-gray-800 border-gray-700'
           : 'bg-gray-100 border-gray-200'
-      }`}>
-        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${
-          isDarkMode ? 'text-white' : 'text-gray-900'
         }`}>
+        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>
           {discountRecord.fullName}
         </h1>
         <div className="flex items-center space-x-2 flex-shrink-0">
           {showApproveButton && (
-            <button 
+            <button
               onClick={handleApprove}
               className="px-3 py-1 rounded text-sm transition-colors flex items-center space-x-1 text-white"
               style={{
@@ -222,11 +220,10 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
             </button>
           )}
           {onClose && (
-            <button onClick={onClose} className={`p-2 rounded transition-colors ${
-              isDarkMode
+            <button onClick={onClose} className={`p-2 rounded transition-colors ${isDarkMode
                 ? 'text-gray-400 hover:text-white hover:bg-gray-700'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-            }`}>
+              }`}>
               <X size={18} />
             </button>
           )}
@@ -235,9 +232,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className={`divide-y ${
-          isDarkMode ? 'divide-gray-800' : 'divide-gray-200'
-        }`}>
+        <div className={`divide-y ${isDarkMode ? 'divide-gray-800' : 'divide-gray-200'
+          }`}>
           <div className="px-5 py-4">
             <div className="flex justify-between items-center py-2">
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Full Name</span>
@@ -250,9 +246,14 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
                 <span className="text-red-500">
                   {discountRecord.accountNo} | {discountRecord.fullName} | {discountRecord.completeAddress || discountRecord.address}
                 </span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
+                <button
+                  onClick={() => onViewCustomer?.(discountRecord.accountNo)}
+                  className={`ml-2 p-1 rounded transition-colors ${isDarkMode ? 'text-gray-500 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+                    }`}
+                  title="View Customer Details"
+                >
+                  <Info size={16} />
+                </button>
               </div>
             </div>
 
@@ -305,9 +306,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Processed By</span>
               <div className="flex items-center">
                 <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.processedBy}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`} />
               </div>
             </div>
 
@@ -320,9 +320,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Approved By</span>
               <div className="flex items-center">
                 <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.approvedBy}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`} />
               </div>
             </div>
 
@@ -330,9 +329,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Modified By</span>
               <div className="flex items-center">
                 <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.modifiedBy}</span>
-                <Info size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
+                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`} />
               </div>
             </div>
 
@@ -345,9 +343,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
               <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>User Email</span>
               <div className="flex items-center">
                 <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.userEmail}</span>
-                <Mail size={16} className={`ml-2 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`} />
+                <Mail size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                  }`} />
               </div>
             </div>
 
@@ -361,9 +358,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
                 <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Barangay</span>
                 <div className="flex items-center">
                   <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.barangay}</span>
-                  <Info size={16} className={`ml-2 ${
-                    isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                  }`} />
+                  <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`} />
                 </div>
               </div>
             )}
@@ -373,9 +369,8 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
                 <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>City</span>
                 <div className="flex items-center">
                   <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.city}</span>
-                  <Info size={16} className={`ml-2 ${
-                    isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                  }`} />
+                  <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-600'
+                    }`} />
                 </div>
               </div>
             )}
@@ -385,39 +380,34 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
 
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${
-            isDarkMode
+          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${isDarkMode
               ? 'bg-gray-800 border-gray-700'
               : 'bg-white border-gray-200'
-          }`}>
+            }`}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Confirm Approval</h2>
+              <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Confirm Approval</h2>
               <button
                 onClick={handleCancelApprove}
                 disabled={isApproving}
-                className={`transition-colors disabled:opacity-50 ${
-                  isDarkMode
+                className={`transition-colors disabled:opacity-50 ${isDarkMode
                     ? 'text-gray-400 hover:text-white'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="mb-6">
-              <p className={`mb-4 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
+              <p className={`mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
                 Are you sure you want to approve this discount?
               </p>
-              <div className={`p-4 rounded border space-y-2 ${
-                isDarkMode
+              <div className={`p-4 rounded border space-y-2 ${isDarkMode
                   ? 'bg-gray-900 border-gray-700'
                   : 'bg-gray-100 border-gray-200'
-              }`}>
+                }`}>
                 <div className="flex justify-between">
                   <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Account No:</span>
                   <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{discountRecord.accountNo}</span>
@@ -445,11 +435,10 @@ const DiscountDetails: React.FC<DiscountDetailsProps> = ({ discountRecord, onClo
               <button
                 onClick={handleCancelApprove}
                 disabled={isApproving}
-                className={`flex-1 px-4 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isDarkMode
+                className={`flex-1 px-4 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
                     ? 'bg-gray-700 hover:bg-gray-600 text-white'
                     : 'bg-gray-300 hover:bg-gray-400 text-gray-900'
-                }`}
+                  }`}
               >
                 Cancel
               </button>

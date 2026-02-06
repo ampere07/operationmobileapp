@@ -18,11 +18,11 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
     address: customerData.address,
     status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
     balance: customerData.billingAccount?.accountBalance || 0,
-    onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
+    onlineStatus: customerData.onlineSessionStatus || (customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline'),
     cityId: null,
     regionId: null,
     timestamp: customerData.updatedAt || '',
-    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
+    billingStatus: customerData.billingAccount?.billingStatusName || (customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : ''),
     dateInstalled: customerData.billingAccount?.dateInstalled || '',
     contactNumber: customerData.contactNumberPrimary,
     secondContactNumber: customerData.contactNumberSecondary || '',
@@ -136,10 +136,15 @@ const allColumns = [
   { key: 'relatedAttachments', label: 'Related Attachments', width: 'min-w-40' }
 ];
 
-const Customer: React.FC = () => {
+interface CustomerProps {
+  initialSearchQuery?: string;
+  autoOpenAccountNo?: string;
+}
+
+const Customer: React.FC<CustomerProps> = ({ initialSearchQuery, autoOpenAccountNo }) => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery || '');
   const { billingRecords, isLoading: isTableLoading, error: contextError, refreshBillingRecords, silentRefresh } = useBillingContext();
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
   const [cities, setCities] = useState<City[]>([]);
@@ -262,6 +267,32 @@ const Customer: React.FC = () => {
     silentRefresh();
   }, [silentRefresh]);
 
+  // Sync initialSearchQuery
+  useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
+
+  // Auto-open account if prop provided
+  useEffect(() => {
+    const autoOpen = async () => {
+      if (autoOpenAccountNo) {
+        setIsLoadingDetails(true);
+        try {
+          const detail = await getCustomerDetail(autoOpenAccountNo);
+          if (detail) {
+            setSelectedCustomer(detail);
+          }
+        } catch (err) {
+          console.error('Error auto-opening customer details:', err);
+        } finally {
+          setIsLoadingDetails(false);
+        }
+      }
+    };
+    autoOpen();
+  }, [autoOpenAccountNo]);
 
   // Memoize city name lookup for performance
   const getCityName = useMemo(() => {
@@ -587,15 +618,16 @@ const Customer: React.FC = () => {
     switch (columnKey) {
       // Basic fields
       case 'status':
+        const isOnline = ['Online', 'online', 'Active', 'active', 'Connected', 'connected'].includes(record.onlineStatus);
         return (
           <div className="flex items-center space-x-2">
             <Circle
-              className={`h-3 w-3 ${record.onlineStatus === 'Online'
+              className={`h-3 w-3 ${isOnline
                 ? 'text-green-400 fill-green-400'
                 : 'text-gray-400 fill-gray-400'
                 }`}
             />
-            <span className={`text-xs ${record.onlineStatus === 'Online'
+            <span className={`text-xs ${isOnline
               ? 'text-green-400'
               : 'text-gray-400'
               }`}>
@@ -710,7 +742,7 @@ const Customer: React.FC = () => {
           (record.address ? (record.address.length > 25 ? `${record.address.substring(0, 25)}...` : record.address) : '-');
       case 'computedStatus':
         return (record as any).computedStatus ||
-          `${record.status || 'Inactive'} | P ${record.balance.toFixed(0)}`;
+          `${record.status || 'Inactive'} | P ${record.balance.toFixed(2)}`;
       case 'computedAccountNo':
         return (record as any).computedAccountNo ||
           `${record.applicationId} | ${record.customerName}${record.address ? (' | ' + record.address.substring(0, 10) + '...') : ''}`;
@@ -1047,9 +1079,9 @@ const Customer: React.FC = () => {
     });
 
   return (
-    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
       }`}>
-      <div className={`border-r flex-shrink-0 flex flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+      <div className={`hidden md:flex border-r flex-shrink-0 flex flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         }`} style={{ width: `${sidebarWidth}px` }}>
         <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
           }`}>
@@ -1321,8 +1353,8 @@ const Customer: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}>
@@ -1335,11 +1367,10 @@ const Customer: React.FC = () => {
                   <p className="mt-4">Loading customer records...</p>
                 </div>
               ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
-                  }`}>
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                   <p>{error}</p>
                   <button
-                    onClick={handleRefresh}
+                    onClick={refreshBillingRecords}
                     className={`mt-4 px-4 py-2 rounded ${isDarkMode
                       ? 'bg-gray-700 hover:bg-gray-600 text-white'
                       : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
@@ -1347,164 +1378,165 @@ const Customer: React.FC = () => {
                     Retry
                   </button>
                 </div>
-              ) : displayMode === 'card' ? (
-                <>
-                  <div className="flex-1 overflow-y-auto">
-                    {paginatedRecords.length > 0 ? (
-                      <div>
-                        {paginatedRecords.map((record) => (
-                          <div
-                            key={record.id}
-                            onClick={() => handleRecordClick(record)}
-                            className={`px-4 py-3 cursor-pointer transition-colors border-b ${isDarkMode
-                              ? 'hover:bg-gray-800 border-gray-800'
-                              : 'hover:bg-gray-100 border-gray-200'
-                              } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="text-red-400 font-medium text-sm mb-1">
-                                  {record.applicationId} | {record.customerName} | {record.address}
-                                </div>
-                                <div className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                  }`}>
-                                  {record.status} | ₱ {record.balance.toFixed(2)}
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
-                                <Circle
-                                  className={`h-3 w-3 ${record.onlineStatus === 'Online' ? 'text-green-400 fill-green-400' : 'text-gray-400 fill-gray-400'}`}
-                                />
-                                <span className={`text-sm ${record.onlineStatus === 'Online' ? 'text-green-400' : 'text-gray-400'}`}>
-                                  {record.onlineStatus}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        No customer records found matching your filters
-                      </div>
-                    )}
-                  </div>
-                  <PaginationControls />
-                </>
               ) : (
-                <div className="flex-1 overflow-auto relative flex flex-col h-full">
-                  <div className="flex-1 overflow-auto">
-                    <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
-                      <thead>
-                        <tr className={`border-b sticky top-0 z-10 ${isDarkMode
-                          ? 'border-gray-700 bg-gray-800'
-                          : 'border-gray-200 bg-gray-100'
-                          }`}>
-                          {filteredColumns.map((column, index) => (
-                            <th
-                              key={column.key}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, column.key)}
-                              onDragOver={(e) => handleDragOver(e, column.key)}
-                              onDragLeave={handleDragLeave}
-                              onDrop={(e) => handleDrop(e, column.key)}
-                              onDragEnd={handleDragEnd}
-                              className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
-                                } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''} ${draggedColumn === column.key ? 'opacity-50' : ''
-                                } ${dragOverColumn === column.key ? '' : ''
-                                }`}
-                              style={dragOverColumn === column.key ? {
-                                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                                width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                              } : {
-                                width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                              }}
-                              onMouseEnter={() => setHoveredColumn(column.key)}
-                              onMouseLeave={() => setHoveredColumn(null)}
+                <>
+                  {displayMode === 'card' ? (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {paginatedRecords.length > 0 ? (
+                        <div>
+                          {paginatedRecords.map((record) => (
+                            <div
+                              key={record.id}
+                              onClick={() => handleRecordClick(record)}
+                              className={`px-4 py-3 cursor-pointer transition-colors border-b ${isDarkMode
+                                ? 'hover:bg-gray-800 border-gray-800'
+                                : 'hover:bg-gray-100 border-gray-200'
+                                } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
                             >
                               <div className="flex items-center justify-between">
-                                <span>{column.label}</span>
-                                {(hoveredColumn === column.key || sortColumn === column.key) && (
-                                  <button
-                                    onClick={() => handleSort(column.key)}
-                                    className="ml-2 transition-colors"
-                                  >
-                                    {sortColumn === column.key && sortDirection === 'desc' ? (
-                                      <ArrowDown className="h-4 w-4" style={{ color: colorPalette?.accent || '#fb923c' }} />
-                                    ) : (
-                                      <ArrowUp className="h-4 w-4 text-gray-400" style={{ color: hoveredColumn === column.key ? (colorPalette?.accent || '#fb923c') : undefined }} />
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-                              {index < filteredColumns.length - 1 && (
-                                <div
-                                  className={`absolute right-0 top-0 bottom-0 w-1 cursor-col-resize ${isDarkMode ? 'group-hover:bg-gray-600' : 'group-hover:bg-gray-300'
-                                    }`}
-                                  style={{
-                                    '--hover-bg': colorPalette?.primary || '#ea580c'
-                                  } as React.CSSProperties}
-                                  onMouseEnter={(e) => {
-                                    if (colorPalette?.primary) {
-                                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                                    }
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.backgroundColor = '';
-                                  }}
-                                  onMouseDown={(e) => handleMouseDownResize(e, column.key)}
-                                />
-                              )}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRecords.length > 0 ? (
-                          paginatedRecords.map((record) => (
-                            <tr
-                              key={record.id}
-                              className={`border-b cursor-pointer transition-colors ${isDarkMode
-                                ? 'border-gray-800 hover:bg-gray-900'
-                                : 'border-gray-200 hover:bg-gray-50'
-                                } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                              onClick={() => handleRecordClick(record)}
-                            >
-                              {filteredColumns.map((column, index) => (
-                                <td
-                                  key={column.key}
-                                  className={`py-4 px-3 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                    } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''}`}
-                                  style={{
-                                    width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                                    maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
-                                  }}
-                                >
-                                  <div className="truncate">
-                                    {renderCellValue(record, column.key)}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-red-400 font-medium text-sm mb-1">
+                                    {record.applicationId} | {record.customerName} | {record.address}
                                   </div>
-                                </td>
+                                  <div className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                    }`}>
+                                    {record.status} | ₱ {record.balance.toFixed(2)}
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
+                                  <Circle
+                                    className={`h-3 w-3 ${['Online', 'online', 'Active', 'active', 'Connected', 'connected'].includes(record.onlineStatus) ? 'text-green-400 fill-green-400' : 'text-gray-400 fill-gray-400'}`}
+                                  />
+                                  <span className={`text-sm ${['Online', 'online', 'Active', 'active', 'Connected', 'connected'].includes(record.onlineStatus) ? 'text-green-400' : 'text-gray-400'}`}>
+                                    {record.onlineStatus}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                          No customer records found matching your filters
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full relative flex flex-col">
+                      <div className="flex-1 overflow-auto">
+                        <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
+                          <thead>
+                            <tr className={`border-b sticky top-0 z-10 ${isDarkMode
+                              ? 'border-gray-700 bg-gray-800'
+                              : 'border-gray-200 bg-gray-100'
+                              }`}>
+                              {filteredColumns.map((column, index) => (
+                                <th
+                                  key={column.key}
+                                  draggable
+                                  onDragStart={(e) => handleDragStart(e, column.key)}
+                                  onDragOver={(e) => handleDragOver(e, column.key)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleDrop(e, column.key)}
+                                  onDragEnd={handleDragEnd}
+                                  className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
+                                    } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''} ${draggedColumn === column.key ? 'opacity-50' : ''
+                                    } ${dragOverColumn === column.key ? '' : ''
+                                    }`}
+                                  style={dragOverColumn === column.key ? {
+                                    backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
+                                    width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
+                                  } : {
+                                    width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
+                                  }}
+                                  onMouseEnter={() => setHoveredColumn(column.key)}
+                                  onMouseLeave={() => setHoveredColumn(null)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span>{column.label}</span>
+                                    {(hoveredColumn === column.key || sortColumn === column.key) && (
+                                      <button
+                                        onClick={() => handleSort(column.key)}
+                                        className="ml-2 transition-colors"
+                                      >
+                                        {sortColumn === column.key && sortDirection === 'desc' ? (
+                                          <ArrowDown className="h-4 w-4" style={{ color: colorPalette?.accent || '#fb923c' }} />
+                                        ) : (
+                                          <ArrowUp className="h-4 w-4 text-gray-400" style={{ color: hoveredColumn === column.key ? (colorPalette?.accent || '#fb923c') : undefined }} />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {index < filteredColumns.length - 1 && (
+                                    <div
+                                      className={`absolute right-0 top-0 bottom-0 w-1 cursor-col-resize ${isDarkMode ? 'group-hover:bg-gray-600' : 'group-hover:bg-gray-300'
+                                        }`}
+                                      style={{
+                                        '--hover-bg': colorPalette?.primary || '#ea580c'
+                                      } as React.CSSProperties}
+                                      onMouseEnter={(e) => {
+                                        if (colorPalette?.primary) {
+                                          e.currentTarget.style.backgroundColor = colorPalette.primary;
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = '';
+                                      }}
+                                      onMouseDown={(e) => handleMouseDownResize(e, column.key)}
+                                    />
+                                  )}
+                                </th>
                               ))}
                             </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${isDarkMode
-                              ? 'text-gray-400 border-gray-800'
-                              : 'text-gray-600 border-gray-200'
-                              }`}>
-                              No customer records found matching your filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <PaginationControls />
-                </div>
+                          </thead>
+                          <tbody>
+                            {paginatedRecords.length > 0 ? (
+                              paginatedRecords.map((record) => (
+                                <tr
+                                  key={record.id}
+                                  className={`border-b cursor-pointer transition-colors ${isDarkMode
+                                    ? 'border-gray-800 hover:bg-gray-900'
+                                    : 'border-gray-200 hover:bg-gray-50'
+                                    } ${selectedCustomer?.billingAccount?.accountNo === record.applicationId ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
+                                  onClick={() => handleRecordClick(record)}
+                                >
+                                  {filteredColumns.map((column, index) => (
+                                    <td
+                                      key={column.key}
+                                      className={`py-4 px-3 ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                        } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''}`}
+                                      style={{
+                                        width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
+                                        maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
+                                      }}
+                                    >
+                                      <div className="truncate">
+                                        {renderCellValue(record, column.key)}
+                                      </div>
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${isDarkMode
+                                  ? 'text-gray-400 border-gray-800'
+                                  : 'text-gray-600 border-gray-200'
+                                  }`}>
+                                  No customer records found matching your filters
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
+            {!isLoading && !error && filteredBillingRecords.length > 0 && <PaginationControls />}
           </div>
         </div>
       </div>

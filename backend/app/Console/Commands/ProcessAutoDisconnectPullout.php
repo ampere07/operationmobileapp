@@ -62,7 +62,7 @@ class ProcessAutoDisconnectPullout extends Command
         $dryRun = $this->option('dry-run');
 
         if ($dryRun) {
-            $this->warn("⚠️  DRY RUN MODE - No changes will be made");
+            $this->warn("[DRY RUN MODE] No changes will be made");
             $this->newLine();
         }
 
@@ -73,14 +73,14 @@ class ProcessAutoDisconnectPullout extends Command
             // Process Auto Disconnection
             if (!$pulloutOnly) {
                 $this->info("─────────────────────────────────────────────────────────");
-                $this->info("🔌 Processing Auto Disconnection...");
+                $this->info("[PROCESS] Processing Auto Disconnection...");
                 $this->info("─────────────────────────────────────────────────────────");
                 
                 $dcResult = $this->autoDisconnectService->processAutoDisconnect();
                 
                 if ($dcResult['success']) {
                     $this->newLine();
-                    $this->info("✅ Auto Disconnection Complete:");
+                    $this->info("[SUCCESS] Auto Disconnection Complete:");
                     $this->table(
                         ['Metric', 'Count'],
                         [
@@ -92,13 +92,13 @@ class ProcessAutoDisconnectPullout extends Command
 
                     if (!empty($dcResult['errors'])) {
                         $this->newLine();
-                        $this->warn("⚠️  Errors encountered:");
+                        $this->warn("[WARNING] Errors encountered:");
                         foreach ($dcResult['errors'] as $error) {
-                            $this->line("   • " . $error);
+                            $this->line("   - " . $error);
                         }
                     }
                 } else {
-                    $this->error("❌ Auto Disconnection Failed: " . ($dcResult['error'] ?? 'Unknown error'));
+                    $this->error("[FAILED] Auto Disconnection Failed: " . ($dcResult['error'] ?? 'Unknown error'));
                     return 1;
                 }
                 
@@ -108,14 +108,14 @@ class ProcessAutoDisconnectPullout extends Command
             // Process Auto Pullout
             if (!$dcOnly) {
                 $this->info("─────────────────────────────────────────────────────────");
-                $this->info("📤 Processing Auto Pullout...");
+                $this->info("[PROCESS] Processing Auto Pullout...");
                 $this->info("─────────────────────────────────────────────────────────");
                 
                 $pulloutResult = $this->autoDisconnectService->processAutoPullout();
                 
                 if ($pulloutResult['success']) {
                     $this->newLine();
-                    $this->info("✅ Auto Pullout Complete:");
+                    $this->info("[SUCCESS] Auto Pullout Complete:");
                     $this->table(
                         ['Metric', 'Count'],
                         [
@@ -127,13 +127,13 @@ class ProcessAutoDisconnectPullout extends Command
 
                     if (!empty($pulloutResult['errors'])) {
                         $this->newLine();
-                        $this->warn("⚠️  Errors encountered:");
+                        $this->warn("[WARNING] Errors encountered:");
                         foreach ($pulloutResult['errors'] as $error) {
-                            $this->line("   • " . $error);
+                            $this->line("   - " . $error);
                         }
                     }
                 } else {
-                    $this->error("❌ Auto Pullout Failed: " . ($pulloutResult['error'] ?? 'Unknown error'));
+                    $this->error("[FAILED] Auto Pullout Failed: " . ($pulloutResult['error'] ?? 'Unknown error'));
                     return 1;
                 }
                 
@@ -152,7 +152,7 @@ class ProcessAutoDisconnectPullout extends Command
             
             if ($dcResult && $pulloutResult) {
                 $this->newLine();
-                $this->info("📊 Overall Summary:");
+                $this->info("[SUMMARY] Overall Results:");
                 $this->table(
                     ['Process', 'Success', 'Failed/Skipped'],
                     [

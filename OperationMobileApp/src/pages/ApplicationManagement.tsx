@@ -3,37 +3,12 @@ import { FileText, Search, ListFilter, ChevronDown, ArrowUp, ArrowDown, Menu, X,
 import ApplicationDetails from '../components/ApplicationDetails';
 import AddApplicationModal from '../modals/AddApplicationModal';
 import ApplicationFunnelFilter from '../filter/ApplicationFunnelFilter';
-import { getApplications } from '../services/applicationService';
+import { useApplicationContext, Application } from '../contexts/ApplicationContext';
 import { getCities, City } from '../services/cityService';
 import { getRegions, Region } from '../services/regionService';
-import { Application as ApiApplication } from '../types/application';
 import { locationEvents, LOCATION_EVENTS } from '../services/locationEvents';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
-interface Application {
-  id: string;
-  customerName: string;
-  timestamp: string;
-  address: string;
-  location: string;
-  city?: string;
-  region?: string;
-  barangay?: string;
-  status?: string;
-  email_address?: string;
-  first_name?: string;
-  middle_initial?: string;
-  last_name?: string;
-  mobile_number?: string;
-  secondary_mobile_number?: string;
-  installation_address?: string;
-  landmark?: string;
-  desired_plan?: string;
-  promo?: string;
-  referred_by?: string;
-  create_date?: string;
-  create_time?: string;
-}
 
 interface LocationItem {
   id: string;
@@ -45,6 +20,7 @@ type DisplayMode = 'card' | 'table';
 
 const allColumns = [
   { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
+  { key: 'status', label: 'Status', width: 'min-w-28' },
   { key: 'customerName', label: 'Customer Name', width: 'min-w-48' },
   { key: 'firstName', label: 'First Name', width: 'min-w-32' },
   { key: 'middleInitial', label: 'Middle Initial', width: 'min-w-28' },
@@ -61,7 +37,6 @@ const allColumns = [
   { key: 'desiredPlan', label: 'Desired Plan', width: 'min-w-36' },
   { key: 'promo', label: 'Promo', width: 'min-w-28' },
   { key: 'referredBy', label: 'Referred By', width: 'min-w-32' },
-  { key: 'status', label: 'Status', width: 'min-w-28' },
   { key: 'createDate', label: 'Create Date', width: 'min-w-32' },
   { key: 'createTime', label: 'Create Time', width: 'min-w-28' }
 ];
@@ -71,12 +46,10 @@ const ApplicationManagement: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
-  const [applications, setApplications] = useState<Application[]>([]);
+  const { applications, isLoading, error, refreshApplications, silentRefresh } = useApplicationContext();
   const [cities, setCities] = useState<City[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [locationDataLoaded, setLocationDataLoaded] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
@@ -112,13 +85,8 @@ const ApplicationManagement: React.FC = () => {
   const sidebarStartXRef = useRef<number>(0);
   const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(() => {
-    const saved = sessionStorage.getItem('applicationManagementCurrentPage');
-    return saved ? parseInt(saved, 10) : 1;
-  });
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [totalLoaded, setTotalLoaded] = useState<number>(0);
-  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 50;
 
   useEffect(() => {
     const checkDarkMode = () => {
@@ -179,32 +147,6 @@ const ApplicationManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!locationDataLoaded) return;
-    fetchApplications(currentPage, false);
-  }, [locationDataLoaded]);
-
-  // Save current page to session storage
-  useEffect(() => {
-    sessionStorage.setItem('applicationManagementCurrentPage', currentPage.toString());
-  }, [currentPage]);
-
-  const handleNextPage = () => {
-    if (hasMore) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      fetchApplications(nextPage, false);
-    }
-  };
-
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      const prevPage = currentPage - 1;
-      setCurrentPage(prevPage);
-      fetchApplications(prevPage, false);
-    }
-  };
-
-  useEffect(() => {
     const fetchColorPalette = async () => {
       try {
         const activePalette = await settingsColorPaletteService.getActive();
@@ -217,137 +159,19 @@ const ApplicationManagement: React.FC = () => {
     fetchColorPalette();
   }, []);
 
-  const fetchApplications = async (page: number = currentPage, append: boolean = false) => {
-    try {
-      if (append) {
-        setIsLoadingMore(true);
-      } else {
-        setIsLoading(true);
-      }
+  // Trigger silent refresh on mount to ensure data is fresh but no spinner if cached
+  useEffect(() => {
+    if (!locationDataLoaded) return;
+    silentRefresh();
+  }, [locationDataLoaded, silentRefresh]);
 
-      // Phase 1: Fast mode for quick initial load
-      const fastResponse = await getApplications(true, page, 50, searchQuery);
 
-      if (fastResponse.applications && fastResponse.applications.length > 0) {
-        const transformedApplications: Application[] = fastResponse.applications.map(app => {
-          const regionName = app.region || '';
-          const cityName = app.city || '';
-          const barangayName = app.barangay || '';
-          const addressLine = app.installation_address || app.address_line || app.address || '';
-          const fullAddress = [regionName, cityName, barangayName, addressLine].filter(Boolean).join(', ');
-
-          return {
-            id: app.id || '',
-            customerName: app.customer_name || `${app.first_name || ''} ${app.middle_initial || ''} ${app.last_name || ''}`.trim(),
-            timestamp: app.timestamp || (app.create_date && app.create_time ? `${app.create_date} ${app.create_time}` : ''),
-            address: addressLine,
-            location: app.location || fullAddress,
-            status: app.status || 'pending',
-            city: cityName,
-            region: regionName,
-            barangay: barangayName,
-            email_address: app.email_address,
-            first_name: app.first_name,
-            middle_initial: app.middle_initial,
-            last_name: app.last_name,
-            mobile_number: app.mobile_number,
-            secondary_mobile_number: app.secondary_mobile_number,
-            installation_address: app.installation_address,
-            landmark: app.landmark,
-            desired_plan: app.desired_plan,
-            promo: app.promo,
-            referred_by: app.referred_by,
-            create_date: app.create_date,
-            create_time: app.create_time
-          };
-        });
-
-        if (append) {
-          setApplications(prev => [...prev, ...transformedApplications]);
-        } else {
-          setApplications(transformedApplications);
-        }
-
-        setHasMore(fastResponse.pagination?.has_more ?? false);
-        setTotalLoaded(append ? totalLoaded + transformedApplications.length : transformedApplications.length);
-        setIsLoading(false);
-        setIsLoadingMore(false);
-
-        // Phase 2: Load full data in background
-        const fullResponse = await getApplications(false, page, 50, searchQuery);
-
-        if (fullResponse.applications && fullResponse.applications.length > 0) {
-          const fullTransformedApplications: Application[] = fullResponse.applications.map(app => {
-            const regionName = app.region || '';
-            const cityName = app.city || '';
-            const barangayName = app.barangay || '';
-            const addressLine = app.installation_address || app.address_line || app.address || '';
-            const fullAddress = [regionName, cityName, barangayName, addressLine].filter(Boolean).join(', ');
-
-            return {
-              id: app.id || '',
-              customerName: app.customer_name || `${app.first_name || ''} ${app.middle_initial || ''} ${app.last_name || ''}`.trim(),
-              timestamp: app.timestamp || (app.create_date && app.create_time ? `${app.create_date} ${app.create_time}` : ''),
-              address: addressLine,
-              location: app.location || fullAddress,
-              status: app.status || 'pending',
-              city: cityName,
-              region: regionName,
-              barangay: barangayName,
-              email_address: app.email_address,
-              first_name: app.first_name,
-              middle_initial: app.middle_initial,
-              last_name: app.last_name,
-              mobile_number: app.mobile_number,
-              secondary_mobile_number: app.secondary_mobile_number,
-              installation_address: app.installation_address,
-              landmark: app.landmark,
-              desired_plan: app.desired_plan,
-              promo: app.promo,
-              referred_by: app.referred_by,
-              create_date: app.create_date,
-              create_time: app.create_time
-            };
-          });
-
-          if (append) {
-            setApplications(prev => {
-              const newApps = [...prev];
-              const startIndex = (page - 1) * 50;
-              fullTransformedApplications.forEach((app, idx) => {
-                const targetIndex = startIndex + idx;
-                if (targetIndex < newApps.length) {
-                  newApps[targetIndex] = app;
-                }
-              });
-              return newApps;
-            });
-          } else {
-            setApplications(fullTransformedApplications);
-          }
-        }
-      } else {
-        if (!append) {
-          setApplications([]);
-        }
-        setHasMore(false);
-      }
-
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch applications:', err);
-      setError('Failed to load applications. Please try again.');
-      if (!append) {
-        setApplications([]);
-      }
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
+  const handleRefresh = async () => {
+    await refreshApplications();
   };
 
   const handleApplicationUpdate = () => {
-    fetchApplications(currentPage, false);
+    silentRefresh();
   };
 
   useEffect(() => {
@@ -525,7 +349,22 @@ const ApplicationManagement: React.FC = () => {
     }
 
     return filtered;
+    return filtered;
   }, [applications, selectedLocation, searchQuery, sortColumn, sortDirection]);
+
+  // Derived paginated records
+  const paginatedApplications = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredApplications.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredApplications, currentPage]);
+
+  const totalPages = Math.ceil(filteredApplications.length / itemsPerPage);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   const handleRowClick = (application: Application) => {
     setSelectedApplication(application);
@@ -695,6 +534,8 @@ const ApplicationManagement: React.FC = () => {
         return application.create_date && application.create_time
           ? `${application.create_date} ${application.create_time}`
           : application.timestamp || '-';
+      case 'status':
+        return application.status || '-';
       case 'customerName':
         return application.customerName;
       case 'firstName':
@@ -727,8 +568,6 @@ const ApplicationManagement: React.FC = () => {
         return application.promo || '-';
       case 'referredBy':
         return application.referred_by || '-';
-      case 'status':
-        return application.status || '-';
       case 'createDate':
         return application.create_date || '-';
       case 'createTime':
@@ -1061,8 +900,7 @@ const ApplicationManagement: React.FC = () => {
                 </div>
                 <button
                   onClick={() => {
-                    setCurrentPage(1);
-                    fetchApplications(1, false);
+                    handleRefresh();
                   }}
                   disabled={isLoading}
                   className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600"
@@ -1087,8 +925,8 @@ const ApplicationManagement: React.FC = () => {
           </div>
 
           {/* Applications List Container */}
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-y-auto">
               {isLoading ? (
                 <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}>
@@ -1112,9 +950,9 @@ const ApplicationManagement: React.FC = () => {
                   </button>
                 </div>
               ) : displayMode === 'card' ? (
-                filteredApplications.length > 0 ? (
+                paginatedApplications.length > 0 ? (
                   <div className="space-y-0">
-                    {filteredApplications.map((application) => (
+                    {paginatedApplications.map((application) => (
                       <div
                         key={application.id}
                         onClick={() => handleRowClick(application)}
@@ -1219,8 +1057,8 @@ const ApplicationManagement: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredApplications.length > 0 ? (
-                        filteredApplications.map((application) => (
+                      {paginatedApplications.length > 0 ? (
+                        paginatedApplications.map((application) => (
                           <tr
                             key={application.id}
                             className={`border-b cursor-pointer transition-colors ${isDarkMode ? 'border-gray-800 hover:bg-gray-900' : 'border-gray-200 hover:bg-gray-50'
@@ -1259,61 +1097,39 @@ const ApplicationManagement: React.FC = () => {
             </div>
 
             {/* Pagination Controls */}
-            {!isLoading && filteredApplications.length > 0 && (
+            {!isLoading && filteredApplications.length > 0 && totalPages > 1 && (
               <div className={`border-t p-4 flex items-center justify-between ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
                 <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Showing {filteredApplications.length} applications (Page {currentPage})
+                  Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredApplications.length)}</span> of <span className="font-medium">{filteredApplications.length}</span> results
                 </div>
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1 || isLoadingMore}
-                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'text-white' : 'text-gray-900'
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
+                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
                       }`}
-                    style={{
-                      backgroundColor: currentPage === 1 || isLoadingMore ? (isDarkMode ? '#374151' : '#d1d5db') : (colorPalette?.primary || '#ea580c')
-                    }}
-                    onMouseEnter={(e) => {
-                      if (currentPage !== 1 && !isLoadingMore && colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (currentPage !== 1 && !isLoadingMore && colorPalette?.primary) {
-                        e.currentTarget.style.backgroundColor = colorPalette.primary;
-                      }
-                    }}
                   >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
                     Previous
                   </button>
+
+                  <div className="flex items-center space-x-1">
+                    <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                  </div>
+
                   <button
-                    onClick={handleNextPage}
-                    disabled={!hasMore || isLoadingMore}
-                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'text-white' : 'text-gray-900'
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
+                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
                       }`}
-                    style={{
-                      backgroundColor: !hasMore || isLoadingMore ? (isDarkMode ? '#374151' : '#d1d5db') : (colorPalette?.primary || '#ea580c')
-                    }}
-                    onMouseEnter={(e) => {
-                      if (hasMore && !isLoadingMore && colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (hasMore && !isLoadingMore && colorPalette?.primary) {
-                        e.currentTarget.style.backgroundColor = colorPalette.primary;
-                      }
-                    }}
                   >
                     Next
-                    <ChevronRight className="h-4 w-4 ml-1" />
                   </button>
-                  {isLoadingMore && (
-                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Loading...
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1382,7 +1198,7 @@ const ApplicationManagement: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSave={() => {
-          fetchApplications();
+          silentRefresh();
           setIsAddModalOpen(false);
         }}
       />

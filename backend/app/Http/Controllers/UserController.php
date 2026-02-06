@@ -22,6 +22,10 @@ class UserController extends Controller
                     $q->where('role_name', 'LIKE', '%' . $roleName . '%');
                 });
             }
+
+            if ($request->has('role_id')) {
+                $query->where('role_id', $request->input('role_id'));
+            }
             
             $users = $query->get();
             return response()->json([
@@ -42,7 +46,7 @@ class UserController extends Controller
         $validator = Validator::make($request->all(), [
             'salutation' => 'nullable|string|max:10|in:Mr,Ms,Mrs,Dr,Prof',
             'first_name' => 'required|string|max:255',
-            'middle_initial' => 'required|string|max:255',
+            'middle_initial' => 'nullable|string|max:1',
             'last_name' => 'required|string|max:255',
             'username' => 'required|string|max:255|unique:users',
             'email_address' => 'required|string|email|max:255|unique:users,email_address',
@@ -142,7 +146,7 @@ class UserController extends Controller
         $validator = Validator::make($request->all(), [
             'salutation' => 'sometimes|string|max:10|in:Mr,Ms,Mrs,Dr,Prof',
             'first_name' => 'sometimes|string|max:255',
-            'middle_initial' => 'sometimes|string|max:255',
+            'middle_initial' => 'sometimes|nullable|string|max:1',
             'last_name' => 'sometimes|string|max:255',
             'username' => 'sometimes|string|max:255|unique:users,username,' . $id . ',id',
             'email_address' => 'sometimes|string|email|max:255|unique:users,email_address,' . $id . ',id',

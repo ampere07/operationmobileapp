@@ -21,17 +21,18 @@ export interface CustomerDetailData {
   houseFrontPictureUrl?: string;
   groupId?: number;
   groupName?: string;
-  
+
   billingAccount?: {
     id: number;
     accountNo: string;
     dateInstalled?: string;
     billingDay: number;
     billingStatusId: number;
+    billingStatusName?: string;
     accountBalance: number;
     balanceUpdateDate?: string;
   };
-  
+
   technicalDetails?: {
     id: number;
     username?: string;
@@ -47,9 +48,11 @@ export interface CustomerDetailData {
     lcpnap?: string;
     usageTypeId?: number;
   };
-  
+
   createdAt?: string;
   updatedAt?: string;
+  onlineSessionStatus?: string;
+  onlineStatusData?: any;
 }
 
 interface CustomerDetailApiResponse {
@@ -62,15 +65,15 @@ export const getCustomerDetail = async (accountNo: string): Promise<CustomerDeta
   try {
     console.log('Fetching customer detail for account:', accountNo);
     const response = await apiClient.get<CustomerDetailApiResponse>(`/customer-detail/${accountNo}`);
-    
+
     console.log('Customer detail API response:', response.data);
-    
+
     if (response.data?.success && response.data?.data) {
       const data = response.data.data;
       console.log('House front picture URL from API:', data.houseFrontPictureUrl);
       return data;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error fetching customer detail:', error);

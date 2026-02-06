@@ -6,6 +6,9 @@ import LoadingModal from '../components/LoadingModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useTransactionContext } from '../contexts/TransactionContext';
 import { Transaction } from '../types/transaction';
+import BillingDetails from '../components/CustomerDetails';
+import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
+import { BillingDetailRecord } from '../types/billing';
 
 interface LocationItem {
   id: string;
@@ -13,7 +16,61 @@ interface LocationItem {
   count: number;
 }
 
-const TransactionList: React.FC = () => {
+const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => {
+  return {
+    id: customerData.billingAccount?.accountNo || '',
+    applicationId: customerData.billingAccount?.accountNo || '',
+    customerName: customerData.fullName,
+    address: customerData.address,
+    status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
+    balance: customerData.billingAccount?.accountBalance || 0,
+    onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
+    cityId: null,
+    regionId: null,
+    timestamp: customerData.updatedAt || '',
+    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
+    dateInstalled: customerData.billingAccount?.dateInstalled || '',
+    contactNumber: customerData.contactNumberPrimary,
+    secondContactNumber: customerData.contactNumberSecondary || '',
+    emailAddress: customerData.emailAddress || '',
+    plan: customerData.desiredPlan || '',
+    username: customerData.technicalDetails?.username || '',
+    connectionType: customerData.technicalDetails?.connectionType || '',
+    routerModel: customerData.technicalDetails?.routerModel || '',
+    routerModemSN: customerData.technicalDetails?.routerModemSn || '',
+    lcpnap: customerData.technicalDetails?.lcpnap || '',
+    port: customerData.technicalDetails?.port || '',
+    vlan: customerData.technicalDetails?.vlan || '',
+    billingDay: customerData.billingAccount?.billingDay || 0,
+    totalPaid: 0,
+    provider: '',
+    lcp: customerData.technicalDetails?.lcp || '',
+    nap: customerData.technicalDetails?.nap || '',
+    modifiedBy: '',
+    modifiedDate: customerData.updatedAt || '',
+    barangay: customerData.barangay || '',
+    city: customerData.city || '',
+    region: customerData.region || '',
+
+    usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
+    referredBy: customerData.referredBy || '',
+    referralContactNo: '',
+    groupName: customerData.groupName || '',
+    mikrotikId: '',
+    sessionIp: customerData.technicalDetails?.ipAddress || '',
+    houseFrontPicture: customerData.houseFrontPictureUrl || '',
+    accountBalance: customerData.billingAccount?.accountBalance || 0,
+    housingStatus: customerData.housingStatus || '',
+    location: customerData.location || '',
+    addressCoordinates: customerData.addressCoordinates || '',
+  };
+};
+
+interface TransactionListProps {
+  onNavigate?: (section: string, extra?: string) => void;
+}
+
+const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
   const { transactions, isLoading: loading, error, silentRefresh } = useTransactionContext();
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
@@ -34,15 +91,14 @@ const TransactionList: React.FC = () => {
   const [approvalMessage, setApprovalMessage] = useState<string>('');
   const [approvalDetails, setApprovalDetails] = useState<any>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
-  // Refresh data silently on mount
-  useEffect(() => {
-    silentRefresh();
-  }, [silentRefresh]);
+
 
   // Dark mode synchronization logic
   useEffect(() => {
@@ -214,6 +270,21 @@ const TransactionList: React.FC = () => {
       console.log('Customer data:', transaction.account?.customer);
       console.log('Full name:', transaction.account?.customer?.full_name);
       setSelectedTransaction(transaction);
+      setSelectedCustomer(null); // Clear customer view when switching transactions
+    }
+  };
+
+  const handleViewCustomer = async (accountNo: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const detail = await getCustomerDetail(accountNo);
+      if (detail) {
+        setSelectedCustomer(detail);
+      }
+    } catch (err) {
+      console.error('Error fetching customer details:', err);
+    } finally {
+      setIsLoadingDetails(false);
     }
   };
 
@@ -363,58 +434,10 @@ const TransactionList: React.FC = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <div className={`flex items-center justify-center h-full ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-        <div className="flex flex-col items-center">
-          <div
-            className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 mb-3"
-            style={{ borderTopColor: colorPalette?.primary || '#ea580c', borderBottomColor: colorPalette?.primary || '#ea580c' }}
-          ></div>
-          <p className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Loading transactions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`flex items-center justify-center h-full ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-        <div className={`rounded-md p-6 max-w-lg ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-          }`}>
-          <h3 className="text-red-500 text-lg font-medium mb-2">Error</h3>
-          <p className={`mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-white py-2 px-4 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
+    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
       }`}>
-      <div className={`border-r flex-shrink-0 flex flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+      <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
         }`} style={{ width: `${sidebarWidth}px` }}>
         <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
           }`}>
@@ -569,168 +592,187 @@ const TransactionList: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-x-auto overflow-y-auto pb-4">
-              <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
-                }`}>
-                <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-x-auto overflow-y-auto">
+              {loading ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                  </div>
+                  <p className="mt-4">Loading transactions...</p>
+                </div>
+              ) : error ? (
+                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                  <p>{error}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
                   }`}>
-                  <tr>
-                    {isBatchApproveMode && (
-                      <th className={`px-4 py-3 text-left ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        <input
-                          type="checkbox"
-                          checked={
-                            selectedTransactionIds.length > 0 &&
-                            selectedTransactionIds.length === filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length &&
-                            filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length > 0
-                          }
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                          style={{
-                            accentColor: colorPalette?.primary || '#ea580c'
-                          }}
-                        />
-                      </th>
-                    )}
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Date Processed</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Account No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Received Payment</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Payment Method</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Processed By</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Full Name</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>OR No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Reference No.</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Remarks</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Status</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Transaction Type</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Image</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Barangay</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Contact No</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Payment Date</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>City</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Plan</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Account Balance</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Created At</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>Updated At</th>
-                  </tr>
-                </thead>
-                <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
-                  }`}>
-                  {paginatedTransactions.length > 0 ? (
-                    paginatedTransactions.map((transaction) => {
-                      const isSelected = selectedTransactionIds.includes(transaction.id);
-                      const isPending = transaction.status.toLowerCase() === 'pending';
-                      const canSelect = isBatchApproveMode && isPending;
-
-                      return (
-                        <tr
-                          key={transaction.id}
-                          className={`${canSelect ? 'cursor-pointer' : isBatchApproveMode ? 'cursor-not-allowed' : 'cursor-pointer'
-                            } ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                            } ${!isSelected && selectedTransaction?.id === transaction.id
-                              ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100')
-                              : !isSelected && isBatchApproveMode && !isPending
-                                ? (isDarkMode ? 'bg-gray-800 opacity-50' : 'bg-gray-200 opacity-50')
-                                : ''
-                            }`}
-                          style={isSelected ? {
-                            backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
-                          } : {}}
-                          onClick={() => handleRowClick(transaction)}
-                        >
-                          {isBatchApproveMode && (
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleTransactionSelection(transaction.id)}
-                                disabled={!isPending}
-                                className={`w-4 h-4 rounded border-gray-300 ${isPending ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                                  }`}
-                                style={{
-                                  accentColor: colorPalette?.primary || '#ea580c'
-                                }}
-                              />
-                            </td>
-                          )}
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{formatDate(transaction.date_processed)}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">{transaction.account?.account_no || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>{formatCurrency(transaction.received_payment)}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.payment_method}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.processed_by_user || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.account?.customer?.full_name || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.or_no}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.reference_no}</td>
-                          <td className={`px-4 py-3 max-w-xs truncate ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.remarks || 'No remarks'}</td>
-                          <td className="px-4 py-3 whitespace-nowrap"><StatusText status={transaction.status} /></td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.transaction_type}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.image_url ? 'Yes' : '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.account?.customer?.barangay || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.account?.customer?.contact_number_primary || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{formatDate(transaction.payment_date)}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.account?.customer?.city || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{transaction.account?.customer?.desired_plan || '-'}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{formatCurrency(transaction.account?.account_balance || 0)}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{formatDate(transaction.created_at)}</td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>{formatDate(transaction.updated_at)}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
+                  <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    }`}>
                     <tr>
-                      <td colSpan={isBatchApproveMode ? 21 : 20} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        {transactions.length > 0
-                          ? 'No transactions found matching your filters'
-                          : 'No transactions found.'}
-                      </td>
+                      {isBatchApproveMode && (
+                        <th className={`px-4 py-3 text-left ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                          <input
+                            type="checkbox"
+                            checked={
+                              selectedTransactionIds.length > 0 &&
+                              selectedTransactionIds.length === filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length &&
+                              filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length > 0
+                            }
+                            onChange={toggleSelectAll}
+                            className="w-4 h-4 rounded border-gray-300 cursor-pointer"
+                            style={{
+                              accentColor: colorPalette?.primary || '#ea580c'
+                            }}
+                          />
+                        </th>
+                      )}
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Date Processed</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Status</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Account No.</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Received Payment</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Payment Method</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Processed By</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Full Name</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>OR No.</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Reference No.</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Remarks</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Transaction Type</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Image</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Barangay</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Contact No</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Payment Date</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>City</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Plan</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Account Balance</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Created At</th>
+                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>Updated At</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
+                    }`}>
+                    {paginatedTransactions.length > 0 ? (
+                      paginatedTransactions.map((transaction) => {
+                        const isSelected = selectedTransactionIds.includes(transaction.id);
+                        const isPending = transaction.status.toLowerCase() === 'pending';
+                        const canSelect = isBatchApproveMode && isPending;
+
+                        return (
+                          <tr
+                            key={transaction.id}
+                            className={`${canSelect ? 'cursor-pointer' : isBatchApproveMode ? 'cursor-not-allowed' : 'cursor-pointer'
+                              } ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                              } ${!isSelected && selectedTransaction?.id === transaction.id
+                                ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100')
+                                : !isSelected && isBatchApproveMode && !isPending
+                                  ? (isDarkMode ? 'bg-gray-800 opacity-50' : 'bg-gray-200 opacity-50')
+                                  : ''
+                              }`}
+                            style={isSelected ? {
+                              backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
+                            } : {}}
+                            onClick={() => handleRowClick(transaction)}
+                          >
+                            {isBatchApproveMode && (
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleTransactionSelection(transaction.id)}
+                                  disabled={!isPending}
+                                  className={`w-4 h-4 rounded border-gray-300 ${isPending ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                                    }`}
+                                  style={{
+                                    accentColor: colorPalette?.primary || '#ea580c'
+                                  }}
+                                />
+                              </td>
+                            )}
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{formatDate(transaction.date_processed)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">{transaction.account?.account_no || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                              }`}>{formatCurrency(transaction.received_payment)}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.payment_method}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.processed_by_user || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.account?.customer?.full_name || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.or_no}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.reference_no}</td>
+                            <td className={`px-4 py-3 max-w-xs truncate ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.remarks || 'No remarks'}</td>
+                            <td className="px-4 py-3 whitespace-nowrap"><StatusText status={transaction.status} /></td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.transaction_type}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.image_url ? 'Yes' : '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.account?.customer?.barangay || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.account?.customer?.contact_number_primary || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{formatDate(transaction.payment_date)}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.account?.customer?.city || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{transaction.account?.customer?.desired_plan || '-'}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{formatCurrency(transaction.account?.account_balance || 0)}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{formatDate(transaction.created_at)}</td>
+                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}>{formatDate(transaction.updated_at)}</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={isBatchApproveMode ? 21 : 20} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
+                          {transactions.length > 0
+                            ? 'No transactions found matching your filters'
+                            : 'No transactions found.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
+            <PaginationControls />
           </div>
-          <PaginationControls />
         </div>
       </div>
 
@@ -739,8 +781,35 @@ const TransactionList: React.FC = () => {
           <TransactionListDetails
             transaction={selectedTransaction}
             onClose={() => setSelectedTransaction(null)}
+            onNavigate={onNavigate}
+            onViewCustomer={handleViewCustomer}
           />
         </div>)}
+
+      {(selectedCustomer || isLoadingDetails) && (
+        <div className="flex-shrink-0 overflow-hidden">
+          {isLoadingDetails ? (
+            <div className={`w-[600px] h-full flex items-center justify-center border-l ${isDarkMode
+              ? 'bg-gray-900 text-white border-white border-opacity-30'
+              : 'bg-white text-gray-900 border-gray-300'
+              }`}>
+              <div className="text-center">
+                <div
+                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
+                  style={{ borderBottomColor: colorPalette?.primary || '#ea580c' }}
+                ></div>
+                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
+              </div>
+            </div>
+          ) : selectedCustomer ? (
+            <BillingDetails
+              billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
+              onlineStatusRecords={[]}
+              onClose={() => setSelectedCustomer(null)}
+            />
+          ) : null}
+        </div>
+      )}
 
       <LoadingModal
         isOpen={isApproving}

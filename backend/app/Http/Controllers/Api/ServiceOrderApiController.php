@@ -14,87 +14,116 @@ class ServiceOrderApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            $page = $request->input('page', 1);
+            $limit = $request->input('limit', 50); // Default 50 for faster response
+            $search = $request->input('search', '');
+            // Fast mode variable kept for compatibility but new logic is inherently faster
+            $fastMode = $request->input('fast', false); 
+
+            // Base query on service_orders
             $query = DB::table('service_orders as so')
-                ->leftJoin('billing_accounts as ba', 'so.account_no', '=', 'ba.account_no')
-                ->leftJoin('customers as c', 'ba.customer_id', '=', 'c.id')
-                ->leftJoin('technical_details as td', 'so.account_no', '=', 'td.account_no')
-                ->select(
-                    'so.id',
-                    'so.id as ticket_id',
-                    'so.account_no',
-                    'so.timestamp',
-                    'ba.id as account_id',
-                    'ba.date_installed',
-                    DB::raw("CONCAT(IFNULL(c.first_name, ''), ' ', IFNULL(c.middle_initial, ''), ' ', IFNULL(c.last_name, '')) as full_name"),
-                    'c.contact_number_primary as contact_number',
-                    DB::raw("CONCAT(IFNULL(c.address, ''), ', ', IFNULL(c.barangay, ''), ', ', IFNULL(c.city, ''), ', ', IFNULL(c.region, '')) as full_address"),
-                    'c.address as contact_address',
-                    'c.email_address',
-                    'c.house_front_picture_url',
-                    'c.desired_plan as plan',
-                    'td.username',
-                    'td.connection_type',
-                    'td.router_modem_sn',
-                    'td.lcp',
-                    'td.nap',
-                    'td.port',
-                    'td.vlan',
-                    'so.concern',
-                    'so.concern_remarks',
-                    'so.requested_by',
-                    'so.support_status',
-                    'so.assigned_email',
-                    'so.repair_category',
-                    'so.visit_status',
-                    'so.priority_level',
-                    'so.visit_by_user',
-                    'so.visit_with',
-                    'so.visit_remarks',
-                    'so.support_remarks',
-                    'so.service_charge',
-                    'so.new_router_modem_sn',
-                    'so.new_lcp',
-                    'so.new_nap',
-                    'so.new_port',
-                    'so.new_vlan',
-                    'so.router_model',
-                    'so.old_lcp',
-                    'so.old_nap',
-                    'so.old_port',
-                    'so.old_vlan',
-                    'so.old_router_modem_sn',
-                    'so.new_lcpnap',
-                    'so.new_plan',
-                    'so.client_signature_url',
-                    'so.image1_url',
-                    'so.image2_url',
-                    'so.image3_url',
-                    'so.status',
-                    'so.created_at',
-                    'so.created_by_user',
-                    'so.updated_at',
-                    'so.updated_by_user'
-                )
-                ->orderBy('so.created_at', 'desc');
+                ->select('so.*', 'so.id as ticket_id');
             
+            // Apply filters
             if ($request->has('assigned_email')) {
                 $query->where('so.assigned_email', $request->input('assigned_email'));
             }
             
             if ($request->has('account_no')) {
-                $query->where('so.account_no', $request->input('account_no'));
+                $query->where('so.account_no', 'LIKE', "%" . $request->input('account_no') . "%");
             }
-            
+
             if ($request->has('support_status')) {
                 $query->where('so.support_status', $request->input('support_status'));
             }
+
+            // Handle Search
+            if ($search) {
+                // Only join when strictly necessary for search
+                $query->leftJoin('billing_accounts as ba', 'so.account_no', '=', 'ba.account_no')
+                      ->leftJoin('customers as c', 'ba.customer_id', '=', 'c.id');
+                      
+                $query->where(function ($q) use ($search) {
+                    $q->where('so.account_no', 'LIKE', "%{$search}%")
+                      ->orWhere('so.id', 'LIKE', "%{$search}%")
+                      ->orWhere('c.first_name', 'LIKE', "%{$search}%")
+                      ->orWhere('c.last_name', 'LIKE', "%{$search}%");
+                });
+            }
+
+            $query->orderBy('so.created_at', 'desc');
+
+            // Fetch one extra record to check if there are more pages
+            $serviceOrders = $query->skip(($page - 1) * $limit)
+                ->take($limit + 1)
+                ->get();
+
+            // Check if there are more pages
+            $hasMore = $serviceOrders->count() > $limit;
+
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $serviceOrders = $serviceOrders->slice(0, $limit);
+            }
             
-            $serviceOrders = $query->get();
+            // Extract Account Numbers for eager loading
+            $accountNos = $serviceOrders->pluck('account_no')->filter()->unique()->values();
+            
+            // Eager load related data efficiently
+            if ($accountNos->isNotEmpty()) {
+                $billingAccounts = \App\Models\BillingAccount::with('customer')
+                    ->whereIn('account_no', $accountNos)
+                    ->get()
+                    ->keyBy('account_no');
+                    
+                $technicalDetails = \App\Models\TechnicalDetail::whereIn('account_no', $accountNos)
+                    ->get()
+                    ->keyBy('account_no');
+            } else {
+                $billingAccounts = collect();
+                $technicalDetails = collect();
+            }
+            
+            // Map related data to service orders
+            $mappedOrders = $serviceOrders->map(function ($so) use ($billingAccounts, $technicalDetails) {
+                $ba = $billingAccounts->get($so->account_no);
+                $c = $ba ? $ba->customer : null;
+                $td = $technicalDetails->get($so->account_no);
+                
+                // Manually populate fields that were previously joined
+                $so->account_id = $ba ? $ba->id : null;
+                $so->date_installed = $ba ? $ba->date_installed : null;
+                
+                // Customer details
+                $so->full_name = $c ? trim(($c->first_name ?? '') . ' ' . ($c->middle_initial ?? '') . ' ' . ($c->last_name ?? '')) : null;
+                $so->contact_number = $c ? $c->contact_number_primary : null;
+                $so->full_address = $c ? trim(($c->address ?? '') . ', ' . ($c->barangay ?? '') . ', ' . ($c->city ?? '') . ', ' . ($c->region ?? '')) : null;
+                $so->contact_address = $c ? $c->address : null;
+                $so->email_address = $c ? $c->email_address : null;
+                $so->house_front_picture_url = $c ? $c->house_front_picture_url : null;
+                $so->plan = $c ? $c->desired_plan : null;
+                
+                // Technical details
+                $so->username = $td ? $td->username : null;
+                $so->connection_type = $td ? $td->connection_type : null;
+                $so->router_modem_sn = $td ? $td->router_modem_sn : null;
+                $so->lcp = $td ? $td->lcp : null;
+                $so->nap = $td ? $td->nap : null;
+                $so->port = $td ? $td->port : null;
+                $so->vlan = $td ? $td->vlan : null;
+                
+                return $so;
+            });
             
             return response()->json([
                 'success' => true,
-                'data' => $serviceOrders,
-                'count' => $serviceOrders->count()
+                'data' => $mappedOrders->values(),
+                'pagination' => [
+                    'current_page' => (int) $page,
+                    'per_page' => (int) $limit,
+                    'has_more' => $hasMore,
+                    'count' => $mappedOrders->count()
+                ]
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching service orders: ' . $e->getMessage(), [
