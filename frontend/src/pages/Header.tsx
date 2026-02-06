@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, RefreshCw } from 'lucide-react';
+import { View, Text, Pressable, Image, ScrollView, Alert, Dimensions } from 'react-native';
+import { Bell, RefreshCw, Menu as MenuIcon } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService, type Notification as AppNotification } from '../services/notificationService';
 import { formUIService } from '../services/formUIService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -20,7 +22,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   const [loading, setLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const notificationRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<View>(null);
   const mountedRef = useRef(true);
   const previousCountRef = useRef(0);
   const previousNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -61,87 +63,19 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   useEffect(() => {
     mountedRef.current = true;
 
-    if ('Notification' in window) {
-      console.log('[Notification] API available, current permission:', Notification.permission);
-
-      if (Notification.permission === 'default') {
-        console.log('[Notification] Requesting permission...');
-        Notification.requestPermission().then(permission => {
-          console.log('[Notification] Permission result:', permission);
-          if (permission === 'granted') {
-            console.log('[Notification] Permission GRANTED - notifications will work');
-          } else {
-            console.warn('[Notification] Permission DENIED - notifications will not work');
-          }
-        });
-      } else if (Notification.permission === 'granted') {
-        console.log('[Notification] Permission already GRANTED');
-      } else {
-        console.warn('[Notification] Permission DENIED');
-      }
-    } else {
-      console.error('[Notification] API not supported in this browser');
-    }
-
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
-
-  const showBrowserNotification = (notification: AppNotification) => {
-    console.log('[Browser Notification] Attempting to show notification:', notification);
-
-    if (!('Notification' in window)) {
-      console.error('[Browser Notification] Browser does not support notifications');
-      return;
-    }
-
-    if (Notification.permission !== 'granted') {
-      console.warn('[Browser Notification] Permission not granted. Current permission:', Notification.permission);
-      return;
-    }
-
-    try {
-      const browserNotification = new Notification('🔔 New Customer Application', {
-        body: `${notification.customer_name}\nPlan: ${notification.plan_name}`,
-        icon: logoUrl || undefined,
-        badge: logoUrl || undefined,
-        tag: `application-${notification.id}`,
-        requireInteraction: false,
-        silent: false
-      });
-
-      browserNotification.onclick = () => {
-        console.log('[Browser Notification] Notification clicked');
-        window.focus();
-        browserNotification.close();
-      };
-
-      console.log('[Browser Notification] Notification created successfully for:', notification.customer_name);
-    } catch (error) {
-      console.error('[Browser Notification] Failed to create notification:', error);
-    }
-  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -196,11 +130,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
           if (newNotifications.length > 0) {
             console.log('[Polling] NEW NOTIFICATIONS DETECTED:', newNotifications.length);
             console.log('[Polling] New notification details:', newNotifications);
-
-            newNotifications.forEach((notification, index) => {
-              console.log(`[Polling] Triggering browser notification ${index + 1}/${newNotifications.length}`);
-              showBrowserNotification(notification);
-            });
           } else {
             console.log('[Polling] No new notifications');
           }
@@ -223,22 +152,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
     };
   }, []);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
-    };
-
-    if (showNotifications) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showNotifications]);
-
   const handleToggleClick = () => {
     if (onToggleSidebar) {
       onToggleSidebar();
@@ -246,7 +159,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   };
 
   const handleRefresh = () => {
-    window.location.reload();
+    Alert.alert('Refresh', 'Reload the application to refresh');
   };
 
   const toggleNotifications = async () => {
@@ -277,198 +190,299 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('authData');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse user data");
+    const loadUser = async () => {
+      const storedUser = await AsyncStorage.getItem('authData');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.error("Failed to parse user data");
+        }
       }
-    }
+    };
+    loadUser();
   }, []);
+
+  const { width } = Dimensions.get('window');
+  const isTablet = width >= 768;
 
   // Customer Header (Role: customer)
   if (user && user.role === 'customer') {
     return (
-      <header className="bg-white border-b h-16 flex items-center justify-between px-6 md:px-12 w-full shadow-sm z-50">
-        <div className="flex items-center space-x-2">
-          {/* Logo Section */}
+      <View style={{
+        backgroundColor: '#ffffff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+        height: 64,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: isTablet ? 48 : 24,
+        width: '100%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+        zIndex: 50
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {logoUrl ? (
-            <img src={logoUrl} alt="ATSS Fiber" className="h-8 object-contain" />
+            <Image
+              source={{ uri: logoUrl }}
+              style={{ height: 32, width: 100, resizeMode: 'contain' }}
+              onError={(e) => {
+                console.error('[Logo] Failed to load image from:', logoUrl);
+              }}
+            />
           ) : (
-            <div className="flex items-center">
-              <div className="w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-xs mr-2">
-                A
-              </div>
-              <span className="text-slate-900 font-bold text-lg tracking-wide">ATSS FIBER <span className="font-extrabold text-slate-900">PORTAL</span></span>
-            </div>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{
+                width: 32,
+                height: 32,
+                backgroundColor: '#0f172a',
+                borderRadius: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 8
+              }}>
+                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>A</Text>
+              </View>
+              <Text style={{ color: '#0f172a', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
+                ATSS FIBER <Text style={{ fontWeight: '800', color: '#0f172a' }}>PORTAL</Text>
+              </Text>
+            </View>
           )}
-        </div>
+        </View>
 
-        <div className="flex items-center space-x-8">
-          <nav className="hidden md:flex items-center space-x-6 text-sm font-bold">
-            <button
-              onClick={() => onNavigate?.('customer-dashboard')}
-              className="transition"
-              style={{ color: activeSection === 'customer-dashboard' || !activeSection ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => onNavigate?.('customer-bills')}
-              className="transition"
-              style={{ color: activeSection === 'customer-bills' ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
-            >
-              Bills
-            </button>
-            <button
-              onClick={() => onNavigate?.('customer-support')}
-              className="transition"
-              style={{ color: activeSection === 'customer-support' ? (colorPalette?.primary || '#0f172a') : '#6b7280' }}
-            >
-              Support
-            </button>
-          </nav>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 32 }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 24,
+            fontSize: 14,
+            fontWeight: 'bold',
+            display: isTablet ? 'flex' : 'none'
+          }}>
+            <Pressable onPress={() => onNavigate?.('customer-dashboard')}>
+              <Text style={{
+                color: activeSection === 'customer-dashboard' || !activeSection ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                fontWeight: 'bold',
+                fontSize: 14
+              }}>
+                Dashboard
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => onNavigate?.('customer-bills')}>
+              <Text style={{
+                color: activeSection === 'customer-bills' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                fontWeight: 'bold',
+                fontSize: 14
+              }}>
+                Bills
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => onNavigate?.('customer-support')}>
+              <Text style={{
+                color: activeSection === 'customer-support' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                fontWeight: 'bold',
+                fontSize: 14
+              }}>
+                Support
+              </Text>
+            </Pressable>
+          </View>
 
-          <button
-            onClick={() => {
-              // Logout logic
-              localStorage.removeItem('token');
-              localStorage.removeItem('authData');
+          <Pressable
+            onPress={async () => {
+              await AsyncStorage.removeItem('token');
+              await AsyncStorage.removeItem('authData');
               if (onLogout) {
                 onLogout();
-              } else {
-                window.location.href = '/';
               }
             }}
-            className="px-6 py-2 border rounded-full text-sm font-bold transition"
             style={{
-              color: colorPalette?.primary || '#ef4444',
+              paddingHorizontal: 24,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderRadius: 9999,
               borderColor: colorPalette?.primary || '#ef4444'
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = `${colorPalette?.primary || '#ef4444'}10`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
           >
-            Logout
-          </button>
-        </div>
-      </header>
+            <Text style={{
+              color: colorPalette?.primary || '#ef4444',
+              fontSize: 14,
+              fontWeight: 'bold'
+            }}>
+              Logout
+            </Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
   // Admin/Staff Header (Original)
   return (
-    <header className={`${isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
-      } border-b h-16 flex items-center px-4`}>
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={handleToggleClick}
-          className={`${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
-            } p-2 transition-colors cursor-pointer`}
-          type="button"
+    <View style={{
+      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+      borderBottomWidth: 1,
+      borderBottomColor: isDarkMode ? '#4b5563' : '#d1d5db',
+      height: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <Pressable
+          onPress={handleToggleClick}
+          style={{
+            padding: 12
+          }}
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+          <MenuIcon size={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+        </Pressable>
 
-        <div className="flex flex-col items-center space-y-1">
+        <View style={{ flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           {logoUrl && (
-            <img
-              src={logoUrl}
-              alt="Logo"
-              className="h-10 object-contain"
-              crossOrigin="anonymous"
-              referrerPolicy="no-referrer"
+            <Image
+              source={{ uri: logoUrl }}
+              style={{ height: 40, width: 120, resizeMode: 'contain' }}
               onError={(e) => {
                 console.error('[Logo] Failed to load image from:', logoUrl);
-                e.currentTarget.style.display = 'none';
               }}
             />
           )}
-          <h1 className={`${isDarkMode ? 'text-white' : 'text-gray-900'
-            } text-xs font-semibold`}>
+          <Text style={{
+            color: isDarkMode ? '#ffffff' : '#111827',
+            fontSize: 12,
+            fontWeight: '600'
+          }}>
             Powered by Sync
-          </h1>
-        </div>
-      </div>
+          </Text>
+        </View>
+      </View>
 
-      <div className="flex-1"></div>
+      <View style={{ flex: 1 }} />
 
-      <div className="flex items-center space-x-2">
-        <button
-          onClick={handleRefresh}
-          className={`p-2 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
-            } transition-colors`}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Pressable
+          onPress={handleRefresh}
+          style={{ padding: 8 }}
         >
-          <RefreshCw className="h-5 w-5" />
-        </button>
+          <RefreshCw size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+        </Pressable>
 
-        <div className="relative" ref={notificationRef}>
-          <button
-            onClick={toggleNotifications}
-            className={`p-2 relative ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black'
-              } transition-colors`}
+        <View style={{ position: 'relative' }}>
+          <Pressable
+            onPress={toggleNotifications}
+            style={{ padding: 8, position: 'relative' }}
           >
-            <Bell className="h-5 w-5" />
+            <Bell size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              <View style={{
+                position: 'absolute',
+                top: 4,
+                right: 4,
+                width: 8,
+                height: 8,
+                backgroundColor: '#ef4444',
+                borderRadius: 4
+              }} />
             )}
-          </button>
+          </Pressable>
 
           {showNotifications && (
-            <div className={`absolute right-0 mt-2 w-96 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              } border z-50`}>
-              <div className={`p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                }`}>
-                <h3 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
+            <View style={{
+              position: 'absolute',
+              right: 0,
+              top: 48,
+              width: 384,
+              borderRadius: 8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 8,
+              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+              borderWidth: 1,
+              borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+              zIndex: 50
+            }}>
+              <View style={{
+                padding: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }}>
+                <Text style={{
+                  fontWeight: '600',
+                  color: isDarkMode ? '#ffffff' : '#111827'
+                }}>
                   Recent Applications ({notifications.length})
-                </h3>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
+                </Text>
+              </View>
+              <ScrollView style={{ maxHeight: 384 }}>
                 {loading ? (
-                  <div className={`p-4 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    Loading...
-                  </div>
+                  <View style={{
+                    padding: 16,
+                    alignItems: 'center'
+                  }}>
+                    <Text style={{
+                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    }}>
+                      Loading...
+                    </Text>
+                  </View>
                 ) : notifications.length === 0 ? (
-                  <div className={`p-4 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    No new applications
-                  </div>
+                  <View style={{
+                    padding: 16,
+                    alignItems: 'center'
+                  }}>
+                    <Text style={{
+                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    }}>
+                      No new applications
+                    </Text>
+                  </View>
                 ) : (
                   notifications.map((notification) => (
-                    <div
+                    <Pressable
                       key={notification.id}
-                      className={`p-4 border-b ${isDarkMode ? 'border-gray-700 hover:bg-gray-750' : 'border-gray-200 hover:bg-gray-50'
-                        } transition-colors cursor-pointer`}
+                      style={{
+                        padding: 16,
+                        borderBottomWidth: 1,
+                        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+                      }}
                     >
-                      <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                        }`}>
+                      <Text style={{
+                        fontWeight: '500',
+                        color: isDarkMode ? '#ffffff' : '#111827'
+                      }}>
                         {notification.customer_name}
-                      </div>
-                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
+                      </Text>
+                      <Text style={{
+                        fontSize: 14,
+                        color: isDarkMode ? '#9ca3af' : '#4b5563'
+                      }}>
                         Plan: {notification.plan_name}
-                      </div>
-                      <div className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'
-                        }`}>
+                      </Text>
+                      <Text style={{
+                        fontSize: 12,
+                        marginTop: 4,
+                        color: isDarkMode ? '#6b7280' : '#6b7280'
+                      }}>
                         {notification.formatted_date}
-                      </div>
-                    </div>
+                      </Text>
+                    </Pressable>
                   ))
                 )}
-              </div>
-            </div>
+              </ScrollView>
+            </View>
           )}
-        </div>
-      </div>
-    </header>
+        </View>
+      </View>
+    </View>
   );
 };
 

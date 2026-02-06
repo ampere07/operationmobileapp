@@ -11,10 +11,13 @@ const getCookie = (name: string): string | null => {
 };
 
 // Fallback or explicit definition for React Native environment
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  process.env.REACT_APP_API_BASE_URL ||
+  'https://backend.atssfiber.ph/api';
 
 if (!API_BASE_URL) {
-  console.warn('REACT_APP_API_BASE_URL is not defined, using default.');
+  console.warn('API_BASE_URL is not defined in any environment variable, using default.');
 }
 
 const apiClient = axios.create({

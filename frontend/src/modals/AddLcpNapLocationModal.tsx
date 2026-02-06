@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Camera, MapPin, ChevronDown, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, TextInput, ScrollView, Modal, Alert, ActivityIndicator, Image, useWindowDimensions } from 'react-native';
+import { X, Camera, MapPin, ChevronDown, CheckCircle, AlertCircle, Loader2 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { getRegions, getCities, City } from '../services/cityService';
 import { barangayService, Barangay } from '../services/barangayService';
 import { locationDetailService, LocationDetail } from '../services/locationDetailService';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
-import { GOOGLE_MAPS_API_KEY } from '../config/maps';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import apiClient from '../config/api';
 
@@ -39,11 +41,16 @@ interface ApiResponse<T = any> {
 const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   isOpen,
   onClose,
-  onSave
+  onSave,
+
 }) => {
-  const getCurrentUser = () => {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+  const modalWidth = isMobile ? '100%' : 600;
+
+  const getCurrentUser = async () => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       if (authData) {
         const user = JSON.parse(authData);
         return user.email || '';
@@ -54,10 +61,10 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
     return '';
   };
 
-  const currentUserEmail = getCurrentUser();
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   const [formData, setFormData] = useState({
-    reading_image: null as File | null,
+    reading_image: null as { uri: string; type: string; name: string } | null,
     street: '',
     barangay: '',
     city: '',
@@ -68,9 +75,9 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
     port_total: '',
     lcpnap_name: '',
     coordinates: '',
-    image: null as File | null,
-    image_2: null as File | null,
-    modified_by: currentUserEmail,
+    image: null as { uri: string; type: string; name: string } | null,
+    image_2: null as { uri: string; type: string; name: string } | null,
+    modified_by: '',
   });
 
   const [imagePreviews, setImagePreviews] = useState({
@@ -95,19 +102,18 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   const [allLocations, setAllLocations] = useState<LocationDetail[]>([]);
   const [showCoordinatesMap, setShowCoordinatesMap] = useState<boolean>(false);
   const [activeImageSize, setActiveImageSize] = useState<ImageSizeSetting | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+      const userEmail = await getCurrentUser();
+      setCurrentUserEmail(userEmail);
+      setFormData(prev => ({ ...prev, modified_by: userEmail }));
+    };
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -124,9 +130,13 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      loadDropdownData();
-      fetchImageSizeSettings();
-      resetForm();
+      // Delay data loading slightly to allow modal animation to start smoothly
+      const timer = setTimeout(() => {
+        loadDropdownData();
+        fetchImageSizeSettings();
+        resetForm();
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -140,148 +150,11 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   };
 
   useEffect(() => {
-    if (showCoordinatesMap && !mapInstanceRef.current) {
-      loadMapScript();
-    }
-
-    return () => {
-      cleanupMap();
-    };
-  }, [showCoordinatesMap]);
-
-  useEffect(() => {
     if (formData.lcp_name && formData.nap_name) {
       const generatedName = `${formData.lcp_name} ${formData.nap_name}`;
       setFormData(prev => ({ ...prev, lcpnap_name: generatedName }));
     }
   }, [formData.lcp_name, formData.nap_name]);
-
-  const loadMapScript = () => {
-    if (window.google?.maps) {
-      initializeMap();
-      return;
-    }
-
-    const existingScript = document.getElementById('google-maps-script-modal');
-    if (existingScript) {
-      existingScript.addEventListener('load', initializeMap);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'google-maps-script-modal';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeMap;
-    script.onerror = () => {
-      console.error('Failed to load Google Maps script');
-    };
-    document.head.appendChild(script);
-  };
-
-  const initializeMap = () => {
-    if (!mapRef.current || !window.google?.maps) return;
-
-    cleanupMap();
-
-    try {
-      const defaultLat = 14.5995;
-      const defaultLng = 120.9842;
-      
-      const map = new google.maps.Map(mapRef.current, {
-        center: { lat: defaultLat, lng: defaultLng },
-        zoom: 6,
-        mapTypeControl: true,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: true,
-      });
-
-      map.addListener('click', (e: google.maps.MapMouseEvent) => {
-        if (e.latLng) {
-          handleMapClick(e.latLng.lat(), e.latLng.lng());
-        }
-      });
-
-      mapInstanceRef.current = map;
-
-      if (formData.coordinates) {
-        const coords = formData.coordinates.split(',').map(c => c.trim());
-        if (coords.length === 2) {
-          const lat = parseFloat(coords[0]);
-          const lng = parseFloat(coords[1]);
-          if (!isNaN(lat) && !isNaN(lng)) {
-            addMarkerToMap(lat, lng);
-            map.setCenter({ lat, lng });
-            map.setZoom(15);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error initializing map:', error);
-    }
-  };
-
-  const cleanupMap = () => {
-    if (markerRef.current) {
-      markerRef.current.setMap(null);
-      markerRef.current = null;
-    }
-    mapInstanceRef.current = null;
-  };
-
-  const handleMapClick = (lat: number, lng: number) => {
-    addMarkerToMap(lat, lng);
-    setFormData(prev => ({
-      ...prev,
-      coordinates: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-    }));
-    if (errors.coordinates) {
-      setErrors(prev => ({ ...prev, coordinates: '' }));
-    }
-  };
-
-  const addMarkerToMap = (lat: number, lng: number) => {
-    if (!mapInstanceRef.current || !window.google?.maps) return;
-
-    if (markerRef.current) {
-      markerRef.current.setMap(null);
-    }
-
-    const marker = new google.maps.Marker({
-      position: { lat, lng },
-      map: mapInstanceRef.current,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 10,
-        fillColor: '#f97316',
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 2,
-      },
-      title: 'Selected Location'
-    });
-
-    const infoWindow = new google.maps.InfoWindow({
-      content: `
-        <div style="font-family: system-ui; text-align: center; color: #1f2937;">
-          <strong>Selected Location</strong><br/>
-          <span style="font-size: 12px; color: #666;">${lat.toFixed(6)}, ${lng.toFixed(6)}</span>
-        </div>
-      `
-    });
-
-    marker.addListener('click', () => {
-      infoWindow.open(mapInstanceRef.current, marker);
-    });
-
-    markerRef.current = marker;
-  };
-
-  const handleToggleMap = () => {
-    setShowCoordinatesMap(!showCoordinatesMap);
-  };
 
   const loadDropdownData = async () => {
     try {
@@ -349,43 +222,38 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleImageUpload = async (field: 'reading_image' | 'image' | 'image_2', file: File) => {
+  const handleImageUpload = async (field: 'reading_image' | 'image' | 'image_2') => {
     try {
-      let processedFile = file;
-      
-      if (activeImageSize && activeImageSize.image_size_value < 100) {
-        try {
-          processedFile = await resizeImage(file, activeImageSize.image_size_value);
-        } catch (resizeError) {
-          processedFile = file;
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Permission to access media library is required');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const fileData = {
+          uri: asset.uri,
+          type: 'image/jpeg',
+          name: `${field}_${Date.now()}.jpg`
+        };
+
+        setFormData(prev => ({ ...prev, [field]: fileData }));
+        setImagePreviews(prev => ({ ...prev, [field]: asset.uri }));
+
+        if (errors[field]) {
+          setErrors(prev => ({ ...prev, [field]: '' }));
         }
       }
-      
-      setFormData(prev => ({ ...prev, [field]: processedFile }));
-      
-      if (imagePreviews[field]) {
-        URL.revokeObjectURL(imagePreviews[field]!);
-      }
-      
-      const previewUrl = URL.createObjectURL(processedFile);
-      setImagePreviews(prev => ({ ...prev, [field]: previewUrl }));
-      
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
     } catch (error) {
-      setFormData(prev => ({ ...prev, [field]: file }));
-      
-      if (imagePreviews[field]) {
-        URL.revokeObjectURL(imagePreviews[field]!);
-      }
-      
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreviews(prev => ({ ...prev, [field]: previewUrl }));
-      
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
@@ -396,7 +264,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
     setShowLoadingModal(true);
     setUploadProgress(0);
     setLoadingPercentage(0);
-    
+
     const progressInterval = setInterval(() => {
       setLoadingPercentage(prev => {
         if (prev >= 99) return 99;
@@ -405,10 +273,10 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
         return prev + 3;
       });
     }, 200);
-    
+
     try {
       const submitData = new FormData();
-      
+
       console.log('=== FORM SUBMISSION DEBUG START ===');
       console.log('Form Data:', {
         reading_image: formData.reading_image?.name,
@@ -426,9 +294,9 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
         image_2: formData.image_2?.name,
         modified_by: formData.modified_by,
       });
-      
+
       if (formData.reading_image) {
-        submitData.append('reading_image', formData.reading_image);
+        submitData.append('reading_image', formData.reading_image as any);
       }
       submitData.append('street', formData.street);
       submitData.append('barangay', formData.barangay);
@@ -441,30 +309,21 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
       submitData.append('lcpnap_name', formData.lcpnap_name);
       submitData.append('coordinates', formData.coordinates);
       if (formData.image) {
-        submitData.append('image', formData.image);
+        submitData.append('image', formData.image as any);
       }
       if (formData.image_2) {
-        submitData.append('image_2', formData.image_2);
+        submitData.append('image_2', formData.image_2 as any);
       }
       submitData.append('modified_by', formData.modified_by);
 
-      console.log('FormData entries:');
-      Array.from(submitData.entries()).forEach(([key, value]) => {
-        if (value instanceof File) {
-          console.log(`${key}: File(${value.name}, ${value.size} bytes, ${value.type})`);
-        } else {
-          console.log(`${key}: ${value}`);
-        }
-      });
-
       console.log('Sending POST request to: /lcpnap');
-      
+
       const response = await apiClient.post<ApiResponse>('/lcpnap', submitData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-      
+
       const data = response.data;
       console.log('Response data:', data);
 
@@ -481,20 +340,20 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
       setResultType('success');
       setResultMessage('LCP/NAP location created successfully');
       setShowResultModal(true);
-      
+
       setTimeout(() => {
         setShowResultModal(false);
         onSave();
         handleClose();
       }, 2000);
-      
+
     } catch (error: any) {
       console.error('=== FORM SUBMISSION ERROR ===');
       console.error('Error type:', error.constructor.name);
       console.error('Error message:', error.message);
       console.error('Error stack:', error.stack);
       console.error('Full error:', error);
-      
+
       clearInterval(progressInterval);
       setShowLoadingModal(false);
       setResultType('error');
@@ -536,8 +395,8 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   };
 
   const handleRegionChange = (regionName: string) => {
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       region: regionName,
       city: '',
       barangay: '',
@@ -546,8 +405,8 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   };
 
   const handleCityChange = (cityName: string) => {
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       city: cityName,
       barangay: '',
       location: ''
@@ -555,8 +414,8 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   };
 
   const handleBarangayChange = (barangayName: string) => {
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       barangay: barangayName,
       location: ''
     }));
@@ -587,482 +446,368 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   const filteredBarangays = getFilteredBarangays();
   const filteredLocations = getFilteredLocations();
 
+  const handleToggleMap = () => {
+    setShowCoordinatesMap(!showCoordinatesMap);
+  };
+
   const ImageUploadField: React.FC<{
     label: string;
     field: 'reading_image' | 'image' | 'image_2';
     required?: boolean;
     error?: string;
   }> = ({ label, field, required, error }) => (
-    <div>
-      <label className={`block text-sm font-medium mb-2 ${
-        isDarkMode ? 'text-white' : 'text-gray-900'
-      }`}>
-        {label}{required && <span className="text-red-500">*</span>}
-      </label>
-      <div className={`relative w-full h-48 border rounded overflow-hidden cursor-pointer ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-          : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-      }`}>
-        <input 
-          type="file" 
-          accept="image/*" 
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleImageUpload(field, e.target.files[0]);
-            }
-          }} 
-          className="absolute inset-0 opacity-0 cursor-pointer z-10" 
-        />
+    <View>
+      <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+        {label}{required && <Text style={{ color: '#ef4444' }}>*</Text>}
+      </Text>
+      <Pressable
+        onPress={() => handleImageUpload(field)}
+        style={{ position: 'relative', width: '100%', height: 192, borderWidth: 1, borderRadius: 4, overflow: 'hidden', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}
+      >
         {imagePreviews[field] ? (
-          <div className="relative w-full h-full">
-            <img 
-              src={imagePreviews[field]!} 
-              alt={label} 
-              className="w-full h-full object-contain"
+          <View style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <Image
+              source={{ uri: imagePreviews[field]! }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="contain"
             />
-            <div className="absolute bottom-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs flex items-center">
-              <Camera className="mr-1" size={14} />Uploaded
-            </div>
-          </div>
+            <View style={{ position: 'absolute', bottom: 8, right: 8, backgroundColor: '#22c55e', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, flexDirection: 'row', alignItems: 'center' }}>
+              <Camera width={14} height={14} color="#ffffff" />
+              <Text style={{ color: '#ffffff', fontSize: 12, marginLeft: 4 }}>Uploaded</Text>
+            </View>
+          </View>
         ) : (
-          <div className={`w-full h-full flex flex-col items-center justify-center ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            <Camera size={32} />
-            <span className="text-sm mt-2">Click to upload</span>
-          </div>
+          <View style={{ width: '100%', height: '100%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <Camera width={32} height={32} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <Text style={{ fontSize: 14, marginTop: 8, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Click to upload</Text>
+          </View>
         )}
-      </div>
-      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-    </div>
+      </Pressable>
+      {error && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{error}</Text>}
+    </View>
   );
 
-  if (!isOpen) return null;
+  const DropdownField: React.FC<{
+    label: string;
+    value: string;
+    options: { label: string; value: string }[];
+    onChange: (value: string) => void;
+    placeholder: string;
+    disabled?: boolean;
+    error?: string;
+    required?: boolean;
+  }> = ({ label, value, options, onChange, placeholder, disabled, error, required }) => {
+    const [showOptions, setShowOptions] = useState(false);
+
+    return (
+      <View>
+        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+          {label}{required && <Text style={{ color: '#ef4444' }}>*</Text>}
+        </Text>
+        <View style={{ position: 'relative' }}>
+          <Pressable
+            onPress={() => !disabled && setShowOptions(!showOptions)}
+            disabled={disabled}
+            style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', opacity: disabled ? 0.5 : 1 }}
+          >
+            <Text style={{ color: value ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af') }}>
+              {value || placeholder}
+            </Text>
+          </Pressable>
+          <View style={{ position: 'absolute', right: 12, top: 8, pointerEvents: 'none' }}>
+            <ChevronDown width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </View>
+        </View>
+        {showOptions && !disabled && (
+          <Modal
+            visible={showOptions}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowOptions(false)}
+          >
+            <Pressable
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+              onPress={() => setShowOptions(false)}
+            >
+              <View style={{ width: '80%', maxHeight: '60%', borderRadius: 8, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', padding: 8 }}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Pressable
+                    onPress={() => {
+                      onChange('');
+                      setShowOptions(false);
+                    }}
+                    style={{ paddingVertical: 12, paddingHorizontal: 16 }}
+                  >
+                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>{placeholder}</Text>
+                  </Pressable>
+                  {options.map((option, index) => (
+                    <Pressable
+                      key={index}
+                      onPress={() => {
+                        onChange(option.value);
+                        setShowOptions(false);
+                      }}
+                      style={{ paddingVertical: 12, paddingHorizontal: 16, backgroundColor: value === option.value ? (isDarkMode ? '#374151' : '#f3f4f6') : 'transparent' }}
+                    >
+                      <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>{option.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            </Pressable>
+          </Modal>
+        )}
+        {error && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{error}</Text>}
+      </View>
+    );
+  };
+
+
 
   return (
     <>
       {showLoadingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-          <div className={`rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px] ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Loader2 
-              className="w-20 h-20 animate-spin" 
-              style={{
-                color: colorPalette?.primary || '#ea580c'
-              }}
-            />
-            <div className="text-center">
-              <p className={`text-4xl font-bold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>{loadingPercentage}%</p>
-            </div>
-          </div>
-        </div>
+        <Modal visible={showLoadingModal} transparent={true} animationType="fade">
+          <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ borderRadius: 8, padding: 32, flexDirection: 'column', alignItems: 'center', gap: 24, minWidth: 320, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
+              <Loader2
+                width={80}
+                height={80}
+                color={colorPalette?.primary || '#ea580c'}
+              />
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 36, fontWeight: 'bold', color: isDarkMode ? '#ffffff' : '#111827' }}>{loadingPercentage}%</Text>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
 
       {showResultModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-          <div className={`rounded-lg p-8 flex flex-col items-center space-y-4 max-w-md ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            {resultType === 'success' ? (
-              <>
-                <CheckCircle className="w-16 h-16 text-green-500" />
-                <p className={`text-xl font-semibold ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Success!</p>
-                <p className={`text-center ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>{resultMessage}</p>
-              </>
-            ) : (
-              <>
-                <AlertCircle className="w-16 h-16 text-red-500" />
-                <p className={`text-xl font-semibold ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Error</p>
-                <p className={`text-center ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>{resultMessage}</p>
-                <button
-                  onClick={() => setShowResultModal(false)}
-                  className="mt-4 px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded"
-                >
-                  Close
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <Modal visible={showResultModal} transparent={true} animationType="fade">
+          <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10000, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ borderRadius: 8, padding: 32, flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: 448, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
+              {resultType === 'success' ? (
+                <>
+                  <CheckCircle width={64} height={64} color="#22c55e" />
+                  <Text style={{ fontSize: 20, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Success!</Text>
+                  <Text style={{ textAlign: 'center', color: isDarkMode ? '#d1d5db' : '#374151' }}>{resultMessage}</Text>
+                </>
+              ) : (
+                <>
+                  <AlertCircle width={64} height={64} color="#ef4444" />
+                  <Text style={{ fontSize: 20, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Error</Text>
+                  <Text style={{ textAlign: 'center', color: isDarkMode ? '#d1d5db' : '#374151' }}>{resultMessage}</Text>
+                  <Pressable
+                    onPress={() => setShowResultModal(false)}
+                    style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 8, backgroundColor: '#ea580c', borderRadius: 4 }}
+                  >
+                    <Text style={{ color: '#ffffff' }}>Close</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       )}
 
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 z-[9998]"
-        onClick={handleClose}
-      />
-      
-      <div className={`fixed right-0 top-0 h-full w-[600px] shadow-2xl z-[9999] flex flex-col ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${
-          isDarkMode
-            ? 'border-gray-800 bg-gray-800'
-            : 'border-gray-300 bg-gray-100'
-        }`}>
-          <h2 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>LCP NAP Location Form</h2>
-          <button onClick={handleClose} className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}>
-            <X size={24} />
-          </button>
-        </div>
+      <Modal
+        visible={isOpen}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleClose}
+      >
+        <Pressable
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9998 }}
+          onPress={handleClose}
+        />
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="space-y-4">
-            <ImageUploadField label="Reading Image" field="reading_image" />
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Street</label>
-              <input
-                type="text"
-                value={formData.street}
-                onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-white border-gray-700'
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Region</label>
-              <div className="relative">
-                <select
-                  value={formData.region}
-                  onChange={(e) => handleRegionChange(e.target.value)}
-                  className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none appearance-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
-                >
-                  <option value="">Select Region</option>
-                  {regions.map(region => (
-                    <option key={region.id} value={region.name}>{region.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`} size={20} />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>City</label>
-              <div className="relative">
-                <select
-                  value={formData.city}
-                  onChange={(e) => handleCityChange(e.target.value)}
-                  disabled={!formData.region}
-                  className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none disabled:opacity-50 appearance-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
-                >
-                  <option value="">{formData.region ? 'Select City' : 'All'}</option>
-                  {filteredCities.map(city => (
-                    <option key={city.id} value={city.name}>{city.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Barangay</label>
-              <div className="relative">
-                <select
-                  value={formData.barangay}
-                  onChange={(e) => handleBarangayChange(e.target.value)}
-                  disabled={!formData.city}
-                  className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none disabled:opacity-50 appearance-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
-                >
-                  <option value="">{formData.city ? 'Select Barangay' : 'All'}</option>
-                  {filteredBarangays.map(barangay => (
-                    <option key={barangay.id} value={barangay.barangay}>{barangay.barangay}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Location</label>
-              <div className="relative">
-                <select
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  disabled={!formData.barangay}
-                  className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none disabled:opacity-50 appearance-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
-                >
-                  <option value="">{formData.barangay ? 'Select Location' : 'All'}</option>
-                  {filteredLocations.map(location => (
-                    <option key={location.id} value={location.location_name}>{location.location_name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                LCP<span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.lcp_name}
-                onChange={(e) => setFormData({ ...formData, lcp_name: e.target.value })}
-                className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-white border-gray-700'
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
+        <View style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: modalWidth, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, zIndex: 9999, flexDirection: 'column', backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>LCP NAP Location Form</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Pressable
+                onPress={handleClose}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 4, borderColor: isDarkMode ? '#ea580c' : '#ea580c', backgroundColor: 'transparent' }}
               >
-                <option value="">Select LCP</option>
-                {lcpList.map(lcp => (
-                  <option key={lcp.id} value={lcp.lcp_name}>{lcp.lcp_name}</option>
-                ))}
-              </select>
-              {errors.lcp_name && <p className="text-red-500 text-xs mt-1">{errors.lcp_name}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                NAP<span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.nap_name}
-                onChange={(e) => setFormData({ ...formData, nap_name: e.target.value })}
-                className={`w-full px-3 py-2 rounded border focus:border-orange-500 focus:outline-none ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-white border-gray-700'
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
+                <Text style={{ color: isDarkMode ? '#fb923c' : '#ea580c' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmit}
+                disabled={loading}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#ea580c', opacity: loading ? 0.5 : 1 }}
               >
-                <option value="">Select NAP</option>
-                {napList.map(nap => (
-                  <option key={nap.id} value={nap.nap_name}>{nap.nap_name}</option>
-                ))}
-              </select>
-              {errors.nap_name && <p className="text-red-500 text-xs mt-1">{errors.nap_name}</p>}
-            </div>
+                <Text style={{ color: '#ffffff' }}>{loading ? 'Saving...' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                PORT TOTAL<span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, port_total: '8' })}
-                  className={`py-3 px-4 rounded border transition-colors ${
-                    formData.port_total === '8' 
-                      ? 'bg-orange-600 border-orange-700 text-white' 
-                      : isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-300'
-                      : 'bg-white border-gray-300 text-gray-700'
-                  }`}
-                >
-                  8
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, port_total: '16' })}
-                  className={`py-3 px-4 rounded border transition-colors ${
-                    formData.port_total === '16' 
-                      ? 'bg-orange-600 border-orange-700 text-white' 
-                      : isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-300'
-                      : 'bg-white border-gray-300 text-gray-700'
-                  }`}
-                >
-                  16
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, port_total: '32' })}
-                  className={`py-3 px-4 rounded border transition-colors ${
-                    formData.port_total === '32' 
-                      ? 'bg-orange-600 border-orange-700 text-white' 
-                      : isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-300'
-                      : 'bg-white border-gray-300 text-gray-700'
-                  }`}
-                >
-                  32
-                </button>
-              </div>
-              {errors.port_total && <p className="text-red-500 text-xs mt-1">{errors.port_total}</p>}
-            </div>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 24, paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ gap: 16 }}>
+              <ImageUploadField label="Reading Image" field="reading_image" />
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                LCPNAP<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.lcpnap_name}
-                readOnly
-                className={`w-full px-3 py-2 rounded border cursor-not-allowed ${
-                  isDarkMode
-                    ? 'bg-gray-700 text-gray-300 border-gray-700'
-                    : 'bg-gray-100 text-gray-600 border-gray-300'
-                }`}
-                placeholder="Auto-generated from LCP and NAP"
-              />
-              {errors.lcpnap_name && <p className="text-red-500 text-xs mt-1">{errors.lcpnap_name}</p>}
-              <p className={`text-xs mt-1 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>Format: LCP-XXX NAP-XXX</p>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                Coordinates<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formData.coordinates}
-                  onChange={(e) => setFormData({ ...formData, coordinates: e.target.value })}
-                  placeholder="14.466580, 121.201807"
-                  className={`w-full px-3 py-2 pr-10 rounded border focus:border-orange-500 focus:outline-none ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-white border-gray-700'
-                      : 'bg-white text-gray-900 border-gray-300'
-                  }`}
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>Street</Text>
+                <TextInput
+                  value={formData.street}
+                  onChangeText={(value) => setFormData({ ...formData, street: value })}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
                 />
-                <button
-                  type="button"
-                  onClick={handleToggleMap}
-                  className={`absolute right-3 top-2.5 transition-colors ${
-                    isDarkMode
-                      ? 'text-gray-400 hover:text-orange-500'
-                      : 'text-gray-600 hover:text-orange-500'
-                  }`}
-                >
-                  <MapPin size={20} />
-                </button>
-              </div>
-              {errors.coordinates && <p className="text-red-500 text-xs mt-1">{errors.coordinates}</p>}
-              
-              {showCoordinatesMap && (
-                <div className={`mt-3 border rounded overflow-hidden ${
-                  isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                }`}>
-                  <div 
-                    ref={mapRef}
-                    className={isDarkMode ? 'w-full h-[400px] bg-gray-800' : 'w-full h-[400px] bg-gray-100'}
-                  />
-                  <div className={`px-3 py-2 text-xs border-t ${
-                    isDarkMode
-                      ? 'bg-gray-800 text-gray-400 border-gray-700'
-                      : 'bg-gray-100 text-gray-600 border-gray-300'
-                  }`}>
-                    Click on the map to set coordinates
-                  </div>
-                </div>
-              )}
-            </div>
+              </View>
 
-            <ImageUploadField label="Image" field="image" required error={errors.image} />
-
-            <ImageUploadField label="Image 2" field="image_2" required error={errors.image_2} />
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Modified By</label>
-              <input
-                type="text"
-                value={formData.modified_by}
-                readOnly
-                className={`w-full px-3 py-2 rounded border cursor-not-allowed ${
-                  isDarkMode
-                    ? 'bg-gray-800 text-gray-400 border-gray-700'
-                    : 'bg-gray-100 text-gray-600 border-gray-300'
-                }`}
+              <DropdownField
+                label="Region"
+                value={formData.region}
+                options={regions.map(r => ({ label: r.name, value: r.name }))}
+                onChange={handleRegionChange}
+                placeholder="Select Region"
               />
-            </div>
-          </div>
-        </div>
 
-        <div className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${
-          isDarkMode
-            ? 'border-gray-800 bg-gray-800'
-            : 'border-gray-300 bg-gray-100'
-        }`}>
-          <button
-            onClick={handleClose}
-            className={`px-4 py-2 border rounded ${
-              isDarkMode
-                ? 'text-orange-400 hover:text-orange-300 border-orange-600 hover:border-orange-500 bg-transparent'
-                : 'text-orange-600 hover:text-orange-700 border-orange-600 hover:border-orange-700 bg-transparent'
-            }`}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-4 py-2 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent && !loading) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-            }}
-          >
-            {loading ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
+              <DropdownField
+                label="City"
+                value={formData.city}
+                options={filteredCities.map(c => ({ label: c.name, value: c.name }))}
+                onChange={handleCityChange}
+                placeholder={formData.region ? 'Select City' : 'All'}
+                disabled={!formData.region}
+              />
+
+              <DropdownField
+                label="Barangay"
+                value={formData.barangay}
+                options={filteredBarangays.map(b => ({ label: b.barangay, value: b.barangay }))}
+                onChange={handleBarangayChange}
+                placeholder={formData.city ? 'Select Barangay' : 'All'}
+                disabled={!formData.city}
+              />
+
+              <DropdownField
+                label="Location"
+                value={formData.location}
+                options={filteredLocations.map(l => ({ label: l.location_name, value: l.location_name }))}
+                onChange={(value) => setFormData({ ...formData, location: value })}
+                placeholder={formData.barangay ? 'Select Location' : 'All'}
+                disabled={!formData.barangay}
+              />
+
+              <DropdownField
+                label="LCP"
+                value={formData.lcp_name}
+                options={lcpList.map(lcp => ({ label: lcp.lcp_name, value: lcp.lcp_name }))}
+                onChange={(value) => setFormData({ ...formData, lcp_name: value })}
+                placeholder="Select LCP"
+                required
+                error={errors.lcp_name}
+              />
+
+              <DropdownField
+                label="NAP"
+                value={formData.nap_name}
+                options={napList.map(nap => ({ label: nap.nap_name, value: nap.nap_name }))}
+                onChange={(value) => setFormData({ ...formData, nap_name: value })}
+                placeholder="Select NAP"
+                required
+                error={errors.nap_name}
+              />
+
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                  PORT TOTAL<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    onPress={() => setFormData({ ...formData, port_total: '8' })}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '8' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '8' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                  >
+                    <Text style={{ textAlign: 'center', color: formData.port_total === '8' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>8</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setFormData({ ...formData, port_total: '16' })}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '16' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '16' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                  >
+                    <Text style={{ textAlign: 'center', color: formData.port_total === '16' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>16</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setFormData({ ...formData, port_total: '32' })}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '32' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '32' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                  >
+                    <Text style={{ textAlign: 'center', color: formData.port_total === '32' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>32</Text>
+                  </Pressable>
+                </View>
+                {errors.port_total && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.port_total}</Text>}
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                  LCPNAP<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  value={formData.lcpnap_name}
+                  editable={false}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#374151' : '#f3f4f6', color: isDarkMode ? '#d1d5db' : '#6b7280' }}
+                  placeholder="Auto-generated from LCP and NAP"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                />
+                {errors.lcpnap_name && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.lcpnap_name}</Text>}
+                <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Format: LCP-XXX NAP-XXX</Text>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                  Coordinates<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <View style={{ position: 'relative' }}>
+                  <TextInput
+                    value={formData.coordinates}
+                    onChangeText={(value) => setFormData({ ...formData, coordinates: value })}
+                    placeholder="14.466580, 121.201807"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, paddingRight: 40, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                  <Pressable
+                    onPress={handleToggleMap}
+                    style={{ position: 'absolute', right: 12, top: 8 }}
+                  >
+                    <MapPin width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  </Pressable>
+                </View>
+                {errors.coordinates && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.coordinates}</Text>}
+
+                {showCoordinatesMap && (
+                  <View style={{ marginTop: 12, borderWidth: 1, borderRadius: 4, overflow: 'hidden', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}>
+                    <View style={{ width: '100%', height: 400, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Map Not Available on Mobile</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderTopColor: isDarkMode ? '#374151' : '#d1d5db' }}>
+                      <Text style={{ fontSize: 12, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Click on the map to set coordinates</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <ImageUploadField label="Image" field="image" required error={errors.image} />
+
+              <ImageUploadField label="Image 2" field="image_2" required error={errors.image_2} />
+
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>Modified By</Text>
+                <TextInput
+                  value={formData.modified_by}
+                  editable={false}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', color: isDarkMode ? '#9ca3af' : '#6b7280' }}
+                />
+              </View>
+            </View>
+          </ScrollView>
+
+
+        </View>
+      </Modal>
     </>
   );
 };

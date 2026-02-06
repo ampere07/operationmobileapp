@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Download, FileText, CreditCard, Clock, Activity, CheckCircle, AlertCircle, File } from 'lucide-react';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking } from 'react-native';
+import { Download, FileText, CreditCard, Clock, Activity, CheckCircle, AlertCircle, File } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { soaService } from '../services/soaService';
 import { invoiceService } from '../services/invoiceService';
 import { paymentPortalLogsService } from '../services/paymentPortalLogsService';
@@ -8,11 +10,10 @@ import { getCustomerDetail } from '../services/customerDetailService';
 import { paymentService, PendingPayment } from '../services/paymentService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
-// Interfaces
 interface SOARecord {
     id: number;
     statement_date?: string;
-    statement_no?: string; // Derived or mapped
+    statement_no?: string;
     print_link?: string;
     total_amount_due?: number;
 }
@@ -21,7 +22,7 @@ interface InvoiceRecord {
     id: number;
     invoice_date?: string;
     invoice_balance?: number;
-    print_link?: string; // Might not exist yet
+    print_link?: string;
 }
 
 interface PaymentRecord {
@@ -48,7 +49,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const [displayName, setDisplayName] = useState('');
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-    // Payment State (Mirrored from Dashboard)
     const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
     const [showPaymentVerifyModal, setShowPaymentVerifyModal] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState(0);
@@ -61,13 +61,12 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const storedUser = localStorage.getItem('authData');
+                const storedUser = await AsyncStorage.getItem('authData');
                 if (storedUser) {
                     const parsedUser = JSON.parse(storedUser);
                     setDisplayName(parsedUser.full_name || 'Customer');
 
-                    // 1. Get Detailed Customer Info (to get IDs and Real Balance)
-                    if (parsedUser.username) { // Username is AccountNo
+                    if (parsedUser.username) {
                         const detail = await getCustomerDetail(parsedUser.username);
 
                         if (detail && detail.billingAccount) {
@@ -77,7 +76,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                             const billingId = detail.billingAccount.id;
                             const accNo = detail.billingAccount.accountNo;
 
-                            // 2. Fetch Data in Parallel
                             const [soaRes, invoiceRes, logsRes, txRes] = await Promise.all([
                                 soaService.getStatementsByAccount(billingId).catch(e => []),
                                 invoiceService.getInvoicesByAccount(billingId).catch(e => []),
@@ -85,13 +83,9 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                                 transactionService.getAllTransactions().catch(e => ({ success: false, data: [] }))
                             ]);
 
-                            // Process SOA
                             setSoaRecords(soaRes || []);
-
-                            // Process Invoices
                             setInvoiceRecords(invoiceRes || []);
 
-                            // Process Payments (Merge & Sort)
                             const formattedLogs: PaymentRecord[] = Array.isArray(logsRes) ? logsRes.map((l: any) => ({
                                 id: `log-${l.id}`,
                                 date: l.date_time,
@@ -148,7 +142,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         }
     }, [initialTab]);
 
-    // --- Payment Handlers (Identical to DashboardCustomer) ---
     const handlePayNow = async () => {
         setErrorMessage('');
         setIsPaymentProcessing(true);
@@ -205,7 +198,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
 
     const handleOpenPaymentLink = () => {
         if (paymentLinkData?.paymentUrl) {
-            window.open(paymentLinkData.paymentUrl, '_blank');
+            Linking.openURL(paymentLinkData.paymentUrl);
             setShowPaymentLinkModal(false);
             setPaymentLinkData(null);
         }
@@ -213,7 +206,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const handleCancelPaymentLink = () => { setShowPaymentLinkModal(false); setPaymentLinkData(null); };
     const handleResumePendingPayment = () => {
         if (pendingPayment?.payment_url) {
-            window.open(pendingPayment.payment_url, '_blank');
+            Linking.openURL(pendingPayment.payment_url);
             setShowPendingPaymentModal(false);
             setPendingPayment(null);
         }
@@ -221,7 +214,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const handleCancelPendingPayment = () => { setShowPendingPaymentModal(false); setPendingPayment(null); };
 
     const handleDownloadPDF = (url?: string) => {
-        if (url) window.open(url, '_blank');
+        if (url) Linking.openURL(url);
     };
 
     const formatDate = (dateStr?: string) => {
@@ -233,315 +226,303 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         return `₱ ${(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     };
 
-    if (loading) return <div className="p-8 flex justify-center bg-gray-50 min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div></div>;
+    if (loading) return (
+        <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
+            <ActivityIndicator size="large" color="#111827" />
+        </View>
+    );
 
     return (
-        <div className="p-6 md:p-12 min-h-screen bg-gray-50 font-sans">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Billing History</h1>
-                    <p className="text-gray-500 mt-1">View your statements and payment records.</p>
-                </div>
-                <button
-                    onClick={handlePayNow}
-                    disabled={isPaymentProcessing}
-                    className="flex items-center space-x-2 text-white px-6 py-3 rounded-full font-bold transition disabled:opacity-50"
-                    style={{ backgroundColor: colorPalette?.primary || '#0f172a' }}
-                >
-                    <CreditCard className="w-5 h-5" />
-                    <span>PAY NOW</span>
-                </button>
-            </div>
+        <View style={{ padding: 24, minHeight: '100%', backgroundColor: '#f9fafb', fontFamily: 'sans-serif' }}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, gap: 16 }}>
+                    <View>
+                        <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#111827' }}>Billing History</Text>
+                        <Text style={{ color: '#6b7280', marginTop: 4 }}>View your statements and payment records.</Text>
+                    </View>
+                    <Pressable
+                        onPress={handlePayNow}
+                        disabled={isPaymentProcessing}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colorPalette?.primary || '#0f172a', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, fontWeight: 'bold', opacity: isPaymentProcessing ? 0.5 : 1 }}
+                    >
+                        <CreditCard width={20} height={20} color="#ffffff" />
+                        <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>PAY NOW</Text>
+                    </Pressable>
+                </View>
 
-            {/* Tabs */}
-            <div className="bg-white rounded-t-2xl border-b border-gray-200 px-6 pt-2">
-                <div className="flex space-x-8">
-                    <button
-                        onClick={() => setActiveTab('soa')}
-                        className={`pb-4 px-2 text-sm font-bold flex items-center space-x-2 border-b-2 transition ${activeTab === 'soa' ? 'text-slate-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                        style={{ borderBottomColor: activeTab === 'soa' ? (colorPalette?.primary || '#0f172a') : 'transparent' }}
-                    >
-                        <FileText className="w-4 h-4" />
-                        <span>Statement of Account</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('invoices')}
-                        className={`pb-4 px-2 text-sm font-bold flex items-center space-x-2 border-b-2 transition ${activeTab === 'invoices' ? 'text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                        style={{ borderBottomColor: activeTab === 'invoices' ? (colorPalette?.primary || '#2563eb') : 'transparent' }}
-                    >
-                        <File className="w-4 h-4" />
-                        <span>Invoices</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('payments')}
-                        className={`pb-4 px-2 text-sm font-bold flex items-center space-x-2 border-b-2 transition ${activeTab === 'payments' ? 'text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                        style={{ borderBottomColor: activeTab === 'payments' ? (colorPalette?.primary || '#2563eb') : 'transparent' }}
-                    >
-                        <Clock className="w-4 h-4" />
-                        <span>Payment History</span>
-                    </button>
-                </div>
-            </div>
+                <View style={{ backgroundColor: '#ffffff', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingHorizontal: 24, paddingTop: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 32 }}>
+                        <Pressable
+                            onPress={() => setActiveTab('soa')}
+                            style={{ paddingBottom: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 2, borderBottomColor: activeTab === 'soa' ? (colorPalette?.primary || '#0f172a') : 'transparent' }}
+                        >
+                            <FileText width={16} height={16} color={activeTab === 'soa' ? '#0f172a' : '#9ca3af'} />
+                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: activeTab === 'soa' ? '#0f172a' : '#9ca3af' }}>Statement of Account</Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={() => setActiveTab('invoices')}
+                            style={{ paddingBottom: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 2, borderBottomColor: activeTab === 'invoices' ? (colorPalette?.primary || '#2563eb') : 'transparent' }}
+                        >
+                            <File width={16} height={16} color={activeTab === 'invoices' ? '#2563eb' : '#9ca3af'} />
+                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: activeTab === 'invoices' ? '#2563eb' : '#9ca3af' }}>Invoices</Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={() => setActiveTab('payments')}
+                            style={{ paddingBottom: 16, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 2, borderBottomColor: activeTab === 'payments' ? (colorPalette?.primary || '#2563eb') : 'transparent' }}
+                        >
+                            <Clock width={16} height={16} color={activeTab === 'payments' ? '#2563eb' : '#9ca3af'} />
+                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: activeTab === 'payments' ? '#2563eb' : '#9ca3af' }}>Payment History</Text>
+                        </Pressable>
+                    </View>
+                </View>
 
-            {/* Content Content */}
-            <div className="bg-white rounded-b-2xl shadow-sm border border-gray-100 border-t-0 overflow-hidden min-h-[400px]">
-                {activeTab === 'soa' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-gray-100">
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Statement Date</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Statement No</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Amount Due</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                <View style={{ backgroundColor: '#ffffff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, borderWidth: 1, borderColor: '#f3f4f6', borderTopWidth: 0, overflow: 'hidden', minHeight: 400 }}>
+                    {activeTab === 'soa' && (
+                        <View style={{ overflow: 'scroll' }}>
+                            <View style={{ width: '100%' }}>
+                                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Statement Date</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Statement No</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Amount Due</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', textAlign: 'right', flex: 1 }}>Action</Text>
+                                </View>
                                 {soaRecords.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-8 text-center text-gray-500">No statements found.</td></tr>
+                                    <View style={{ padding: 32, alignItems: 'center' }}>
+                                        <Text style={{ color: '#6b7280' }}>No statements found.</Text>
+                                    </View>
                                 ) : (
                                     soaRecords.map((record) => (
-                                        <tr key={record.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
-                                            <td className="p-6 text-sm text-gray-600">{formatDate(record.statement_date)}</td>
-                                            <td className="p-6 text-sm font-bold text-gray-900">{record.id}</td>
-                                            <td className="p-6 text-sm font-bold text-gray-900">{formatCurrency(record.total_amount_due)}</td>
-                                            <td className="p-6 text-right">
-                                                <button
-                                                    onClick={() => handleDownloadPDF(record.print_link)}
+                                        <View key={record.id} style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f9fafb' }}>
+                                            <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{formatDate(record.statement_date)}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, fontWeight: 'bold', color: '#111827', flex: 1 }}>{record.id}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, fontWeight: 'bold', color: '#111827', flex: 1 }}>{formatCurrency(record.total_amount_due)}</Text>
+                                            <View style={{ padding: 24, alignItems: 'flex-end', flex: 1 }}>
+                                                <Pressable
+                                                    onPress={() => handleDownloadPDF(record.print_link)}
                                                     disabled={!record.print_link}
-                                                    className="inline-flex items-center space-x-2 px-4 py-2 border border-red-500 text-red-500 rounded-full text-xs font-bold hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
+                                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: record.print_link ? '#ef4444' : '#d1d5db', borderRadius: 24, opacity: record.print_link ? 1 : 0.5 }}
                                                 >
-                                                    <Download className="w-3 h-3" />
-                                                    <span>Download PDF</span>
-                                                </button>
-                                            </td>
-                                        </tr>
+                                                    <Download width={12} height={12} color={record.print_link ? '#ef4444' : '#9ca3af'} />
+                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: record.print_link ? '#ef4444' : '#9ca3af' }}>Download PDF</Text>
+                                                </Pressable>
+                                            </View>
+                                        </View>
                                     ))
                                 )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                            </View>
+                        </View>
+                    )}
 
-                {activeTab === 'invoices' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-gray-100">
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Invoice Date</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Invoice Ref</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Amount</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                    {activeTab === 'invoices' && (
+                        <View style={{ overflow: 'scroll' }}>
+                            <View style={{ width: '100%' }}>
+                                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Invoice Date</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Invoice Ref</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Amount</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', textAlign: 'right', flex: 1 }}>Action</Text>
+                                </View>
                                 {invoiceRecords.length === 0 ? (
-                                    <tr><td colSpan={4} className="p-8 text-center text-gray-500">No invoices found.</td></tr>
+                                    <View style={{ padding: 32, alignItems: 'center' }}>
+                                        <Text style={{ color: '#6b7280' }}>No invoices found.</Text>
+                                    </View>
                                 ) : (
                                     invoiceRecords.map((record) => (
-                                        <tr key={record.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
-                                            <td className="p-6 text-sm text-gray-600">{formatDate(record.invoice_date)}</td>
-                                            <td className="p-6 text-sm font-bold text-gray-900">{record.id}</td>
-                                            <td className="p-6 text-sm font-bold text-gray-900">{formatCurrency(record.invoice_balance)}</td>
-                                            <td className="p-6 text-right">
-                                                <button
-                                                    onClick={() => handleDownloadPDF(record.print_link)}
+                                        <View key={record.id} style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f9fafb' }}>
+                                            <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{formatDate(record.invoice_date)}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, fontWeight: 'bold', color: '#111827', flex: 1 }}>{record.id}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, fontWeight: 'bold', color: '#111827', flex: 1 }}>{formatCurrency(record.invoice_balance)}</Text>
+                                            <View style={{ padding: 24, alignItems: 'flex-end', flex: 1 }}>
+                                                <Pressable
+                                                    onPress={() => handleDownloadPDF(record.print_link)}
                                                     disabled={!record.print_link}
-                                                    className="inline-flex items-center space-x-2 px-4 py-2 border border-red-500 text-red-500 rounded-full text-xs font-bold hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
+                                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: record.print_link ? '#ef4444' : '#d1d5db', borderRadius: 24, opacity: record.print_link ? 1 : 0.5 }}
                                                 >
-                                                    <Download className="w-3 h-3" />
-                                                    <span>Download PDF</span>
-                                                </button>
-                                            </td>
-                                        </tr>
+                                                    <Download width={12} height={12} color={record.print_link ? '#ef4444' : '#9ca3af'} />
+                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: record.print_link ? '#ef4444' : '#9ca3af' }}>Download PDF</Text>
+                                                </Pressable>
+                                            </View>
+                                        </View>
                                     ))
                                 )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                            </View>
+                        </View>
+                    )}
 
-                {activeTab === 'payments' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-gray-100">
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Date</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Reference</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Source</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase">Status</th>
-                                    <th className="p-6 text-xs font-bold text-gray-500 uppercase text-right">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                    {activeTab === 'payments' && (
+                        <View style={{ overflow: 'scroll' }}>
+                            <View style={{ width: '100%' }}>
+                                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Date</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Reference</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Source</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', flex: 1 }}>Status</Text>
+                                    <Text style={{ padding: 24, fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', textAlign: 'right', flex: 1 }}>Amount</Text>
+                                </View>
                                 {paymentRecords.length === 0 ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">No payment history found.</td></tr>
+                                    <View style={{ padding: 32, alignItems: 'center' }}>
+                                        <Text style={{ color: '#6b7280' }}>No payment history found.</Text>
+                                    </View>
                                 ) : (
                                     paymentRecords.map((record) => (
-                                        <tr key={record.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
-                                            <td className="p-6 text-sm text-gray-600">{formatDate(record.date)}</td>
-                                            <td className="p-6 text-sm font-mono text-gray-500">{record.reference}</td>
-                                            <td className="p-6 text-sm text-gray-600">{record.source}</td>
-                                            <td className="p-6 text-sm">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${record.status === 'Completed' || record.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                                    }`}>
-                                                    {record.status || 'Posted'}
-                                                </span>
-                                            </td>
-                                            <td className="p-6 text-sm font-bold text-green-600 text-right">+{formatCurrency(record.amount)}</td>
-                                        </tr>
+                                        <View key={record.id} style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f9fafb' }}>
+                                            <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{formatDate(record.date)}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, fontFamily: 'monospace', color: '#6b7280', flex: 1 }}>{record.reference}</Text>
+                                            <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{record.source}</Text>
+                                            <View style={{ padding: 24, fontSize: 14, flex: 1 }}>
+                                                <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, backgroundColor: (record.status === 'Completed' || record.status === 'PAID') ? '#dcfce7' : '#f3f4f6', alignSelf: 'flex-start' }}>
+                                                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: (record.status === 'Completed' || record.status === 'PAID') ? '#15803d' : '#374151' }}>
+                                                        {record.status || 'Posted'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <Text style={{ padding: 24, fontSize: 14, fontWeight: 'bold', color: '#16a34a', textAlign: 'right', flex: 1 }}>+{formatCurrency(record.amount)}</Text>
+                                        </View>
                                     ))
                                 )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                            </View>
+                        </View>
+                    )}
+                </View>
+            </ScrollView>
 
-            {/* PAYMENT VERIFY MODAL */}
             {showPaymentVerifyModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-                        <div className="p-6 border-b border-gray-200">
-                            <h3 className="text-xl font-bold text-gray-900 text-center">Confirm Payment</h3>
-                        </div>
-                        <div className="p-6">
-                            <div className="bg-gray-100 p-4 rounded mb-4">
-                                <div className="flex justify-between mb-2 text-gray-700">
-                                    <span>Account:</span>
-                                    <span className="font-bold">{displayName}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-700">
-                                    <span>Currency Balance:</span>
-                                    <span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%' }}>
+                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', textAlign: 'center' }}>Confirm Payment</Text>
+                        </View>
+                        <View style={{ padding: 24 }}>
+                            <View style={{ backgroundColor: '#f3f4f6', padding: 16, borderRadius: 4, marginBottom: 16 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <Text style={{ color: '#374151' }}>Account:</Text>
+                                    <Text style={{ fontWeight: 'bold', color: '#374151' }}>{displayName}</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: '#374151' }}>Currency Balance:</Text>
+                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#16a34a' }}>
                                         {formatCurrency(balance)}
-                                    </span>
-                                </div>
-                            </div>
+                                    </Text>
+                                </View>
+                            </View>
 
                             {errorMessage && (
-                                <div className="bg-red-50 p-3 rounded mb-4 border border-red-200">
-                                    <p className="text-red-500 text-sm text-center">{errorMessage}</p>
-                                </div>
+                                <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 4, marginBottom: 16, borderWidth: 1, borderColor: '#fecaca' }}>
+                                    <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
+                                </View>
                             )}
 
-                            <div className="mb-4">
-                                <label className="block font-bold mb-2 text-gray-700">Payment Amount</label>
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={paymentAmount || ''}
-                                    onChange={(e) => {
-                                        const value = e.target.value;
+                            <View style={{ marginBottom: 16 }}>
+                                <Text style={{ fontWeight: 'bold', marginBottom: 8, color: '#374151' }}>Payment Amount</Text>
+                                <TextInput
+                                    keyboardType="decimal-pad"
+                                    value={paymentAmount ? paymentAmount.toString() : ''}
+                                    onChangeText={(value) => {
                                         if (value === '' || /^\d*\.?\d*$/.test(value)) {
                                             setPaymentAmount(value === '' ? 0 : parseFloat(value) || 0);
                                         }
                                     }}
                                     placeholder="0.00"
-                                    className="w-full px-4 py-3 rounded text-lg font-bold border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontSize: 18, fontWeight: 'bold', borderWidth: 1, borderColor: '#d1d5db', color: '#111827' }}
                                 />
-                                <div className="text-sm text-right mt-1 text-gray-500">
-                                    {balance > 0 ? (
-                                        <span>Outstanding: {formatCurrency(balance)}</span>
-                                    ) : (
-                                        <span>Minimum: ₱1.00</span>
-                                    )}
-                                </div>
-                            </div>
+                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 }}>
+                                    <Text style={{ fontSize: 14, color: '#6b7280' }}>
+                                        {balance > 0 ? (
+                                            `Outstanding: ${formatCurrency(balance)}`
+                                        ) : (
+                                            'Minimum: ₱1.00'
+                                        )}
+                                    </Text>
+                                </View>
+                            </View>
 
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={handleCloseVerifyModal}
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <Pressable
+                                    onPress={handleCloseVerifyModal}
                                     disabled={isPaymentProcessing}
-                                    className="flex-1 px-4 py-3 rounded font-bold bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors disabled:opacity-50"
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#e5e7eb', opacity: isPaymentProcessing ? 0.5 : 1 }}
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleProceedToCheckout}
+                                    <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleProceedToCheckout}
                                     disabled={isPaymentProcessing || paymentAmount < 1}
-                                    className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors disabled:opacity-50"
-                                    style={{ backgroundColor: colorPalette?.primary || '#0f172a' }}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: colorPalette?.primary || '#0f172a', opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1 }}
                                 >
-                                    {isPaymentProcessing ? 'Processing...' : 'Proceed to Pay'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
+                                        {isPaymentProcessing ? 'Processing...' : 'Proceed to Pay'}
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </View>
             )}
 
-            {/* PAYMENT LINK MODAL */}
             {showPaymentLinkModal && paymentLinkData && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full text-center">
-                        <div className="p-6 border-b border-gray-200">
-                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-                                <CheckCircle className="h-6 w-6 text-green-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">Payment Link Created!</h3>
-                            <p className="text-gray-500 mt-2">Reference: {paymentLinkData.referenceNo}</p>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-600 mb-6">
+                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
+                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                            <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#dcfce7', marginBottom: 16 }}>
+                                <CheckCircle width={24} height={24} color="#16a34a" />
+                            </View>
+                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Payment Link Created!</Text>
+                            <Text style={{ color: '#6b7280', marginTop: 8 }}>Reference: {paymentLinkData.referenceNo}</Text>
+                        </View>
+                        <View style={{ padding: 24 }}>
+                            <Text style={{ color: '#4b5563', marginBottom: 24 }}>
                                 Please click the button below to complete your payment of
-                                <span className="font-bold text-gray-900"> {formatCurrency(paymentLinkData.amount)}</span>
-                            </p>
-                            <button
-                                onClick={handleOpenPaymentLink}
-                                className="w-full px-4 py-3 rounded font-bold bg-green-600 text-white hover:bg-green-700 transition-colors mb-3"
+                                <Text style={{ fontWeight: 'bold', color: '#111827' }}> {formatCurrency(paymentLinkData.amount)}</Text>
+                            </Text>
+                            <Pressable
+                                onPress={handleOpenPaymentLink}
+                                style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#16a34a', marginBottom: 12 }}
                             >
-                                Open Payment Portal
-                            </button>
-                            <button
-                                onClick={handleCancelPaymentLink}
-                                className="text-gray-500 underline text-sm hover:text-gray-700"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                                <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Open Payment Portal</Text>
+                            </Pressable>
+                            <Pressable onPress={handleCancelPaymentLink}>
+                                <Text style={{ color: '#6b7280', textDecorationLine: 'underline', fontSize: 14, textAlign: 'center' }}>Close</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
             )}
 
-            {/* PENDING PAYMENT MODAL */}
             {showPendingPaymentModal && pendingPayment && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full text-center">
-                        <div className="p-6 border-b border-gray-200">
-                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 mb-4">
-                                <Activity className="h-6 w-6 text-yellow-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">Pending Payment Found</h3>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-600 mb-6">
+                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
+                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                            <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#fef3c7', marginBottom: 16 }}>
+                                <Activity width={24} height={24} color="#ca8a04" />
+                            </View>
+                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Pending Payment Found</Text>
+                        </View>
+                        <View style={{ padding: 24 }}>
+                            <Text style={{ color: '#4b5563', marginBottom: 24 }}>
                                 You have a pending payment of
-                                <span className="font-bold text-gray-900"> {formatCurrency(pendingPayment.amount)}</span>.
+                                <Text style={{ fontWeight: 'bold', color: '#111827' }}> {formatCurrency(pendingPayment.amount)}</Text>.
                                 Would you like to complete it?
-                            </p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={handleCancelPendingPayment}
-                                    className="flex-1 px-4 py-3 rounded font-bold bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors"
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                                <Pressable
+                                    onPress={handleCancelPendingPayment}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#e5e7eb' }}
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleResumePendingPayment}
-                                    className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors"
-                                    style={{ backgroundColor: colorPalette?.primary || '#0f172a' }}
+                                    <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleResumePendingPayment}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: colorPalette?.primary || '#0f172a' }}
                                 >
-                                    Resume Payment
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Resume Payment</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </View>
             )}
 
-        </div>
+        </View>
     );
 };
 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ChevronDown, Minus, Plus, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Image } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { X, Calendar, ChevronDown, Minus, Plus, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react-native';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { updateApplication } from '../services/applicationService';
@@ -17,6 +19,7 @@ import { locationDetailService, LocationDetail } from '../services/locationDetai
 import apiClient from '../config/api';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Region {
   id: number;
@@ -90,23 +93,13 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    // WEB-ONLY: MutationObserver removed for RN
   }, []);
 
   useEffect(() => {
@@ -121,9 +114,9 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
     fetchColorPalette();
   }, []);
 
-  const getCurrentUser = (): UserData | null => {
+  const getCurrentUser = async (): Promise<UserData | null> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       if (authData) {
         return JSON.parse(authData);
       }
@@ -133,8 +126,15 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
     return null;
   };
 
-  const currentUser = getCurrentUser();
-  const currentUserEmail = currentUser?.email || 'unknown@ampere.com';
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('unknown@ampere.com');
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const user = await getCurrentUser();
+      setCurrentUserEmail(user?.email || 'unknown@ampere.com');
+    };
+    loadCurrentUser();
+  }, []);
 
   const [formData, setFormData] = useState<JobOrderDoneFormData>({
     referredBy: '',
@@ -202,6 +202,8 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
   const [vlans, setVlans] = useState<VLAN[]>([]);
 
   const [usageTypes, setUsageTypes] = useState<UsageType[]>([]);
+  const [lcpnapSearch, setLcpnapSearch] = useState('');
+  const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [allCities, setAllCities] = useState<City[]>([]);
@@ -266,68 +268,68 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
     const isBlobUrl = imageUrl?.startsWith('blob:');
 
     return (
-      <div>
-        <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          } mb-2`}>{label}</label>
-        <div className={`relative w-full h-48 ${isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-white border-gray-300 hover:bg-gray-50'
-          } border rounded overflow-hidden cursor-pointer`}>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                onUpload(e.target.files[0]);
-                setImageLoadError(false);
-              }
-            }}
-            className="absolute inset-0 opacity-0 cursor-pointer z-10"
-          />
+      <View>
+        <Text className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+          {label}
+        </Text>
+        <Pressable
+          className={`relative w-full h-48 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} border rounded overflow-hidden`}
+          onPress={() => {
+            // WEB-ONLY: File input removed for RN - needs react-native-image-picker
+            console.log('Image upload pressed - implement with react-native-image-picker');
+          }}
+        >
           {imageUrl ? (
-            <div className="relative w-full h-full">
+            <View className="relative w-full h-full">
               {isBlobUrl || (!isGDrive && !imageLoadError) ? (
-                <img
-                  src={imageUrl}
-                  alt={label}
-                  className="w-full h-full object-contain"
+                <Image
+                  source={{ uri: imageUrl }}
+                  className="w-full h-full"
+                  resizeMode="contain"
                   onError={() => setImageLoadError(true)}
                 />
               ) : (
-                <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  <Camera size={32} />
-                  <span className="text-sm mt-2 text-center px-4">Image stored in Google Drive</span>
+                <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <Text className={`text-sm mt-2 text-center px-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Image stored in Google Drive
+                  </Text>
                   {imageUrl && (
-                    <a
-                      href={imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-orange-500 text-xs mt-2 hover:underline z-20"
-                      onClick={(e) => e.stopPropagation()}
+                    <Text
+                      className="text-orange-500 text-xs mt-2"
+                      onPress={(e) => {
+                        // WEB-ONLY: href replaced - implement Linking.openURL
+                        console.log('Open link:', imageUrl);
+                      }}
                     >
                       View in Drive
-                    </a>
+                    </Text>
                   )}
-                </div>
+                </View>
               )}
-              <div className="absolute bottom-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs flex items-center pointer-events-none">
-                <Camera className="mr-1" size={14} />Uploaded
-              </div>
-            </div>
+              <View className="absolute bottom-2 right-2 bg-green-500 px-2 py-1 rounded flex-row items-center">
+                <Camera color="white" size={14} />
+                <Text className="text-white text-xs ml-1">Uploaded</Text>
+              </View>
+            </View>
           ) : (
-            <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
-              <Camera size={32} />
-              <span className="text-sm mt-2">Click to upload</span>
-            </div>
+            <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              <Text className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                Click to upload
+              </Text>
+            </View>
           )}
-        </div>
+        </Pressable>
         {error && (
-          <div className="flex items-center mt-1">
-            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-            <p className="text-orange-500 text-xs">This entry is required</p>
-          </div>
+          <View className="flex flex-row items-center mt-1">
+            <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+              <Text className="text-white text-xs">!</Text>
+            </View>
+            <Text className="text-orange-500 text-xs">This entry is required</Text>
+          </View>
         )}
-      </div>
+      </View>
     );
   };
 
@@ -1458,57 +1460,48 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
 
   return (
     <>
-      {showLoadingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'
-            } rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px]`}>
-            <Loader2 className="w-20 h-20 text-orange-500 animate-spin" />
-            <div className="text-center">
-              <p className={`${isDarkMode ? 'text-white' : 'text-gray-900'
-                } text-4xl font-bold`}>{loadingPercentage}%</p>
-            </div>
-          </div>
-        </div>
-      )}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]">
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'
-            } rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col`}>
-            <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              } flex items-center justify-between`}>
-              <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{modalContent.title}</h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className={`${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  } transition-colors`}
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="space-y-3">
+      <Modal visible={showLoadingModal} transparent animationType="fade">
+        <View className="flex-1 bg-black/70 items-center justify-center">
+          <View className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg p-8 flex flex-col items-center min-w-[320px]`}>
+            <ActivityIndicator size="large" color="#F97316" />
+            <View className="mt-6">
+              <Text className={`${isDarkMode ? 'text-white' : 'text-gray-900'} text-4xl font-bold text-center`}>
+                {loadingPercentage}%
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+
+      <Modal visible={showModal} transparent animationType="fade">
+        <View className="flex-1 bg-black/75 items-center justify-center">
+          <View className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col`}>
+            <View className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex flex-row items-center justify-between`}>
+              <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                {modalContent.title}
+              </Text>
+              <Pressable onPress={() => setShowModal(false)}>
+                <X size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+            <ScrollView className="px-6 py-4">
+              <View>
                 {modalContent.messages.map((message, index) => (
-                  <div
+                  <View
                     key={index}
-                    className={`flex items-start gap-3 p-3 rounded-lg ${message.type === 'success'
+                    className={`flex flex-row items-start p-3 rounded-lg mb-3 ${message.type === 'success'
                       ? isDarkMode ? 'bg-green-900/30 border border-green-700' : 'bg-green-100 border border-green-300'
                       : message.type === 'warning'
                         ? isDarkMode ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-yellow-100 border border-yellow-300'
                         : isDarkMode ? 'bg-red-900/30 border border-red-700' : 'bg-red-100 border border-red-300'
                       }`}
                   >
-                    {message.type === 'success' && (
-                      <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    {message.type === 'warning' && (
-                      <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    {message.type === 'error' && (
-                      <XCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    <p
-                      className={`text-sm ${message.type === 'success'
+                    {message.type === 'success' && <CheckCircle color="#10B981" size={20} />}
+                    {message.type === 'warning' && <AlertCircle color="#F59E0B" size={20} />}
+                    {message.type === 'error' && <XCircle color="#EF4444" size={20} />}
+                    <Text
+                      className={`text-sm flex-1 ml-3 ${message.type === 'success'
                         ? isDarkMode ? 'text-green-200' : 'text-green-800'
                         : message.type === 'warning'
                           ? isDarkMode ? 'text-yellow-200' : 'text-yellow-800'
@@ -1516,769 +1509,868 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
                         }`}
                     >
                       {message.text}
-                    </p>
-                  </div>
+                    </Text>
+                  </View>
                 ))}
-              </div>
-            </div>
-            <div className={`px-6 py-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              } flex justify-end`}>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-        <div className={`h-full w-full max-w-2xl ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-          } shadow-2xl overflow-hidden flex flex-col`}>
-          <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            } px-6 py-4 flex items-center justify-between border-b`}>
-            <div className="flex items-center space-x-3">
+              </View>
+            </ScrollView>
+            <View className={`px-6 py-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} flex flex-row justify-end`}>
+              <Pressable className="px-4 py-2 bg-orange-600 rounded" onPress={() => setShowModal(false)}>
+                <Text className="text-white">Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {isOpen && (
+        <View className="absolute inset-0 bg-black/50 flex items-center justify-end">
+          <View className={`h-full w-full max-w-2xl ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} shadow-2xl overflow-hidden flex flex-col`}>
+            <View className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'} px-6 py-4 flex flex-row items-center justify-between border-b`}>
+              <View className="flex flex-row items-center">
+                <Text className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {`${formData.firstName} ${formData.middleInitial} ${formData.lastName}`}
+                </Text>
+              </View>
+              <View className="flex flex-row items-center space-x-3">
+                <Pressable onPress={onClose} className="px-4 py-2 border border-orange-600 rounded">
+                  <Text className="text-orange-600 text-sm">Cancel</Text>
+                </Pressable>
+                <Pressable onPress={handleSave} disabled={loading} className={`px-4 py-2 bg-orange-600 rounded ${loading ? 'opacity-50' : ''}`}>
+                  <Text className="text-white text-sm">{loading ? 'Saving...' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </View>
 
-              <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                {`${formData.firstName} ${formData.middleInitial} ${formData.lastName}`}
-              </h2>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button onClick={onClose} className={`px-4 py-2 border border-orange-600 text-orange-600 hover:bg-orange-600 hover:text-white rounded text-sm`}>
-                Cancel
-              </button>
-              <button onClick={handleSave} disabled={loading} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded text-sm">
-                {loading ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
+            <ScrollView className="flex-1 p-6">
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Referred By
+                </Text>
+                <TextInput
+                  value={formData.referredBy}
+                  onChangeText={(text) => handleInputChange('referredBy', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded`}
+                />
+              </View>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Referred By</label>
-              <input type="text" value={formData.referredBy} onChange={(e) => handleInputChange('referredBy', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                } border rounded focus:outline-none focus:border-orange-500`} />
-            </div>
 
-            {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Date Installed<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input type="date" value={formData.dateInstalled} onChange={(e) => handleInputChange('dateInstalled', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.dateInstalled ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-                    <Calendar className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.dateInstalled && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Usage Type<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.usageType} onChange={(e) => handleInputChange('usageType', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.usageType ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value=""></option>
-                      {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                        <option value={formData.usageType}>{formData.usageType}</option>
-                      )}
-                      {usageTypes.map((usageType) => (
-                        <option key={usageType.id} value={usageType.usage_name}>
-                          {usageType.usage_name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.usageType && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>First Name<span className="text-red-500">*</span></label>
-              <input type="text" value={formData.firstName} onChange={(e) => handleInputChange('firstName', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.firstName ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Middle Initial</label>
-              <input type="text" value={formData.middleInitial} onChange={(e) => handleInputChange('middleInitial', e.target.value)} maxLength={1} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                } border rounded focus:outline-none focus:border-orange-500`} />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Last Name<span className="text-red-500">*</span></label>
-              <input type="text" value={formData.lastName} onChange={(e) => handleInputChange('lastName', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.lastName ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Contact Number<span className="text-red-500">*</span></label>
-              <input type="text" value={formData.contactNumber} onChange={(e) => handleInputChange('contactNumber', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.contactNumber ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.contactNumber && <p className="text-red-500 text-xs mt-1">{errors.contactNumber}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Second Contact Number</label>
-              <input type="text" value={formData.secondContactNumber} onChange={(e) => handleInputChange('secondContactNumber', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                } border rounded focus:outline-none focus:border-orange-500`} />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Applicant Email Address<span className="text-red-500">*</span></label>
-              <input type="email" value={formData.email} onChange={(e) => handleInputChange('email', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.email ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Address<span className="text-red-500">*</span></label>
-              <input type="text" value={formData.address} onChange={(e) => handleInputChange('address', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.address ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Region<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.region} onChange={(e) => handleInputChange('region', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } border ${errors.region ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                  <option value="">Select Region</option>
-                  {formData.region && !regions.some(reg => reg.name === formData.region) && (
-                    <option value={formData.region}>{formData.region}</option>
-                  )}
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.name}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.region && <p className="text-red-500 text-xs mt-1">{errors.region}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>City<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  disabled={!formData.region}
-                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } border ${errors.city ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <option value="">{formData.region ? 'Select City' : 'Select Region First'}</option>
-                  {formData.city && !filteredCities.some(city => city.name === formData.city) && (
-                    <option value={formData.city}>{formData.city}</option>
-                  )}
-                  {filteredCities.map((city) => (
-                    <option key={city.id} value={city.name}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Barangay<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.barangay}
-                  onChange={(e) => handleInputChange('barangay', e.target.value)}
-                  disabled={!formData.city}
-                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } border ${errors.barangay ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <option value="">{formData.city ? 'Select Barangay' : 'Select City First'}</option>
-                  {formData.barangay && !filteredBarangays.some(brgy => brgy.barangay === formData.barangay) && (
-                    <option value={formData.barangay}>{formData.barangay}</option>
-                  )}
-                  {filteredBarangays.map((barangay) => (
-                    <option key={barangay.id} value={barangay.barangay}>
-                      {barangay.barangay}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.barangay && <p className="text-red-500 text-xs mt-1">{errors.barangay}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Location<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!formData.barangay}
-                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } border ${errors.location ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <option value="">{formData.barangay ? 'Select Location' : 'Select Barangay First'}</option>
-                  {formData.location && !filteredLocations.some(loc => loc.location_name === formData.location) && (
-                    <option value={formData.location}>{formData.location}</option>
-                  )}
-                  {filteredLocations.map((location) => (
-                    <option key={location.id} value={location.location_name}>
-                      {location.location_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
-            </div>
-
-            {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
-              <div>
-                <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  } mb-2`}>Address Coordinates<span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <input type="text" value={formData.addressCoordinates} onChange={(e) => handleInputChange('addressCoordinates', e.target.value)} placeholder="14.466580, 121.201807" className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } border ${errors.addressCoordinates ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 pr-10`} />
-                  <MapPin className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    } pointer-events-none`} size={20} />
-                </div>
-                {errors.addressCoordinates && (
-                  <div className="flex items-center mt-1">
-                    <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                    <p className="text-orange-500 text-xs">This entry is required</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Choose Plan<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.choosePlan} onChange={(e) => handleInputChange('choosePlan', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } border ${errors.choosePlan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                  <option value="">Select Plan</option>
-                  {formData.choosePlan && !plans.some(plan => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
-                  }) && (
-                      <option value={formData.choosePlan}>{formData.choosePlan}</option>
+              {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Date Installed<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className="relative">
+                      <TextInput
+                        value={formData.dateInstalled}
+                        onChangeText={(text) => handleInputChange('dateInstalled', text)}
+                        placeholder="YYYY-MM-DD"
+                        className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.dateInstalled ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                      />
+                      <Calendar className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} size={20} />
+                    </View>
+                    {errors.dateInstalled && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
                     )}
-                  {plans.map((plan) => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return (
-                      <option key={plan.id} value={planWithPrice}>
-                        {planWithPrice}
-                      </option>
-                    );
-                  })}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.choosePlan && <p className="text-red-500 text-xs mt-1">{errors.choosePlan}</p>}
-            </div>
+                  </View>
 
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Status<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.status} onChange={(e) => handleInputChange('status', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } border ${errors.status ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="For Confirmation">For Confirmation</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  } pointer-events-none`} size={20} />
-              </div>
-              {errors.status && <p className="text-red-500 text-xs mt-1">{errors.status}</p>}
-            </div>
-
-            {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Connection Type<span className="text-red-500">*</span></label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => handleInputChange('connectionType', 'Antenna')} className={`py-2 px-4 rounded border ${formData.connectionType === 'Antenna'
-                      ? 'bg-orange-600 border-orange-700 text-white'
-                      : isDarkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
-                      } transition-colors duration-200`}>Antenna</button>
-                    <button type="button" onClick={() => handleInputChange('connectionType', 'Fiber')} className={`py-2 px-4 rounded border ${formData.connectionType === 'Fiber'
-                      ? 'bg-orange-600 border-orange-700 text-white'
-                      : isDarkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
-                      } transition-colors duration-200`}>Fiber</button>
-                    <button type="button" onClick={() => handleInputChange('connectionType', 'Local')} className={`py-2 px-4 rounded border ${formData.connectionType === 'Local'
-                      ? 'bg-orange-600 border-orange-700 text-white'
-                      : isDarkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
-                      } transition-colors duration-200`}>Local</button>
-                  </div>
-                  {errors.connectionType && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Router Model<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.routerModel} onChange={(e) => handleInputChange('routerModel', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.routerModel ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value=""></option>
-                      {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
-                        <option value={formData.routerModel}>{formData.routerModel}</option>
-                      )}
-                      {routerModels.map((routerModel, index) => (
-                        <option key={index} value={routerModel.model}>{routerModel.model}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.routerModel && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Modem SN<span className="text-red-500">*</span></label>
-                  <input type="text" value={formData.modemSN} onChange={(e) => handleInputChange('modemSN', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } border ${errors.modemSN ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-                  {errors.modemSN && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                {formData.connectionType === 'Antenna' && (
-                  <div>
-                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      } mb-2`}>IP<span className="text-red-500">*</span></label>
-                    <input type="text" value={formData.ip} onChange={(e) => handleInputChange('ip', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.ip ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-                    {errors.ip && (
-                      <div className="flex items-center mt-1">
-                        <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                        <p className="text-orange-500 text-xs">This entry is required</p>
-                      </div>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Usage Type<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.usageType ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.usageType}
+                        onValueChange={(value) => handleInputChange('usageType', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select Usage Type" value="" />
+                        {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
+                          <Picker.Item label={formData.usageType} value={formData.usageType} />
+                        )}
+                        {usageTypes.map((usageType) => (
+                          <Picker.Item key={usageType.id} label={usageType.usage_name} value={usageType.usage_name} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.usageType && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
                     )}
-                  </div>
-                )}
+                  </View>
+                </>
+              )}
 
-                {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
-                  <ImagePreview
-                    imageUrl={imagePreviews.portLabelImage}
-                    label="Port Label Image"
-                    onUpload={(file) => handleImageUpload('portLabelImage', file)}
-                    error={errors.portLabelImage}
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  First Name<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.firstName}
+                  onChangeText={(text) => handleInputChange('firstName', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.firstName ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.firstName && <Text className="text-red-500 text-xs mt-1">{errors.firstName}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Middle Initial
+                </Text>
+                <TextInput
+                  value={formData.middleInitial}
+                  onChangeText={(text) => handleInputChange('middleInitial', text)}
+                  maxLength={1}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded`}
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Last Name<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.lastName}
+                  onChangeText={(text) => handleInputChange('lastName', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.lastName ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.lastName && <Text className="text-red-500 text-xs mt-1">{errors.lastName}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Contact Number<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.contactNumber}
+                  onChangeText={(text) => handleInputChange('contactNumber', text)}
+                  keyboardType="phone-pad"
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.contactNumber ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.contactNumber && <Text className="text-red-500 text-xs mt-1">{errors.contactNumber}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Second Contact Number
+                </Text>
+                <TextInput
+                  value={formData.secondContactNumber}
+                  onChangeText={(text) => handleInputChange('secondContactNumber', text)}
+                  keyboardType="phone-pad"
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded`}
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Applicant Email Address<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.email}
+                  onChangeText={(text) => handleInputChange('email', text)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.email ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.email && <Text className="text-red-500 text-xs mt-1">{errors.email}</Text>}
+              </View>
+
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Address<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.address}
+                  onChangeText={(text) => handleInputChange('address', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.address ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.address && <Text className="text-red-500 text-xs mt-1">{errors.address}</Text>}
+              </View>
+
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Region<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.region ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <Picker
+                    selectedValue={formData.region}
+                    onValueChange={(value) => handleInputChange('region', value)}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label="Select Region" value="" />
+                    {formData.region && !regions.some(reg => reg.name === formData.region) && (
+                      <Picker.Item label={formData.region} value={formData.region} />
+                    )}
+                    {regions.map((region) => (
+                      <Picker.Item key={region.id} label={region.name} value={region.name} />
+                    ))}
+                  </Picker>
+                </View>
+                {errors.region && <Text className="text-red-500 text-xs mt-1">{errors.region}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  City<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.city ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'} ${!formData.region ? 'opacity-50' : ''}`}>
+                  <Picker
+                    selectedValue={formData.city}
+                    onValueChange={(value) => handleInputChange('city', value)}
+                    enabled={!!formData.region}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label={formData.region ? 'Select City' : 'Select Region First'} value="" />
+                    {formData.city && !filteredCities.some(city => city.name === formData.city) && (
+                      <Picker.Item label={formData.city} value={formData.city} />
+                    )}
+                    {filteredCities.map((city) => (
+                      <Picker.Item key={city.id} label={city.name} value={city.name} />
+                    ))}
+                  </Picker>
+                </View>
+                {errors.city && <Text className="text-red-500 text-xs mt-1">{errors.city}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Barangay<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.barangay ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'} ${!formData.city ? 'opacity-50' : ''}`}>
+                  <Picker
+                    selectedValue={formData.barangay}
+                    onValueChange={(value) => handleInputChange('barangay', value)}
+                    enabled={!!formData.city}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label={formData.city ? 'Select Barangay' : 'Select City First'} value="" />
+                    {formData.barangay && !filteredBarangays.some(brgy => brgy.barangay === formData.barangay) && (
+                      <Picker.Item label={formData.barangay} value={formData.barangay} />
+                    )}
+                    {filteredBarangays.map((barangay) => (
+                      <Picker.Item key={barangay.id} label={barangay.barangay} value={barangay.barangay} />
+                    ))}
+                  </Picker>
+                </View>
+                {errors.barangay && <Text className="text-red-500 text-xs mt-1">{errors.barangay}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Location<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.location ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'} ${!formData.barangay ? 'opacity-50' : ''}`}>
+                  <Picker
+                    selectedValue={formData.location}
+                    onValueChange={(value) => handleInputChange('location', value)}
+                    enabled={!!formData.barangay}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label={formData.barangay ? 'Select Location' : 'Select Barangay First'} value="" />
+                    {formData.location && !filteredLocations.some(loc => loc.location_name === formData.location) && (
+                      <Picker.Item label={formData.location} value={formData.location} />
+                    )}
+                    {filteredLocations.map((location) => (
+                      <Picker.Item key={location.id} label={location.location_name} value={location.location_name} />
+                    ))}
+                  </Picker>
+                </View>
+                {errors.location && <Text className="text-red-500 text-xs mt-1">{errors.location}</Text>}
+              </View>
+
+              {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
+                <View className="mb-4">
+                  <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Address Coordinates<Text className="text-red-500">*</Text>
+                  </Text>
+                  <View className="relative">
+                    <TextInput
+                      value={formData.addressCoordinates}
+                      onChangeText={(text) => handleInputChange('addressCoordinates', text)}
+                      placeholder="14.466580, 121.201807"
+                      className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.addressCoordinates ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded pr-10`}
+                    />
+                    <MapPin className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} size={20} />
+                  </View>
+                  {errors.addressCoordinates && (
+                    <View className="flex flex-row items-center mt-1">
+                      <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                        <Text className="text-white text-xs">!</Text>
+                      </View>
+                      <Text className="text-orange-500 text-xs">This entry is required</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Choose Plan<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.choosePlan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <Picker
+                    selectedValue={formData.choosePlan}
+                    onValueChange={(value) => handleInputChange('choosePlan', value)}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label="Select Plan" value="" />
+                    {formData.choosePlan && !plans.some(plan => {
+                      const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                      return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
+                    }) && (
+                        <Picker.Item label={formData.choosePlan} value={formData.choosePlan} />
+                      )}
+                    {plans.map((plan) => {
+                      const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                      return (
+                        <Picker.Item key={plan.id} label={planWithPrice} value={planWithPrice} />
+                      );
+                    })}
+                  </Picker>
+                </View>
+                {errors.choosePlan && <Text className="text-red-500 text-xs mt-1">{errors.choosePlan}</Text>}
+              </View>
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Status<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.status ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <Picker
+                    selectedValue={formData.status}
+                    onValueChange={(value) => handleInputChange('status', value)}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label="Confirmed" value="Confirmed" />
+                    <Picker.Item label="For Confirmation" value="For Confirmation" />
+                    <Picker.Item label="Cancelled" value="Cancelled" />
+                  </Picker>
+                </View>
+                {errors.status && <Text className="text-red-500 text-xs mt-1">{errors.status}</Text>}
+              </View>
+
+              {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Connection Type<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className="flex flex-row gap-2">
+                      <Pressable onPress={() => handleInputChange('connectionType', 'Antenna')} className={`flex-1 py-2 px-4 rounded border ${formData.connectionType === 'Antenna' ? 'bg-orange-600 border-orange-700' : isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}>
+                        <Text className={formData.connectionType === 'Antenna' ? 'text-white text-center' : isDarkMode ? 'text-white text-center' : 'text-gray-900 text-center'}>Antenna</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleInputChange('connectionType', 'Fiber')} className={`flex-1 py-2 px-4 rounded border ${formData.connectionType === 'Fiber' ? 'bg-orange-600 border-orange-700' : isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}>
+                        <Text className={formData.connectionType === 'Fiber' ? 'text-white text-center' : isDarkMode ? 'text-white text-center' : 'text-gray-900 text-center'}>Fiber</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleInputChange('connectionType', 'Local')} className={`flex-1 py-2 px-4 rounded border ${formData.connectionType === 'Local' ? 'bg-orange-600 border-orange-700' : isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}>
+                        <Text className={formData.connectionType === 'Local' ? 'text-white text-center' : isDarkMode ? 'text-white text-center' : 'text-gray-900 text-center'}>Local</Text>
+                      </Pressable>
+                    </View>
+                    {errors.connectionType && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Router Model<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.routerModel ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.routerModel}
+                        onValueChange={(value) => handleInputChange('routerModel', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select Router Model" value="" />
+                        {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
+                          <Picker.Item label={formData.routerModel} value={formData.routerModel} />
+                        )}
+                        {routerModels.map((routerModel, index) => (
+                          <Picker.Item key={index} label={routerModel.model} value={routerModel.model} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.routerModel && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Modem SN<Text className="text-red-500">*</Text>
+                    </Text>
+                    <TextInput
+                      value={formData.modemSN}
+                      onChangeText={(text) => handleInputChange('modemSN', text)}
+                      className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.modemSN ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                    />
+                    {errors.modemSN && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {formData.connectionType === 'Antenna' && (
+                    <View className="mb-4">
+                      <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        IP<Text className="text-red-500">*</Text>
+                      </Text>
+                      <TextInput
+                        value={formData.ip}
+                        onChangeText={(text) => handleInputChange('ip', text)}
+                        className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.ip ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                      />
+                      {errors.ip && (
+                        <View className="flex flex-row items-center mt-1">
+                          <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                            <Text className="text-white text-xs">!</Text>
+                          </View>
+                          <Text className="text-orange-500 text-xs">This entry is required</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
+                    <ImagePreview
+                      imageUrl={imagePreviews.portLabelImage}
+                      label="Port Label Image"
+                      onUpload={(file) => handleImageUpload('portLabelImage', file)}
+                      error={errors.portLabelImage}
+                    />
+                  )}
+                </>
+              )}
+
+
+
+              {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      LCP-NAP<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.lcpnap ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.lcpnap}
+                        onValueChange={(value) => handleInputChange('lcpnap', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select LCP-NAP" value="" />
+                        {formData.lcpnap && !lcpnaps.some(ln => ln.lcpnap_name === formData.lcpnap) && (
+                          <Picker.Item label={formData.lcpnap} value={formData.lcpnap} />
+                        )}
+                        {lcpnaps.map((lcpnap) => (
+                          <Picker.Item key={lcpnap.id} label={lcpnap.lcpnap_name} value={lcpnap.lcpnap_name} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.lcpnap && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      PORT<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.port ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.port}
+                        onValueChange={(value) => handleInputChange('port', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select PORT" value="" />
+                        <Picker.Item label="PORT 001" value="PORT 001" />
+                        <Picker.Item label="PORT 002" value="PORT 002" />
+                        <Picker.Item label="PORT 003" value="PORT 003" />
+                        <Picker.Item label="PORT 004" value="PORT 004" />
+                        <Picker.Item label="PORT 005" value="PORT 005" />
+                        <Picker.Item label="PORT 006" value="PORT 006" />
+                        <Picker.Item label="PORT 007" value="PORT 007" />
+                        <Picker.Item label="PORT 008" value="PORT 008" />
+                        <Picker.Item label="PORT 009" value="PORT 009" />
+                        <Picker.Item label="PORT 010" value="PORT 010" />
+                        <Picker.Item label="PORT 011" value="PORT 011" />
+                        <Picker.Item label="PORT 012" value="PORT 012" />
+                        <Picker.Item label="PORT 013" value="PORT 013" />
+                        <Picker.Item label="PORT 014" value="PORT 014" />
+                        <Picker.Item label="PORT 015" value="PORT 015" />
+                        <Picker.Item label="PORT 016" value="PORT 016" />
+                        <Picker.Item label="PORT 017" value="PORT 017" />
+                        <Picker.Item label="PORT 018" value="PORT 018" />
+                        <Picker.Item label="PORT 019" value="PORT 019" />
+                        <Picker.Item label="PORT 020" value="PORT 020" />
+                        <Picker.Item label="PORT 021" value="PORT 021" />
+                        <Picker.Item label="PORT 022" value="PORT 022" />
+                        <Picker.Item label="PORT 023" value="PORT 023" />
+                        <Picker.Item label="PORT 024" value="PORT 024" />
+                        <Picker.Item label="PORT 025" value="PORT 025" />
+                        <Picker.Item label="PORT 026" value="PORT 026" />
+                        <Picker.Item label="PORT 027" value="PORT 027" />
+                        <Picker.Item label="PORT 028" value="PORT 028" />
+                        <Picker.Item label="PORT 029" value="PORT 029" />
+                        <Picker.Item label="PORT 030" value="PORT 030" />
+                        <Picker.Item label="PORT 032" value="PORT 032" />
+                        <Picker.Item label="PORT 032" value="PORT 032" />
+                      </Picker>
+                    </View>
+                    {errors.port && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      VLAN<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.vlan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.vlan}
+                        onValueChange={(value) => handleInputChange('vlan', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select VLAN" value="" />
+                        {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
+                          <Picker.Item label={formData.vlan} value={formData.vlan} />
+                        )}
+                        {vlans.map((vlan) => (
+                          <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.vlan && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Username<Text className="text-red-500">*</Text>
+                </Text>
+                <TextInput
+                  value={formData.username}
+                  onChangeText={(text) => handleInputChange('username', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.username ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                />
+                {errors.username && <Text className="text-red-500 text-xs mt-1">{errors.username}</Text>}
+              </View>
+
+              {formData.status === 'Confirmed' && (formData.onsiteStatus === 'Done' || formData.onsiteStatus === 'Reschedule') && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Visit By<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.visit_by ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.visit_by}
+                        onValueChange={(value) => handleInputChange('visit_by', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select Visit By" value="" />
+                        {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
+                          <Picker.Item label={formData.visit_by} value={formData.visit_by} />
+                        )}
+                        {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
+                          <Picker.Item key={index} label={technician.name} value={technician.name} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.visit_by && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Visit With<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.visit_with ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.visit_with}
+                        onValueChange={(value) => handleInputChange('visit_with', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select Visit With" value="" />
+                        <Picker.Item label="None" value="None" />
+                        {formData.visit_with && !technicians.some(t => t.name === formData.visit_with) && (
+                          <Picker.Item label={formData.visit_with} value={formData.visit_with} />
+                        )}
+                        {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
+                          <Picker.Item key={index} label={technician.name} value={technician.name} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.visit_with && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Visit With(Other)<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.visit_with_other ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.visit_with_other}
+                        onValueChange={(value) => handleInputChange('visit_with_other', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Visit With(Other)" value="" />
+                        <Picker.Item label="None" value="None" />
+                        {formData.visit_with_other && !technicians.some(t => t.name === formData.visit_with_other) && (
+                          <Picker.Item label={formData.visit_with_other} value={formData.visit_with_other} />
+                        )}
+                        {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
+                          <Picker.Item key={index} label={technician.name} value={technician.name} />
+                        ))}
+                      </Picker>
+                    </View>
+                    {errors.visit_with_other && (
+                      <View className="flex flex-row items-center mt-1">
+                        <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                          <Text className="text-white text-xs">!</Text>
+                        </View>
+                        <Text className="text-orange-500 text-xs">This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
+              {formData.status === 'Confirmed' && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                      Onsite Status<Text className="text-red-500">*</Text>
+                    </Text>
+                    <View className={`border ${errors.onsiteStatus ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.onsiteStatus}
+                        onValueChange={(value) => handleInputChange('onsiteStatus', value)}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="In Progress" value="In Progress" />
+                        <Picker.Item label="Done" value="Done" />
+                        <Picker.Item label="Failed" value="Failed" />
+                        <Picker.Item label="Reschedule" value="Reschedule" />
+                      </Picker>
+                    </View>
+                    {errors.onsiteStatus && <Text className="text-red-500 text-xs mt-1">{errors.onsiteStatus}</Text>}
+                  </View>
+
+                  {(formData.onsiteStatus === 'Reschedule' || formData.onsiteStatus === 'Done') && (
+                    <View className="mb-4">
+                      <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        Onsite Remarks<Text className="text-red-500">*</Text>
+                      </Text>
+                      <TextInput
+                        value={formData.onsiteRemarks}
+                        onChangeText={(text) => handleInputChange('onsiteRemarks', text)}
+                        multiline
+                        numberOfLines={3}
+                        className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} border ${errors.onsiteRemarks ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded`}
+                      />
+                      {errors.onsiteRemarks && (
+                        <View className="flex flex-row items-center mt-1">
+                          <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                            <Text className="text-white text-xs">!</Text>
+                          </View>
+                          <Text className="text-orange-500 text-xs">This entry is required</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {formData.onsiteStatus === 'Done' && (
+                    <>
+                      <ImagePreview
+                        imageUrl={imagePreviews.signedContractImage}
+                        label="Signed Contract Image"
+                        onUpload={(file) => handleImageUpload('signedContractImage', file)}
+                        error={errors.signedContractImage}
+                      />
+
+                      <ImagePreview
+                        imageUrl={imagePreviews.setupImage}
+                        label="Setup Image"
+                        onUpload={(file) => handleImageUpload('setupImage', file)}
+                        error={errors.setupImage}
+                      />
+
+                      <ImagePreview
+                        imageUrl={imagePreviews.boxReadingImage}
+                        label="Box Reading Image"
+                        onUpload={(file) => handleImageUpload('boxReadingImage', file)}
+                        error={errors.boxReadingImage}
+                      />
+
+                      <ImagePreview
+                        imageUrl={imagePreviews.routerReadingImage}
+                        label="Router Reading Image"
+                        onUpload={(file) => handleImageUpload('routerReadingImage', file)}
+                        error={errors.routerReadingImage}
+                      />
+
+                      <ImagePreview
+                        imageUrl={imagePreviews.clientSignatureImage}
+                        label="Client Signature Image"
+                        onUpload={(file) => handleImageUpload('clientSignatureImage', file)}
+                        error={errors.clientSignatureImage}
+                      />
+
+                      <ImagePreview
+                        imageUrl={imagePreviews.speedTestImage}
+                        label="Speed Test Image"
+                        onUpload={(file) => handleImageUpload('speedTestImage', file)}
+                        error={errors.speedTestImage}
+                      />
+
+
+                    </>
+                  )}
+
+                  {formData.onsiteStatus === 'Reschedule' && (
+                    <View className="mb-4">
+                      <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                        Status Remarks<Text className="text-red-500">*</Text>
+                      </Text>
+                      <View className={`border ${errors.statusRemarks ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.statusRemarks}
+                          onValueChange={(value) => handleInputChange('statusRemarks', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                        >
+                          <Picker.Item label="Select Status Remarks" value="" />
+                          <Picker.Item label="Customer Request" value="Customer Request" />
+                          <Picker.Item label="Bad Weather" value="Bad Weather" />
+                          <Picker.Item label="Technician Unavailable" value="Technician Unavailable" />
+                          <Picker.Item label="Equipment Issue" value="Equipment Issue" />
+                        </Picker>
+                      </View>
+                      {errors.statusRemarks && (
+                        <View className="flex flex-row items-center mt-1">
+                          <View className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 mr-2">
+                            <Text className="text-white text-xs">!</Text>
+                          </View>
+                          <Text className="text-orange-500 text-xs">This entry is required</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Contract Template<Text className="text-red-500">*</Text>
+                </Text>
+                <View className="flex flex-row items-center space-x-2">
+                  <Pressable onPress={() => handleNumberChange('contractTemplate', false)} className={`p-2 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} border rounded`}>
+                    <Minus size={16} color={isDarkMode ? 'white' : 'black'} />
+                  </Pressable>
+                  <TextInput
+                    value={formData.contractTemplate}
+                    editable={false}
+                    className={`flex-1 px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded text-center`}
                   />
-                )}
-              </>
-            )}
+                  <Pressable onPress={() => handleNumberChange('contractTemplate', true)} className={`p-2 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} border rounded`}>
+                    <Plus size={16} color={isDarkMode ? 'white' : 'black'} />
+                  </Pressable>
+                </View>
+                {errors.contractTemplate && <Text className="text-red-500 text-xs mt-1">{errors.contractTemplate}</Text>}
+              </View>
 
-
-
-            {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>LCP-NAP<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      value={formData.lcpnap}
-                      onChange={(e) => handleInputChange('lcpnap', e.target.value)}
-                      className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                        } border ${errors.lcpnap ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}
-                    >
-                      <option value="">Select LCP-NAP</option>
-                      {formData.lcpnap && !lcpnaps.some(ln => ln.lcpnap_name === formData.lcpnap) && (
-                        <option value={formData.lcpnap}>{formData.lcpnap}</option>
-                      )}
-                      {lcpnaps.map((lcpnap) => (
-                        <option key={lcpnap.id} value={lcpnap.lcpnap_name}>
-                          {lcpnap.lcpnap_name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.lcpnap && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>PORT<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.port} onChange={(e) => handleInputChange('port', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.port ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value="">Select PORT</option>
-                      <option value="PORT 001">PORT 001</option>
-                      <option value="PORT 002">PORT 002</option>
-                      <option value="PORT 003">PORT 003</option>
-                      <option value="PORT 004">PORT 004</option>
-                      <option value="PORT 005">PORT 005</option>
-                      <option value="PORT 006">PORT 006</option>
-                      <option value="PORT 007">PORT 007</option>
-                      <option value="PORT 008">PORT 008</option>
-                      <option value="PORT 009">PORT 009</option>
-                      <option value="PORT 010">PORT 010</option>
-                      <option value="PORT 011">PORT 011</option>
-                      <option value="PORT 012">PORT 012</option>
-                      <option value="PORT 013">PORT 013</option>
-                      <option value="PORT 014">PORT 014</option>
-                      <option value="PORT 015">PORT 015</option>
-                      <option value="PORT 016">PORT 016</option>
-                      <option value="PORT 017">PORT 017</option>
-                      <option value="PORT 018">PORT 018</option>
-                      <option value="PORT 019">PORT 019</option>
-                      <option value="PORT 020">PORT 020</option>
-                      <option value="PORT 021">PORT 021</option>
-                      <option value="PORT 022">PORT 022</option>
-                      <option value="PORT 023">PORT 023</option>
-                      <option value="PORT 024">PORT 024</option>
-                      <option value="PORT 025">PORT 025</option>
-                      <option value="PORT 026">PORT 026</option>
-                      <option value="PORT 027">PORT 027</option>
-                      <option value="PORT 028">PORT 028</option>
-                      <option value="PORT 029">PORT 029</option>
-                      <option value="PORT 030">PORT 030</option>
-                      <option value="PORT 032">PORT 032</option>
-                      <option value="PORT 032">PORT 032</option>
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.port && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>VLAN<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.vlan} onChange={(e) => handleInputChange('vlan', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.vlan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value="">Select VLAN</option>
-                      {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
-                        <option value={formData.vlan}>{formData.vlan}</option>
-                      )}
-                      {vlans.map((vlan) => (
-                        <option key={vlan.vlan_id} value={vlan.value}>
-                          {vlan.value}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.vlan && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Username<span className="text-red-500">*</span></label>
-              <input type="text" value={formData.username} onChange={(e) => handleInputChange('username', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                } border ${errors.username ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500`} />
-              {errors.username && <p className="text-red-500 text-xs mt-1">{errors.username}</p>}
-            </div>
-
-            {formData.status === 'Confirmed' && (formData.onsiteStatus === 'Done' || formData.onsiteStatus === 'Reschedule') && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Visit By<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_by} onChange={(e) => handleInputChange('visit_by', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.visit_by ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value=""></option>
-                      {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                        <option value={formData.visit_by}>{formData.visit_by}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.visit_by && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Visit With<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with} onChange={(e) => handleInputChange('visit_with', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.visit_with ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value="">Select Visit With</option>
-                      <option value="None">None</option>
-                      {formData.visit_with && !technicians.some(t => t.name === formData.visit_with) && (
-                        <option value={formData.visit_with}>{formData.visit_with}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.visit_with && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Visit With(Other)<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with_other} onChange={(e) => handleInputChange('visit_with_other', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.visit_with_other ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value="">Visit With(Other)</option>
-                      <option value="None">None</option>
-                      {formData.visit_with_other && !technicians.some(t => t.name === formData.visit_with_other) && (
-                        <option value={formData.visit_with_other}>{formData.visit_with_other}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      } pointer-events-none`} size={20} />
-                  </div>
-                  {errors.visit_with_other && (
-                    <div className="flex items-center mt-1">
-                      <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                      <p className="text-orange-500 text-xs">This entry is required</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {formData.status === 'Confirmed' && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    } mb-2`}>Onsite Status<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.onsiteStatus} onChange={(e) => handleInputChange('onsiteStatus', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.onsiteStatus ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Done">Done</option>
-                      <option value="Failed">Failed</option>
-                      <option value="Reschedule">Reschedule</option>
-                    </select>
-                    <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-                  </div>
-                  {errors.onsiteStatus && <p className="text-red-500 text-xs mt-1">{errors.onsiteStatus}</p>}
-                </div>
-
-                {(formData.onsiteStatus === 'Reschedule' || formData.onsiteStatus === 'Done') && (
-                  <div>
-                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      } mb-2`}>Onsite Remarks<span className="text-red-500">*</span></label>
-                    <textarea value={formData.onsiteRemarks} onChange={(e) => handleInputChange('onsiteRemarks', e.target.value)} rows={3} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } border ${errors.onsiteRemarks ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 resize-none`} />
-                    {errors.onsiteRemarks && (
-                      <div className="flex items-center mt-1">
-                        <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                        <p className="text-orange-500 text-xs">This entry is required</p>
-                      </div>
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Assigned Email<Text className="text-red-500">*</Text>
+                </Text>
+                <View className={`border ${errors.assignedEmail ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <Picker
+                    selectedValue={formData.assignedEmail}
+                    onValueChange={(value) => handleInputChange('assignedEmail', value)}
+                    style={{ color: isDarkMode ? '#fff' : '#000' }}
+                  >
+                    <Picker.Item label="Select Assigned Email" value="" />
+                    {formData.assignedEmail && !technicians.some(t => t.email === formData.assignedEmail) && (
+                      <Picker.Item label={formData.assignedEmail} value={formData.assignedEmail} />
                     )}
-                  </div>
-                )}
+                    {technicians.map((technician, index) => (
+                      <Picker.Item key={index} label={technician.email} value={technician.email} />
+                    ))}
+                  </Picker>
+                </View>
+                {errors.assignedEmail && <Text className="text-red-500 text-xs mt-1">{errors.assignedEmail}</Text>}
+              </View>
 
-                {formData.onsiteStatus === 'Done' && (
-                  <>
-                    <ImagePreview
-                      imageUrl={imagePreviews.signedContractImage}
-                      label="Signed Contract Image"
-                      onUpload={(file) => handleImageUpload('signedContractImage', file)}
-                      error={errors.signedContractImage}
-                    />
-
-                    <ImagePreview
-                      imageUrl={imagePreviews.setupImage}
-                      label="Setup Image"
-                      onUpload={(file) => handleImageUpload('setupImage', file)}
-                      error={errors.setupImage}
-                    />
-
-                    <ImagePreview
-                      imageUrl={imagePreviews.boxReadingImage}
-                      label="Box Reading Image"
-                      onUpload={(file) => handleImageUpload('boxReadingImage', file)}
-                      error={errors.boxReadingImage}
-                    />
-
-                    <ImagePreview
-                      imageUrl={imagePreviews.routerReadingImage}
-                      label="Router Reading Image"
-                      onUpload={(file) => handleImageUpload('routerReadingImage', file)}
-                      error={errors.routerReadingImage}
-                    />
-
-                    <ImagePreview
-                      imageUrl={imagePreviews.clientSignatureImage}
-                      label="Client Signature Image"
-                      onUpload={(file) => handleImageUpload('clientSignatureImage', file)}
-                      error={errors.clientSignatureImage}
-                    />
-
-                    <ImagePreview
-                      imageUrl={imagePreviews.speedTestImage}
-                      label="Speed Test Image"
-                      onUpload={(file) => handleImageUpload('speedTestImage', file)}
-                      error={errors.speedTestImage}
-                    />
-
-
-                  </>
-                )}
-
-                {formData.onsiteStatus === 'Reschedule' && (
-                  <div>
-                    <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      } mb-2`}>Status Remarks<span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <select value={formData.statusRemarks} onChange={(e) => handleInputChange('statusRemarks', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                        } border ${errors.statusRemarks ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                        <option value=""></option>
-                        <option value="Customer Request">Customer Request</option>
-                        <option value="Bad Weather">Bad Weather</option>
-                        <option value="Technician Unavailable">Technician Unavailable</option>
-                        <option value="Equipment Issue">Equipment Issue</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-                    </div>
-                    {errors.statusRemarks && (
-                      <div className="flex items-center mt-1">
-                        <div className="flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-white text-xs mr-2">!</div>
-                        <p className="text-orange-500 text-xs">This entry is required</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Contract Template<span className="text-red-500">*</span></label>
-              <div className="flex items-center space-x-2">
-                <button type="button" onClick={() => handleNumberChange('contractTemplate', false)} className={`p-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
-                  } border rounded`}>
-                  <Minus size={16} />
-                </button>
-                <input type="text" value={formData.contractTemplate} readOnly className={`flex-1 px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                  } border rounded text-center focus:outline-none`} />
-                <button type="button" onClick={() => handleNumberChange('contractTemplate', true)} className={`p-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
-                  } border rounded`}>
-                  <Plus size={16} />
-                </button>
-              </div>
-              {errors.contractTemplate && <p className="text-red-500 text-xs mt-1">{errors.contractTemplate}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Assigned Email<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.assignedEmail} onChange={(e) => handleInputChange('assignedEmail', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } border ${errors.assignedEmail ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'} rounded focus:outline-none focus:border-orange-500 appearance-none`}>
-                  <option value="">Select Assigned Email</option>
-                  {formData.assignedEmail && !technicians.some(t => t.email === formData.assignedEmail) && (
-                    <option value={formData.assignedEmail}>{formData.assignedEmail}</option>
-                  )}
-                  {technicians.map((technician, index) => (
-                    <option key={index} value={technician.email}>{technician.email}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={20} />
-              </div>
-              {errors.assignedEmail && <p className="text-red-500 text-xs mt-1">{errors.assignedEmail}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                } mb-2`}>Contract Link</label>
-              <input type="text" value={formData.contractLink} onChange={(e) => handleInputChange('contractLink', e.target.value)} className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                } border rounded focus:outline-none focus:border-orange-500`} />
-            </div>
-          </div>
-        </div>
-      </div>
+              <View className="mb-4">
+                <Text className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                  Contract Link
+                </Text>
+                <TextInput
+                  value={formData.contractLink}
+                  onChangeText={(text) => handleInputChange('contractLink', text)}
+                  className={`w-full px-3 py-2 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded`}
+                />
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </>
   );
 };

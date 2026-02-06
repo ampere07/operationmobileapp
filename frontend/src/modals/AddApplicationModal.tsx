@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { View, Text, Pressable, TextInput, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
+import { X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -61,15 +63,15 @@ const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+    };
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -85,14 +87,14 @@ const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
   }, []);
 
   const statusOptions = [
-    { value: 'pending', label: 'Pending', color: 'text-orange-400' },
-    { value: 'schedule', label: 'Scheduled', color: 'text-green-400' },
-    { value: 'no facility', label: 'No Facility', color: 'text-red-400' },
-    { value: 'cancelled', label: 'Cancelled', color: 'text-red-500' },
-    { value: 'no slot', label: 'No Slot', color: 'text-yellow-400' },
-    { value: 'duplicate', label: 'Duplicate', color: 'text-yellow-500' },
-    { value: 'in progress', label: 'In Progress', color: 'text-blue-400' },
-    { value: 'completed', label: 'Completed', color: 'text-green-400' }
+    { value: 'pending', label: 'Pending', color: '#fb923c' },
+    { value: 'schedule', label: 'Scheduled', color: '#4ade80' },
+    { value: 'no facility', label: 'No Facility', color: '#f87171' },
+    { value: 'cancelled', label: 'Cancelled', color: '#ef4444' },
+    { value: 'no slot', label: 'No Slot', color: '#facc15' },
+    { value: 'duplicate', label: 'Duplicate', color: '#eab308' },
+    { value: 'in progress', label: 'In Progress', color: '#60a5fa' },
+    { value: 'completed', label: 'Completed', color: '#4ade80' }
   ];
 
   useEffect(() => {
@@ -236,20 +238,20 @@ const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
       const data = await response.json();
       
       if (response.ok && data.success) {
-        alert(data.message || `Application ${editingApplication ? 'updated' : 'created'} successfully`);
+        Alert.alert('Success', data.message || `Application ${editingApplication ? 'updated' : 'created'} successfully`);
         onSave();
         handleClose();
       } else {
         if (data.errors) {
           const errorMessages = Object.values(data.errors).flat().join('\n');
-          alert('Validation errors:\n' + errorMessages);
+          Alert.alert('Validation Errors', errorMessages);
         } else {
-          alert(data.message || `Failed to ${editingApplication ? 'update' : 'create'} application`);
+          Alert.alert('Error', data.message || `Failed to ${editingApplication ? 'update' : 'create'} application`);
         }
       }
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert(`Failed to ${editingApplication ? 'update' : 'create'} application: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      Alert.alert('Error', `Failed to ${editingApplication ? 'update' : 'create'} application: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -263,457 +265,335 @@ const AddApplicationModal: React.FC<AddApplicationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50" onClick={handleClose}>
-      <div 
-        className={`h-full w-full md:w-full md:max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col ${
-          isDarkMode ? 'bg-gray-900' : 'bg-white'
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={`px-6 py-4 flex items-center justify-between border-b ${
-          isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-gray-100 border-gray-300'
-        }`}>
-          <h2 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{editingApplication ? 'Edit Application' : 'New Application'}</h2>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleClose}
-              className={`px-4 py-2 rounded text-sm ${
-                isDarkMode
-                  ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm flex items-center"
-              style={{
-                backgroundColor: colorPalette?.primary || '#ea580c'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent && !loading) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-              }}
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Saving...
-                </>
-              ) : (
-                'Save'
-              )}
-            </button>
-            <button
-              onClick={handleClose}
-              className={isDarkMode ? 'text-gray-400 hover:text-white transition-colors' : 'text-gray-600 hover:text-gray-900 transition-colors'}
-            >
-              <X size={24} />
-            </button>
-          </div>
-        </div>
+    <Modal
+      visible={isOpen}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+        <Pressable
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+          onPress={handleClose}
+        />
+        
+        <View 
+          style={{ height: '100%', width: '100%', maxWidth: 672, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, overflow: 'hidden', flexDirection: 'column', backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}
+        >
+          <View style={{ paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#d1d5db' }}>
+            <Text style={{ fontSize: 20, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+              {editingApplication ? 'Edit Application' : 'New Application'}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Pressable
+                onPress={handleClose}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+              >
+                <Text style={{ fontSize: 14, color: isDarkMode ? '#ffffff' : '#111827' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmit}
+                disabled={loading}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c', opacity: loading ? 0.5 : 1 }}
+              >
+                {loading ? (
+                  <>
+                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={{ color: '#ffffff', fontSize: 14 }}>Saving...</Text>
+                  </>
+                ) : (
+                  <Text style={{ color: '#ffffff', fontSize: 14 }}>Save</Text>
+                )}
+              </Pressable>
+              <Pressable onPress={handleClose}>
+                <X width={24} height={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              </Pressable>
+            </View>
+          </View>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Status<span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-            >
-              {statusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ScrollView style={{ flex: 1, padding: 24 }} showsVerticalScrollIndicator={false}>
+            <View style={{ gap: 24 }}>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Status<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <View style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
+                  {statusOptions.map(option => (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setFormData({ ...formData, status: option.value })}
+                      style={{ paddingVertical: 8 }}
+                    >
+                      <Text style={{ color: formData.status === option.value ? option.color : (isDarkMode ? '#ffffff' : '#111827') }}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                First Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.first_name}
-                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  errors.first_name ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                }`}
-                placeholder="Enter first name"
-              />
-              {errors.first_name && <p className="text-red-500 text-xs mt-1">{errors.first_name}</p>}
-            </div>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <View style={{ flex: 2 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    First Name<Text style={{ color: '#ef4444' }}>*</Text>
+                  </Text>
+                  <TextInput
+                    value={formData.first_name}
+                    onChangeText={(value) => setFormData({ ...formData, first_name: value })}
+                    placeholder="Enter first name"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.first_name ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                  {errors.first_name && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.first_name}</Text>}
+                </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                M.I.
-              </label>
-              <input
-                type="text"
-                maxLength={2}
-                value={formData.middle_initial}
-                onChange={(e) => setFormData({ ...formData, middle_initial: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="M.I."
-              />
-            </div>
-          </div>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    M.I.
+                  </Text>
+                  <TextInput
+                    maxLength={2}
+                    value={formData.middle_initial}
+                    onChangeText={(value) => setFormData({ ...formData, middle_initial: value })}
+                    placeholder="M.I."
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                </View>
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Last Name<span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.last_name}
-              onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.last_name ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="Enter last name"
-            />
-            {errors.last_name && <p className="text-red-500 text-xs mt-1">{errors.last_name}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Last Name<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  value={formData.last_name}
+                  onChangeText={(value) => setFormData({ ...formData, last_name: value })}
+                  placeholder="Enter last name"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.last_name ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                {errors.last_name && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.last_name}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Email Address<span className="text-red-500">*</span>
-            </label>
-            <input
-              type="email"
-              value={formData.email_address}
-              onChange={(e) => setFormData({ ...formData, email_address: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.email_address ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="example@email.com"
-            />
-            {errors.email_address && <p className="text-red-500 text-xs mt-1">{errors.email_address}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Email Address<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  keyboardType="email-address"
+                  value={formData.email_address}
+                  onChangeText={(value) => setFormData({ ...formData, email_address: value })}
+                  placeholder="example@email.com"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.email_address ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                {errors.email_address && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.email_address}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Mobile Number<span className="text-red-500">*</span>
-            </label>
-            <input
-              type="tel"
-              value={formData.mobile_number}
-              onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value.replace(/\D/g, '') })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.mobile_number ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="09123456789"
-              maxLength={11}
-            />
-            {errors.mobile_number && <p className="text-red-500 text-xs mt-1">{errors.mobile_number}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Mobile Number<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  keyboardType="phone-pad"
+                  value={formData.mobile_number}
+                  onChangeText={(value) => setFormData({ ...formData, mobile_number: value.replace(/\D/g, '') })}
+                  placeholder="09123456789"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  maxLength={11}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.mobile_number ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                {errors.mobile_number && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.mobile_number}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Second Mobile Number
-            </label>
-            <input
-              type="tel"
-              value={formData.secondary_mobile_number}
-              onChange={(e) => setFormData({ ...formData, secondary_mobile_number: e.target.value.replace(/\D/g, '') })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.secondary_mobile_number ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="09123456789"
-              maxLength={11}
-            />
-            {errors.secondary_mobile_number && <p className="text-red-500 text-xs mt-1">{errors.secondary_mobile_number}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Second Mobile Number
+                </Text>
+                <TextInput
+                  keyboardType="phone-pad"
+                  value={formData.secondary_mobile_number}
+                  onChangeText={(value) => setFormData({ ...formData, secondary_mobile_number: value.replace(/\D/g, '') })}
+                  placeholder="09123456789"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  maxLength={11}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.secondary_mobile_number ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                {errors.secondary_mobile_number && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.secondary_mobile_number}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Installation Address<span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.installation_address}
-              onChange={(e) => setFormData({ ...formData, installation_address: e.target.value })}
-              rows={3}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${
-                errors.installation_address ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="Enter full installation address"
-            />
-            {errors.installation_address && <p className="text-red-500 text-xs mt-1">{errors.installation_address}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Installation Address<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  multiline
+                  numberOfLines={3}
+                  value={formData.installation_address}
+                  onChangeText={(value) => setFormData({ ...formData, installation_address: value })}
+                  placeholder="Enter full installation address"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.installation_address ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827', textAlignVertical: 'top' }}
+                />
+                {errors.installation_address && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.installation_address}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Landmark
-            </label>
-            <input
-              type="text"
-              value={formData.landmark}
-              onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              placeholder="Nearby landmark"
-            />
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Landmark
+                </Text>
+                <TextInput
+                  value={formData.landmark}
+                  onChangeText={(value) => setFormData({ ...formData, landmark: value })}
+                  placeholder="Nearby landmark"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+              </View>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Region
-              </label>
-              <input
-                type="text"
-                value={formData.region}
-                onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="Region"
-              />
-            </div>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Region
+                  </Text>
+                  <TextInput
+                    value={formData.region}
+                    onChangeText={(value) => setFormData({ ...formData, region: value })}
+                    placeholder="Region"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                City
-              </label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="City"
-              />
-            </div>
-          </div>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    City
+                  </Text>
+                  <TextInput
+                    value={formData.city}
+                    onChangeText={(value) => setFormData({ ...formData, city: value })}
+                    placeholder="City"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                </View>
+              </View>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Barangay
-              </label>
-              <input
-                type="text"
-                value={formData.barangay}
-                onChange={(e) => setFormData({ ...formData, barangay: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="Barangay"
-              />
-            </div>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Barangay
+                  </Text>
+                  <TextInput
+                    value={formData.barangay}
+                    onChangeText={(value) => setFormData({ ...formData, barangay: value })}
+                    placeholder="Barangay"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Location
-              </label>
-              <input
-                type="text"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                placeholder="Specific location"
-              />
-            </div>
-          </div>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    Location
+                  </Text>
+                  <TextInput
+                    value={formData.location}
+                    onChangeText={(value) => setFormData({ ...formData, location: value })}
+                    placeholder="Specific location"
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                  />
+                </View>
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Desired Plan<span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.desired_plan}
-              onChange={(e) => setFormData({ ...formData, desired_plan: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                errors.desired_plan ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-              } ${
-                isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-              }`}
-              placeholder="e.g., FLASH, TURBO, etc."
-            />
-            {errors.desired_plan && <p className="text-red-500 text-xs mt-1">{errors.desired_plan}</p>}
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Desired Plan<Text style={{ color: '#ef4444' }}>*</Text>
+                </Text>
+                <TextInput
+                  value={formData.desired_plan}
+                  onChangeText={(value) => setFormData({ ...formData, desired_plan: value })}
+                  placeholder="e.g., FLASH, TURBO, etc."
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: errors.desired_plan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                {errors.desired_plan && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.desired_plan}</Text>}
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Promo
-            </label>
-            <input
-              type="text"
-              value={formData.promo}
-              onChange={(e) => setFormData({ ...formData, promo: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              placeholder="Promo code (if any)"
-            />
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Promo
+                </Text>
+                <TextInput
+                  value={formData.promo}
+                  onChangeText={(value) => setFormData({ ...formData, promo: value })}
+                  placeholder="Promo code (if any)"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Referred By
-            </label>
-            <input
-              type="text"
-              value={formData.referred_by}
-              onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              placeholder="Name of referrer (if any)"
-            />
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Referred By
+                </Text>
+                <TextInput
+                  value={formData.referred_by}
+                  onChangeText={(value) => setFormData({ ...formData, referred_by: value })}
+                  placeholder="Name of referrer (if any)"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+              </View>
 
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}>
-              Government Valid ID
-            </label>
-            <input
-              type="text"
-              value={formData.government_valid_id}
-              onChange={(e) => setFormData({ ...formData, government_valid_id: e.target.value })}
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              placeholder="Google Drive link or ID number"
-            />
-            <p className={`text-xs mt-1 ${
-              isDarkMode ? 'text-gray-500' : 'text-gray-600'
-            }`}>Upload to Google Drive and paste the link here</p>
-          </div>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                  Government Valid ID
+                </Text>
+                <TextInput
+                  value={formData.government_valid_id}
+                  onChangeText={(value) => setFormData({ ...formData, government_valid_id: value })}
+                  placeholder="Google Drive link or ID number"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+                />
+                <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
+                  Upload to Google Drive and paste the link here
+                </Text>
+              </View>
 
-          <div>
-            <label className="flex items-start space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.terms_and_conditions}
-                onChange={(e) => setFormData({ ...formData, terms_and_conditions: e.target.checked })}
-                className={`mt-1 h-4 w-4 rounded border text-orange-600 focus:ring-orange-500 ${
-                  errors.terms_and_conditions
-                    ? 'border-red-500'
-                    : isDarkMode
-                    ? 'border-gray-600 bg-gray-700 focus:ring-offset-gray-800'
-                    : 'border-gray-300 bg-white focus:ring-offset-white'
-                }`}
-              />
-              <div className="flex-1">
-                <span className={`text-sm ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  I agree to the Terms and Conditions<span className="text-red-500">*</span>
-                </span>
-                <p className={`text-xs mt-1 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-600'
-                }`}>
-                  By checking this box, you confirm that you have read and agree to our terms and conditions.
-                </p>
-                {errors.terms_and_conditions && <p className="text-red-500 text-xs mt-1">{errors.terms_and_conditions}</p>}
-              </div>
-            </label>
-          </div>
+              <View>
+                <Pressable
+                  onPress={() => setFormData({ ...formData, terms_and_conditions: !formData.terms_and_conditions })}
+                  style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}
+                >
+                  <View style={{ marginTop: 4, height: 16, width: 16, borderRadius: 4, borderWidth: 1, borderColor: errors.terms_and_conditions ? '#ef4444' : (isDarkMode ? '#4b5563' : '#d1d5db'), backgroundColor: formData.terms_and_conditions ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#ffffff'), alignItems: 'center', justifyContent: 'center' }}>
+                    {formData.terms_and_conditions && <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                      I agree to the Terms and Conditions<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#6b7280' : '#4b5563' }}>
+                      By checking this box, you confirm that you have read and agree to our terms and conditions.
+                    </Text>
+                    {errors.terms_and_conditions && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.terms_and_conditions}</Text>}
+                  </View>
+                </Pressable>
+              </View>
 
-          <div className={`p-4 border rounded-lg ${
-            isDarkMode
-              ? 'bg-blue-900/20 border-blue-700/30'
-              : 'bg-blue-50 border-blue-200'
-          }`}>
-            <p className={`text-sm ${
-              isDarkMode ? 'text-blue-300' : 'text-blue-700'
-            }`}>
-              <strong>Note:</strong> Timestamp will be automatically recorded when the application is created.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+              <View style={{ padding: 16, borderWidth: 1, borderRadius: 8, backgroundColor: isDarkMode ? 'rgba(30, 58, 138, 0.2)' : '#eff6ff', borderColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : '#bfdbfe' }}>
+                <Text style={{ fontSize: 14, color: isDarkMode ? '#93c5fd' : '#1e40af' }}>
+                  <Text style={{ fontWeight: 'bold' }}>Note:</Text> Timestamp will be automatically recorded when the application is created.
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

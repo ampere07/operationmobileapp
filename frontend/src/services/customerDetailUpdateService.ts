@@ -1,6 +1,7 @@
-import apiClient from '../config/api';
+import apiClient, { API_BASE_URL } from '../config/api';
 
-const API_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+const API_URL = API_BASE_URL;
+
 
 export interface CustomerDetailsUpdate {
   firstName: string;
@@ -45,7 +46,7 @@ export const customerDetailUpdateService = {
   async updateCustomerDetails(accountNo: string, data: CustomerDetailsUpdate) {
     try {
       const formData = new FormData();
-      
+
       formData.append('firstName', data.firstName);
       if (data.middleInitial) formData.append('middleInitial', data.middleInitial);
       formData.append('lastName', data.lastName);
@@ -61,7 +62,7 @@ export const customerDetailUpdateService = {
       if (data.housingStatus) formData.append('housingStatus', data.housingStatus);
       if (data.referredBy) formData.append('referredBy', data.referredBy);
       if (data.groupName) formData.append('groupName', data.groupName);
-      
+
       if (data.houseFrontPicture && data.houseFrontPicture instanceof File) {
         formData.append('houseFrontPicture', data.houseFrontPicture);
       }

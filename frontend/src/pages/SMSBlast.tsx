@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ChevronRight, Plus, Filter, Search, X } from 'lucide-react';
 import SMSBlastDetails from '../components/SMSBlastDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { API_BASE_URL } from '../config/api';
+
 
 interface SMSBlastRecord {
   id: string;
@@ -58,8 +60,7 @@ const SMSBlast: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
-  // API Base URL
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+
 
   // Fetch SMS blast data
   useEffect(() => {
@@ -273,8 +274,8 @@ const SMSBlast: React.FC = () => {
             <button
               onClick={handleCloseDetails}
               className={`transition-colors rounded p-1 ${isDarkMode
-                  ? 'text-gray-400 hover:text-white bg-gray-800'
-                  : 'text-gray-600 hover:text-gray-900 bg-gray-200'
+                ? 'text-gray-400 hover:text-white bg-gray-800'
+                : 'text-gray-600 hover:text-gray-900 bg-gray-200'
                 }`}
             >
               <X size={20} />

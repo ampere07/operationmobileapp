@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, ScrollView, Modal, Alert, Linking } from 'react-native';
 import { 
-  ArrowLeft, ArrowRight, Maximize2, X, Phone, MessageSquare, Info, 
-  ExternalLink, Mail, ChevronDown, ChevronRight as ChevronRightIcon, 
-  Ban, XCircle, RotateCw, CheckCircle, Loader, Square, Settings
-} from 'lucide-react';
+  X, Phone, MessageSquare, Info, ExternalLink, Mail, ChevronDown, 
+  ChevronRight as ChevronRightIcon, Ban, XCircle, RotateCw, CheckCircle, 
+  Loader, Square, Settings
+} from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApplication, updateApplication } from '../../services/applicationService';
 import ConfirmationModal from '../../modals/MoveToJoModal';
 import JOAssignFormModal from '../../modals/JOAssignFormModal';
@@ -41,14 +43,9 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
   const [showVisitExistsConfirmation, setShowVisitExistsConfirmation] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const FIELD_VISIBILITY_KEY = 'applicationDetailsFieldVisibility';
   const FIELD_ORDER_KEY = 'applicationDetailsFieldOrder';
@@ -82,42 +79,36 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
   ];
 
   const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem(FIELD_VISIBILITY_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
     return defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
   });
 
-  const [fieldOrder, setFieldOrder] = useState<string[]>(() => {
-    const saved = localStorage.getItem(FIELD_ORDER_KEY);
-    return saved ? JSON.parse(saved) : defaultFields;
-  });
+  const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
 
   useEffect(() => {
-    localStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
+    const loadSettings = async () => {
+      const theme = await AsyncStorage.getItem('theme');
+      setIsDarkMode(theme === 'dark');
+
+      const savedVisibility = await AsyncStorage.getItem(FIELD_VISIBILITY_KEY);
+      if (savedVisibility) {
+        setFieldVisibility(JSON.parse(savedVisibility));
+      }
+
+      const savedOrder = await AsyncStorage.getItem(FIELD_ORDER_KEY);
+      if (savedOrder) {
+        setFieldOrder(JSON.parse(savedOrder));
+      }
+    };
+    loadSettings();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
   }, [fieldVisibility]);
 
   useEffect(() => {
-    localStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
+    AsyncStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
   }, [fieldOrder]);
-
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-    
-    checkDarkMode();
-    
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -131,38 +122,6 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
     
     fetchColorPalette();
   }, []);
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-      
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
 
   const handleMoveToJO = () => {
     setShowMoveConfirmation(true);
@@ -298,26 +257,26 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
   };
 
   const getStatusColor = (status?: string | null): string => {
-    if (!status) return 'text-gray-400';
+    if (!status) return '#9ca3af';
     
     switch (status.toLowerCase()) {
       case 'schedule':
       case 'completed':
-        return 'text-green-400';
+        return '#4ade80';
       case 'in progress':
-        return 'text-blue-400';
+        return '#60a5fa';
       case 'pending':
-        return 'text-orange-400';
+        return '#fb923c';
       case 'cancelled':
-        return 'text-red-500';
+        return '#ef4444';
       case 'no facility':
-        return 'text-red-400';
+        return '#f87171';
       case 'no slot':
-        return 'text-purple-400';
+        return '#c084fc';
       case 'duplicate':
-        return 'text-pink-400';
+        return '#f472b6';
       default:
-        return 'text-gray-400';
+        return '#9ca3af';
     }
   };
 
@@ -366,27 +325,6 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
     setFieldVisibility(allHidden);
   };
 
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (dropIndex: number) => {
-    if (draggedIndex === null) return;
-    const newOrder = [...fieldOrder];
-    const [removed] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, removed);
-    setFieldOrder(newOrder);
-    setDraggedIndex(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
   const resetFieldSettings = () => {
     const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
     setFieldVisibility(allVisible);
@@ -396,497 +334,308 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
   const renderFieldContent = (fieldKey: string) => {
     if (!fieldVisibility[fieldKey]) return null;
 
+    const baseFieldStyle = { flexDirection: 'row' as const, borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' };
+    const labelStyle = { width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' };
+    const valueStyle = { flex: 1, color: isDarkMode ? '#ffffff' : '#111827' };
+
     switch (fieldKey) {
       case 'timestamp':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Timestamp:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Timestamp:</Text>
+            <Text style={valueStyle}>
               {detailedApplication?.create_date && detailedApplication?.create_time 
                 ? `${detailedApplication.create_date} ${detailedApplication.create_time}` 
                 : formatDate(application.timestamp)}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
       
       case 'status':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Status:</div>
-            <div className={`${getStatusColor(detailedApplication?.status)} flex-1 capitalize`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Status:</Text>
+            <Text style={{ flex: 1, textTransform: 'capitalize', color: getStatusColor(detailedApplication?.status) }}>
               {detailedApplication?.status || 'Pending'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'referredBy':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Referred By:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.referred_by || 'None'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Referred By:</Text>
+            <Text style={valueStyle}>{detailedApplication?.referred_by || 'None'}</Text>
+          </View>
         );
 
       case 'fullName':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Full Name of Client:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{getClientFullName()}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Full Name of Client:</Text>
+            <Text style={valueStyle}>{getClientFullName()}</Text>
+          </View>
         );
 
       case 'fullAddress':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Full Address of Client:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{getClientFullAddress()}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Full Address of Client:</Text>
+            <Text style={valueStyle}>{getClientFullAddress()}</Text>
+          </View>
         );
 
       case 'landmark':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Landmark:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.landmark || 'Not provided'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Landmark:</Text>
+            <Text style={valueStyle}>{detailedApplication?.landmark || 'Not provided'}</Text>
+          </View>
         );
 
       case 'contactNumber':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Contact Number:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Contact Number:</Text>
+            <Text style={valueStyle}>
               {detailedApplication?.mobile_number || application.mobile_number || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'secondContactNumber':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Second Contact Number:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Second Contact Number:</Text>
+            <Text style={valueStyle}>
               {detailedApplication?.secondary_mobile_number || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'emailAddress':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Email Address:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Email Address:</Text>
+            <Text style={valueStyle}>
               {detailedApplication?.email_address || application.email_address || 'Not provided'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'village':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Village:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.village || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Village:</Text>
+            <Text style={valueStyle}>{detailedApplication?.village || 'Not specified'}</Text>
+          </View>
         );
 
       case 'barangay':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Barangay:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.barangay || application.barangay || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Barangay:</Text>
+            <Text style={valueStyle}>{detailedApplication?.barangay || application.barangay || 'Not specified'}</Text>
+          </View>
         );
 
       case 'city':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>City:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.city || application.city || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>City:</Text>
+            <Text style={valueStyle}>{detailedApplication?.city || application.city || 'Not specified'}</Text>
+          </View>
         );
 
       case 'region':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Region:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.region || application.region || 'Not specified'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Region:</Text>
+            <Text style={valueStyle}>{detailedApplication?.region || application.region || 'Not specified'}</Text>
+          </View>
         );
 
       case 'desiredPlan':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Desired Plan:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Desired Plan:</Text>
+            <Text style={valueStyle}>
               {detailedApplication?.desired_plan || 'Not specified'}
-            </div>
-          </div>
+            </Text>
+          </View>
         );
 
       case 'promo':
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Promo:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{detailedApplication?.promo || 'None'}</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Promo:</Text>
+            <Text style={valueStyle}>{detailedApplication?.promo || 'None'}</Text>
+          </View>
         );
 
       case 'termsAgreed':
         if (!detailedApplication?.terms_agreed) return null;
         return (
-          <div className={`flex border-b pb-4 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Terms and Conditions:</div>
-            <div className={`flex-1 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Agreed</div>
-          </div>
+          <View style={baseFieldStyle}>
+            <Text style={labelStyle}>Terms and Conditions:</Text>
+            <Text style={valueStyle}>Agreed</Text>
+          </View>
         );
 
       case 'proofOfBilling':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Proof of Billing</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Proof of Billing</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.proof_of_billing_url || 'No document available'}
-              </span>
+              </Text>
               {detailedApplication?.proof_of_billing_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.proof_of_billing_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.proof_of_billing_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'governmentValidId':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Government Valid ID</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Government Valid ID</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.government_valid_id_url || 'No document available'}
-              </span>
+              </Text>
               {detailedApplication?.government_valid_id_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.government_valid_id_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.government_valid_id_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'secondaryGovernmentValidId':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>
-              <div>Secondary Government</div>
-              <div>Valid ID</div>
-            </div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <View style={{ width: 160 }}>
+              <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Secondary Government</Text>
+              <Text style={{ fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Valid ID</Text>
+            </View>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.secondary_government_valid_id_url || 'No document available'}
-              </span>
+              </Text>
               {detailedApplication?.secondary_government_valid_id_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.secondary_government_valid_id_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.secondary_government_valid_id_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'houseFrontPicture':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>House Front Picture</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>House Front Picture</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.house_front_picture_url || 'No image available'}
-              </span>
+              </Text>
               {detailedApplication?.house_front_picture_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.house_front_picture_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.house_front_picture_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'promoImage':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Promo Image</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Promo Image</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.promo_url || 'No image available'}
-              </span>
+              </Text>
               {detailedApplication?.promo_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.promo_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.promo_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'nearestLandmark1':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Nearest Landmark 1</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Nearest Landmark 1</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.nearest_landmark1_url || 'No image available'}
-              </span>
+              </Text>
               {detailedApplication?.nearest_landmark1_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.nearest_landmark1_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.nearest_landmark1_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'nearestLandmark2':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Nearest Landmark 2</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Nearest Landmark 2</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.nearest_landmark2_url || 'No image available'}
-              </span>
+              </Text>
               {detailedApplication?.nearest_landmark2_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.nearest_landmark2_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.nearest_landmark2_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'documentAttachment':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Document Attachment</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Document Attachment</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.document_attachment_url || 'No document available'}
-              </span>
+              </Text>
               {detailedApplication?.document_attachment_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.document_attachment_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.document_attachment_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       case 'otherIspBill':
         return (
-          <div className={`flex border-b py-2 ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          }`}>
-            <div className={`w-40 text-sm whitespace-nowrap ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>Other ISP Bill</div>
-            <div className={`flex-1 flex items-center justify-between min-w-0 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              <span className="truncate mr-2">
+          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Other ISP Bill</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                 {detailedApplication?.other_isp_bill_url || 'No document available'}
-              </span>
+              </Text>
               {detailedApplication?.other_isp_bill_url && (
-                <button 
-                  className={`flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                  onClick={() => window.open(detailedApplication.other_isp_bill_url)}
-                >
-                  <ExternalLink size={16} />
-                </button>
+                <Pressable onPress={() => Linking.openURL(detailedApplication.other_isp_bill_url)}>
+                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </Pressable>
               )}
-            </div>
-          </div>
+            </View>
+          </View>
         );
 
       default:
@@ -895,302 +644,165 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
   };
   
   return (
-    <div className={`h-full flex flex-col overflow-hidden border-l relative ${
-      isDarkMode ? 'bg-gray-950 border-white border-opacity-30' : 'bg-gray-50 border-gray-300'
-    }`} style={{ width: `${detailsWidth}px` }}>
-      <div
-        className={`absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50 ${
-          isDarkMode ? 'hover:bg-orange-500' : 'hover:bg-orange-600'
-        }`}
-        onMouseDown={handleMouseDownResize}
-      />
-      
-      <div className={`p-3 flex items-center justify-between border-b ${
-        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-      }`}>
-        <div className="flex items-center">
-          <h2 className={isDarkMode ? 'text-white font-medium' : 'text-gray-900 font-medium'}>{getClientFullName()}</h2>
-          {loading && <div className={`ml-3 animate-pulse text-sm ${
-            isDarkMode ? 'text-orange-500' : 'text-orange-600'
-          }`}>Loading...</div>}
-        </div>
+    <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', borderLeftWidth: 1, position: 'relative', backgroundColor: isDarkMode ? '#030712' : '#f9fafb', borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db' }}>
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', fontWeight: '500' }}>{getClientFullName()}</Text>
+          {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#fb923c' : '#ea580c' }}>Loading...</Text>}
+        </View>
         
-        <div className="flex items-center space-x-3">
-          <button 
-            className="px-3 py-1 rounded-sm flex items-center text-white"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-            onClick={handleMoveToJO}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Pressable 
+            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            onPress={handleMoveToJO}
             disabled={loading}
           >
-            <span>Move to JO</span>
-          </button>
-          <button 
-            className="px-3 py-1 rounded-sm flex items-center text-white"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-            onClick={handleScheduleVisit}
+            <Text style={{ color: '#ffffff' }}>Move to JO</Text>
+          </Pressable>
+          <Pressable 
+            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            onPress={handleScheduleVisit}
             disabled={loading}
           >
-            <span>Schedule</span>
-          </button>
+            <Text style={{ color: '#ffffff' }}>Schedule</Text>
+          </Pressable>
           
-          <div className="relative">
-            <button
-              onClick={() => setShowFieldSettings(!showFieldSettings)}
-              className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-              title="Field Settings"
-            >
-              <Settings size={16} />
-            </button>
-            {showFieldSettings && (
-              <div className={`absolute right-0 mt-2 w-80 rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-white border-gray-200'
-              }`}>
-                <div className={`px-4 py-3 border-b flex items-center justify-between ${
-                  isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                }`}>
-                  <h3 className={`font-semibold ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Field Visibility & Order</h3>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={selectAllFields}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Show All
-                    </button>
-                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
-                    <button
-                      onClick={deselectAllFields}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Hide All
-                    </button>
-                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>|</span>
-                    <button
-                      onClick={resetFieldSettings}
-                      className="text-blue-600 hover:text-blue-700 text-xs"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-                <div className="p-2">
-                  <div className={`text-xs mb-2 px-2 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Drag to reorder fields
-                  </div>
-                  {fieldOrder.map((fieldKey, index) => (
-                    <div
-                      key={fieldKey}
-                      draggable
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(index)}
-                      onDragEnd={handleDragEnd}
-                      className={`flex items-center space-x-2 px-2 py-1.5 rounded cursor-move transition-colors ${
-                        isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                      } ${
-                        draggedIndex === index
-                          ? isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
-                          : ''
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={fieldVisibility[fieldKey]}
-                        onChange={() => toggleFieldVisibility(fieldKey)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className={`text-xs ${
-                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                      }`}>☰</span>
-                      <span className={`text-sm ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
-                        {getFieldLabel(fieldKey)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <Pressable onPress={() => setShowFieldSettings(!showFieldSettings)}>
+            <Settings width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
           
-          <button 
-            onClick={onClose}
-            className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+          <Pressable onPress={onClose}>
+            <X width={18} height={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        </View>
+      </View>
       
-      <div className={`py-3 border-b flex items-center justify-center px-4 ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-200'
-      }`}>
-        <button 
-          className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-          }`}
-          onClick={() => handleStatusChange('No Facility')}
+      <View style={{ paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+        <Pressable 
+          style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
+          onPress={() => handleStatusChange('No Facility')}
           disabled={loading}
         >
-          <div 
-            className="p-2 rounded-full"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-          >
-            <div className="text-white">
-              <Ban size={18} />
-            </div>
-          </div>
-          <span className={`text-xs mt-1 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>No Facility</span>
-        </button>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+            <Ban width={18} height={18} color="#ffffff" />
+          </View>
+          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>No Facility</Text>
+        </Pressable>
         
-        <button 
-          className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-          }`}
-          onClick={() => handleStatusChange('Cancelled')}
+        <Pressable 
+          style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
+          onPress={() => handleStatusChange('Cancelled')}
           disabled={loading}
         >
-          <div 
-            className="p-2 rounded-full"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-          >
-            <div className="text-white">
-              <XCircle size={18} />
-            </div>
-          </div>
-          <span className={`text-xs mt-1 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>Cancelled</span>
-        </button>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+            <XCircle width={18} height={18} color="#ffffff" />
+          </View>
+          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Cancelled</Text>
+        </Pressable>
         
-        <button 
-          className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-          }`}
-          onClick={() => handleStatusChange('No Slot')}
+        <Pressable 
+          style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
+          onPress={() => handleStatusChange('No Slot')}
           disabled={loading}
         >
-          <div 
-            className="p-2 rounded-full"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-          >
-            <div className="text-white">
-              <RotateCw size={18} />
-            </div>
-          </div>
-          <span className={`text-xs mt-1 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>No Slot</span>
-        </button>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+            <RotateCw width={18} height={18} color="#ffffff" />
+          </View>
+          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>No Slot</Text>
+        </Pressable>
         
-        <button 
-          className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-          }`}
-          onClick={() => handleStatusChange('Duplicate')}
+        <Pressable 
+          style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
+          onPress={() => handleStatusChange('Duplicate')}
           disabled={loading}
         >
-          <div 
-            className="p-2 rounded-full"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-          >
-            <div className="text-white">
-              <Square size={18} />
-            </div>
-          </div>
-          <span className={`text-xs mt-1 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>Duplicate</span>
-        </button>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+            <Square width={18} height={18} color="#ffffff" />
+          </View>
+          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Duplicate</Text>
+        </Pressable>
         
-        <button 
-          className={`flex flex-col items-center text-center p-2 rounded-md transition-colors ${
-            isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-200'
-          }`}
-          onClick={() => handleStatusChange('In Progress')}
+        <Pressable 
+          style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
+          onPress={() => handleStatusChange('In Progress')}
           disabled={loading}
         >
-          <div 
-            className="p-2 rounded-full"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-          >
-            <div className="text-white">
-              <CheckCircle size={18} />
-            </div>
-          </div>
-          <span className={`text-xs mt-1 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>Clear Status</span>
-        </button>
-      </div>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+            <CheckCircle width={18} height={18} color="#ffffff" />
+          </View>
+          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Clear Status</Text>
+        </Pressable>
+      </View>
       
       {error && (
-        <div className={`p-3 m-3 rounded ${
-          isDarkMode 
-            ? 'bg-red-900 bg-opacity-20 border border-red-700 text-red-400'
-            : 'bg-red-100 border border-red-300 text-red-700'
-        }`}>
-          {error}
-        </div>
+        <View style={{ padding: 12, margin: 12, borderRadius: 4, backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2', borderWidth: 1, borderColor: isDarkMode ? '#991b1b' : '#fca5a5' }}>
+          <Text style={{ color: isDarkMode ? '#fca5a5' : '#991b1b' }}>{error}</Text>
+        </View>
       )}
       
-      <div className="flex-1 overflow-y-auto">
-        <div className={`max-w-2xl mx-auto py-6 px-4 ${
-          isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-        }`}>
-          <div className="space-y-4">
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <View style={{ maxWidth: 672, marginHorizontal: 'auto', paddingVertical: 24, paddingHorizontal: 16, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+          <View style={{ gap: 16 }}>
             {fieldOrder.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
                 {renderFieldContent(fieldKey)}
               </React.Fragment>
             ))}
-          </div>
-        </div>
-      </div>
+          </View>
+        </View>
+      </ScrollView>
+
+      {showFieldSettings && (
+        <Modal
+          visible={showFieldSettings}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFieldSettings(false)}
+        >
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setShowFieldSettings(false)}
+          >
+            <Pressable
+              style={{ width: '90%', maxWidth: 400, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, borderWidth: 1, maxHeight: '80%', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+                <Text style={{ fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Field Visibility</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable onPress={selectAllFields}>
+                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Show All</Text>
+                  </Pressable>
+                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                  <Pressable onPress={deselectAllFields}>
+                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Hide All</Text>
+                  </Pressable>
+                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                  <Pressable onPress={resetFieldSettings}>
+                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Reset</Text>
+                  </Pressable>
+                </View>
+              </View>
+              <ScrollView style={{ padding: 8 }} showsVerticalScrollIndicator={false}>
+                {fieldOrder.map((fieldKey) => (
+                  <Pressable
+                    key={fieldKey}
+                    onPress={() => toggleFieldVisibility(fieldKey)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4 }}
+                  >
+                    <View style={{ height: 16, width: 16, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: fieldVisibility[fieldKey] ? '#2563eb' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}>
+                      {fieldVisibility[fieldKey] && <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>}
+                    </View>
+                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                      {getFieldLabel(fieldKey)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
       
       <ConfirmationModal
         isOpen={showMoveConfirmation}
@@ -1252,7 +864,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
       />
-    </div>
+    </View>
   );
 };
 

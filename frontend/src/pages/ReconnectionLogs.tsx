@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, Search, Circle, X } from 'lucide-react';
 import ReconnectionLogsDetails from '../components/ReconnectionLogsDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { API_BASE_URL } from '../config/api';
+
 
 interface ReconnectionLogRecord {
   id: string;
@@ -108,8 +110,7 @@ const ReconnectionLogs: React.FC = () => {
     { key: 'reconnectionCode', label: 'Reconnection Code', width: 'min-w-36' }
   ];
 
-  // API Base URL
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+
 
   // Fetch reconnection log data
   useEffect(() => {

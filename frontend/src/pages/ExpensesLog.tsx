@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Eye, X } from 'lucide-react';
 import ExpensesLogDetails from '../components/ExpensesLogDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { API_BASE_URL } from '../config/api';
+
 
 interface ExpenseRecord {
   id: string;
@@ -61,8 +63,7 @@ const ExpensesLog: React.FC = () => {
     fetchColorPalette();
   }, []);
 
-  // API Base URL
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+
 
   useEffect(() => {
     const fetchExpenseData = async () => {
@@ -123,8 +124,8 @@ const ExpensesLog: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`w-full rounded pl-10 pr-4 py-3 focus:outline-none text-sm ${isDarkMode
-                  ? 'bg-slate-700 text-white border-slate-600'
-                  : 'bg-white text-gray-900 border-gray-300'
+                ? 'bg-slate-700 text-white border-slate-600'
+                : 'bg-white text-gray-900 border-gray-300'
                 }`}
               onFocus={(e) => {
                 if (colorPalette?.primary) {
@@ -203,8 +204,8 @@ const ExpensesLog: React.FC = () => {
                         <tr
                           key={record.id}
                           className={`border-b cursor-pointer transition-colors ${isDarkMode
-                              ? 'border-slate-800 hover:bg-slate-800'
-                              : 'border-gray-200 hover:bg-gray-50'
+                            ? 'border-slate-800 hover:bg-slate-800'
+                            : 'border-gray-200 hover:bg-gray-50'
                             } ${selectedExpense?.id === record.id
                               ? isDarkMode ? 'bg-slate-800' : 'bg-gray-100'
                               : ''
@@ -267,8 +268,8 @@ const ExpensesLog: React.FC = () => {
             <button
               onClick={handleCloseDetails}
               className={`transition-colors rounded p-1 ${isDarkMode
-                  ? 'text-slate-400 hover:text-white bg-slate-800'
-                  : 'text-gray-600 hover:text-gray-900 bg-gray-100'
+                ? 'text-slate-400 hover:text-white bg-slate-800'
+                : 'text-gray-600 hover:text-gray-900 bg-gray-100'
                 }`}
             >
               <X size={20} />

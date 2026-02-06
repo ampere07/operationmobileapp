@@ -1,14 +1,7 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 
-const getApiBaseUrl = (): string => {
-  const baseUrl = process.env.REACT_APP_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("REACT_APP_API_BASE_URL is not defined");
-  }
-  return baseUrl;
-};
-
-const API_BASE_URL = getApiBaseUrl();
 
 export interface PaymentPortalLog {
   id: string | number;
@@ -60,9 +53,9 @@ export const paymentPortalLogsService = {
     search?: string;
   }): Promise<PaymentPortalLog[]> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';
@@ -91,9 +84,9 @@ export const paymentPortalLogsService = {
    */
   getLogById: async (id: string | number): Promise<PaymentPortalLog | null> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';
@@ -121,9 +114,9 @@ export const paymentPortalLogsService = {
    */
   getLogsByAccountNo: async (accountNo: string): Promise<PaymentPortalLog[]> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';

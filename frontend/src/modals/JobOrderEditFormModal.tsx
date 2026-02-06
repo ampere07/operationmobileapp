@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, Calendar, ChevronDown, Minus, Plus, Camera, MapPin, Loader2 } from 'lucide-react';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
@@ -122,20 +123,32 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  const getCurrentUser = (): UserData | null => {
-    try {
-      const authData = localStorage.getItem('authData');
-      if (authData) {
-        return JSON.parse(authData);
-      }
-    } catch (error) {
-      console.error('Error getting current user:', error);
-    }
-    return null;
-  };
+  // const currentUser = getCurrentUser(); // Removed synchronous call
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('unknown@ampere.com');
 
-  const currentUser = getCurrentUser();
-  const currentUserEmail = currentUser?.email || 'unknown@ampere.com';
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const authData = await AsyncStorage.getItem('authData');
+        if (authData) {
+          const user = JSON.parse(authData);
+          setCurrentUserEmail(user.email || 'unknown@ampere.com');
+        }
+      } catch (error) {
+        console.error('Error getting current user:', error);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    if (currentUserEmail && currentUserEmail !== 'unknown@ampere.com') {
+      setFormData(prev => ({
+        ...prev,
+        modifiedBy: currentUserEmail
+      }));
+    }
+  }, [currentUserEmail]);
 
   const [formData, setFormData] = useState<JobOrderEditFormData>({
     referredBy: '',
@@ -171,7 +184,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
-    modifiedBy: currentUserEmail,
+    modifiedBy: '', // Initialize empty, will act as placeholder until useEffect updates it or user acts
     modifiedDate: new Date().toLocaleString('en-US', {
       month: '2-digit',
       day: '2-digit',
@@ -239,23 +252,29 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
   });
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
 
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
+    // MutationObserver is for web DOM changes, might not be relevant/working in RN context depending on setup
+    // but leaving it commented out or removed if strictly RN. 
+    // Assuming this might still be running in a webview or hybrid, I'll update it to check safely.
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(() => {
+        checkDarkMode();
+      });
 
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+      if (document.documentElement) {
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['class']
+        });
+      }
+      return () => observer.disconnect();
+    }
   }, []);
 
   useEffect(() => {

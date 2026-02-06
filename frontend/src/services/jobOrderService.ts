@@ -1,4 +1,5 @@
 import apiClient from '../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { JobOrderData } from '../types/jobOrder';
 
 // Export JobOrderData for backwards compatibility
@@ -27,12 +28,12 @@ export const createJobOrder = async (jobOrderData: JobOrderData) => {
 export const getJobOrders = async (assignedEmail?: string) => {
   try {
     const params: { assigned_email?: string; user_role?: string } = {};
-    
+
     if (assignedEmail) {
       params.assigned_email = assignedEmail;
     }
-    
-    const authData = localStorage.getItem('authData');
+
+    const authData = await AsyncStorage.getItem('authData');
     if (authData) {
       try {
         const userData = JSON.parse(authData);
@@ -43,9 +44,9 @@ export const getJobOrders = async (assignedEmail?: string) => {
         console.error('Failed to parse authData:', err);
       }
     }
-    
+
     const response = await apiClient.get<ApiResponse<JobOrderData[]>>('/job-orders', { params });
-    
+
     // Process the data to ensure it matches our expected format
     if (response.data && response.data.success && Array.isArray(response.data.data)) {
       // Map any database field names that might be different from our interface
@@ -58,13 +59,13 @@ export const getJobOrders = async (assignedEmail?: string) => {
           id: item.id || item.JobOrder_ID
         };
       });
-      
+
       return {
         ...response.data,
         data: processedData
       };
     }
-    
+
     return response.data;
   } catch (error) {
     console.error('Error fetching job orders:', error);

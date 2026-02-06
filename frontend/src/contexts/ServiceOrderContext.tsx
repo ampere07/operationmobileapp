@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getServiceOrders, ServiceOrderData } from '../services/serviceOrderService';
 
 interface ServiceOrder {
@@ -153,7 +154,7 @@ export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ chil
 
         try {
             // Get user role and email for filtering
-            const authData = localStorage.getItem('authData');
+            const authData = await AsyncStorage.getItem('authData');
             let assignedEmail: string | undefined;
 
             if (authData) {

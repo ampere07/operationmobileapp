@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getJobOrders } from '../services/jobOrderService';
 import { JobOrder } from '../types/jobOrder';
 
@@ -43,7 +44,7 @@ export const JobOrderProvider: React.FC<JobOrderProviderProps> = ({ children }) 
 
         try {
             // Get user role and email for filtering
-            const authData = localStorage.getItem('authData');
+            const authData = await AsyncStorage.getItem('authData');
             let assignedEmail: string | undefined;
 
             if (authData) {

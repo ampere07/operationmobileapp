@@ -1,14 +1,7 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 
-const getApiBaseUrl = (): string => {
-  const baseUrl = process.env.REACT_APP_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("REACT_APP_API_BASE_URL is not defined");
-  }
-  return baseUrl;
-};
-
-const API_BASE_URL = getApiBaseUrl();
 
 export interface PendingPayment {
   reference_no: string;
@@ -44,9 +37,9 @@ export interface PaymentStatusResponse {
 export const paymentService = {
   getAccountBalance: async (accountNo: string): Promise<number> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';
@@ -72,9 +65,9 @@ export const paymentService = {
 
   checkPendingPayment: async (accountNo: string): Promise<PendingPayment | null> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';
@@ -101,21 +94,21 @@ export const paymentService = {
   createPayment: async (accountNo: string, amount: number): Promise<PaymentResponse> => {
     try {
       console.log('Payment Service - Creating payment:', { accountNo, amount });
-      
+
       if (!accountNo || accountNo.trim() === '') {
         throw new Error('Account number is missing from user session. Please log in again.');
       }
 
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';
-        console.log('Auth data:', { 
-          hasToken: !!token, 
+        console.log('Auth data:', {
+          hasToken: !!token,
           accountNo: parsed.account_no,
-          username: parsed.username 
+          username: parsed.username
         });
       }
 
@@ -140,7 +133,7 @@ export const paymentService = {
       return response.data as PaymentResponse;
     } catch (error: any) {
       console.error('Payment creation error:', error.response?.data || error.message);
-      
+
       if (error.response?.data) {
         throw new Error(error.response.data.message || 'Payment creation failed');
       }
@@ -150,9 +143,9 @@ export const paymentService = {
 
   checkPaymentStatus: async (referenceNo: string): Promise<PaymentStatusResponse> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       let token = '';
-      
+
       if (authData) {
         const parsed = JSON.parse(authData);
         token = parsed.token || '';

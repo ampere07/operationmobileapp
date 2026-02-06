@@ -50,6 +50,8 @@ import {
   DEFAULT_VISIBLE_WIDGETS,
   CURRENCY_WIDGETS
 } from '../types/monitor.types';
+import { API_BASE_URL } from '../config/api';
+
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -86,10 +88,7 @@ const LiveMonitor: React.FC = () => {
 
   const refreshInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // IMPORTANT:
-  // put this in .env of React:
-  // REACT_APP_API_BASE_URL=https://backend.atssfiber.ph/api
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+
 
   const buildHandleUrl = (params: Record<string, string | number | undefined>) => {
     const url = new URL(`${API_BASE_URL}/monitor/handle`);

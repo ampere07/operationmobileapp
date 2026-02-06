@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Picker } from '@react-native-picker/picker';
+import { X, Calendar, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { userService } from '../services/userService';
@@ -86,23 +89,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
+    const checkDarkMode = async () => {
+      try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark' || theme === null);
+      } catch (e) {
+        setIsDarkMode(true);
+      }
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -117,18 +113,22 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchColorPalette();
   }, []);
 
-  const getCurrentUser = (): UserData | null => {
-    try {
-      const authData = localStorage.getItem('authData');
-      if (authData) {
-        return JSON.parse(authData);
-      }
-    } catch (error) {
-    }
-    return null;
-  };
+  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
 
-  const currentUser = getCurrentUser();
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const authData = await AsyncStorage.getItem('authData');
+        if (authData) {
+          setCurrentUser(JSON.parse(authData));
+        }
+      } catch (error) {
+        console.error('Failed to fetch auth data:', error);
+      }
+    };
+    fetchUserData();
+  }, []);
+
   const currentUserEmail = currentUser?.email || 'unknown@unknown.com';
 
   const [formData, setFormData] = useState<JobOrderDoneFormData>({
@@ -247,86 +247,80 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const ImagePreview: React.FC<{
     imageUrl: string | null;
     label: string;
-    onUpload: (file: File) => void;
+    onUpload: (file: any) => void;
     error?: string;
   }> = ({ imageUrl, label, onUpload, error }) => {
     const [imageLoadError, setImageLoadError] = useState(false);
     const isGDrive = isGoogleDriveUrl(imageUrl);
-    const isBlobUrl = imageUrl?.startsWith('blob:');
+    const isBlobUrl = imageUrl?.startsWith('blob:') || imageUrl?.startsWith('file:');
     const isCloud = isCloudUrl(imageUrl);
 
     return (
-      <div>
-        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>{label}</label>
-        <div className={`relative w-full h-48 border rounded overflow-hidden cursor-pointer ${isDarkMode ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-          }`}>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                onUpload(e.target.files[0]);
-                setImageLoadError(false);
-              }
-            }}
-            className="absolute inset-0 opacity-0 cursor-pointer z-10"
-          />
+      <View className="mb-4">
+        <Text className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          }`}>{label}</Text>
+        <Pressable
+          onPress={() => {
+            // Native file picker should be called here
+            console.log('Upload image pressed');
+          }}
+          className={`relative w-full h-48 border rounded overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'
+            }`}
+        >
           {imageUrl && !imageLoadError ? (
-            <div className="relative w-full h-full">
-              {isBlobUrl ? (
-                <img
-                  src={imageUrl}
-                  alt={label}
-                  className="w-full h-full object-contain"
+            <View className="relative w-full h-full">
+              {isBlobUrl || (!isGDrive && !imageLoadError) ? (
+                <Image
+                  source={{ uri: imageUrl }}
+                  className="w-full h-full"
+                  resizeMode="contain"
                   onError={() => setImageLoadError(true)}
                 />
               ) : isCloud ? (
-                <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}>
-                  <Camera size={48} className="mb-2 opacity-50" />
-                  <span className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Camera size={48} color={isDarkMode ? '#9CA3AF' : '#4B5563'} className="mb-2 opacity-50" />
+                  <Text className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {isGDrive ? 'Image stored in Google Drive' : 'Image stored in Cloud'}
-                  </span>
-                  <a
-                    href={imageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium hover:underline z-20"
+                  </Text>
+                  <Text
+                    onPress={() => Linking.openURL(imageUrl!)}
+                    className="text-sm font-medium underline"
                     style={{ color: colorPalette?.primary || '#ea580c' }}
-                    onClick={(e) => e.stopPropagation()}
                   >
                     View in {isGDrive ? 'Drive' : 'Source'}
-                  </a>
-                </div>
+                  </Text>
+                </View>
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center">
-                  <Camera size={32} />
-                  <span className="text-sm mt-2">Invalid image source</span>
-                </div>
+                <View className="w-full h-full flex flex-col items-center justify-center">
+                  <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <Text className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Invalid image source</Text>
+                </View>
               )}
-              <div className="absolute bottom-3 right-3 bg-[#22c55e] text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-lg pointer-events-none z-30">
-                <Camera className="mr-2" size={16} />Uploaded
-              </div>
-            </div>
+              <View className="absolute bottom-3 right-3 bg-[#22c55e] px-3 py-1.5 rounded-md flex-row items-center shadow-lg pointer-events-none z-30">
+                <Camera color="white" size={16} className="mr-2" /><Text className="text-white text-sm font-medium ml-1">Uploaded</Text>
+              </View>
+            </View>
           ) : (
-            <div className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}>
-              <Camera size={32} />
-              <span className="text-sm mt-2 font-medium">Click to upload</span>
-            </div>
+              <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              <Text className="text-sm mt-2 font-medium">Click to upload</Text>
+            </View>
           )}
-        </div>
+        </Pressable>
         {error && (
-          <div className="flex items-center mt-1">
-            <div
-              className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2 shadow-sm"
+          <View className="flex-row items-center mt-1">
+            <View
+              className="flex items-center justify-center w-4 h-4 rounded-full mr-2 shadow-sm"
               style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-            >!</div>
-            <p className="text-xs font-medium" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-          </div>
+            >
+              <Text className="text-white text-[10px] font-bold">!</Text>
+            </View>
+            <Text className="text-xs font-medium" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+          </View>
         )}
-      </div>
+      </View>
     );
   };
 
@@ -1509,1031 +1503,1123 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
   return (
-    <>
-      {showLoadingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-          <div className={`rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px] ${isDarkMode ? 'bg-gray-800' : 'bg-white'
-            }`}>
-            <Loader2
-              className="w-20 h-20 animate-spin"
-              style={{ color: colorPalette?.primary || '#ea580c' }}
-            />
-            <div className="text-center">
-              <p className={`text-4xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{loadingPercentage}%</p>
-            </div>
-          </div>
-        </div>
-      )}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60]">
-          <div className={`rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'
-            }`}>
-            <div className={`px-6 py-4 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-              <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{modalContent.title}</h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className={`transition-colors ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="space-y-3">
-                {modalContent.messages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`flex items-start gap-3 p-3 rounded-lg border ${message.type === 'success'
-                      ? (isDarkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-100 border-green-300')
-                      : message.type === 'warning'
-                        ? (isDarkMode ? 'bg-yellow-900/30 border-yellow-700' : 'bg-yellow-100 border-yellow-300')
-                        : (isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-100 border-red-300')
-                      }`}
-                  >
-                    {message.type === 'success' && (
-                      <CheckCircle className="text-green-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    {message.type === 'warning' && (
-                      <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    {message.type === 'error' && (
-                      <XCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
-                    )}
-                    <p
-                      className={`text-sm ${message.type === 'success'
-                        ? (isDarkMode ? 'text-green-200' : 'text-green-800')
+    <Modal
+      visible={isOpen}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 bg-black/50 justify-end">
+        <Modal
+          visible={showLoadingModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View className="flex-1 bg-black/70 items-center justify-center">
+            <View className={`rounded-xl p-8 items-center space-y-6 min-w-[320px] ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <Loader2
+                size={80}
+                color={colorPalette?.primary || '#ea580c'}
+                className="animate-spin"
+              />
+              <View>
+                <Text className={`text-4xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{loadingPercentage}%</Text>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View className="flex-1 bg-black/75 items-center justify-center p-4">
+            <View className={`rounded-xl shadow-xl max-w-2xl w-full max-h-[80%] overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <View className={`px-6 py-4 border-b flex-row items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{modalContent.title}</Text>
+                <Pressable
+                  onPress={() => setShowModal(false)}
+                  className="p-1"
+                >
+                  <X size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <ScrollView className="px-6 py-4">
+                <View className="space-y-3">
+                  {modalContent.messages.map((message, index) => (
+                    <View
+                      key={index}
+                      className={`flex-row items-start gap-3 p-3 rounded-lg border ${message.type === 'success'
+                        ? (isDarkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-100 border-green-300')
                         : message.type === 'warning'
-                          ? (isDarkMode ? 'text-yellow-200' : 'text-yellow-800')
-                          : (isDarkMode ? 'text-red-200' : 'text-red-800')
+                          ? (isDarkMode ? 'bg-yellow-900/30 border-yellow-700' : 'bg-yellow-100 border-yellow-300')
+                          : (isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-100 border-red-300')
                         }`}
                     >
-                      {message.text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`px-6 py-4 border-t flex justify-end ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-white rounded transition-colors"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-        <div className={`h-full w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-          }`}>
-          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
+                      {message.type === 'success' && (
+                        <CheckCircle className="text-green-500 mt-0.5" size={20} />
+                      )}
+                      {message.type === 'warning' && (
+                        <AlertCircle className="text-yellow-500 mt-0.5" size={20} />
+                      )}
+                      {message.type === 'error' && (
+                        <XCircle className="text-red-500 mt-0.5" size={20} />
+                      )}
+                      <Text
+                        className={`text-sm flex-1 ${message.type === 'success'
+                          ? (isDarkMode ? 'text-green-200' : 'text-green-800')
+                          : message.type === 'warning'
+                            ? (isDarkMode ? 'text-yellow-200' : 'text-yellow-800')
+                            : (isDarkMode ? 'text-red-200' : 'text-red-800')
+                          }`}
+                      >
+                        {message.text}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+              <View className={`px-6 py-4 border-t flex-row justify-end ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <Pressable
+                  onPress={() => setShowModal(false)}
+                  className="px-6 py-2 rounded-lg"
+                  style={{
+                    backgroundColor: colorPalette?.primary || '#ea580c'
+                  }}
+                >
+                  <Text className="text-white font-medium text-center">Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
-              <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{fullName}</h2>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border rounded text-sm transition-colors"
+        <View className={`h-[90%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+          }`}>
+          <View className={`px-6 py-4 flex-row items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
+            }`}>
+            <View className="flex-row items-center space-x-3">
+              <Text className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{fullName}</Text>
+            </View>
+            <View className="flex-row items-center space-x-3 gap-2">
+              <Pressable
+                onPress={onClose}
+                className="px-4 py-2 border rounded-lg"
                 style={{
                   borderColor: colorPalette?.primary || '#ea580c',
-                  color: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    e.currentTarget.style.color = 'white';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.color = colorPalette.primary;
-                  }
                 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
+                <Text style={{ color: colorPalette?.primary || '#ea580c' }} className="text-sm font-medium">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSave}
                 disabled={loading}
-                className="px-4 py-2 disabled:opacity-50 text-white rounded text-sm transition-colors"
+                className="px-6 py-2 rounded-lg"
                 style={{
-                  backgroundColor: loading ? (isDarkMode ? '#6b7280' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading && colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
+                  backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
                 }}
               >
-                {loading ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
+                <Text className="text-white text-sm font-medium">{loading ? 'Saving...' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </View>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Choose Plan<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.choosePlan} onChange={(e) => handleInputChange('choosePlan', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } ${errors.choosePlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                  <option value="">Select Plan</option>
-                  {formData.choosePlan && !plans.some(plan => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
-                  }) && (
-                      <option value={formData.choosePlan}>{formData.choosePlan}</option>
-                    )}
-                  {plans.map((plan) => {
-                    const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                    return (
-                      <option key={plan.id} value={planWithPrice}>
-                        {planWithPrice}
-                      </option>
-                    );
-                  })}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.choosePlan && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.choosePlan}</p>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Onsite Status<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select value={formData.onsiteStatus} onChange={(e) => handleInputChange('onsiteStatus', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                  } ${errors.onsiteStatus ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Done">Done</option>
-                  <option value="Failed">Failed</option>
-                  <option value="Reschedule">Reschedule</option>
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.onsiteStatus && (
-                <div className="flex items-center mt-1">
-                  <div
-                    className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                    style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                  >!</div>
-                  <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.onsiteStatus}</p>
-                </div>
-              )}
-            </div>
-
-
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Region</label>
-              <input
-                type="text"
-                value={formData.region}
-                readOnly
-                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-gray-300'
-                  : 'bg-gray-100 border-gray-300 text-gray-600'
-                  }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>City</label>
-              <input
-                type="text"
-                value={formData.city}
-                readOnly
-                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-gray-300'
-                  : 'bg-gray-100 border-gray-300 text-gray-600'
-                  }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Barangay</label>
-              <input
-                type="text"
-                value={formData.barangay}
-                readOnly
-                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-gray-300'
-                  : 'bg-gray-100 border-gray-300 text-gray-600'
-                  }`}
-              />
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Location</label>
-              <input
-                type="text"
-                value={formData.location}
-                readOnly
-                className={`w-full px-3 py-2 border rounded focus:outline-none cursor-not-allowed opacity-75 ${isDarkMode
-                  ? 'bg-gray-700 border-gray-600 text-gray-300'
-                  : 'bg-gray-100 border-gray-300 text-gray-600'
-                  }`}
-              />
-            </div>
-
-            {formData.onsiteStatus === 'Done' && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Date Installed<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input type="date" value={formData.dateInstalled} onChange={(e) => handleInputChange('dateInstalled', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`} />
-                    <Calendar className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.dateInstalled && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Usage Type<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.usageType} onChange={(e) => handleInputChange('usageType', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.usageType ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value=""></option>
-                      {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                        <option value={formData.usageType}>{formData.usageType}</option>
-                      )}
-                      {usageTypes.map((usageType) => (
-                        <option key={usageType.id} value={usageType.usage_name}>
-                          {usageType.usage_name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.usageType && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Connection Type<span className="text-red-500">*</span></label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('connectionType', 'Antenna')}
-                      className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Antenna'
-                        ? 'text-white'
-                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
-                        }`}
-                      style={formData.connectionType === 'Antenna' ? {
-                        backgroundColor: colorPalette?.primary || '#ea580c',
-                        borderColor: colorPalette?.accent || '#dc2626'
-                      } : {}}
-                    >Antenna</button>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('connectionType', 'Fiber')}
-                      className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Fiber'
-                        ? 'text-white'
-                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
-                        }`}
-                      style={formData.connectionType === 'Fiber' ? {
-                        backgroundColor: colorPalette?.primary || '#ea580c',
-                        borderColor: colorPalette?.accent || '#dc2626'
-                      } : {}}
-                    >Fiber</button>
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange('connectionType', 'Local')}
-                      className={`py-2 px-4 rounded border transition-colors duration-200 ${formData.connectionType === 'Local'
-                        ? 'text-white'
-                        : (isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-700')
-                        }`}
-                      style={formData.connectionType === 'Local' ? {
-                        backgroundColor: colorPalette?.primary || '#ea580c',
-                        borderColor: colorPalette?.accent || '#dc2626'
-                      } : {}}
-                    >Local</button>
-                  </div>
-                  {errors.connectionType && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Router Model<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.routerModel} onChange={(e) => handleInputChange('routerModel', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.routerModel ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value=""></option>
-                      {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
-                        <option value={formData.routerModel}>{formData.routerModel}</option>
-                      )}
-                      {routerModels.map((routerModel, index) => (
-                        <option key={index} value={routerModel.model}>{routerModel.model}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.routerModel && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Modem SN<span className="text-red-500">*</span></label>
-                  <input type="text" value={formData.modemSN} onChange={(e) => handleInputChange('modemSN', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.modemSN ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`} />
-                  {errors.modemSN && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                {usernamePattern && usernamePattern.sequence.some(item => item.type === 'tech_input') && (
-                  <div>
-                    <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>PPPoE Username<span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={techInputValue}
-                      onChange={(e) => {
-                        setTechInputValue(e.target.value);
-                        if (errors.techInput) {
-                          setErrors(prev => ({ ...prev, techInput: '' }));
-                        }
-                      }}
-                      placeholder="Enter PPPoE username"
-                      className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                        } ${errors.techInput ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                    />
-                    {errors.techInput && (
-                      <div className="flex items-center mt-1">
-                        <div
-                          className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                        >!</div>
-                        <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.techInput}</p>
-                      </div>
-                    )}
-                    {!techInputValue.trim() && !errors.techInput && (
-                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>This will be used as the PPPoE username</p>
-                    )}
-                  </div>
+          <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }}>
+            <View className="space-y-4">
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Choose Plan<Text className="text-red-500">*</Text></Text>
+                <View className="relative">
+                  <View className={`border rounded-lg overflow-hidden ${errors.choosePlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <Picker
+                      selectedValue={formData.choosePlan}
+                      onValueChange={(value) => handleInputChange('choosePlan', value)}
+                      style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                    >
+                      <Picker.Item label="Select Plan" value="" />
+                      {formData.choosePlan && !plans.some(plan => {
+                        const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                        return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
+                      }) && (
+                          <Picker.Item label={formData.choosePlan} value={formData.choosePlan} />
+                        )}
+                      {plans.map((plan) => {
+                        const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
+                        return (
+                          <Picker.Item key={plan.id} label={planWithPrice} value={planWithPrice} />
+                        );
+                      })}
+                    </Picker>
+                  </View>
+                </View>
+                {errors.choosePlan && (
+                  <View className="flex-row items-center mt-1">
+                    <View
+                      className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                      style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                    >
+                      <Text className="text-white text-[10px] font-bold">!</Text>
+                    </View>
+                    <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.choosePlan}</Text>
+                  </View>
                 )}
+              </View>
 
-                {formData.connectionType === 'Antenna' && (
-                  <div>
-                    <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>IP<span className="text-red-500">*</span></label>
-                    <input type="text" value={formData.ip} onChange={(e) => handleInputChange('ip', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.ip ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`} />
-                    {errors.ip && (
-                      <div className="flex items-center mt-1">
-                        <div
-                          className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                        >!</div>
-                        <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                      </div>
-                    )}
-                  </div>
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Onsite Status<Text className="text-red-500">*</Text></Text>
+                <View className="relative">
+                  <View className={`border rounded-lg overflow-hidden ${errors.onsiteStatus ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <Picker
+                      selectedValue={formData.onsiteStatus}
+                      onValueChange={(value) => handleInputChange('onsiteStatus', value)}
+                      style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                    >
+                      <Picker.Item label="In Progress" value="In Progress" />
+                      <Picker.Item label="Done" value="Done" />
+                      <Picker.Item label="Failed" value="Failed" />
+                      <Picker.Item label="Reschedule" value="Reschedule" />
+                    </Picker>
+                  </View>
+                </View>
+                {errors.onsiteStatus && (
+                  <View className="flex-row items-center mt-1">
+                    <View
+                      className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                      style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                    >
+                      <Text className="text-white text-[10px] font-bold">!</Text>
+                    </View>
+                    <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.onsiteStatus}</Text>
+                  </View>
                 )}
+              </View>
 
-                {formData.connectionType === 'Fiber' && (
-                  <>
-                    <div>
-                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        LCP-NAP<span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        {/* Display Field (The "Closed" state) */}
-                        <div
-                          className={`flex items-center justify-between px-3 py-2 border rounded cursor-pointer transition-colors ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                            } ${errors.lcpnap ? 'border-red-500' : 'focus-within:border-orange-500'}`}
-                          onClick={() => setIsLcpnapOpen(!isLcpnapOpen)}
+
+
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Region</Text>
+                <TextInput
+                  value={formData.region}
+                  editable={false}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-gray-300'
+                    : 'bg-gray-100 border-gray-300 text-gray-600'
+                    }`}
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>City</Text>
+                <TextInput
+                  value={formData.city}
+                  editable={false}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-gray-300'
+                    : 'bg-gray-100 border-gray-300 text-gray-600'
+                    }`}
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Barangay</Text>
+                <TextInput
+                  value={formData.barangay}
+                  editable={false}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-gray-300'
+                    : 'bg-gray-100 border-gray-300 text-gray-600'
+                    }`}
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>Location</Text>
+                <TextInput
+                  value={formData.location}
+                  editable={false}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-gray-300'
+                    : 'bg-gray-100 border-gray-300 text-gray-600'
+                    }`}
+                />
+              </View>
+
+              {formData.onsiteStatus === 'Done' && (
+                <>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Date Installed<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <TextInput
+                        value={formData.dateInstalled}
+                        onChangeText={(text) => handleInputChange('dateInstalled', text)}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                          } ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                      />
+                      <Calendar
+                        className="absolute right-3 top-2.5"
+                        size={20}
+                        color={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                      />
+                    </View>
+                    {errors.dateInstalled && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
                         >
-                          <span className={`text-sm ${!formData.lcpnap ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : ''}`}>
-                            {formData.lcpnap || 'Select LCP-NAP'}
-                          </span>
-                          <ChevronDown
-                            size={18}
-                            className={`transition-transform duration-200 ${isLcpnapOpen ? 'rotate-180' : ''} ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}
-                          />
-                        </div>
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
 
-                        {/* Dropdown Menu */}
-                        {isLcpnapOpen && (
-                          <div
-                            className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-md shadow-2xl border overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                              }`}
-                            style={{ minWidth: '100%' }}
-                          >
-                            {/* Search Box at Top of Dropdown */}
-                            <div className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
-                              <div className={`flex items-center px-2 py-1.5 rounded border ${isDarkMode ? 'bg-gray-800 border-gray-700 focus-within:border-orange-500' : 'bg-white border-gray-300 focus-within:border-orange-500'
-                                }`}>
-                                <Search size={14} className="mr-2 text-gray-400" />
-                                <input
-                                  autoFocus
-                                  type="text"
-                                  placeholder="Search LCP-NAP..."
-                                  value={lcpnapSearch}
-                                  onChange={(e) => setLcpnapSearch(e.target.value)}
-                                  className={`w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                    }`}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Options List */}
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                              {lcpnaps
-                                .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
-                                .map((lcpnap) => (
-                                  <div
-                                    key={lcpnap.id}
-                                    className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDarkMode
-                                      ? 'hover:bg-gray-700 text-gray-200'
-                                      : 'hover:bg-gray-100 text-gray-700'
-                                      } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20 text-orange-400' : 'bg-orange-50 text-orange-600') : ''}`}
-                                    onClick={() => {
-                                      handleInputChange('lcpnap', lcpnap.lcpnap_name);
-                                      setLcpnapSearch('');
-                                      setIsLcpnapOpen(false);
-                                    }}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span>{lcpnap.lcpnap_name}</span>
-                                      {formData.lcpnap === lcpnap.lcpnap_name && (
-                                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
-                                <div className={`px-4 py-8 text-center text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                  No results found for "{lcpnapSearch}"
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Click outside to close */}
-                        {isLcpnapOpen && (
-                          <div
-                            className="fixed inset-0 z-40 bg-transparent"
-                            onClick={() => {
-                              setIsLcpnapOpen(false);
-                              setLcpnapSearch('');
-                            }}
-                          />
-                        )}
-                      </div>
-                      {errors.lcpnap && (
-                        <div className="flex items-center mt-1">
-                          <div
-                            className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >!</div>
-                          <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>PORT<span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <select value={formData.port} onChange={(e) => handleInputChange('port', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.port ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                          <option value="">Select PORT</option>
-                          <option value="PORT 001">PORT 001</option>
-                          <option value="PORT 002">PORT 002</option>
-                          <option value="PORT 003">PORT 003</option>
-                          <option value="PORT 004">PORT 004</option>
-                          <option value="PORT 005">PORT 005</option>
-                          <option value="PORT 006">PORT 006</option>
-                          <option value="PORT 007">PORT 007</option>
-                          <option value="PORT 008">PORT 008</option>
-                          <option value="PORT 009">PORT 009</option>
-                          <option value="PORT 010">PORT 010</option>
-                          <option value="PORT 011">PORT 011</option>
-                          <option value="PORT 012">PORT 012</option>
-                          <option value="PORT 013">PORT 013</option>
-                          <option value="PORT 014">PORT 014</option>
-                          <option value="PORT 015">PORT 015</option>
-                          <option value="PORT 016">PORT 016</option>
-                          <option value="PORT 017">PORT 017</option>
-                          <option value="PORT 018">PORT 018</option>
-                          <option value="PORT 019">PORT 019</option>
-                          <option value="PORT 020">PORT 020</option>
-                          <option value="PORT 021">PORT 021</option>
-                          <option value="PORT 022">PORT 022</option>
-                          <option value="PORT 023">PORT 023</option>
-                          <option value="PORT 024">PORT 024</option>
-                          <option value="PORT 025">PORT 025</option>
-                          <option value="PORT 026">PORT 026</option>
-                          <option value="PORT 027">PORT 027</option>
-                          <option value="PORT 028">PORT 028</option>
-                          <option value="PORT 029">PORT 029</option>
-                          <option value="PORT 030">PORT 030</option>
-                          <option value="PORT 032">PORT 032</option>
-                          <option value="PORT 032">PORT 032</option>
-                        </select>
-                        <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`} size={20} />
-                      </div>
-                      {errors.port && (
-                        <div className="flex items-center mt-1">
-                          <div
-                            className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >!</div>
-                          <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>VLAN<span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <select value={formData.vlan} onChange={(e) => handleInputChange('vlan', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.vlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                          <option value="">Select VLAN</option>
-                          {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
-                            <option value={formData.vlan}>{formData.vlan}</option>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Usage Type<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.usageType ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.usageType}
+                          onValueChange={(value) => handleInputChange('usageType', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Usage Type" value="" />
+                          {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
+                            <Picker.Item label={formData.usageType} value={formData.usageType} />
                           )}
-                          {vlans.map((vlan) => (
-                            <option key={vlan.vlan_id} value={vlan.value}>
-                              {vlan.value}
-                            </option>
+                          {usageTypes.map((usageType) => (
+                            <Picker.Item key={usageType.id} label={usageType.usage_name} value={usageType.usage_name} />
                           ))}
-                        </select>
-                        <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`} size={20} />
-                      </div>
-                      {errors.vlan && (
-                        <div className="flex items-center mt-1">
-                          <div
-                            className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >!</div>
-                          <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.usageType && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit By<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_by} onChange={(e) => handleInputChange('visit_by', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value=""></option>
-                      {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                        <option value={formData.visit_by}>{formData.visit_by}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_by && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Connection Type<Text className="text-red-500">*</Text></Text>
+                    <View className="flex-row gap-2">
+                      <Pressable
+                        onPress={() => handleInputChange('connectionType', 'Antenna')}
+                        className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Antenna'
+                          ? 'text-white'
+                          : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
+                          }`}
+                        style={formData.connectionType === 'Antenna' ? {
+                          backgroundColor: colorPalette?.primary || '#ea580c',
+                          borderColor: colorPalette?.accent || '#dc2626'
+                        } : {}}
+                      >
+                        <Text className={`font-medium ${formData.connectionType === 'Antenna' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Antenna</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleInputChange('connectionType', 'Fiber')}
+                        className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Fiber'
+                          ? 'text-white'
+                          : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
+                          }`}
+                        style={formData.connectionType === 'Fiber' ? {
+                          backgroundColor: colorPalette?.primary || '#ea580c',
+                          borderColor: colorPalette?.accent || '#dc2626'
+                        } : {}}
+                      >
+                        <Text className={`font-medium ${formData.connectionType === 'Fiber' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Fiber</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleInputChange('connectionType', 'Local')}
+                        className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Local'
+                          ? 'text-white'
+                          : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
+                          }`}
+                        style={formData.connectionType === 'Local' ? {
+                          backgroundColor: colorPalette?.primary || '#ea580c',
+                          borderColor: colorPalette?.accent || '#dc2626'
+                        } : {}}
+                      >
+                        <Text className={`font-medium ${formData.connectionType === 'Local' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Local</Text>
+                      </Pressable>
+                    </View>
+                    {errors.connectionType && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit With<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with} onChange={(e) => handleInputChange('visit_with', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value="">Select Visit With</option>
-                      <option value="None">None</option>
-                      {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
-                        <option value={formData.visit_with}>{formData.visit_with}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_with && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit With(Other)<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with_other} onChange={(e) => handleInputChange('visit_with_other', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value="">Visit With(Other)</option>
-                      <option value="None">None</option>
-                      {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
-                        <option value={formData.visit_with_other}>{formData.visit_with_other}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_with_other && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Onsite Remarks<span className="text-red-500">*</span></label>
-                  <textarea value={formData.onsiteRemarks} onChange={(e) => handleInputChange('onsiteRemarks', e.target.value)} rows={3} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`} />
-                  {errors.onsiteRemarks && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
-
-                <ImagePreview
-                  imageUrl={imagePreviews.boxReadingImage}
-                  label="Box Reading Image"
-                  onUpload={(file) => handleImageUpload('boxReadingImage', file)}
-                  error={errors.boxReadingImage}
-                />
-
-                <ImagePreview
-                  imageUrl={imagePreviews.routerReadingImage}
-                  label="Router Reading Image"
-                  onUpload={(file) => handleImageUpload('routerReadingImage', file)}
-                  error={errors.routerReadingImage}
-                />
-
-                {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
-                  <ImagePreview
-                    imageUrl={imagePreviews.portLabelImage}
-                    label="Port Label Image"
-                    onUpload={(file) => handleImageUpload('portLabelImage', file)}
-                    error={errors.portLabelImage}
-                  />
-                )}
-
-                <ImagePreview
-                  imageUrl={imagePreviews.setupImage}
-                  label="Setup Image"
-                  onUpload={(file) => handleImageUpload('setupImage', file)}
-                  error={errors.setupImage}
-                />
-
-                <ImagePreview
-                  imageUrl={imagePreviews.signedContractImage}
-                  label="Signed Contract Image"
-                  onUpload={(file) => handleImageUpload('signedContractImage', file)}
-                  error={errors.signedContractImage}
-                />
-
-                <ImagePreview
-                  imageUrl={imagePreviews.clientSignatureImage}
-                  label="Client Signature Image"
-                  onUpload={(file) => handleImageUpload('clientSignatureImage', file)}
-                  error={errors.clientSignatureImage}
-                />
-
-                <ImagePreview
-                  imageUrl={imagePreviews.speedTestImage}
-                  label="Speed Test Image"
-                  onUpload={(file) => handleImageUpload('speedTestImage', file)}
-                  error={errors.speedTestImage}
-                />
-
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Items<span className="text-red-500">*</span></label>
-                  {orderItems.map((item, index) => (
-                    <div key={index} className="mb-3">
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1">
-                          <div className="relative">
-                            <select
-                              value={item.itemId}
-                              onChange={(e) => handleItemChange(index, 'itemId', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300'
-                                }`}
-                            >
-                              <option value="">Select Item {index + 1}</option>
-                              {inventoryItems.map((invItem) => (
-                                <option key={invItem.id} value={invItem.item_name}>
-                                  {invItem.item_name}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                              }`} size={20} />
-                          </div>
-                          {errors[`item_${index}`] && (
-                            <p className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`item_${index}`]}</p>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Router Model<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.routerModel ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.routerModel}
+                          onValueChange={(value) => handleInputChange('routerModel', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Router Model" value="" />
+                          {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
+                            <Picker.Item label={formData.routerModel} value={formData.routerModel} />
                           )}
-                        </div>
+                          {routerModels.map((routerModel, index) => (
+                            <Picker.Item key={index} label={routerModel.model} value={routerModel.model} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.routerModel && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
 
-                        {item.itemId && (
-                          <div className="w-32">
-                            <input
-                              type="number"
-                              value={item.quantity}
-                              onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                              placeholder="Qty"
-                              min="1"
-                              className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300'
-                                }`}
-                            />
-                            {errors[`quantity_${index}`] && (
-                              <p className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`quantity_${index}`]}</p>
-                            )}
-                          </div>
-                        )}
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Modem SN<Text className="text-red-500">*</Text></Text>
+                    <TextInput
+                      value={formData.modemSN}
+                      onChangeText={(text) => handleInputChange('modemSN', text)}
+                      placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                      className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                        } ${errors.modemSN ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                    />
+                    {errors.modemSN && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
 
-                        {orderItems.length > 1 && item.itemId && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(index)}
-                            className="p-2 text-red-500 hover:text-red-400"
+                  {usernamePattern && usernamePattern.sequence.some(item => item.type === 'tech_input') && (
+                    <View className="mb-4">
+                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                        }`}>PPPoE Username<Text className="text-red-500">*</Text></Text>
+                      <TextInput
+                        value={techInputValue}
+                        onChangeText={(text) => {
+                          setTechInputValue(text);
+                          if (errors.techInput) {
+                            setErrors(prev => ({ ...prev, techInput: '' }));
+                          }
+                        }}
+                        placeholder="Enter PPPoE username"
+                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                          } ${errors.techInput ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                      />
+                      {errors.techInput && (
+                        <View className="flex-row items-center mt-1">
+                          <View
+                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
                           >
-                            <X size={20} />
-                          </button>
+                            <Text className="text-white text-[10px] font-bold">!</Text>
+                          </View>
+                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.techInput}</Text>
+                        </View>
+                      )}
+                      {!techInputValue.trim() && !errors.techInput && (
+                        <Text className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>This will be used as the PPPoE username</Text>
+                      )}
+                    </View>
+                  )}
+
+                  {formData.connectionType === 'Antenna' && (
+                    <View className="mb-4">
+                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                        }`}>IP<Text className="text-red-500">*</Text></Text>
+                      <TextInput
+                        value={formData.ip}
+                        onChangeText={(text) => handleInputChange('ip', text)}
+                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                          } ${errors.ip ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                      />
+                      {errors.ip && (
+                        <View className="flex-row items-center mt-1">
+                          <View
+                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                          >
+                            <Text className="text-white text-[10px] font-bold">!</Text>
+                          </View>
+                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {formData.connectionType === 'Fiber' && (
+                    <View className="mb-4">
+                      <View className="mb-4">
+                        <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          LCP-NAP<Text className="text-red-500">*</Text>
+                        </Text>
+                        <View className="relative">
+                          {/* Display Field (The "Closed" state) */}
+                          <Pressable
+                            onPress={() => setIsLcpnapOpen(!isLcpnapOpen)}
+                            className={`flex-row items-center justify-between px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                              } ${errors.lcpnap ? 'border-red-500' : ''}`}
+                          >
+                            <Text className={`text-sm ${!formData.lcpnap ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : (isDarkMode ? 'text-white' : 'text-gray-900')}`}>
+                              {formData.lcpnap || 'Select LCP-NAP'}
+                            </Text>
+                            <ChevronDown
+                              size={18}
+                              color={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                              style={{ transform: [{ rotate: isLcpnapOpen ? '180deg' : '0deg' }] }}
+                            />
+                          </Pressable>
+
+                          {/* Dropdown Menu */}
+                          {isLcpnapOpen && (
+                            <View
+                              className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                                }`}
+                              style={{ elevation: 5 }}
+                            >
+                              {/* Search Box at Top of Dropdown */}
+                              <View className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
+                                <View className={`flex-row items-center px-2 py-1.5 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                                  }`}>
+                                  <Search size={14} color="#9CA3AF" className="mr-2" />
+                                  <TextInput
+                                    autoFocus
+                                    placeholder="Search LCP-NAP..."
+                                    value={lcpnapSearch}
+                                    onChangeText={setLcpnapSearch}
+                                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                    className={`flex-1 p-1 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                      }`}
+                                  />
+                                </View>
+                              </View>
+
+                              {/* Options List */}
+                              <ScrollView className="max-h-60" nestedScrollEnabled={true}>
+                                {lcpnaps
+                                  .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
+                                  .map((lcpnap) => (
+                                    <Pressable
+                                      key={lcpnap.id}
+                                      className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                        } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                      onPress={() => {
+                                        handleInputChange('lcpnap', lcpnap.lcpnap_name);
+                                        setLcpnapSearch('');
+                                        setIsLcpnapOpen(false);
+                                      }}
+                                    >
+                                      <View className="flex-row items-center justify-between">
+                                        <Text className={`text-sm ${formData.lcpnap === lcpnap.lcpnap_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                          {lcpnap.lcpnap_name}
+                                        </Text>
+                                        {formData.lcpnap === lcpnap.lcpnap_name && (
+                                          <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                        )}
+                                      </View>
+                                    </Pressable>
+                                  ))}
+                                {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
+                                  <View className="px-4 py-8 items-center">
+                                    <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                      No results found for "{lcpnapSearch}"
+                                    </Text>
+                                  </View>
+                                )}
+                              </ScrollView>
+                            </View>
+                          )}
+                        </View>
+                        {errors.lcpnap && (
+                          <View className="flex-row items-center mt-1">
+                            <View
+                              className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                            >
+                              <Text className="text-white text-[10px] font-bold">!</Text>
+                            </View>
+                            <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          </View>
                         )}
-                      </div>
-                    </div>
-                  ))}
-                  {errors.items && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.items}</p>
-                    </div>
-                  )}
-                </div>
+                      </View>
 
-                <LocationPicker
-                  value={formData.addressCoordinates}
-                  onChange={(coordinates) => handleInputChange('addressCoordinates', coordinates)}
-                  isDarkMode={isDarkMode}
-                  label="Address Coordinates"
-                  required={true}
-                  error={errors.addressCoordinates}
-                />
-              </>
-            )}
+                      <View className="mb-4">
+                        <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                          }`}>PORT<Text className="text-red-500">*</Text></Text>
+                        <View className="relative">
+                          <View className={`border rounded-lg overflow-hidden ${errors.port ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.port}
+                              onValueChange={(value) => handleInputChange('port', value)}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                            >
+                              <Picker.Item label="Select PORT" value="" />
+                              <Picker.Item label="PORT 001" value="PORT 001" />
+                              <Picker.Item label="PORT 002" value="PORT 002" />
+                              <Picker.Item label="PORT 003" value="PORT 003" />
+                              <Picker.Item label="PORT 004" value="PORT 004" />
+                              <Picker.Item label="PORT 005" value="PORT 005" />
+                              <Picker.Item label="PORT 006" value="PORT 006" />
+                              <Picker.Item label="PORT 007" value="PORT 007" />
+                              <Picker.Item label="PORT 008" value="PORT 008" />
+                              <Picker.Item label="PORT 009" value="PORT 009" />
+                              <Picker.Item label="PORT 010" value="PORT 010" />
+                              <Picker.Item label="PORT 011" value="PORT 011" />
+                              <Picker.Item label="PORT 012" value="PORT 012" />
+                              <Picker.Item label="PORT 013" value="PORT 013" />
+                              <Picker.Item label="PORT 014" value="PORT 014" />
+                              <Picker.Item label="PORT 015" value="PORT 015" />
+                              <Picker.Item label="PORT 016" value="PORT 016" />
+                              <Picker.Item label="PORT 017" value="PORT 017" />
+                              <Picker.Item label="PORT 018" value="PORT 018" />
+                              <Picker.Item label="PORT 019" value="PORT 019" />
+                              <Picker.Item label="PORT 020" value="PORT 020" />
+                              <Picker.Item label="PORT 021" value="PORT 021" />
+                              <Picker.Item label="PORT 022" value="PORT 022" />
+                              <Picker.Item label="PORT 023" value="PORT 023" />
+                              <Picker.Item label="PORT 024" value="PORT 024" />
+                              <Picker.Item label="PORT 025" value="PORT 025" />
+                              <Picker.Item label="PORT 026" value="PORT 026" />
+                              <Picker.Item label="PORT 027" value="PORT 027" />
+                              <Picker.Item label="PORT 028" value="PORT 028" />
+                              <Picker.Item label="PORT 029" value="PORT 029" />
+                              <Picker.Item label="PORT 030" value="PORT 030" />
+                              <Picker.Item label="PORT 031" value="PORT 031" />
+                              <Picker.Item label="PORT 032" value="PORT 032" />
+                            </Picker>
+                          </View>
+                        </View>
+                        {errors.port && (
+                          <View className="flex-row items-center mt-1">
+                            <View
+                              className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                            >
+                              <Text className="text-white text-[10px] font-bold">!</Text>
+                            </View>
+                            <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          </View>
+                        )}
+                      </View>
 
-            {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
-              <>
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit By<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_by} onChange={(e) => handleInputChange('visit_by', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value=""></option>
-                      {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                        <option value={formData.visit_by}>{formData.visit_by}</option>
-                      )}
-                      {technicians.map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_by && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
+                      <View className="mb-4">
+                        <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                          }`}>VLAN<Text className="text-red-500">*</Text></Text>
+                        <View className="relative">
+                          <View className={`border rounded-lg overflow-hidden ${errors.vlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.vlan}
+                              onValueChange={(value) => handleInputChange('vlan', value)}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                            >
+                              <Picker.Item label="Select VLAN" value="" />
+                              {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
+                                <Picker.Item label={formData.vlan} value={formData.vlan} />
+                              )}
+                              {vlans.map((vlan) => (
+                                <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+                        {errors.vlan && (
+                          <View className="flex-row items-center mt-1">
+                            <View
+                              className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                            >
+                              <Text className="text-white text-[10px] font-bold">!</Text>
+                            </View>
+                            <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
                   )}
-                </div>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit With<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with} onChange={(e) => handleInputChange('visit_with', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value="">Visit With</option>
-                      <option value="None">None</option>
-                      {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
-                        <option value={formData.visit_with}>{formData.visit_with}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_with && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit By<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_by}
+                          onValueChange={(value) => handleInputChange('visit_by', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Visit By" value="" />
+                          {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
+                            <Picker.Item label={formData.visit_by} value={formData.visit_by} />
+                          )}
+                          {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_by && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_by}</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Visit With(Other)<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.visit_with_other} onChange={(e) => handleInputChange('visit_with_other', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value="">Visit With(Other)</option>
-                      <option value="None">None</option>
-                      {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
-                        <option value={formData.visit_with_other}>{formData.visit_with_other}</option>
-                      )}
-                      {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
-                        <option key={index} value={technician.name}>{technician.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.visit_with_other && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit With<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_with}
+                          onValueChange={(value) => handleInputChange('visit_with', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Visit With" value="" />
+                          <Picker.Item label="None" value="None" />
+                          {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
+                            <Picker.Item label={formData.visit_with} value={formData.visit_with} />
+                          )}
+                          {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_with && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_with}</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Onsite Remarks<span className="text-red-500">*</span></label>
-                  <textarea value={formData.onsiteRemarks} onChange={(e) => handleInputChange('onsiteRemarks', e.target.value)} rows={3} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`} />
-                  {errors.onsiteRemarks && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
-                  )}
-                </div>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit With(Other)<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_with_other}
+                          onValueChange={(value) => handleInputChange('visit_with_other', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Visit With(Other)" value="" />
+                          <Picker.Item label="None" value="None" />
+                          {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
+                            <Picker.Item label={formData.visit_with_other} value={formData.visit_with_other} />
+                          )}
+                          {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_with_other && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_with_other}</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <div>
-                  <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Status Remarks<span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select value={formData.statusRemarks} onChange={(e) => handleInputChange('statusRemarks', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 appearance-none ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                      } ${errors.statusRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}>
-                      <option value=""></option>
-                      <option value="Customer Request">Customer Request</option>
-                      <option value="Bad Weather">Bad Weather</option>
-                      <option value="Technician Unavailable">Technician Unavailable</option>
-                      <option value="Equipment Issue">Equipment Issue</option>
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`} size={20} />
-                  </div>
-                  {errors.statusRemarks && (
-                    <div className="flex items-center mt-1">
-                      <div
-                        className="flex items-center justify-center w-4 h-4 rounded-full text-white text-xs mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >!</div>
-                      <p className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</p>
-                    </div>
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Onsite Remarks<Text className="text-red-500">*</Text></Text>
+                    <TextInput
+                      value={formData.onsiteRemarks}
+                      onChangeText={(text) => handleInputChange('onsiteRemarks', text)}
+                      multiline={true}
+                      numberOfLines={4}
+                      placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                      className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                        } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                      style={{ textAlignVertical: 'top' }}
+                    />
+                    {errors.onsiteRemarks && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.onsiteRemarks}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.boxReadingImage}
+                    label="Box Reading Image"
+                    onUpload={(file) => handleImageUpload('boxReadingImage', file)}
+                    error={errors.boxReadingImage}
+                  />
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.routerReadingImage}
+                    label="Router Reading Image"
+                    onUpload={(file) => handleImageUpload('routerReadingImage', file)}
+                    error={errors.routerReadingImage}
+                  />
+
+                  {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
+                    <ImagePreview
+                      imageUrl={imagePreviews.portLabelImage}
+                      label="Port Label Image"
+                      onUpload={(file) => handleImageUpload('portLabelImage', file)}
+                      error={errors.portLabelImage}
+                    />
                   )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </>
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.setupImage}
+                    label="Setup Image"
+                    onUpload={(file) => handleImageUpload('setupImage', file)}
+                    error={errors.setupImage}
+                  />
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.signedContractImage}
+                    label="Signed Contract Image"
+                    onUpload={(file) => handleImageUpload('signedContractImage', file)}
+                    error={errors.signedContractImage}
+                  />
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.clientSignatureImage}
+                    label="Client Signature Image"
+                    onUpload={(file) => handleImageUpload('clientSignatureImage', file)}
+                    error={errors.clientSignatureImage}
+                  />
+
+                  <ImagePreview
+                    imageUrl={imagePreviews.speedTestImage}
+                    label="Speed Test Image"
+                    onUpload={(file) => handleImageUpload('speedTestImage', file)}
+                    error={errors.speedTestImage}
+                  />
+
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Items<Text className="text-red-500">*</Text></Text>
+                    {orderItems.map((item, index) => (
+                      <View key={index} className="mb-4">
+                        <View className="flex-row items-start gap-2">
+                          <View className="flex-1">
+                            <View className="relative">
+                              <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}>
+                                <Picker
+                                  selectedValue={item.itemId}
+                                  onValueChange={(value) => handleItemChange(index, 'itemId', value)}
+                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
+                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                >
+                                  <Picker.Item label={`Select Item ${index + 1}`} value="" />
+                                  {inventoryItems.map((invItem) => (
+                                    <Picker.Item key={invItem.id} label={invItem.item_name} value={invItem.item_name} />
+                                  ))}
+                                </Picker>
+                              </View>
+                            </View>
+                            {errors[`item_${index}`] && (
+                              <Text className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`item_${index}`]}</Text>
+                            )}
+                          </View>
+
+                          {item.itemId && (
+                            <View className="w-24">
+                              <TextInput
+                                keyboardType="numeric"
+                                value={item.quantity.toString()}
+                                onChangeText={(text) => handleItemChange(index, 'quantity', text)}
+                                placeholder="Qty"
+                                placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                className={`px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300'
+                                  }`}
+                              />
+                              {errors[`quantity_${index}`] && (
+                                <Text className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`quantity_${index}`]}</Text>
+                              )}
+                            </View>
+                          )}
+
+                          {orderItems.length > 1 && (
+                            <Pressable
+                              onPress={() => handleRemoveItem(index)}
+                              className="p-3 items-center justify-center"
+                            >
+                              <X size={20} color={isDarkMode ? '#F87171' : '#EF4444'} />
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                    {errors.items && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.items}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <LocationPicker
+                    value={formData.addressCoordinates}
+                    onChange={(coordinates) => handleInputChange('addressCoordinates', coordinates)}
+                    isDarkMode={isDarkMode}
+                    label="Address Coordinates"
+                    required={true}
+                    error={errors.addressCoordinates}
+                  />
+                </>
+              )}
+
+              {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
+                <View className="space-y-4">
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit By<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_by}
+                          onValueChange={(value) => handleInputChange('visit_by', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Visit By" value="" />
+                          {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
+                            <Picker.Item label={formData.visit_by} value={formData.visit_by} />
+                          )}
+                          {technicians.map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_by && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit With<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_with}
+                          onValueChange={(value) => handleInputChange('visit_with', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Visit With" value="" />
+                          <Picker.Item label="None" value="None" />
+                          {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
+                            <Picker.Item label={formData.visit_with} value={formData.visit_with} />
+                          )}
+                          {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_with && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Visit With(Other)<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.visit_with_other}
+                          onValueChange={(value) => handleInputChange('visit_with_other', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Visit With(Other)" value="" />
+                          <Picker.Item label="None" value="None" />
+                          {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
+                            <Picker.Item label={formData.visit_with_other} value={formData.visit_with_other} />
+                          )}
+                          {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
+                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.visit_with_other && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Onsite Remarks<Text className="text-red-500">*</Text></Text>
+                    <TextInput
+                      value={formData.onsiteRemarks}
+                      onChangeText={(text) => handleInputChange('onsiteRemarks', text)}
+                      multiline={true}
+                      numberOfLines={4}
+                      placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                      className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                        } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                      style={{ textAlignVertical: 'top' }}
+                    />
+                    {errors.onsiteRemarks && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View className="mb-4">
+                    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>Status Remarks<Text className="text-red-500">*</Text></Text>
+                    <View className="relative">
+                      <View className={`border rounded-lg overflow-hidden ${errors.statusRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <Picker
+                          selectedValue={formData.statusRemarks}
+                          onValueChange={(value) => handleInputChange('statusRemarks', value)}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        >
+                          <Picker.Item label="Select Status Remarks" value="" />
+                          <Picker.Item label="Customer Request" value="Customer Request" />
+                          <Picker.Item label="Bad Weather" value="Bad Weather" />
+                          <Picker.Item label="Technician Unavailable" value="Technician Unavailable" />
+                          <Picker.Item label="Equipment Issue" value="Equipment Issue" />
+                        </Picker>
+                      </View>
+                    </View>
+                    {errors.statusRemarks && (
+                      <View className="flex-row items-center mt-1">
+                        <View
+                          className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
+                          style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                        >
+                          <Text className="text-white text-[10px] font-bold">!</Text>
+                        </View>
+                        <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </View >
+    </Modal >
   );
 };
 

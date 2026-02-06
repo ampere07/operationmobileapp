@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, ScrollView, Linking } from 'react-native';
+import { X, ExternalLink } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface LocationMarker {
@@ -38,28 +40,15 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
   onClose,
   isMobile = false
 }) => {
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const loadTheme = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    loadTheme();
   }, []);
 
   useEffect(() => {
@@ -74,38 +63,6 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     fetchColorPalette();
   }, []);
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
-
   const formatDate = (dateStr: string | undefined) => {
     if (!dateStr) return 'Not available';
     try {
@@ -116,272 +73,187 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
   };
 
   return (
-    <div
-      className={`h-full flex flex-col overflow-hidden ${!isMobile ? 'md:border-l' : ''} relative w-full md:w-auto ${isDarkMode ? 'bg-gray-950 border-white border-opacity-30' : 'bg-gray-50 border-gray-300'
-        }`}
-      style={!isMobile && window.innerWidth >= 768 ? { width: `${detailsWidth}px` } : undefined}
-    >
-      {!isMobile && (
-        <div
-          className={`hidden md:block absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50 ${isDarkMode ? 'hover:bg-orange-500' : 'hover:bg-orange-600'
-            }`}
-          onMouseDown={handleMouseDownResize}
-        />
-      )}
-
-      {/* Header */}
-      <div className={`p-3 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-        <div className="flex items-center flex-1 min-w-0">
-          <h2 className={`font-medium truncate ${isMobile ? 'max-w-[200px] text-sm' : ''} ${isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+    <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%', borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb', borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db' }}>
+      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <Text style={{ fontWeight: '500', maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 14 : 16, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
             {location.lcpnap_name}
-          </h2>
-        </div>
+          </Text>
+        </View>
 
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={onClose}
-            className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Pressable onPress={onClose}>
+            <X width={18} height={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        </View>
+      </View>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className={`max-w-2xl mx-auto py-6 px-4 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-          }`}>
-          <div className="space-y-4">
-            {/* LCP Name */}
-            <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>LCP:</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{location.lcp_name}</div>
-            </div>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <View style={{ maxWidth: 672, marginHorizontal: 'auto', paddingVertical: 24, paddingHorizontal: 16, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+          <View style={{ gap: 16 }}>
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+              <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>LCP:</Text>
+              <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.lcp_name}</Text>
+            </View>
 
-            {/* NAP Name */}
-            <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>NAP:</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{location.nap_name}</div>
-            </div>
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+              <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>NAP:</Text>
+              <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.nap_name}</Text>
+            </View>
 
-            {/* Street */}
             {location.street && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Street:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.street}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Street:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.street}</Text>
+              </View>
             )}
 
-            {/* Barangay */}
             {location.barangay && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Barangay:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.barangay}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Barangay:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.barangay}</Text>
+              </View>
             )}
 
-            {/* City */}
             {location.city && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>City:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.city}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>City:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.city}</Text>
+              </View>
             )}
 
-            {/* Region */}
             {location.region && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Region:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.region}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Region:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.region}</Text>
+              </View>
             )}
 
-            {/* Port Total */}
             {location.port_total !== undefined && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Port Total:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.port_total}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Port Total:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.port_total}</Text>
+              </View>
             )}
 
-            {/* Session Status */}
-            <div className={`border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              }`}>
-              <div className={`w-40 text-sm mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Session Status:</div>
-              <div className="flex-1 space-y-2">
-                {/* Online */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-green-500">Online</span>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                    {location.active_sessions || 0}
-                  </span>
-                </div>
+            <View style={{ borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+              <Text style={{ width: 160, fontSize: 14, marginBottom: 12, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Session Status:</Text>
+              <View style={{ flex: 1, gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: '#22c55e' }}>Online</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999, backgroundColor: isDarkMode ? '#14532d' : '#dcfce7' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkMode ? '#86efac' : '#166534' }}>
+                      {location.active_sessions || 0}
+                    </Text>
+                  </View>
+                </View>
 
-                {/* Offline */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-orange-500">Offline</span>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
-                    {location.offline_sessions || 0}
-                  </span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: '#fb923c' }}>Offline</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999, backgroundColor: isDarkMode ? '#7c2d12' : '#ffedd5' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkMode ? '#fdba74' : '#9a3412' }}>
+                      {location.offline_sessions || 0}
+                    </Text>
+                  </View>
+                </View>
 
-                {/* Inactive */}
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Inactive</span>
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                    {location.inactive_sessions || 0}
-                  </span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Inactive</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999, backgroundColor: isDarkMode ? '#374151' : '#f3f4f6' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkMode ? '#d1d5db' : '#1f2937' }}>
+                      {location.inactive_sessions || 0}
+                    </Text>
+                  </View>
+                </View>
 
-                {/* Blocked */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-red-500">Blocked</span>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                    {location.blocked_sessions || 0}
-                  </span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: '#ef4444' }}>Blocked</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999, backgroundColor: isDarkMode ? '#7f1d1d' : '#fee2e2' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkMode ? '#fca5a5' : '#991b1b' }}>
+                      {location.blocked_sessions || 0}
+                    </Text>
+                  </View>
+                </View>
 
-                {/* Not Found */}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-purple-500">Not Found</span>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                    {location.not_found_sessions || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: '#a855f7' }}>Not Found</Text>
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999, backgroundColor: isDarkMode ? '#581c87' : '#f3e8ff' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isDarkMode ? '#e9d5ff' : '#6b21a8' }}>
+                      {location.not_found_sessions || 0}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
 
-            {/* Coordinates */}
-            <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Coordinates:</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+              <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Coordinates:</Text>
+              <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
                 {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-              </div>
-            </div>
+              </Text>
+            </View>
 
-            {/* Reading Image */}
             {location.reading_image_url && (
-              <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Reading Image</div>
-                <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
-                  <span className="truncate mr-2">
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Reading Image</Text>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                     {location.reading_image_url}
-                  </span>
-                  <button
-                    className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    onClick={() => window.open(location.reading_image_url)}
-                  >
-                    <ExternalLink size={16} />
-                  </button>
-                </div>
-              </div>
+                  </Text>
+                  <Pressable onPress={() => Linking.openURL(location.reading_image_url || '')}>
+                    <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  </Pressable>
+                </View>
+              </View>
             )}
 
-            {/* Image 1 */}
             {location.image1_url && (
-              <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Image 1</div>
-                <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
-                  <span className="truncate mr-2">
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Image 1</Text>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                     {location.image1_url}
-                  </span>
-                  <button
-                    className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    onClick={() => window.open(location.image1_url)}
-                  >
-                    <ExternalLink size={16} />
-                  </button>
-                </div>
-              </div>
+                  </Text>
+                  <Pressable onPress={() => Linking.openURL(location.image1_url || '')}>
+                    <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  </Pressable>
+                </View>
+              </View>
             )}
 
-            {/* Image 2 */}
             {location.image2_url && (
-              <div className={`flex border-b py-2 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Image 2</div>
-                <div className={`flex-1 flex items-center justify-between min-w-0 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
-                  <span className="truncate mr-2">
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Image 2</Text>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
                     {location.image2_url}
-                  </span>
-                  <button
-                    className={`flex-shrink-0 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    onClick={() => window.open(location.image2_url)}
-                  >
-                    <ExternalLink size={16} />
-                  </button>
-                </div>
-              </div>
+                  </Text>
+                  <Pressable onPress={() => Linking.openURL(location.image2_url || '')}>
+                    <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  </Pressable>
+                </View>
+              </View>
             )}
 
-            {/* Modified By */}
             {location.modified_by && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Modified By:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{location.modified_by}</div>
-              </div>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Modified By:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{location.modified_by}</Text>
+              </View>
             )}
 
-            {/* Modified Date */}
             {location.modified_date && (
-              <div className={`flex border-b pb-4 ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Modified Date:</div>
-                <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
+                <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Modified Date:</Text>
+                <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
                   {formatDate(location.modified_date)}
-                </div>
-              </div>
+                </Text>
+              </View>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 

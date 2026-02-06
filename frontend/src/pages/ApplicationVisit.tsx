@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FileText, Search, ChevronDown, RefreshCw, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions } from 'react-native';
+import { FileText, Search, ChevronDown, RefreshCw, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, Filter, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApplicationVisitDetails from '../components/ApplicationVisitDetails';
 import ApplicationVisitFunnelFilter, { FilterValues } from '../filter/ApplicationVisitFunnelFilter';
 import { useApplicationVisitContext, type ApplicationVisit } from '../contexts/ApplicationVisitContext';
@@ -16,7 +18,6 @@ interface LocationItem {
 
 type DisplayMode = 'card' | 'table';
 
-// All available columns from application_visits table
 const allColumns = [
   { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
   { key: 'fullName', label: 'Full Name', width: 'min-w-48' },
@@ -61,14 +62,6 @@ const ApplicationVisitPage: React.FC = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    const saved = localStorage.getItem('applicationVisitVisibleColumns');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.error('Failed to load column visibility:', err);
-      }
-    }
     return allColumns.map(col => col.key);
   });
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -85,9 +78,9 @@ const ApplicationVisitPage: React.FC = () => {
   const [mobileView, setMobileView] = useState<'locations' | 'visits' | 'details'>('locations');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const [activeFilters, setActiveFilters] = useState<FilterValues>({});
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLTableElement>(null);
+  const dropdownRef = useRef<View>(null);
+  const filterDropdownRef = useRef<View>(null);
+  const tableRef = useRef<ScrollView>(null);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
   const sidebarStartXRef = useRef<number>(0);
@@ -107,51 +100,34 @@ const ApplicationVisitPage: React.FC = () => {
     };
 
     fetchColorPalette();
-    fetchColorPalette();
   }, []);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedLocation, searchQuery, activeFilters, sortColumn, sortDirection]);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
+    const checkDarkMode = async () => {
+      const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark' || theme === null);
     };
 
     checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
   }, []);
 
-  // Handle click outside to close dropdowns
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setFilterDropdownOpen(false);
+    const loadVisibleColumns = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('applicationVisitVisibleColumns');
+        if (saved) {
+          setVisibleColumns(JSON.parse(saved));
+        }
+      } catch (err) {
+        console.error('Failed to load column visibility:', err);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownRef, filterDropdownRef]);
+    loadVisibleColumns();
+  }, []);
 
   const formatDate = (dateStr?: string): string => {
     if (!dateStr) return 'Not scheduled';
@@ -163,18 +139,20 @@ const ApplicationVisitPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const userData = JSON.parse(authData);
-        setUserRole(userData.role || '');
-      } catch (err) {
-        // Error parsing auth data
+    const loadAuthData = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const userData = JSON.parse(authData);
+          setUserRole(userData.role || '');
+        } catch (err) {
+          // Error parsing auth data
+        }
       }
-    }
+    };
+    loadAuthData();
   }, []);
 
-  // Trigger silent refresh on mount to ensure data is fresh but no spinner if cached
   useEffect(() => {
     silentRefresh();
   }, [silentRefresh]);
@@ -223,7 +201,6 @@ const ApplicationVisitPage: React.FC = () => {
     }
   });
 
-  // Apply location and search filters first
   let filteredVisits = applicationVisits.filter(visit => {
     const addressParts = visit.full_address.split(',');
     const city = addressParts.length > 3 ? addressParts[3].trim().toLowerCase() : '';
@@ -237,7 +214,6 @@ const ApplicationVisitPage: React.FC = () => {
     return matchesLocation && matchesSearch;
   });
 
-  // Apply funnel filters
   filteredVisits = applyFilters(filteredVisits, activeFilters);
 
   const presortedVisits = [...filteredVisits].sort((a, b) => {
@@ -365,10 +341,8 @@ const ApplicationVisitPage: React.FC = () => {
     if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
     if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
     return 0;
-    return 0;
   });
 
-  // Derived paginated records
   const paginatedVisits = React.useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return sortedVisits.slice(startIndex, startIndex + itemsPerPage);
@@ -381,6 +355,9 @@ const ApplicationVisitPage: React.FC = () => {
       setCurrentPage(newPage);
     }
   };
+
+  const { width } = Dimensions.get('window');
+  const isTablet = width >= 768;
 
   const handleRowClick = async (visit: ApplicationVisit) => {
     try {
@@ -411,19 +388,19 @@ const ApplicationVisitPage: React.FC = () => {
     if (type === 'visit') {
       switch (status.toLowerCase()) {
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'scheduled':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'pending':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'cancelled':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     } else {
       switch (status.toLowerCase()) {
@@ -431,60 +408,60 @@ const ApplicationVisitPage: React.FC = () => {
         case 'done':
         case 'schedule':
         case 'completed':
-          textColor = 'text-green-400';
+          textColor = '#4ade80';
           break;
         case 'pending':
-          textColor = 'text-orange-400';
+          textColor = '#fb923c';
           break;
         case 'under review':
         case 'in progress':
-          textColor = 'text-blue-400';
+          textColor = '#60a5fa';
           break;
         case 'rejected':
         case 'failed':
         case 'cancelled':
-          textColor = 'text-red-500';
+          textColor = '#ef4444';
           break;
         case 'no facility':
-          textColor = 'text-red-400';
+          textColor = '#f87171';
           break;
         case 'no slot':
-          textColor = 'text-purple-400';
+          textColor = '#c084fc';
           break;
         case 'duplicate':
-          textColor = 'text-pink-400';
+          textColor = '#f9a8d4';
           break;
         default:
-          textColor = 'text-gray-400';
+          textColor = '#9ca3af';
       }
     }
 
     return (
-      <span className={`${textColor} font-bold uppercase`}>
+      <Text style={{ color: textColor, fontWeight: 'bold', textTransform: 'uppercase' }}>
         {status}
-      </span>
+      </Text>
     );
   };
 
-  const handleToggleColumn = (columnKey: string) => {
+  const handleToggleColumn = async (columnKey: string) => {
     setVisibleColumns(prev => {
       const newColumns = prev.includes(columnKey)
         ? prev.filter(key => key !== columnKey)
         : [...prev, columnKey];
-      localStorage.setItem('applicationVisitVisibleColumns', JSON.stringify(newColumns));
+      AsyncStorage.setItem('applicationVisitVisibleColumns', JSON.stringify(newColumns));
       return newColumns;
     });
   };
 
-  const handleSelectAllColumns = () => {
+  const handleSelectAllColumns = async () => {
     const allKeys = allColumns.map(col => col.key);
     setVisibleColumns(allKeys);
-    localStorage.setItem('applicationVisitVisibleColumns', JSON.stringify(allKeys));
+    await AsyncStorage.setItem('applicationVisitVisibleColumns', JSON.stringify(allKeys));
   };
 
-  const handleDeselectAllColumns = () => {
+  const handleDeselectAllColumns = async () => {
     setVisibleColumns([]);
-    localStorage.setItem('applicationVisitVisibleColumns', JSON.stringify([]));
+    await AsyncStorage.setItem('applicationVisitVisibleColumns', JSON.stringify([]));
   };
 
   const handleSort = (columnKey: string) => {
@@ -509,14 +486,11 @@ const ApplicationVisitPage: React.FC = () => {
       return indexA - indexB;
     });
 
-  const handleDragStart = (e: React.DragEvent, columnKey: string) => {
+  const handleDragStart = (e: any, columnKey: string) => {
     setDraggedColumn(columnKey);
-    e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, columnKey: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+  const handleDragOver = (e: any, columnKey: string) => {
     if (draggedColumn && draggedColumn !== columnKey) {
       setDragOverColumn(columnKey);
     }
@@ -526,9 +500,7 @@ const ApplicationVisitPage: React.FC = () => {
     setDragOverColumn(null);
   };
 
-  const handleDrop = (e: React.DragEvent, targetColumnKey: string) => {
-    e.preventDefault();
-
+  const handleDrop = (e: any, targetColumnKey: string) => {
     if (!draggedColumn || draggedColumn === targetColumnKey) {
       setDraggedColumn(null);
       setDragOverColumn(null);
@@ -552,75 +524,15 @@ const ApplicationVisitPage: React.FC = () => {
     setDragOverColumn(null);
   };
 
-  const handleMouseDownResize = (e: React.MouseEvent, columnKey: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleMouseDownResize = (e: any, columnKey: string) => {
     setResizingColumn(columnKey);
-    startXRef.current = e.clientX;
-
-    const th = (e.target as HTMLElement).closest('th');
-    if (th) {
-      startWidthRef.current = th.offsetWidth;
-    }
+    startXRef.current = e.nativeEvent.pageX;
+    startWidthRef.current = columnWidths[columnKey] || 100;
   };
 
-  useEffect(() => {
-    if (!resizingColumn) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizingColumn) return;
-
-      const diff = e.clientX - startXRef.current;
-      const newWidth = Math.max(100, startWidthRef.current + diff);
-
-      setColumnWidths(prev => ({
-        ...prev,
-        [resizingColumn]: newWidth
-      }));
-    };
-
-    const handleMouseUp = () => {
-      setResizingColumn(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingColumn]);
-
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleMouseDownSidebarResize = (e: any) => {
     setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
+    sidebarStartXRef.current = e.nativeEvent.pageX;
     sidebarStartWidthRef.current = sidebarWidth;
   };
 
@@ -712,676 +624,950 @@ const ApplicationVisitPage: React.FC = () => {
   };
 
   return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-      {/* Desktop Sidebar - Hidden on mobile */}
-      {userRole.toLowerCase() !== 'technician' && (
-        <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative z-40 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`} style={{ width: `${sidebarWidth}px` }}>
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-            <div className="flex items-center justify-between mb-1">
-              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Application Visits</h2>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
+    <View style={{
+      height: '100%',
+      flexDirection: isTablet ? 'row' : 'column',
+      overflow: 'hidden',
+      paddingBottom: isTablet ? 0 : 64,
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+    }}>
+      {userRole.toLowerCase() !== 'technician' && isTablet && (
+        <View style={{
+          width: sidebarWidth,
+          borderRightWidth: 1,
+          flexShrink: 0,
+          flexDirection: 'column',
+          position: 'relative',
+          zIndex: 40,
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+        }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            flexShrink: 0,
+            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 4
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Application Visits</Text>
+            </View>
+          </View>
+          <ScrollView style={{ flex: 1 }}>
             {locationItems.map((location) => (
-              <button
+              <Pressable
                 key={location.id}
-                onClick={() => {
+                onPress={() => {
                   setSelectedLocation(location.id);
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                  } ${selectedLocation === location.id
-                    ? ''
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
-                style={selectedLocation === location.id ? {
-                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                  color: colorPalette?.primary || '#fb923c'
-                } : {}}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: selectedLocation === location.id
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent'
+                }}
               >
-                <div className="flex items-center">
-                  <FileText className="h-4 w-4 mr-2" />
-                  <span className="capitalize">{location.name}</span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
+                  <Text style={{
+                    textTransform: 'capitalize',
+                    fontSize: 14,
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>{location.name}</Text>
+                </View>
                 {location.count > 0 && (
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
-                      ? 'text-white'
-                      : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                      }`}
-                    style={selectedLocation === location.id ? {
-                      backgroundColor: colorPalette?.primary || '#ea580c'
-                    } : {}}
-                  >
-                    {location.count}
-                  </span>
+                  <View style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#d1d5db')
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}>{location.count}</Text>
+                  </View>
                 )}
-              </button>
+              </Pressable>
             ))}
-          </div>
-
-          {/* Resize Handle */}
-          <div
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-            onMouseDown={handleMouseDownSidebarResize}
-            style={{
-              backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
-            }}
-            onMouseEnter={(e) => {
-              if (!isResizingSidebar && colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isResizingSidebar) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }
-            }}
-          />
-        </div>
+          </ScrollView>
+        </View>
       )}
 
-      {/* Mobile Location View */}
       {mobileView === 'locations' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-          }`}>
-          <div className={`p-4 border-b ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Application Visits</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto">
+        <View style={{
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          display: isTablet ? 'none' : 'flex'
+        }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <Text style={{
+              fontSize: 18,
+              fontWeight: '600',
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>Application Visits</Text>
+          </View>
+          <ScrollView style={{ flex: 1 }}>
             {locationItems.map((location) => (
-              <button
+              <Pressable
                 key={location.id}
-                onClick={() => handleLocationSelect(location.id)}
-                className={`w-full flex items-center justify-between px-4 py-4 text-sm transition-colors border-b ${isDarkMode ? 'hover:bg-gray-800 border-gray-800' : 'hover:bg-gray-100 border-gray-200'
-                  } ${selectedLocation === location.id ? '' : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
-                style={selectedLocation === location.id ? {
-                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                  color: colorPalette?.primary || '#fb923c'
-                } : {}}
+                onPress={() => handleLocationSelect(location.id)}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 16,
+                  borderBottomWidth: 1,
+                  backgroundColor: selectedLocation === location.id
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent',
+                  borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                }}
               >
-                <div className="flex items-center">
-                  <FileText className="h-5 w-5 mr-3" />
-                  <span className="capitalize text-base">{location.name}</span>
-                </div>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 12 }} />
+                  <Text style={{
+                    textTransform: 'capitalize',
+                    fontSize: 16,
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>{location.name}</Text>
+                </View>
                 {location.count > 0 && (
-                  <span
-                    className="px-3 py-1 rounded-full text-sm"
-                    style={selectedLocation === location.id ? {
-                      backgroundColor: colorPalette?.primary || '#ea580c',
-                      color: 'white'
-                    } : {
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
-                      color: isDarkMode ? '#d1d5db' : '#4b5563'
-                    }}
-                  >
-                    {location.count}
-                  </span>
+                  <View style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#d1d5db')
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#4b5563')
+                    }}>{location.count}</Text>
+                  </View>
                 )}
-              </button>
+              </Pressable>
             ))}
-          </div>
-        </div>
+          </ScrollView>
+        </View>
       )}
 
-      {/* Mobile Overlay Menu */}
       {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'visits' && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)} />
-          <div className={`absolute inset-y-0 left-0 w-64 shadow-xl flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
-            }`}>
-            <div className={`p-4 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Filters</h2>
-              <button onClick={() => setMobileMenuOpen(false)} className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}>
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 50
+        }}>
+          <Pressable
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)'
+            }}
+            onPress={() => setMobileMenuOpen(false)}
+          />
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 256,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            flexDirection: 'column'
+          }}>
+            <View style={{
+              padding: 16,
+              borderBottomWidth: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827'
+              }}>Filters</Text>
+              <Pressable onPress={() => setMobileMenuOpen(false)}>
+                <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ flex: 1 }}>
               {locationItems.map((location) => (
-                <button
+                <Pressable
                   key={location.id}
-                  onClick={() => handleLocationSelect(location.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-gray-800 ${selectedLocation === location.id
-                    ? ''
-                    : 'text-gray-300'
-                    }`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                    color: colorPalette?.primary || '#fb923c'
-                  } : {}}
+                  onPress={() => handleLocationSelect(location.id)}
+                  style={{
+                    width: '100%',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                      : 'transparent'
+                  }}
                 >
-                  <div className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    <span className="capitalize">{location.name}</span>
-                  </div>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#d1d5db'} style={{ marginRight: 8 }} />
+                    <Text style={{
+                      textTransform: 'capitalize',
+                      fontSize: 14,
+                      color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#d1d5db'
+                    }}>{location.name}</Text>
+                  </View>
                   {location.count > 0 && (
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
-                        ? 'text-white'
-                        : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                        }`}
-                      style={selectedLocation === location.id ? {
-                        backgroundColor: colorPalette?.primary || '#ea580c'
-                      } : {}}
-                    >
-                      {location.count}
-                    </span>
+                    <View style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 9999,
+                      backgroundColor: selectedLocation === location.id
+                        ? (colorPalette?.primary || '#ea580c')
+                        : (isDarkMode ? '#374151' : '#d1d5db')
+                    }}>
+                      <Text style={{
+                        fontSize: 12,
+                        color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
+                      }}>{location.count}</Text>
+                    </View>
                   )}
-                </button>
+                </Pressable>
               ))}
-            </div>
-          </div>
-        </div>
+            </ScrollView>
+          </View>
+        </View>
       )}
 
-      {/* Main Content */}
-      <div className={`overflow-hidden flex-1 flex flex-col md:pb-0 relative z-30 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-        } ${mobileView === 'locations' || mobileView === 'details' ? 'hidden md:flex' : ''}`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 relative z-50 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
+      <View style={{
+        overflow: 'hidden',
+        flex: 1,
+        flexDirection: 'column',
+        position: 'relative',
+        zIndex: 30,
+        backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+        display: (mobileView === 'locations' || mobileView === 'details') && !isTablet ? 'none' : 'flex'
+      }}>
+        <View style={{ flexDirection: 'column', height: '100%' }}>
+          <View style={{
+            padding: 16,
+            borderBottomWidth: 1,
+            flexShrink: 0,
+            position: 'relative',
+            zIndex: 50,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               {userRole.toLowerCase() !== 'technician' && mobileView === 'visits' && (
-                <button
-                  onClick={() => setMobileMenuOpen(true)}
-                  className={`md:hidden p-2 rounded text-sm transition-colors flex items-center justify-center ${isDarkMode
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}
-                  aria-label="Open filter menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-              )}
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search application visits..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none ${isDarkMode
-                    ? 'bg-gray-800 text-white border border-gray-700'
-                    : 'bg-white text-gray-900 border border-gray-300'
-                    }`}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                      e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                    }
+                <Pressable
+                  onPress={() => setMobileMenuOpen(true)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 4,
+                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
                   }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                    e.currentTarget.style.boxShadow = 'none';
+                >
+                  <Menu size={20} color={isDarkMode ? 'white' : '#111827'} />
+                </Pressable>
+              )}
+              <View style={{ position: 'relative', flex: 1 }}>
+                <TextInput
+                  placeholder="Search application visits..."
+                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  style={{
+                    width: '100%',
+                    borderRadius: 4,
+                    paddingLeft: 40,
+                    paddingRight: 16,
+                    paddingVertical: 8,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
                   }}
                 />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setIsFunnelFilterOpen(true)}
-                  className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
-                    ? 'hover:bg-gray-700 text-white'
-                    : 'hover:bg-gray-200 text-gray-900'
-                    }`}
+                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => setIsFunnelFilterOpen(true)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 4
+                  }}
                 >
-                  <Filter className="h-5 w-5" />
-                </button>
+                  <Filter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
                 {displayMode === 'table' && (
-                  <div className="relative" ref={filterDropdownRef}>
-                    <button
-                      className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
-                        ? 'hover:bg-gray-800 text-white'
-                        : 'hover:bg-gray-100 text-gray-900'
-                        }`}
-                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                  <View style={{ position: 'relative' }} ref={filterDropdownRef}>
+                    <Pressable
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderRadius: 4
+                      }}
+                      onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
                     >
-                      <ListFilter className="h-5 w-5" />
-                    </button>
+                      <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                    </Pressable>
                     {filterDropdownOpen && (
                       <>
-                        {/* Mobile Overlay */}
-                        <div className="md:hidden fixed inset-0 z-50">
-                          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setFilterDropdownOpen(false)} />
-                          <div className={`absolute inset-x-4 top-20 bottom-4 rounded shadow-lg flex flex-col ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                            }`}>
-                            <div className={`p-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                              }`}>
-                              <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                }`}>Column Visibility</span>
-                              <button onClick={() => setFilterDropdownOpen(false)} className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}>
-                                <X className="h-5 w-5" />
-                              </button>
-                            </div>
-                            <div className={`p-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                              }`}>
-                              <button
-                                onClick={handleSelectAllColumns}
-                                className={`text-sm px-3 py-1 rounded transition-colors ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                  }`}
-                                style={{
-                                  color: colorPalette?.primary || '#fb923c'
-                                }}
-                              >
-                                Select All
-                              </button>
-                              <button
-                                onClick={handleDeselectAllColumns}
-                                className={`text-sm px-3 py-1 rounded transition-colors ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
-                                  }`}
-                                style={{
-                                  color: colorPalette?.primary || '#fb923c'
-                                }}
-                              >
-                                Deselect All
-                              </button>
-                            </div>
-                            <div className="overflow-y-auto flex-1">
-                              {allColumns.map((column) => (
-                                <label
-                                  key={column.key}
-                                  className={`flex items-center px-4 py-3 cursor-pointer text-sm border-b ${isDarkMode ? 'hover:bg-gray-700 text-white border-gray-700' : 'hover:bg-gray-100 text-gray-900 border-gray-200'
-                                    }`}
+                        {!isTablet && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            zIndex: 50
+                          }}>
+                            <Pressable
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)'
+                              }}
+                              onPress={() => setFilterDropdownOpen(false)}
+                            />
+                            <View style={{
+                              position: 'absolute',
+                              left: 16,
+                              right: 16,
+                              top: 80,
+                              bottom: 16,
+                              borderRadius: 4,
+                              flexDirection: 'column',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                              borderWidth: 1,
+                              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                            }}>
+                              <View style={{
+                                padding: 12,
+                                borderBottomWidth: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                              }}>
+                                <Text style={{
+                                  fontSize: 14,
+                                  fontWeight: '500',
+                                  color: isDarkMode ? '#ffffff' : '#111827'
+                                }}>Column Visibility</Text>
+                                <Pressable onPress={() => setFilterDropdownOpen(false)}>
+                                  <X size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                                </Pressable>
+                              </View>
+                              <View style={{
+                                padding: 12,
+                                borderBottomWidth: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                              }}>
+                                <Pressable
+                                  onPress={handleSelectAllColumns}
+                                  style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 4,
+                                    borderRadius: 4,
+                                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                                  }}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.includes(column.key)}
-                                    onChange={() => handleToggleColumn(column.key)}
-                                    className="mr-3 h-4 w-4 rounded border-gray-600 bg-gray-700 text-orange-600 focus:ring-orange-500 focus:ring-offset-gray-800"
-                                  />
-                                  <span>{column.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                                  <Text style={{
+                                    fontSize: 14,
+                                    color: colorPalette?.primary || '#fb923c'
+                                  }}>Select All</Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={handleDeselectAllColumns}
+                                  style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 4,
+                                    borderRadius: 4,
+                                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                                  }}
+                                >
+                                  <Text style={{
+                                    fontSize: 14,
+                                    color: colorPalette?.primary || '#fb923c'
+                                  }}>Deselect All</Text>
+                                </Pressable>
+                              </View>
+                              <ScrollView style={{ flex: 1 }}>
+                                {allColumns.map((column) => (
+                                  <Pressable
+                                    key={column.key}
+                                    onPress={() => handleToggleColumn(column.key)}
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      paddingHorizontal: 16,
+                                      paddingVertical: 12,
+                                      borderBottomWidth: 1,
+                                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                                    }}
+                                  >
+                                    <View style={{
+                                      width: 16,
+                                      height: 16,
+                                      borderRadius: 4,
+                                      borderWidth: 1,
+                                      borderColor: '#4b5563',
+                                      backgroundColor: visibleColumns.includes(column.key) ? '#ea580c' : '#374151',
+                                      marginRight: 12
+                                    }} />
+                                    <Text style={{
+                                      fontSize: 14,
+                                      color: isDarkMode ? '#ffffff' : '#111827'
+                                    }}>{column.label}</Text>
+                                  </Pressable>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          </View>
+                        )}
 
-                        {/* Desktop Dropdown */}
-                        <div className={`hidden md:flex absolute top-full right-0 mt-2 w-80 rounded shadow-lg z-50 max-h-96 flex-col ${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                          }`}>
-                          <div className={`p-3 border-b flex items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                            }`}>
-                            <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                              }`}>Column Visibility</span>
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleSelectAllColumns}
-                                className="text-xs transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#fb923c'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (colorPalette?.accent) {
-                                    e.currentTarget.style.color = colorPalette.accent;
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (colorPalette?.primary) {
-                                    e.currentTarget.style.color = colorPalette.primary;
-                                  }
-                                }}
-                              >
-                                Select All
-                              </button>
-                              <span className={isDarkMode ? 'text-gray-600' : 'text-gray-400'}>|</span>
-                              <button
-                                onClick={handleDeselectAllColumns}
-                                className="text-xs transition-colors"
-                                style={{
-                                  color: colorPalette?.primary || '#fb923c'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (colorPalette?.accent) {
-                                    e.currentTarget.style.color = colorPalette.accent;
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (colorPalette?.primary) {
-                                    e.currentTarget.style.color = colorPalette.primary;
-                                  }
-                                }}
-                              >
-                                Deselect All
-                              </button>
-                            </div>
-                          </div>
-                          <div className="overflow-y-auto flex-1">
-                            {allColumns.map((column) => (
-                              <label
-                                key={column.key}
-                                className={`flex items-center px-4 py-2 cursor-pointer text-sm ${isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-900'
-                                  }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={visibleColumns.includes(column.key)}
-                                  onChange={() => handleToggleColumn(column.key)}
-                                  className="mr-3 h-4 w-4 rounded border-gray-600 bg-gray-700 text-orange-600 focus:ring-orange-500 focus:ring-offset-gray-800"
-                                />
-                                <span>{column.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
+                        {isTablet && (
+                          <View style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            marginTop: 8,
+                            width: 320,
+                            borderRadius: 4,
+                            zIndex: 50,
+                            maxHeight: 384,
+                            flexDirection: 'column',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                          }}>
+                            <View style={{
+                              padding: 12,
+                              borderBottomWidth: 1,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                            }}>
+                              <Text style={{
+                                fontSize: 14,
+                                fontWeight: '500',
+                                color: isDarkMode ? '#ffffff' : '#111827'
+                              }}>Column Visibility</Text>
+                              <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <Pressable onPress={handleSelectAllColumns}>
+                                  <Text style={{
+                                    fontSize: 12,
+                                    color: colorPalette?.primary || '#fb923c'
+                                  }}>Select All</Text>
+                                </Pressable>
+                                <Text style={{ color: isDarkMode ? '#4b5563' : '#9ca3af' }}>|</Text>
+                                <Pressable onPress={handleDeselectAllColumns}>
+                                  <Text style={{
+                                    fontSize: 12,
+                                    color: colorPalette?.primary || '#fb923c'
+                                  }}>Deselect All</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                            <ScrollView style={{ flex: 1 }}>
+                              {allColumns.map((column) => (
+                                <Pressable
+                                  key={column.key}
+                                  onPress={() => handleToggleColumn(column.key)}
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 8
+                                  }}
+                                >
+                                  <View style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: 4,
+                                    borderWidth: 1,
+                                    borderColor: '#4b5563',
+                                    backgroundColor: visibleColumns.includes(column.key) ? '#ea580c' : '#374151',
+                                    marginRight: 12
+                                  }} />
+                                  <Text style={{
+                                    fontSize: 14,
+                                    color: isDarkMode ? '#ffffff' : '#111827'
+                                  }}>{column.label}</Text>
+                                </Pressable>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
                       </>
                     )}
-                  </div>
+                  </View>
                 )}
-                <div className="relative z-[100]" ref={dropdownRef}>
-                  <button
-                    className={`px-4 py-2 rounded text-sm transition-colors flex items-center ${isDarkMode
-                      ? 'hover:bg-gray-800 text-white'
-                      : 'hover:bg-gray-100 text-gray-900'
-                      }`}
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                <View style={{ position: 'relative', zIndex: 100 }} ref={dropdownRef}>
+                  <Pressable
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      flexDirection: 'row',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => setDropdownOpen(!dropdownOpen)}
                   >
-                    <span>{displayMode === 'card' ? 'Card View' : 'Table View'}</span>
-                    <ChevronDown className="w-4 h-4 ml-1" />
-                  </button>
+                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', fontSize: 14 }}>
+                      {displayMode === 'card' ? 'Card View' : 'Table View'}
+                    </Text>
+                    <ChevronDown size={16} color={isDarkMode ? '#ffffff' : '#111827'} style={{ marginLeft: 4 }} />
+                  </Pressable>
                   {dropdownOpen && (
-                    <div className={`absolute top-full right-0 mt-1 w-36 rounded shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                      }`}>
-                      <button
-                        onClick={() => {
+                    <View style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: 4,
+                      width: 144,
+                      borderRadius: 4,
+                      borderWidth: 1,
+                      zIndex: 50,
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}>
+                      <Pressable
+                        onPress={() => {
                           setDisplayMode('card');
                           setDropdownOpen(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                          }`}
-                        style={displayMode === 'card' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
+                        style={{
+                          width: '100%',
+                          paddingHorizontal: 16,
+                          paddingVertical: 8
                         }}
                       >
-                        Card View
-                      </button>
-                      <button
-                        onClick={() => {
+                        <Text style={{
+                          fontSize: 14,
+                          color: displayMode === 'card' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#ffffff' : '#111827')
+                        }}>Card View</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
                           setDisplayMode('table');
                           setDropdownOpen(false);
                         }}
-                        className={`block w-full text-left px-4 py-2 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                          }`}
-                        style={displayMode === 'table' ? {
-                          color: colorPalette?.primary || '#f97316'
-                        } : {
-                          color: isDarkMode ? '#ffffff' : '#111827'
+                        style={{
+                          width: '100%',
+                          paddingHorizontal: 16,
+                          paddingVertical: 8
                         }}
                       >
-                        Table View
-                      </button>
-                    </div>
-                  )}                </div>
-                <button
-                  onClick={handleRefresh}
+                        <Text style={{
+                          fontSize: 14,
+                          color: displayMode === 'table' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#ffffff' : '#111827')
+                        }}>Table View</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+                <Pressable
+                  onPress={handleRefresh}
                   disabled={isRefreshing}
-                  className="text-white px-3 py-2 rounded text-sm flex items-center transition-colors"
                   style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    flexDirection: 'row',
+                    alignItems: 'center',
                     backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c')
                   }}
-                  onMouseEnter={(e) => {
-                    if (!isRefreshing && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isRefreshing && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                  title="Refresh application visits"
                 >
-                  <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
-          </div>
+                  <RefreshCw size={16} color="white" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto">
+          <View style={{ flex: 1, overflow: 'hidden', flexDirection: 'column' }}>
+            <ScrollView style={{ flex: 1 }}>
               {isLoading ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                  </div>
-                  <p className="mt-4">Loading application visits...</p>
-                </div>
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#9ca3af' : '#4b5563'
+                }}>
+                  <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                    <View style={{
+                      height: 16,
+                      width: '33%',
+                      borderRadius: 4,
+                      marginBottom: 16,
+                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
+                    }} />
+                    <View style={{
+                      height: 16,
+                      width: '50%',
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
+                    }} />
+                  </View>
+                  <Text style={{
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>Loading application visits...</Text>
+                </View>
               ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
-                  }`}>
-                  <p>{error}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'
-                      }`}>
-                    Retry
-                  </button>
-                  <div className={`mt-4 p-4 rounded overflow-auto max-h-48 text-left ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                    }`}>
-                    <pre className={`text-xs whitespace-pre-wrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
+                <View style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  color: isDarkMode ? '#f87171' : '#dc2626'
+                }}>
+                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Pressable
+                    onPress={() => Alert.alert('Retry', 'Reload the application')}
+                    style={{
+                      marginTop: 16,
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#9ca3af'
+                    }}
+                  >
+                    <Text style={{ color: 'white' }}>Retry</Text>
+                  </Pressable>
+                  <View style={{
+                    marginTop: 16,
+                    padding: 16,
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                    maxHeight: 192,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    }}>
                       {error}
-                    </pre>
-                  </div>
-                </div>
+                    </Text>
+                  </View>
+                </View>
               ) : displayMode === 'card' ? (
                 paginatedVisits.length > 0 ? (
-                  <div className="space-y-0">
+                  <View>
                     {paginatedVisits.map((visit) => (
-                      <div
+                      <Pressable
                         key={visit.id}
-                        onClick={() => window.innerWidth < 768 ? handleMobileRowClick(visit) : handleRowClick(visit)}
-                        className={`px-4 py-3 cursor-pointer transition-colors border-b ${isDarkMode ? 'hover:bg-gray-800 border-gray-800' : 'hover:bg-gray-100 border-gray-200'
-                          } ${selectedVisit?.id === visit.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
+                        onPress={() => !isTablet ? handleMobileRowClick(visit) : handleRowClick(visit)}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          backgroundColor: selectedVisit?.id === visit.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
+                          borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                        }}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium text-sm mb-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                              }`}>
+                        <View style={{
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between'
+                        }}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={{
+                              fontWeight: '500',
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: isDarkMode ? '#ffffff' : '#111827'
+                            }}>
                               {visit.full_name}
-                            </div>
-                            <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                              }`}>
+                            </Text>
+                            <Text style={{
+                              fontSize: 12,
+                              color: isDarkMode ? '#9ca3af' : '#4b5563'
+                            }}>
                               {formatDate(visit.timestamp)} | {visit.full_address}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end space-y-1 ml-4 flex-shrink-0">
+                            </Text>
+                          </View>
+                          <View style={{
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: 4,
+                            marginLeft: 16,
+                            flexShrink: 0
+                          }}>
                             <StatusText status={visit.visit_status || 'Scheduled'} type="visit" />
-                          </div>
-                        </div>
-                      </div>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))}
-                  </div>
+                  </View>
                 ) : (
-                  <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    {applicationVisits.length > 0
-                      ? 'No application visits found matching your filters'
-                      : 'No application visits found. Create your first visit by scheduling from the Applications page.'}
-                  </div>
+                  <View style={{
+                    alignItems: 'center',
+                    paddingVertical: 48
+                  }}>
+                    <Text style={{
+                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    }}>
+                      {applicationVisits.length > 0
+                        ? 'No application visits found matching your filters'
+                        : 'No application visits found. Create your first visit by scheduling from the Applications page.'}
+                    </Text>
+                  </View>
                 )
               ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table ref={tableRef} className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-100'
-                        }`}>
-                        {filteredColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, column.key)}
-                            onDragOver={(e) => handleDragOver(e, column.key)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, column.key)}
-                            onDragEnd={handleDragEnd}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap relative group cursor-move ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
-                              } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''} ${draggedColumn === column.key ? 'opacity-50' : ''
-                              }`}
-                            style={{
-                              width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                              ...(dragOverColumn === column.key ? {
-                                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
-                              } : {})
-                            }}
-                            onMouseEnter={() => setHoveredColumn(column.key)}
-                            onMouseLeave={() => setHoveredColumn(null)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span>{column.label}</span>
-                              {(hoveredColumn === column.key || sortColumn === column.key) && (
-                                <button
-                                  onClick={() => handleSort(column.key)}
-                                  className="ml-2 transition-colors"
-                                >
-                                  {sortColumn === column.key && sortDirection === 'desc' ? (
-                                    <ArrowDown
-                                      className="h-4 w-4"
-                                      style={{
-                                        color: colorPalette?.primary || '#fb923c'
-                                      }}
-                                    />
-                                  ) : (
-                                    <ArrowUp
-                                      className="h-4 w-4 text-gray-400 transition-colors"
-                                      style={{
-                                        color: hoveredColumn === column.key ? (colorPalette?.primary || '#fb923c') : undefined
-                                      }}
-                                    />
-                                  )}
-                                </button>
+                <ScrollView horizontal style={{ overflow: 'hidden' }}>
+                  <View>
+                    <View style={{
+                      flexDirection: 'row',
+                      borderBottomWidth: 1,
+                      position: 'relative',
+                      zIndex: 10,
+                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}>
+                      {filteredColumns.map((column, index) => (
+                        <Pressable
+                          key={column.key}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            minWidth: 100,
+                            position: 'relative',
+                            backgroundColor: dragOverColumn === column.key
+                              ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                              : (isDarkMode ? '#1f2937' : '#f3f4f6'),
+                            borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                          }}
+                        >
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}>
+                            <Text style={{
+                              color: isDarkMode ? '#9ca3af' : '#4b5563'
+                            }}>{column.label}</Text>
+                            <Pressable onPress={() => handleSort(column.key)}>
+                              {sortColumn === column.key && sortDirection === 'desc' ? (
+                                <ArrowDown size={16} color={colorPalette?.primary || '#fb923c'} />
+                              ) : (
+                                <ArrowUp size={16} color={sortColumn === column.key ? (colorPalette?.primary || '#fb923c') : '#9ca3af'} />
                               )}
-                            </div>
-                            {index < filteredColumns.length - 1 && (
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize group-hover:bg-gray-600"
+                            </Pressable>
+                          </View>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {paginatedVisits.length > 0 ? (
+                      paginatedVisits.map((visit) => (
+                        <Pressable
+                          key={visit.id}
+                          onPress={() => !isTablet ? handleMobileRowClick(visit) : handleRowClick(visit)}
+                          style={{
+                            flexDirection: 'row',
+                            borderBottomWidth: 1,
+                            backgroundColor: selectedVisit?.id === visit.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
+                            borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                          }}
+                        >
+                          {filteredColumns.map((column, index) => (
+                            <View
+                              key={column.key}
+                              style={{
+                                paddingVertical: 16,
+                                paddingHorizontal: 12,
+                                minWidth: 100,
+                                borderRightWidth: index < filteredColumns.length - 1 ? 1 : 0,
+                                borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                              }}
+                            >
+                              <Text
+                                numberOfLines={1}
                                 style={{
-                                  backgroundColor: hoveredColumn === column.key ? (colorPalette?.primary || '#f97316') : undefined
-                                }}
-                                onMouseDown={(e) => handleMouseDownResize(e, column.key)}
-                              />
-                            )}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedVisits.length > 0 ? (
-                        paginatedVisits.map((visit) => (
-                          <tr
-                            key={visit.id}
-                            className={`border-b cursor-pointer transition-colors ${isDarkMode ? 'border-gray-800 hover:bg-gray-900' : 'border-gray-200 hover:bg-gray-50'
-                              } ${selectedVisit?.id === visit.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                            onClick={() => window.innerWidth < 768 ? handleMobileRowClick(visit) : handleRowClick(visit)}
-                          >
-                            {filteredColumns.map((column, index) => (
-                              <td
-                                key={column.key}
-                                className={`py-4 px-3 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                  } ${index < filteredColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''}`}
-                                style={{
-                                  width: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined,
-                                  maxWidth: columnWidths[column.key] ? `${columnWidths[column.key]}px` : undefined
+                                  color: isDarkMode ? '#ffffff' : '#111827'
                                 }}
                               >
-                                <div className="truncate" title={String(renderCellValue(visit, column.key))}>
-                                  {renderCellDisplay(visit, column.key)}
-                                </div>
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={filteredColumns.length} className={`px-4 py-12 text-center border-b ${isDarkMode ? 'text-gray-400 border-gray-800' : 'text-gray-600 border-gray-200'
-                            }`}>
-                            {applicationVisits.length > 0
-                              ? 'No application visits found matching your filters'
-                              : 'No application visits found. Create your first visit by scheduling from the Applications page.'}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                {renderCellDisplay(visit, column.key)}
+                              </Text>
+                            </View>
+                          ))}
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 48,
+                        alignItems: 'center',
+                        borderBottomWidth: 1,
+                        borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                      }}>
+                        <Text style={{
+                          color: isDarkMode ? '#9ca3af' : '#4b5563'
+                        }}>
+                          {applicationVisits.length > 0
+                            ? 'No application visits found matching your filters'
+                            : 'No application visits found. Create your first visit by scheduling from the Applications page.'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
               )}
-            </div>
+            </ScrollView>
 
-            {/* Pagination Controls */}
             {!isLoading && sortedVisits.length > 0 && totalPages > 1 && (
-              <div className={`border-t p-4 flex items-center justify-between ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
-                <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, sortedVisits.length)}</span> of <span className="font-medium">{sortedVisits.length}</span> results
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handlePageChange(currentPage - 1)}
+              <View style={{
+                borderTopWidth: 1,
+                padding: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }}>
+                <View>
+                  <Text style={{
+                    fontSize: 14,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>
+                    Showing <Text style={{ fontWeight: '500' }}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={{ fontWeight: '500' }}>{Math.min(currentPage * itemsPerPage, sortedVisits.length)}</Text> of <Text style={{ fontWeight: '500' }}>{sortedVisits.length}</Text> results
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Pressable
+                    onPress={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
-                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-                      }`}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 4,
+                      backgroundColor: currentPage === 1
+                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                        : (isDarkMode ? '#374151' : '#ffffff'),
+                      borderWidth: currentPage === 1 ? 0 : 1,
+                      borderColor: '#d1d5db'
+                    }}
                   >
-                    Previous
-                  </button>
+                    <Text style={{
+                      fontSize: 14,
+                      color: currentPage === 1
+                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
+                        : (isDarkMode ? '#ffffff' : '#374151')
+                    }}>Previous</Text>
+                  </Pressable>
 
-                  <div className="flex items-center space-x-1">
-                    <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={{
+                      paddingHorizontal: 8,
+                      fontSize: 14,
+                      color: isDarkMode ? '#ffffff' : '#111827'
+                    }}>
                       Page {currentPage} of {totalPages}
-                    </span>
-                  </div>
+                    </Text>
+                  </View>
 
-                  <button
-                    onClick={() => handlePageChange(currentPage + 1)}
+                  <Pressable
+                    onPress={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
-                      ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-                      : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-                      }`}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 4,
+                      backgroundColor: currentPage === totalPages
+                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
+                        : (isDarkMode ? '#374151' : '#ffffff'),
+                      borderWidth: currentPage === totalPages ? 0 : 1,
+                      borderColor: '#d1d5db'
+                    }}
                   >
-                    Next
-                  </button>
-                </div>
-              </div>
+                    <Text style={{
+                      fontSize: 14,
+                      color: currentPage === totalPages
+                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
+                        : (isDarkMode ? '#ffffff' : '#374151')
+                    }}>Next</Text>
+                  </Pressable>
+                </View>
+              </View>
             )}
-          </div>
-        </div>
-      </div>
+          </View>
+        </View>
+      </View>
 
       {selectedVisit && mobileView === 'details' && (
-        <div className={`md:hidden flex-1 flex flex-col overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-          }`}>
+        <View style={{
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          display: isTablet ? 'none' : 'flex'
+        }}>
           <ApplicationVisitDetails
             applicationVisit={selectedVisit}
             onClose={handleMobileBack}
             onUpdate={handleVisitUpdate}
             isMobile={true}
           />
-        </div>
+        </View>
       )}
 
       {selectedVisit && mobileView !== 'details' && (
-        <div className="hidden md:block flex-shrink-0 overflow-hidden">
+        <View style={{
+          flexShrink: 0,
+          overflow: 'hidden',
+          display: isTablet ? 'flex' : 'none'
+        }}>
           <ApplicationVisitDetails
             applicationVisit={selectedVisit}
             onClose={() => setSelectedVisit(null)}
             onUpdate={handleVisitUpdate}
             isMobile={false}
           />
-        </div>
+        </View>
       )}
 
       <ApplicationVisitFunnelFilter
@@ -1393,17 +1579,7 @@ const ApplicationVisitPage: React.FC = () => {
         }}
         currentFilters={activeFilters}
       />
-
-      <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
-    </div>
+    </View>
   );
 };
 
