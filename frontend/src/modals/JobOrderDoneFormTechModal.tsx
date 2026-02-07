@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { X, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
@@ -15,7 +15,7 @@ import { getAllVLANs, VLAN } from '../services/vlanService';
 
 import { getAllUsageTypes, UsageType } from '../services/usageTypeService';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
-import { createJobOrderItems, JobOrderItem, deleteJobOrderItems } from '../services/jobOrderItemService';
+import { createJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { getRegions, getCities, City } from '../services/cityService';
 import { barangayService, Barangay } from '../services/barangayService';
 import { locationDetailService, LocationDetail } from '../services/locationDetailService';
@@ -25,6 +25,7 @@ import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/i
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import LocationPicker from '../components/LocationPicker';
 import { pppoeService, UsernamePattern } from '../services/pppoeService';
+import ImagePreview from '../components/ImagePreview';
 
 interface Region {
   id: number;
@@ -257,85 +258,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     return url.startsWith('http') && !url.includes('localhost') && !url.includes('127.0.0.1');
   };
 
-  const ImagePreview: React.FC<{
-    imageUrl: string | null;
-    label: string;
-    onUpload: (file: any) => void;
-    error?: string;
-  }> = ({ imageUrl, label, onUpload, error }) => {
-    const [imageLoadError, setImageLoadError] = useState(false);
-    const isGDrive = isGoogleDriveUrl(imageUrl);
-    const isBlobUrl = imageUrl?.startsWith('blob:') || imageUrl?.startsWith('file:');
-    const isCloud = isCloudUrl(imageUrl);
 
-    return (
-      <View className="mb-4">
-        <Text className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>{label}</Text>
-        <Pressable
-          onPress={() => {
-            // Native file picker should be called here
-            console.log('Upload image pressed');
-          }}
-          className={`relative w-full h-48 border rounded overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'
-            }`}
-        >
-          {imageUrl && !imageLoadError ? (
-            <View className="relative w-full h-full">
-              {isBlobUrl || (!isGDrive && !imageLoadError) ? (
-                <Image
-                  source={{ uri: imageUrl }}
-                  className="w-full h-full"
-                  resizeMode="contain"
-                  onError={() => setImageLoadError(true)}
-                />
-              ) : isCloud ? (
-                <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  <Camera size={48} color={isDarkMode ? '#9CA3AF' : '#4B5563'} className="mb-2 opacity-50" />
-                  <Text className={`text-sm mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {isGDrive ? 'Image stored in Google Drive' : 'Image stored in Cloud'}
-                  </Text>
-                  <Text
-                    onPress={() => Linking.openURL(imageUrl!)}
-                    className="text-sm font-medium underline"
-                    style={{ color: colorPalette?.primary || '#ea580c' }}
-                  >
-                    View in {isGDrive ? 'Drive' : 'Source'}
-                  </Text>
-                </View>
-              ) : (
-                <View className="w-full h-full flex flex-col items-center justify-center">
-                  <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  <Text className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Invalid image source</Text>
-                </View>
-              )}
-              <View className="absolute bottom-3 right-3 bg-[#22c55e] px-3 py-1.5 rounded-md flex-row items-center shadow-lg pointer-events-none z-30">
-                <Camera color="white" size={16} className="mr-2" /><Text className="text-white text-sm font-medium ml-1">Uploaded</Text>
-              </View>
-            </View>
-          ) : (
-            <View className={`w-full h-full flex flex-col items-center justify-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
-              <Camera size={32} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              <Text className="text-sm mt-2 font-medium">Click to upload</Text>
-            </View>
-          )}
-        </Pressable>
-        {error && (
-          <View className="flex-row items-center mt-1">
-            <View
-              className="flex items-center justify-center w-4 h-4 rounded-full mr-2 shadow-sm"
-              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-            >
-              <Text className="text-white text-[10px] font-bold">!</Text>
-            </View>
-            <Text className="text-xs font-medium" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
 
   useEffect(() => {
     const fetchImageSizeSettings = async () => {
@@ -859,58 +782,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
   };
 
-  const handleImageUpload = async (field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage', file: File) => {
+  const handleImageUpload = (field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage', file: any) => {
     try {
-      let processedFile = file;
-      const originalSize = (file.size / 1024 / 1024).toFixed(2);
+      // In React Native/Expo, the file object from ImagePicker is { uri, name, type }
+      // We don't need to create object URLs or resize with web APIs.
 
-      if (activeImageSize && activeImageSize.image_size_value < 100) {
-        try {
-          const resizedFile = await resizeImage(file, activeImageSize.image_size_value);
-          const resizedSize = (resizedFile.size / 1024 / 1024).toFixed(2);
+      console.log(`[UPLOAD] Received file for ${field}:`, file);
 
-          if (resizedFile.size < file.size) {
-            processedFile = resizedFile;
-            console.log(`[RESIZE SUCCESS] ${field}: ${originalSize}MB → ${resizedSize}MB (${activeImageSize.image_size_value}%, saved ${((1 - resizedFile.size / file.size) * 100).toFixed(1)}%)`);
-          } else {
-            console.log(`[RESIZE SKIP] ${field}: Resized file (${resizedSize}MB) is not smaller than original (${originalSize}MB), using original`);
-          }
-        } catch (resizeError) {
-          console.error(`[RESIZE FAILED] ${field}:`, resizeError);
-          processedFile = file;
-        }
-      }
+      setFormData(prev => ({ ...prev, [field]: file }));
 
-      setFormData(prev => {
-        const updated = { ...prev, [field]: processedFile };
-        console.log(`[STATE UPDATE] ${field} stored: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`);
-        return updated;
-      });
-
-      if (imagePreviews[field] && imagePreviews[field]?.startsWith('blob:')) {
-        URL.revokeObjectURL(imagePreviews[field]!);
-      }
-
-      const previewUrl = URL.createObjectURL(processedFile);
-      setImagePreviews(prev => ({ ...prev, [field]: previewUrl }));
+      // Use the URI directly for preview
+      setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
 
       if (errors[field]) {
         setErrors(prev => ({ ...prev, [field]: '' }));
       }
     } catch (error) {
       console.error(`[UPLOAD ERROR] ${field}:`, error);
+      // Fallback
       setFormData(prev => ({ ...prev, [field]: file }));
-
-      if (imagePreviews[field] && imagePreviews[field]?.startsWith('blob:')) {
-        URL.revokeObjectURL(imagePreviews[field]!);
-      }
-
-      const previewUrl = URL.createObjectURL(file);
-      setImagePreviews(prev => ({ ...prev, [field]: previewUrl }));
-
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
+      setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
     }
   };
 
@@ -1395,11 +1286,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           return isValid;
         });
 
-        console.log('[SAVE ITEMS] Valid items found:', validItems.length, validItems);
+        console.log('[SAVE ITEMS] Valid items to save:', validItems.length, validItems);
 
         if (validItems.length > 0) {
           try {
-            // Ensure we have a numeric ID
             const numericJobOrderId = parseInt((jobOrderData.JobOrder_ID || jobOrderData.id || 0).toString());
             console.log('[SAVE ITEMS] Using Job Order ID:', numericJobOrderId);
 
@@ -1407,62 +1297,21 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               throw new Error('Invalid Job Order ID for items saving');
             }
 
-            // Get existing items from database
-            const existingItemsResponse = await apiClient.get<{ success: boolean; data: any[] }>(`/job-order-items?job_order_id=${numericJobOrderId}`);
 
-            if (existingItemsResponse.data.success && Array.isArray(existingItemsResponse.data.data)) {
-              const existingItems = existingItemsResponse.data.data;
-              console.log('[SAVE ITEMS] Existing items count:', existingItems.length);
 
-              const existingItemsMap = new Map();
-              existingItems.forEach((item: any) => {
-                existingItemsMap.set(item.item_name, item);
-              });
+            const itemsToCreate: JobOrderItem[] = validItems.map(item => ({
+              job_order_id: numericJobOrderId,
+              item_name: item.itemId,
+              quantity: parseInt(item.quantity)
+            }));
 
-              const itemsToUpdate = [];
-              const itemsToCreate = [];
-              const processedItemNames = new Set<string>();
+            console.log('[SAVE ITEMS] Creating new items:', itemsToCreate);
+            const createResponse = await createJobOrderItems(itemsToCreate);
 
-              for (const item of validItems) {
-                processedItemNames.add(item.itemId);
-                const existingItem = existingItemsMap.get(item.itemId);
-
-                if (existingItem) {
-                  itemsToUpdate.push({ id: existingItem.id, item_name: item.itemId, quantity: parseInt(item.quantity) });
-                } else {
-                  itemsToCreate.push({ job_order_id: numericJobOrderId, item_name: item.itemId, quantity: parseInt(item.quantity) });
-                }
-              }
-
-              // Update existing items
-              for (const item of itemsToUpdate) {
-                console.log(`[SAVE ITEMS] Updating: ${item.item_name}`, item);
-                await apiClient.put(`/job-order-items/${item.id}`, { quantity: item.quantity });
-              }
-
-              // Create new items in batch
-              if (itemsToCreate.length > 0) {
-                console.log('[SAVE ITEMS] Batch creating:', itemsToCreate);
-                await apiClient.post('/job-order-items', { items: itemsToCreate });
-              }
-
-              // Delete removed items
-              for (const existingItem of existingItems) {
-                if (!processedItemNames.has(existingItem.item_name)) {
-                  console.log(`[SAVE ITEMS] Deleting removed item: ${existingItem.item_name}`);
-                  await apiClient.delete(`/job-order-items/${existingItem.id}`);
-                }
-              }
-            } else {
-              // Fallback: Create all as new if GET failed or returned no success
-              const itemsToCreate = validItems.map(item => ({
-                job_order_id: numericJobOrderId,
-                item_name: item.itemId,
-                quantity: parseInt(item.quantity)
-              }));
-              console.log('[SAVE ITEMS] Fallback batch creation:', itemsToCreate);
-              await apiClient.post('/job-order-items', { items: itemsToCreate });
+            if (!createResponse.success) {
+              throw new Error(createResponse.message || 'Failed to create job order items');
             }
+
             console.log('[SAVE ITEMS] Items processing completed successfully');
           } catch (itemsError: any) {
             console.error('[SAVE ITEMS] ERROR:', itemsError);
@@ -1488,6 +1337,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       setShowLoadingModal(false);
       setLoadingPercentage(0);
       onSave(updatedFormData);
+      DeviceEventEmitter.emit('jobOrderUpdated');
       onClose();
     } catch (error: any) {
       clearInterval(progressInterval);
@@ -1520,6 +1370,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       visible={isOpen}
       transparent={true}
       animationType="slide"
+      statusBarTranslucent={true}
       onRequestClose={onClose}
     >
       <View className="flex-1 bg-black/50 justify-end">

@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { login as loginUser, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
 import { formUIService } from '../services/formUIService';
+import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { ArrowRight } from 'lucide-react-native';
 
 interface LoginProps {
@@ -33,6 +34,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
@@ -54,6 +56,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     };
 
     fetchLogo();
+  }, []);
+
+  useEffect(() => {
+    const fetchColorPalette = async () => {
+      try {
+        const activePalette = await settingsColorPaletteService.getActive();
+        setColorPalette(activePalette);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
+      }
+    };
+    fetchColorPalette();
   }, []);
 
   const handleSubmit = async () => {
@@ -129,7 +143,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               elevation: 5,
             }}>
               <View style={{ alignItems: 'center', marginBottom: 30 }}>
-                <Text style={{ color: '#6d28d9', fontSize: 24, fontWeight: '600' }}>Reset Password</Text>
+                <Text style={{ color: colorPalette?.primary || '#6d28d9', fontSize: 24, fontWeight: '600' }}>Reset Password</Text>
               </View>
 
               {forgotMessage ? (
@@ -154,7 +168,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     style={{
                       width: '100%',
                       padding: 14,
-                      backgroundColor: '#6d28d9',
+                      backgroundColor: colorPalette?.primary || '#6d28d9',
                       borderRadius: 30,
                       alignItems: 'center',
                       marginBottom: 15,
@@ -222,12 +236,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       padding: 14,
                       backgroundColor: 'transparent',
                       borderWidth: 1,
-                      borderColor: '#6d28d9',
+                      borderColor: colorPalette?.primary || '#6d28d9',
                       borderRadius: 12,
                       alignItems: 'center',
                     }}
                   >
-                    <Text style={{ color: '#6d28d9', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
+                    <Text style={{ color: colorPalette?.primary || '#6d28d9', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -261,7 +275,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           {/* Login Form Section */}
           <View style={{
-            backgroundColor: '#6d28d9',
+            backgroundColor: colorPalette?.primary || '#6d28d9',
             borderRadius: 24,
             padding: 30,
             shadowColor: '#000',
@@ -348,13 +362,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 }}
               >
                 <Text style={{
-                  color: isLoading ? '#ffffff' : '#6d28d9',
+                  color: isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9'),
                   fontSize: 16,
                   fontWeight: '700',
                 }}>
                   {isLoading ? 'LOGGING IN...' : 'SECURE LOGIN'}
                 </Text>
-                {!isLoading && <ArrowRight color={isLoading ? '#ffffff' : '#6d28d9'} size={20} />}
+                {!isLoading && <ArrowRight color={isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9')} size={20} />}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -375,7 +389,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               fontSize: 30,
               fontWeight: '700',
               marginBottom: 10,
-              color: '#6d28d9',
+              color: colorPalette?.primary || '#6d28d9',
               textAlign: 'center',
             }}>New Here?</Text>
             <Text style={{
@@ -389,7 +403,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               style={{
                 paddingVertical: 16,
                 paddingHorizontal: 48,
-                backgroundColor: '#6d28d9',
+                backgroundColor: colorPalette?.primary || '#6d28d9',
                 borderRadius: 30,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },

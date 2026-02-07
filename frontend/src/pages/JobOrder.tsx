@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter } from 'react-native';
 import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
@@ -133,6 +133,18 @@ const JobOrderPage: React.FC = () => {
 
     fetchColorPalette();
   }, []);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('jobOrderUpdated', () => {
+      setSelectedJobOrder(null);
+      setMobileView('orders');
+      refreshJobOrders();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshJobOrders]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -720,7 +732,6 @@ const JobOrderPage: React.FC = () => {
       height: '100%',
       flexDirection: isTablet ? 'row' : 'column',
       overflow: 'hidden',
-      paddingBottom: isTablet ? 0 : 64,
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
       {mobileView === 'locations' && (
@@ -980,6 +991,17 @@ const JobOrderPage: React.FC = () => {
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              {!isTablet && mobileView === 'orders' && (
+                <Pressable
+                  onPress={handleMobileBack}
+                  style={{
+                    padding: 8,
+                    borderRadius: 4,
+                  }}
+                >
+                  <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
+              )}
               {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
                 <Pressable
                   onPress={() => setMobileMenuOpen(true)}

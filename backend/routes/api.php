@@ -1209,6 +1209,15 @@ Route::prefix('job-order-items')->group(function () {
     Route::delete('/{id}', [\App\Http\Controllers\Api\JobOrderItemApiController::class, 'destroy']);
 });
 
+// Service Order Items Management Routes
+Route::prefix('service-order-items')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'store']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'destroy']);
+});
+
 // Test endpoint for job-order-items
 Route::get('/job-order-items-test', function() {
     return response()->json([

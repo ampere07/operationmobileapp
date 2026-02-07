@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Image, ScrollView, Alert, Dimensions } from 'react-native';
-import { Bell, RefreshCw, Menu as MenuIcon } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Bell, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService, type Notification as AppNotification } from '../services/notificationService';
 import { formUIService } from '../services/formUIService';
@@ -209,15 +210,10 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   // Customer Header (Role: customer)
   if (user && user.role === 'customer') {
     return (
-      <View style={{
+      <SafeAreaView edges={['top']} style={{
         backgroundColor: '#ffffff',
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
-        height: 64,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: isTablet ? 48 : 24,
         width: '100%',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -226,263 +222,265 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
         elevation: 2,
         zIndex: 50
       }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {logoUrl ? (
-            <Image
-              source={{ uri: logoUrl }}
-              style={{ height: 32, width: 100, resizeMode: 'contain' }}
-              onError={(e) => {
-                console.error('[Logo] Failed to load image from:', logoUrl);
-              }}
-            />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{
-                width: 32,
-                height: 32,
-                backgroundColor: '#0f172a',
-                borderRadius: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 8
-              }}>
-                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>A</Text>
+        <View style={{
+          height: 64,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: isTablet ? 48 : 24,
+          width: '100%'
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {logoUrl ? (
+              <Image
+                source={{ uri: logoUrl }}
+                style={{ height: 32, width: 100, resizeMode: 'contain' }}
+                onError={(e) => {
+                  console.error('[Logo] Failed to load image from:', logoUrl);
+                }}
+              />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{
+                  width: 32,
+                  height: 32,
+                  backgroundColor: '#0f172a',
+                  borderRadius: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: 8
+                }}>
+                  <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>A</Text>
+                </View>
+                <Text style={{ color: '#0f172a', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
+                  ATSS FIBER <Text style={{ fontWeight: '800', color: '#0f172a' }}>PORTAL</Text>
+                </Text>
               </View>
-              <Text style={{ color: '#0f172a', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
-                ATSS FIBER <Text style={{ fontWeight: '800', color: '#0f172a' }}>PORTAL</Text>
-              </Text>
-            </View>
-          )}
-        </View>
+            )}
+          </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 32 }}>
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 24,
-            fontSize: 14,
-            fontWeight: 'bold',
-            display: isTablet ? 'flex' : 'none'
-          }}>
-            <Pressable onPress={() => onNavigate?.('customer-dashboard')}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 32 }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 24,
+              display: isTablet ? 'flex' : 'none'
+            }}>
+              <Pressable onPress={() => onNavigate?.('customer-dashboard')}>
+                <Text style={{
+                  color: activeSection === 'customer-dashboard' || !activeSection ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                  fontWeight: 'bold',
+                  fontSize: 14
+                }}>
+                  Dashboard
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => onNavigate?.('customer-bills')}>
+                <Text style={{
+                  color: activeSection === 'customer-bills' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                  fontWeight: 'bold',
+                  fontSize: 14
+                }}>
+                  Bills
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => onNavigate?.('customer-support')}>
+                <Text style={{
+                  color: activeSection === 'customer-support' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
+                  fontWeight: 'bold',
+                  fontSize: 14
+                }}>
+                  Support
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={async () => {
+                await AsyncStorage.removeItem('token');
+                await AsyncStorage.removeItem('authData');
+                if (onLogout) {
+                  onLogout();
+                }
+              }}
+              style={{
+                paddingHorizontal: 24,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderRadius: 9999,
+                borderColor: colorPalette?.primary || '#ef4444'
+              }}
+            >
               <Text style={{
-                color: activeSection === 'customer-dashboard' || !activeSection ? (colorPalette?.primary || '#0f172a') : '#6b7280',
-                fontWeight: 'bold',
-                fontSize: 14
+                color: colorPalette?.primary || '#ef4444',
+                fontSize: 14,
+                fontWeight: 'bold'
               }}>
-                Dashboard
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => onNavigate?.('customer-bills')}>
-              <Text style={{
-                color: activeSection === 'customer-bills' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
-                fontWeight: 'bold',
-                fontSize: 14
-              }}>
-                Bills
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => onNavigate?.('customer-support')}>
-              <Text style={{
-                color: activeSection === 'customer-support' ? (colorPalette?.primary || '#0f172a') : '#6b7280',
-                fontWeight: 'bold',
-                fontSize: 14
-              }}>
-                Support
+                Logout
               </Text>
             </Pressable>
           </View>
-
-          <Pressable
-            onPress={async () => {
-              await AsyncStorage.removeItem('token');
-              await AsyncStorage.removeItem('authData');
-              if (onLogout) {
-                onLogout();
-              }
-            }}
-            style={{
-              paddingHorizontal: 24,
-              paddingVertical: 8,
-              borderWidth: 1,
-              borderRadius: 9999,
-              borderColor: colorPalette?.primary || '#ef4444'
-            }}
-          >
-            <Text style={{
-              color: colorPalette?.primary || '#ef4444',
-              fontSize: 14,
-              fontWeight: 'bold'
-            }}>
-              Logout
-            </Text>
-          </Pressable>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // Admin/Staff Header (Original)
   return (
-    <View style={{
+    <SafeAreaView edges={['top']} style={{
       backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
       borderBottomWidth: 1,
       borderBottomColor: isDarkMode ? '#4b5563' : '#d1d5db',
-      height: 64,
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16
+      width: '100%'
     }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-        <Pressable
-          onPress={handleToggleClick}
-          style={{
-            padding: 12
-          }}
-        >
-          <MenuIcon size={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        </Pressable>
-
-        <View style={{ flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          {logoUrl && (
-            <Image
-              source={{ uri: logoUrl }}
-              style={{ height: 40, width: 120, resizeMode: 'contain' }}
-              onError={(e) => {
-                console.error('[Logo] Failed to load image from:', logoUrl);
-              }}
-            />
-          )}
-          <Text style={{
-            color: isDarkMode ? '#ffffff' : '#111827',
-            fontSize: 12,
-            fontWeight: '600'
-          }}>
-            Powered by Sync
-          </Text>
-        </View>
-      </View>
-
-      <View style={{ flex: 1 }} />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Pressable
-          onPress={handleRefresh}
-          style={{ padding: 8 }}
-        >
-          <RefreshCw size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        </Pressable>
-
-        <View style={{ position: 'relative' }}>
-          <Pressable
-            onPress={toggleNotifications}
-            style={{ padding: 8, position: 'relative' }}
-          >
-            <Bell size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-            {unreadCount > 0 && (
-              <View style={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 8,
-                height: 8,
-                backgroundColor: '#ef4444',
-                borderRadius: 4
-              }} />
+      <View style={{
+        height: 64,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <View style={{ flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            {logoUrl && (
+              <Image
+                source={{ uri: logoUrl }}
+                style={{ height: 40, width: 120, resizeMode: 'contain' }}
+                onError={(e) => {
+                  console.error('[Logo] Failed to load image from:', logoUrl);
+                }}
+              />
             )}
+            <Text style={{
+              color: isDarkMode ? '#ffffff' : '#111827',
+              fontSize: 12,
+              fontWeight: '600'
+            }}>
+              Powered by Sync
+            </Text>
+          </View>
+        </View>
+
+        <View style={{ flex: 1 }} />
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Pressable
+            onPress={handleRefresh}
+            style={{ padding: 8 }}
+          >
+            <RefreshCw size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
           </Pressable>
 
-          {showNotifications && (
-            <View style={{
-              position: 'absolute',
-              right: 0,
-              top: 48,
-              width: 384,
-              borderRadius: 8,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 8,
-              elevation: 8,
-              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-              borderWidth: 1,
-              borderColor: isDarkMode ? '#374151' : '#e5e7eb',
-              zIndex: 50
-            }}>
+          <View style={{ position: 'relative' }}>
+            <Pressable
+              onPress={toggleNotifications}
+              style={{ padding: 8, position: 'relative' }}
+            >
+              <Bell size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              {unreadCount > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  width: 8,
+                  height: 8,
+                  backgroundColor: '#ef4444',
+                  borderRadius: 4
+                }} />
+              )}
+            </Pressable>
+
+            {showNotifications && (
               <View style={{
-                padding: 16,
-                borderBottomWidth: 1,
-                borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+                position: 'absolute',
+                right: 0,
+                top: 48,
+                width: 384,
+                borderRadius: 8,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+                elevation: 8,
+                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                borderWidth: 1,
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+                zIndex: 50
               }}>
-                <Text style={{
-                  fontWeight: '600',
-                  color: isDarkMode ? '#ffffff' : '#111827'
+                <View style={{
+                  padding: 16,
+                  borderBottomWidth: 1,
+                  borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
                 }}>
-                  Recent Applications ({notifications.length})
-                </Text>
-              </View>
-              <ScrollView style={{ maxHeight: 384 }}>
-                {loading ? (
-                  <View style={{
-                    padding: 16,
-                    alignItems: 'center'
+                  <Text style={{
+                    fontWeight: '600',
+                    color: isDarkMode ? '#ffffff' : '#111827'
                   }}>
-                    <Text style={{
-                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    Recent Applications ({notifications.length})
+                  </Text>
+                </View>
+                <ScrollView style={{ maxHeight: 384 }}>
+                  {loading ? (
+                    <View style={{
+                      padding: 16,
+                      alignItems: 'center'
                     }}>
-                      Loading...
-                    </Text>
-                  </View>
-                ) : notifications.length === 0 ? (
-                  <View style={{
-                    padding: 16,
-                    alignItems: 'center'
-                  }}>
-                    <Text style={{
-                      color: isDarkMode ? '#9ca3af' : '#4b5563'
-                    }}>
-                      No new applications
-                    </Text>
-                  </View>
-                ) : (
-                  notifications.map((notification) => (
-                    <Pressable
-                      key={notification.id}
-                      style={{
-                        padding: 16,
-                        borderBottomWidth: 1,
-                        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
-                      }}
-                    >
                       <Text style={{
-                        fontWeight: '500',
-                        color: isDarkMode ? '#ffffff' : '#111827'
-                      }}>
-                        {notification.customer_name}
-                      </Text>
-                      <Text style={{
-                        fontSize: 14,
                         color: isDarkMode ? '#9ca3af' : '#4b5563'
                       }}>
-                        Plan: {notification.plan_name}
+                        Loading...
                       </Text>
+                    </View>
+                  ) : notifications.length === 0 ? (
+                    <View style={{
+                      padding: 16,
+                      alignItems: 'center'
+                    }}>
                       <Text style={{
-                        fontSize: 12,
-                        marginTop: 4,
-                        color: isDarkMode ? '#6b7280' : '#6b7280'
+                        color: isDarkMode ? '#9ca3af' : '#4b5563'
                       }}>
-                        {notification.formatted_date}
+                        No new applications
                       </Text>
-                    </Pressable>
-                  ))
-                )}
-              </ScrollView>
-            </View>
-          )}
+                    </View>
+                  ) : (
+                    notifications.map((notification) => (
+                      <Pressable
+                        key={notification.id}
+                        style={{
+                          padding: 16,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+                        }}
+                      >
+                        <Text style={{
+                          fontWeight: '500',
+                          color: isDarkMode ? '#ffffff' : '#111827'
+                        }}>
+                          {notification.customer_name}
+                        </Text>
+                        <Text style={{
+                          fontSize: 14,
+                          color: isDarkMode ? '#9ca3af' : '#4b5563'
+                        }}>
+                          Plan: {notification.plan_name}
+                        </Text>
+                        <Text style={{
+                          fontSize: 12,
+                          marginTop: 4,
+                          color: isDarkMode ? '#6b7280' : '#6b7280'
+                        }}>
+                          {notification.formatted_date}
+                        </Text>
+                      </Pressable>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 

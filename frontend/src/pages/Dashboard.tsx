@@ -325,72 +325,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                         <View style={{ flexShrink: 0 }}>
                             <Header
                                 onSearch={handleSearch}
-                                onToggleSidebar={toggleSidebar}
+                                onToggleSidebar={() => { }} // No longer needed
                                 onNavigate={handleSectionChange}
                                 onLogout={onLogout}
                                 activeSection={activeSection}
                             />
                         </View>
 
-                        {/* Main Content Area with Fixed Sidebar and Scrollable Content */}
-                        <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
-                            {/* Mobile Overlay */}
-                            {isMobileMenuOpen && (
-                                <View
-                                    style={{
-                                        position: 'absolute',
-                                        top: 0,
-                                        left: 0,
-                                        right: 0,
-                                        bottom: 0,
-                                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                                        zIndex: 40
-                                    }}
-                                    onTouchEnd={closeMobileMenu}
-                                />
-                            )}
-
-                            {/* Fixed Sidebar */}
-                            {showSidebar && (
-                                <View style={{
-                                    flexShrink: 0,
-                                    position: width >= 768 ? 'relative' : 'absolute',
-                                    zIndex: 50,
-                                    top: 0,
-                                    left: 0,
-                                    height: '100%',
-                                    transform: [
-                                        {
-                                            translateX: width >= 768
-                                                ? 0
-                                                : (isMobileMenuOpen ? 0 : -300)
-                                        }
-                                    ]
-                                }}>
-                                    <View style={{ height: '100%' }}>
-                                        <Sidebar
-                                            activeSection={activeSection}
-                                            onSectionChange={handleSectionChange}
-                                            onLogout={onLogout}
-                                            isCollapsed={width >= 768 ? sidebarCollapsed : false}
-                                            userRole={userData?.role || ''}
-                                            userEmail={userData?.email || ''}
-                                        />
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Scrollable Content Area Only */}
-                            <View style={{
-                                flex: 1,
-                                overflow: 'hidden',
-                                backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-                            }}>
-                                <View style={{ height: '100%', overflow: 'scroll' }}>
-                                    {renderContent()}
-                                </View>
+                        {/* Main Content Area */}
+                        <View style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+                        }}>
+                            <View style={{ height: '100%', overflow: 'scroll' }}>
+                                {renderContent()}
                             </View>
                         </View>
+
+                        {/* Bottom Navigation Bar */}
+                        {showSidebar && (
+                            <View style={{ flexShrink: 0 }}>
+                                <Sidebar
+                                    activeSection={activeSection}
+                                    onSectionChange={handleSectionChange}
+                                    onLogout={onLogout}
+                                    userRole={userData?.role || ''}
+                                    userEmail={userData?.email || ''}
+                                />
+                            </View>
+                        )}
                     </View>
                 </ServiceOrderProvider>
             </JobOrderProvider>

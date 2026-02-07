@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions } from 'react-native';
-import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, RefreshCw } from 'lucide-react-native';
+import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, RefreshCw, ArrowLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
 // import ServiceOrderFunnelFilter from '../components/filters/ServiceOrderFunnelFilter';
@@ -565,7 +565,6 @@ const ServiceOrderPage: React.FC = () => {
       height: '100%',
       flexDirection: isTablet ? 'row' : 'column',
       overflow: 'hidden',
-      paddingBottom: isTablet ? 0 : 64,
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
       {userRole.toLowerCase() !== 'technician' && isTablet && (
@@ -672,15 +671,18 @@ const ServiceOrderPage: React.FC = () => {
                   paddingHorizontal: 16,
                   paddingVertical: 16,
                   borderBottomWidth: 1,
+                  backgroundColor: selectedLocation === location.id
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent',
                   borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FileText size={20} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 12 }} />
+                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 12 }} />
                   <Text style={{
                     textTransform: 'capitalize',
                     fontSize: 16,
-                    color: isDarkMode ? '#d1d5db' : '#374151'
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
                   }}>{location.name}</Text>
                 </View>
                 {location.count > 0 && (
@@ -688,11 +690,13 @@ const ServiceOrderPage: React.FC = () => {
                     paddingHorizontal: 12,
                     paddingVertical: 4,
                     borderRadius: 9999,
-                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
                   }}>
                     <Text style={{
                       fontSize: 14,
-                      color: isDarkMode ? '#d1d5db' : '#374151'
+                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
                     }}>{location.count}</Text>
                   </View>
                 )}
@@ -809,6 +813,17 @@ const ServiceOrderPage: React.FC = () => {
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              {!isTablet && mobileView === 'orders' && (
+                <Pressable
+                  onPress={handleMobileBack}
+                  style={{
+                    padding: 8,
+                    borderRadius: 4,
+                  }}
+                >
+                  <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
+                </Pressable>
+              )}
               {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
                 <Pressable
                   onPress={() => setMobileMenuOpen(true)}

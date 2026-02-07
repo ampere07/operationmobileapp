@@ -266,7 +266,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 <View style={{ flexDirection: 'row', gap: 32 }}>
                     <View style={{ flex: 1, gap: 24 }}>
                         <View style={{ backgroundColor: '#ffffff', borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: '#f3f4f6' }}>
-                            <View style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+                            <View style={{ position: 'relative', marginBottom: 16 }}>
                                 <View style={{ width: 96, height: 96, backgroundColor: '#e5e7eb', borderRadius: 48, marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center' }}>
                                     <User width={48} height={48} color="#9ca3af" />
                                 </View>

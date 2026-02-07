@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator } from 'react-native';
-import { Loader2, MapPin, List, Map } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator, TextInput } from 'react-native';
+import { Loader2, MapPin, List, Map, Plus, Search } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import AddLcpNapLocationModal from '../modals/AddLcpNapLocationModal';
@@ -57,6 +57,7 @@ const LcpNapLocation: React.FC = () => {
   const [markers, setMarkers] = useState<LocationMarker[]>([]);
   const [lcpNapGroups, setLcpNapGroups] = useState<LcpNapGroup[]>([]);
   const [selectedLcpNapId, setSelectedLcpNapId] = useState<number | string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
@@ -66,6 +67,7 @@ const LcpNapLocation: React.FC = () => {
   const mapRef = useRef<MapView>(null);
   const sidebarStartXRef = useRef<number>(0);
   const sidebarStartWidthRef = useRef<number>(0);
+  const [userRole, setUserRole] = useState<number | null>(null);
 
   useEffect(() => {
     const checkDarkMode = async () => {
@@ -86,6 +88,22 @@ const LcpNapLocation: React.FC = () => {
       }
     };
     fetchColorPalette();
+
+  }, []);
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const authData = await AsyncStorage.getItem('authData');
+        if (authData) {
+          const parsedUser = JSON.parse(authData);
+          setUserRole(parsedUser.role_id);
+        }
+      } catch (error) {
+        console.error('Failed to fetch auth data:', error);
+      }
+    };
+    fetchUserRole();
   }, []);
 
   useEffect(() => {
@@ -267,9 +285,23 @@ const LcpNapLocation: React.FC = () => {
   const selectedGroup = getSelectedGroup();
 
   const getMarkersToDisplay = (): LocationMarker[] => {
-    if (selectedLcpNapId === 'all') return markers;
-    const group = lcpNapGroups.find(g => g.lcpnap_id === selectedLcpNapId);
-    return group ? group.locations : [];
+    let displayedMarkers = markers;
+
+    if (selectedLcpNapId !== 'all') {
+      const group = lcpNapGroups.find(g => g.lcpnap_id === selectedLcpNapId);
+      displayedMarkers = group ? group.locations : [];
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      displayedMarkers = displayedMarkers.filter(marker =>
+        (marker.lcpnap_name || '').toLowerCase().includes(query) ||
+        (marker.lcp_name || '').toLowerCase().includes(query) ||
+        (marker.nap_name || '').toLowerCase().includes(query)
+      );
+    }
+
+    return displayedMarkers;
   };
 
   const { width } = useWindowDimensions();
@@ -353,7 +385,7 @@ const LcpNapLocation: React.FC = () => {
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
       {/* Desktop Sidebar */}
-      {isTablet && (
+      {isTablet && userRole !== 2 && (
         <View style={{
           width: sidebarWidth,
           borderRightWidth: 1,
@@ -406,31 +438,26 @@ const LcpNapLocation: React.FC = () => {
             <View style={{
               flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
             }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>Map View</Text>
-              <Pressable
-                onPress={() => setShowAddModal(true)}
+              <Search size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} style={{ marginRight: 8 }} />
+              <TextInput
                 style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  borderRadius: 4,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  backgroundColor: colorPalette?.primary || '#ea580c'
+                  flex: 1,
+                  color: isDarkMode ? '#ffffff' : '#111827',
+                  fontSize: 14,
+                  padding: 0
                 }}
-              >
-                <MapPin size={16} color="white" />
-                <Text style={{
-                  color: 'white',
-                  fontSize: 14
-                }}>Add LCPNAP</Text>
-              </Pressable>
+                placeholder="Search locations..."
+                placeholderTextColor={isDarkMode ? '#9ca3af' : '#9ca3af'}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
             </View>
           </View>
 
@@ -509,6 +536,29 @@ const LcpNapLocation: React.FC = () => {
               ))}
             </MapView>
 
+            <Pressable
+              onPress={() => setShowAddModal(true)}
+              style={{
+                position: 'absolute',
+                bottom: 24,
+                right: 24,
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: colorPalette?.primary || '#ea580c',
+                alignItems: 'center',
+                justifyContent: 'center',
+                elevation: 5,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 3.84,
+                zIndex: 1001
+              }}
+            >
+              <Plus size={24} color="white" />
+            </Pressable>
+
             {isLoading && (
               <View style={{
                 position: 'absolute',
@@ -554,26 +604,7 @@ const LcpNapLocation: React.FC = () => {
         </View>
       )}
 
-      {/* Mobile Bottom Bar - Horizontal Scroll */}
-      {
-        !isTablet && (
-          <View style={{
-            width: '100%',
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderTopWidth: 1,
-            borderColor: isDarkMode ? '#374151' : '#e5e7eb',
-            paddingVertical: 0
-          }}>
-            <ScrollView
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 0 }}
-            >
-              {lcpNapItems.map((item) => renderLocationItem(item, true))}
-            </ScrollView>
-          </View>
-        )
-      }
+
     </View >
   );
 };

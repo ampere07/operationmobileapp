@@ -499,7 +499,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const linkStyle = { marginLeft: 8 };
   const valueStyle = {
     color: isDarkMode ? '#ffffff' : '#111827',
-    fontSize: 14,
+    fontSize: 16,
   };
 
   const renderImageLink = (url: string | undefined | null) => (
@@ -593,7 +593,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       gap: 2
     };
     const labelStyle = {
-      fontSize: 12,
+      fontSize: 14,
       color: isDarkMode ? '#9ca3af' : '#6b7280',
       fontWeight: '500' as const
     };
@@ -615,7 +615,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%', borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb', borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db' }}>
       <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Text style={{ fontWeight: '500', maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 14 : 16, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>{getClientFullName()}</Text>
+          <Text style={{ fontWeight: '500', maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>{getClientFullName()}</Text>
           {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#fb923c' : '#ea580c' }}>Loading...</Text>}
         </View>
 
@@ -647,7 +647,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
 
           <Pressable onPress={onClose}>
-            <X width={18} height={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
           </Pressable>
         </View>
       </View>
@@ -675,8 +675,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         </View>
       )}
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        <View style={{ width: '100%', paddingVertical: 8, paddingHorizontal: 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ width: '100%', minHeight: '100%', paddingVertical: 8, paddingHorizontal: 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
           <View>
             {defaultFields.map((fieldKey) => (
               <React.Fragment key={fieldKey}>

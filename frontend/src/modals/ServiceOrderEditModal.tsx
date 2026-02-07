@@ -3,7 +3,7 @@ import { X, Calendar, ChevronDown, Minus, Plus } from 'lucide-react';
 import { UserData } from '../types/api';
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
-import { createServiceOrderItems, ServiceOrderItem, deleteServiceOrderItems } from '../services/serviceOrderItemService';
+import { createServiceOrderItems, ServiceOrderItem, deleteServiceOrderItem } from '../services/serviceOrderItemService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
 
@@ -755,7 +755,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
             for (const item of existingItems) {
               try {
-                await apiClient.delete(`/service-order-items/${item.id}`);
+                await deleteServiceOrderItem(item.id);
               } catch (deleteErr) {
                 console.error('Error deleting existing item:', deleteErr);
               }

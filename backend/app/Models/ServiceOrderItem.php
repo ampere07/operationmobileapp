@@ -10,7 +10,7 @@ class ServiceOrderItem extends Model
     
     protected $fillable = [
         'service_order_id',
-        'item_id',
+        'item_name',
         'quantity',
         'is_pullout',
         'serial_number'
