@@ -8,6 +8,7 @@ import { paymentPortalLogsService } from '../services/paymentPortalLogsService';
 import { transactionService } from '../services/transactionService';
 import { getCustomerDetail } from '../services/customerDetailService';
 import { paymentService, PendingPayment } from '../services/paymentService';
+import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface SOARecord {
@@ -39,13 +40,8 @@ interface BillsProps {
 }
 
 const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
-    const [loading, setLoading] = useState(true);
+    const { customerDetail, payments: paymentRecords, soaRecords, invoiceRecords, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
     const [activeTab, setActiveTab] = useState<'soa' | 'invoices' | 'payments'>(initialTab);
-    const [soaRecords, setSoaRecords] = useState<SOARecord[]>([]);
-    const [invoiceRecords, setInvoiceRecords] = useState<InvoiceRecord[]>([]);
-    const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
-    const [balance, setBalance] = useState(0);
-    const [accountNo, setAccountNo] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
@@ -59,70 +55,18 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const storedUser = await AsyncStorage.getItem('authData');
-                if (storedUser) {
-                    const parsedUser = JSON.parse(storedUser);
-                    setDisplayName(parsedUser.full_name || 'Customer');
-
-                    if (parsedUser.username) {
-                        const detail = await getCustomerDetail(parsedUser.username);
-
-                        if (detail && detail.billingAccount) {
-                            setAccountNo(detail.billingAccount.accountNo);
-                            setBalance(detail.billingAccount.accountBalance);
-
-                            const billingId = detail.billingAccount.id;
-                            const accNo = detail.billingAccount.accountNo;
-
-                            const [soaRes, invoiceRes, logsRes, txRes] = await Promise.all([
-                                soaService.getStatementsByAccount(billingId).catch(e => []),
-                                invoiceService.getInvoicesByAccount(billingId).catch(e => []),
-                                paymentPortalLogsService.getLogsByAccountNo(accNo).catch(e => []),
-                                transactionService.getAllTransactions().catch(e => ({ success: false, data: [] }))
-                            ]);
-
-                            setSoaRecords(soaRes || []);
-                            setInvoiceRecords(invoiceRes || []);
-
-                            const formattedLogs: PaymentRecord[] = Array.isArray(logsRes) ? logsRes.map((l: any) => ({
-                                id: `log-${l.id}`,
-                                date: l.date_time,
-                                reference: l.reference_no,
-                                amount: parseFloat(l.total_amount),
-                                source: 'Online',
-                                status: l.status
-                            })) : [];
-
-                            let formattedTxs: PaymentRecord[] = [];
-                            if (txRes && txRes.success && Array.isArray(txRes.data)) {
-                                formattedTxs = txRes.data
-                                    .filter((t: any) => t.account_no === accNo)
-                                    .map((t: any) => ({
-                                        id: `tx-${t.id}`,
-                                        date: t.payment_date || t.created_at,
-                                        reference: t.or_no || t.reference_no || `TR-${t.id}`,
-                                        amount: parseFloat(t.received_payment || t.amount || 0),
-                                        source: 'Manual',
-                                        status: 'Computed'
-                                    }));
-                            }
-
-                            const allPayments = [...formattedLogs, ...formattedTxs].sort((a, b) =>
-                                new Date(b.date).getTime() - new Date(a.date).getTime()
-                            );
-                            setPaymentRecords(allPayments);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error("Error fetching bills data:", err);
-            } finally {
-                setLoading(false);
+        const loadUser = async () => {
+            const storedUser = await AsyncStorage.getItem('authData');
+            if (storedUser) {
+                const parsedUser = JSON.parse(storedUser);
+                setDisplayName(parsedUser.full_name || 'Customer');
             }
         };
+        loadUser();
+        silentRefresh();
+    }, []);
 
+    useEffect(() => {
         const fetchColorPalette = async () => {
             try {
                 const activePalette = await settingsColorPaletteService.getActive();
@@ -132,7 +76,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
             }
         };
 
-        fetchData();
         fetchColorPalette();
     }, []);
 
@@ -226,14 +169,17 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         return `₱ ${(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     };
 
-    if (loading) return (
+    const balance = customerDetail?.billingAccount?.accountBalance || 0;
+    const accountNo = customerDetail?.billingAccount?.accountNo || '';
+
+    if (contextLoading && !customerDetail) return (
         <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
             <ActivityIndicator size="large" color="#111827" />
         </View>
     );
 
     return (
-        <View style={{ padding: 24, minHeight: '100%', backgroundColor: '#f9fafb', fontFamily: 'sans-serif' }}>
+        <View style={{ padding: 24, minHeight: '100%', backgroundColor: '#f9fafb' }}>
             <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, gap: 16 }}>
                     <View>
@@ -243,7 +189,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                     <Pressable
                         onPress={handlePayNow}
                         disabled={isPaymentProcessing}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colorPalette?.primary || '#0f172a', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, fontWeight: 'bold', opacity: isPaymentProcessing ? 0.5 : 1 }}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colorPalette?.primary || '#0f172a', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, opacity: isPaymentProcessing ? 0.5 : 1 }}
                     >
                         <CreditCard width={20} height={20} color="#ffffff" />
                         <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>PAY NOW</Text>
@@ -369,7 +315,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                                             <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{formatDate(record.date)}</Text>
                                             <Text style={{ padding: 24, fontSize: 14, fontFamily: 'monospace', color: '#6b7280', flex: 1 }}>{record.reference}</Text>
                                             <Text style={{ padding: 24, fontSize: 14, color: '#4b5563', flex: 1 }}>{record.source}</Text>
-                                            <View style={{ padding: 24, fontSize: 14, flex: 1 }}>
+                                            <View style={{ padding: 24, flex: 1 }}>
                                                 <View style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, backgroundColor: (record.status === 'Completed' || record.status === 'PAID') ? '#dcfce7' : '#f3f4f6', alignSelf: 'flex-start' }}>
                                                     <Text style={{ fontSize: 12, fontWeight: 'bold', color: (record.status === 'Completed' || record.status === 'PAID') ? '#15803d' : '#374151' }}>
                                                         {record.status || 'Posted'}
@@ -440,14 +386,14 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                                 <Pressable
                                     onPress={handleCloseVerifyModal}
                                     disabled={isPaymentProcessing}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#e5e7eb', opacity: isPaymentProcessing ? 0.5 : 1 }}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#e5e7eb', opacity: isPaymentProcessing ? 0.5 : 1 }}
                                 >
                                     <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
                                 </Pressable>
                                 <Pressable
                                     onPress={handleProceedToCheckout}
                                     disabled={isPaymentProcessing || paymentAmount < 1}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: colorPalette?.primary || '#0f172a', opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1 }}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: colorPalette?.primary || '#0f172a', opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1 }}
                                 >
                                     <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
                                         {isPaymentProcessing ? 'Processing...' : 'Proceed to Pay'}
@@ -476,7 +422,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                             </Text>
                             <Pressable
                                 onPress={handleOpenPaymentLink}
-                                style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#16a34a', marginBottom: 12 }}
+                                style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#16a34a', marginBottom: 12 }}
                             >
                                 <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Open Payment Portal</Text>
                             </Pressable>
@@ -506,13 +452,13 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                             <View style={{ flexDirection: 'row', gap: 12 }}>
                                 <Pressable
                                     onPress={handleCancelPendingPayment}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: '#e5e7eb' }}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#e5e7eb' }}
                                 >
                                     <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
                                 </Pressable>
                                 <Pressable
                                     onPress={handleResumePendingPayment}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontWeight: 'bold', backgroundColor: colorPalette?.primary || '#0f172a' }}
+                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: colorPalette?.primary || '#0f172a' }}
                                 >
                                     <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Resume Payment</Text>
                                 </Pressable>

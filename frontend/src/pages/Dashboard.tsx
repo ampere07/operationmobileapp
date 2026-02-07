@@ -66,6 +66,7 @@ import Support from './Support';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
 import Bills from './Bills';
+import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface DashboardProps {
@@ -97,6 +98,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     // Use the initialized user data if available
                     if (user.role === 'customer') {
                         setActiveSection('customer-dashboard');
+                    } else if (user.role === 'technician') {
+                        setActiveSection('job-order');
                     }
 
                     if (user.role === 'customer' || String(user.role_id) === '3') {
@@ -291,7 +294,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     };
 
     // Helper to determine if we should show sidebar
-    const showSidebar = userData && String(userData.role_id) !== '3';
+    const showSidebar = userData !== null;
 
     if (isLoading) {
         return (
@@ -312,52 +315,54 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         //                             <StaggeredPaymentProvider>
         //                                 <DiscountProvider>
         <ApplicationProvider>
-            {/* <ApplicationVisitProvider> */}
-            <JobOrderProvider>
-                <ServiceOrderProvider>
-                    <View style={{
-                        height: '100%',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-                    }}>
-                        {/* Fixed Header */}
-                        <View style={{ flexShrink: 0 }}>
-                            <Header
-                                onSearch={handleSearch}
-                                onToggleSidebar={() => { }} // No longer needed
-                                onNavigate={handleSectionChange}
-                                onLogout={onLogout}
-                                activeSection={activeSection}
-                            />
-                        </View>
-
-                        {/* Main Content Area */}
+            <CustomerDataProvider>
+                {/* <ApplicationVisitProvider> */}
+                <JobOrderProvider>
+                    <ServiceOrderProvider>
                         <View style={{
-                            flex: 1,
+                            height: '100%',
+                            flexDirection: 'column',
                             overflow: 'hidden',
                             backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
                         }}>
-                            <View style={{ height: '100%', overflow: 'scroll' }}>
-                                {renderContent()}
-                            </View>
-                        </View>
-
-                        {/* Bottom Navigation Bar */}
-                        {showSidebar && (
+                            {/* Fixed Header */}
                             <View style={{ flexShrink: 0 }}>
-                                <Sidebar
-                                    activeSection={activeSection}
-                                    onSectionChange={handleSectionChange}
+                                <Header
+                                    onSearch={handleSearch}
+                                    onToggleSidebar={() => { }} // No longer needed
+                                    onNavigate={handleSectionChange}
                                     onLogout={onLogout}
-                                    userRole={userData?.role || ''}
-                                    userEmail={userData?.email || ''}
+                                    activeSection={activeSection}
                                 />
                             </View>
-                        )}
-                    </View>
-                </ServiceOrderProvider>
-            </JobOrderProvider>
+
+                            {/* Main Content Area */}
+                            <View style={{
+                                flex: 1,
+                                overflow: 'hidden',
+                                backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+                            }}>
+                                <View style={{ height: '100%', overflow: 'scroll' }}>
+                                    {renderContent()}
+                                </View>
+                            </View>
+
+                            {/* Bottom Navigation Bar */}
+                            {showSidebar && (
+                                <View style={{ flexShrink: 0 }}>
+                                    <Sidebar
+                                        activeSection={activeSection}
+                                        onSectionChange={handleSectionChange}
+                                        onLogout={onLogout}
+                                        userRole={userData?.role || ''}
+                                        userEmail={userData?.email || ''}
+                                    />
+                                </View>
+                            )}
+                        </View>
+                    </ServiceOrderProvider>
+                </JobOrderProvider>
+            </CustomerDataProvider>
             {/* </ApplicationVisitProvider> */}
         </ApplicationProvider>
         //                                 </DiscountProvider>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { FileCheck, Wrench, MapPinned, LogOut, Settings } from 'lucide-react-native';
+import { FileCheck, Wrench, MapPinned, LogOut, Settings, LayoutDashboard, ReceiptText, LifeBuoy } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import ConfirmationModal from '../modals/MoveToJoModal';
@@ -22,18 +22,8 @@ interface MenuItem {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLogout, userRole }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
-
-    checkDarkMode();
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -48,13 +38,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
     fetchColorPalette();
   }, []);
 
-  if (userRole?.toLowerCase() === 'customer') return null;
+  // No longer returning null for customers to allow showing the updated bottom navbar
 
   const menuItems: MenuItem[] = [
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician'] },
-    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] }, // Changed icon to Settings to differentiate
+    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] },
     { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'] },
+    // Customer specific items
+    { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
+    { id: 'customer-bills', label: 'Bills', icon: ReceiptText, allowedRoles: ['customer'] },
+    { id: 'customer-support', label: 'Support', icon: LifeBuoy, allowedRoles: ['customer'] },
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {
@@ -72,9 +66,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
       width: '100%',
       height: 75,
       flexDirection: 'row',
-      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+      backgroundColor: '#ffffff',
       borderTopWidth: 1,
-      borderTopColor: isDarkMode ? '#4b5563' : '#d1d5db',
+      borderTopColor: '#d1d5db',
       justifyContent: 'space-around',
       alignItems: 'center',
       paddingHorizontal: 10,
@@ -98,14 +92,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
               size={24}
               color={isActive
                 ? (colorPalette?.primary || '#ea580c')
-                : (isDarkMode ? '#9ca3af' : '#4b5563')}
+                : '#4b5563'}
             />
             <Text style={{
               fontSize: 10,
               marginTop: 4,
               color: isActive
                 ? (colorPalette?.primary || '#ea580c')
-                : (isDarkMode ? '#9ca3af' : '#4b5563')
+                : '#4b5563'
             }}>
               {item.label}
             </Text>
@@ -124,12 +118,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
       >
         <LogOut
           size={24}
-          color={isDarkMode ? '#9ca3af' : '#4b5563'}
+          color="#4b5563"
         />
         <Text style={{
           fontSize: 10,
           marginTop: 4,
-          color: isDarkMode ? '#9ca3af' : '#4b5563'
+          color: '#4b5563'
         }}>
           Logout
         </Text>

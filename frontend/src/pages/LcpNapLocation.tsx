@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator, TextInput, StyleSheet, Modal } from 'react-native';
 import { MapPin, Search, Plus } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as ExpoLocation from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 import AddLcpNapLocationModal from '../modals/AddLcpNapLocationModal';
 import LcpNapLocationDetails from '../components/LcpNapLocationDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -104,6 +105,16 @@ const LcpNapLocation: React.FC = () => {
     };
 
     initData();
+  }, []);
+
+  // Request location permissions
+  useEffect(() => {
+    (async () => {
+      let { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Permission to access location was denied');
+      }
+    })();
   }, []);
 
   const loadLocations = useCallback(async () => {
@@ -386,6 +397,8 @@ const LcpNapLocation: React.FC = () => {
               maxZoomLevel={20}
               rotateEnabled={false}
               pitchEnabled={false}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
               onMapReady={handleMapReady}
             >
               {markersToDisplay.map((location) => (

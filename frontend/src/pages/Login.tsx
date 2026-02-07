@@ -17,7 +17,7 @@ import { login as loginUser, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
 import { formUIService } from '../services/formUIService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { ArrowRight } from 'lucide-react-native';
+import { ArrowRight, Eye, EyeOff } from 'lucide-react-native';
 
 interface LoginProps {
   onLogin: (userData: UserData) => void;
@@ -35,6 +35,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [forgotMessage, setForgotMessage] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
@@ -311,11 +312,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 />
               </View>
 
-              <View style={{ marginBottom: 16 }}>
+              <View style={{ marginBottom: 16, position: 'relative' }}>
                 <TextInput
                   style={{
                     width: '100%',
                     padding: 14,
+                    paddingRight: 50,
                     backgroundColor: '#ffffff',
                     borderWidth: 1,
                     borderColor: '#d1d5db',
@@ -327,8 +329,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   onChangeText={setMobileNo}
                   placeholder="Password"
                   placeholderTextColor="#6b7280"
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                 />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 14,
+                    top: 14,
+                  }}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color="#6b7280" />
+                  ) : (
+                    <Eye size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
               </View>
 
               {error ? (

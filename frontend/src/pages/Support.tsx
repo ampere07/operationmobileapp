@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking } from 'react-native';
-import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions } from 'react-native';
+import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle, Plus, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -26,6 +26,8 @@ interface SupportProps {
 }
 
 const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const [isDarkMode, setIsDarkMode] = useState<boolean>(forceLightMode ? false : true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
@@ -40,6 +42,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showLoadingModal, setShowLoadingModal] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+  const [showNewRequestModal, setShowNewRequestModal] = useState<boolean>(false);
 
   const concernOptions = [
     'No Internet',
@@ -231,40 +234,297 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   };
 
   return (
-    <ScrollView style={{
-      height: '100%',
+    <View style={{
+      flex: 1,
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
-      <View style={{ maxWidth: 1280, marginHorizontal: 'auto', padding: 24 }}>
+      <ScrollView style={{ flex: 1 }}>
+        <View style={{ maxWidth: 1280, marginHorizontal: 'auto', padding: isMobile ? 12 : 24, paddingBottom: 100 }}>
+          <View style={{
+            flex: isMobile ? 1 : 2,
+            width: '100%',
+            padding: isMobile ? 16 : 24
+          }}>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {isLoading ? (
+                <View style={{
+                  paddingVertical: 48,
+                  alignItems: 'center',
+                  width: '100%'
+                }}>
+                  <View style={{ flexDirection: 'column', alignItems: 'center' }}>
+                    <View style={{
+                      height: 16,
+                      width: '33%',
+                      borderRadius: 4,
+                      marginBottom: 16,
+                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
+                    }} />
+                    <View style={{
+                      height: 16,
+                      width: '50%',
+                      borderRadius: 4,
+                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
+                    }} />
+                  </View>
+                  <Text style={{
+                    marginTop: 16,
+                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                  }}>Loading support requests...</Text>
+                </View>
+              ) : (
+                <>
+                  {requests.map((request) => (
+                    <View
+                      key={request.id}
+                      style={{
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+                        padding: 16,
+                        marginBottom: 16
+                      }}
+                    >
+                      {/* Header Row */}
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{
+                            fontSize: 12,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280',
+                            marginBottom: 4
+                          }}>Ticket ID</Text>
+                          <Text style={{
+                            fontSize: 16,
+                            fontWeight: '600',
+                            color: isDarkMode ? '#ffffff' : '#111827'
+                          }}>{request.requestId}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={{
+                            fontSize: 12,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280'
+                          }}>{request.date}</Text>
+                        </View>
+                      </View>
+
+                      {/* Issue Section */}
+                      <View style={{ marginBottom: 12 }}>
+                        <Text style={{
+                          fontSize: 14,
+                          fontWeight: '600',
+                          color: isDarkMode ? '#d1d5db' : '#374151',
+                          marginBottom: 4
+                        }}>{request.issue}</Text>
+                        <Text style={{
+                          fontSize: 13,
+                          color: isDarkMode ? '#9ca3af' : '#6b7280',
+                          lineHeight: 18
+                        }}>{request.issueDetails}</Text>
+                      </View>
+
+                      {/* Status Row */}
+                      <View style={{
+                        flexDirection: isMobile ? 'column' : 'row',
+                        gap: 12,
+                        marginBottom: 12
+                      }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{
+                            fontSize: 12,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280',
+                            marginBottom: 6
+                          }}>Status</Text>
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            alignSelf: 'flex-start',
+                            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6'
+                          }}>
+                            <Info size={14} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 6 }} />
+                            <Text style={{
+                              color: isDarkMode ? '#d1d5db' : '#374151',
+                              fontSize: 13,
+                              fontWeight: '500'
+                            }}>
+                              {request.status}
+                            </Text>
+                          </View>
+                          {request.statusNote && (
+                            <Text style={{
+                              fontSize: 12,
+                              marginTop: 4,
+                              color: isDarkMode ? '#6b7280' : '#9ca3af'
+                            }}>
+                              {request.statusNote}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={{
+                            fontSize: 12,
+                            color: isDarkMode ? '#9ca3af' : '#6b7280',
+                            marginBottom: 6
+                          }}>Visit Status</Text>
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            alignSelf: 'flex-start',
+                            backgroundColor: request.visitInfo.status === 'Done'
+                              ? 'rgba(234, 179, 8, 0.2)'
+                              : isDarkMode ? '#374151' : '#f3f4f6',
+                            borderWidth: request.visitInfo.status === 'Done' ? 1 : 0,
+                            borderColor: request.visitInfo.status === 'Done' ? 'rgba(234, 179, 8, 0.5)' : 'transparent'
+                          }}>
+                            <CheckCircle
+                              size={14}
+                              color={request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151')}
+                              style={{ marginRight: 6 }}
+                            />
+                            <Text style={{
+                              color: request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151'),
+                              fontSize: 13,
+                              fontWeight: '500'
+                            }}>
+                              {request.visitInfo.status}
+                            </Text>
+                          </View>
+                          {request.assignedEmail && (
+                            <Text style={{
+                              fontSize: 12,
+                              marginTop: 4,
+                              color: isDarkMode ? '#9ca3af' : '#6b7280'
+                            }}>
+                              Tech: {request.assignedEmail}
+                            </Text>
+                          )}
+                          {request.visitNote && (
+                            <Text style={{
+                              fontSize: 12,
+                              color: isDarkMode ? '#6b7280' : '#9ca3af'
+                            }}>
+                              {request.visitNote}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Action Button */}
+                      <Pressable
+                        style={{
+                          paddingVertical: 10,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: colorPalette?.primary || '#3b82f6',
+                          alignItems: 'center',
+                          marginTop: 4
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 14,
+                          fontWeight: '500',
+                          color: colorPalette?.primary || '#3b82f6'
+                        }}>
+                          View Details
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ))}
+
+                  {requests.length === 0 && (
+                    <View style={{
+                      paddingVertical: 48,
+                      alignItems: 'center',
+                      width: '100%'
+                    }}>
+                      <FileText size={48} color={isDarkMode ? '#9ca3af80' : '#4b556380'} strokeWidth={1} style={{ marginBottom: 16 }} />
+                      <Text style={{
+                        fontSize: 18,
+                        fontWeight: '500',
+                        color: isDarkMode ? '#9ca3af' : '#4b5563'
+                      }}>No support requests</Text>
+                      <Text style={{
+                        fontSize: 14,
+                        marginTop: 4,
+                        color: isDarkMode ? '#9ca3af' : '#4b5563'
+                      }}>Submit a ticket to get started</Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <Pressable
+        onPress={() => setShowNewRequestModal(true)}
+        style={{
+          position: 'absolute',
+          bottom: isMobile ? 20 : 30,
+          right: isMobile ? 20 : 30,
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          backgroundColor: colorPalette?.primary || '#1e40af',
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+          elevation: 8
+        }}
+      >
+        <Plus size={28} color="#ffffff" />
+      </Pressable >
+
+
+      {/* New Request Modal */}
+      <Modal
+        visible={showNewRequestModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNewRequestModal(false)}
+      >
         <View style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 24
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'flex-end'
         }}>
           <View style={{
-            flex: 1,
-            minWidth: 300,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderRadius: 8,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 8,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            maxHeight: '90%',
             padding: 24
           }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
-              <FileText size={20} color={isDarkMode ? '#ffffff' : '#111827'} style={{ marginRight: 8 }} />
-              <Text style={{
-                fontSize: 20,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>
-                New Request
-              </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <FileText size={24} color={isDarkMode ? '#ffffff' : '#111827'} style={{ marginRight: 8 }} />
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '600',
+                  color: isDarkMode ? '#ffffff' : '#111827'
+                }}>
+                  New Request
+                </Text>
+              </View>
+              <Pressable onPress={() => setShowNewRequestModal(false)}>
+                <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              </Pressable>
             </View>
 
-            <View>
+            <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ marginBottom: 16 }}>
                 <Text style={{
                   fontSize: 14,
@@ -326,7 +586,10 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
               </View>
 
               <Pressable
-                onPress={handleSubmit}
+                onPress={() => {
+                  handleSubmit();
+                  setShowNewRequestModal(false);
+                }}
                 disabled={isSubmitting || remainingRequests <= 0}
                 style={{
                   width: '100%',
@@ -380,278 +643,33 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
                   </Text>
                 </View>
               )}
-            </View>
 
-            <Pressable
-              onPress={handleRequestPlanUpdate}
-              style={{
-                width: '100%',
-                marginTop: 16,
-                paddingVertical: 12,
-                borderRadius: 4,
-                borderWidth: 2,
-                borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center'
-              }}
-            >
-              <Upload size={16} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 8 }} />
-              <Text style={{
-                fontWeight: '500',
-                color: isDarkMode ? '#d1d5db' : '#374151'
-              }}>
-                Request Plan Update
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={{
-            flex: 2,
-            minWidth: 500,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderRadius: 8,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 8,
-            padding: 24
-          }}>
-            <Text style={{
-              fontSize: 20,
-              fontWeight: '600',
-              marginBottom: 24,
-              color: isDarkMode ? '#ffffff' : '#111827'
-            }}>
-              Latest Request
-            </Text>
-
-            <ScrollView horizontal style={{ overflow: 'scroll' }}>
-              {isLoading ? (
-                <View style={{
-                  paddingVertical: 48,
+              <Pressable
+                onPress={handleRequestPlanUpdate}
+                style={{
+                  width: '100%',
+                  marginTop: 16,
+                  paddingVertical: 12,
+                  borderRadius: 4,
+                  borderWidth: 2,
+                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
                   alignItems: 'center',
-                  width: '100%'
+                  flexDirection: 'row',
+                  justifyContent: 'center'
+                }}
+              >
+                <Upload size={16} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 8 }} />
+                <Text style={{
+                  fontWeight: '500',
+                  color: isDarkMode ? '#d1d5db' : '#374151'
                 }}>
-                  <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                    <View style={{
-                      height: 16,
-                      width: '33%',
-                      borderRadius: 4,
-                      marginBottom: 16,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
-                    <View style={{
-                      height: 16,
-                      width: '50%',
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
-                  </View>
-                  <Text style={{
-                    marginTop: 16,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>Loading support requests...</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={{ maxHeight: 400 }}>
-                    <View style={{ minWidth: '100%' }}>
-                      {/* Table Header */}
-                      <View style={{
-                        flexDirection: 'row',
-                        borderBottomWidth: 1,
-                        borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-                        position: 'sticky',
-                        top: 0,
-                        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                        zIndex: 10
-                      }}>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>Date</Text>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>ID</Text>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>Issue</Text>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>Status</Text>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>Visit Info</Text>
-                        <Text style={{
-                          flex: 1,
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          textAlign: 'left',
-                          fontWeight: '600',
-                          fontSize: 14,
-                          color: isDarkMode ? '#d1d5db' : '#374151'
-                        }}>Action</Text>
-                      </View>
-                      {/* Table Body */}
-                      {requests.map((request) => (
-                        <View
-                          key={request.id}
-                          style={{
-                            flexDirection: 'row',
-                            borderBottomWidth: 1,
-                            borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                          }}
-                        >
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
-                              {request.date}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
-                              {request.requestId}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
-                              {request.issue}
-                            </Text>
-                            <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
-                              {request.issueDetails}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <View style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              paddingHorizontal: 12,
-                              paddingVertical: 4,
-                              borderRadius: 4,
-                              alignSelf: 'flex-start',
-                              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6'
-                            }}>
-                              <Info size={14} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 4 }} />
-                              <Text style={{ color: isDarkMode ? '#d1d5db' : '#374151', fontSize: 14 }}>
-                                {request.status}
-                              </Text>
-                            </View>
-                            <Text style={{ fontSize: 12, marginTop: 4, color: '#6b7280' }}>
-                              Note: {request.statusNote || 'N/A'}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <View style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              paddingHorizontal: 12,
-                              paddingVertical: 8,
-                              borderRadius: 4,
-                              alignSelf: 'flex-start',
-                              backgroundColor: request.visitInfo.status === 'Done'
-                                ? 'rgba(234, 179, 8, 0.2)'
-                                : isDarkMode ? '#1f2937' : '#f3f4f6',
-                              borderWidth: request.visitInfo.status === 'Done' ? 1 : 0,
-                              borderColor: request.visitInfo.status === 'Done' ? 'rgba(234, 179, 8, 0.5)' : 'transparent'
-                            }}>
-                              <CheckCircle
-                                size={14}
-                                color={request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151')}
-                                style={{ marginRight: 4 }}
-                              />
-                              <Text style={{
-                                color: request.visitInfo.status === 'Done' ? '#eab308' : (isDarkMode ? '#d1d5db' : '#374151'),
-                                fontSize: 14
-                              }}>
-                                {request.visitInfo.status}
-                              </Text>
-                            </View>
-                            <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
-                              Techs: {request.assignedEmail || 'Not assigned'}
-                            </Text>
-                            <Text style={{ fontSize: 12, color: '#6b7280' }}>
-                              Note: {request.visitNote || 'N/A'}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 12 }}>
-                            <Pressable
-                              style={{
-                                paddingHorizontal: 16,
-                                paddingVertical: 4,
-                                borderRadius: 4,
-                                borderWidth: 1,
-                                borderColor: colorPalette?.primary || '#3b82f6',
-                                alignSelf: 'flex-start'
-                              }}
-                            >
-                              <Text style={{
-                                fontSize: 14,
-                                color: colorPalette?.primary || '#3b82f6'
-                              }}>
-                                View
-                              </Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  {requests.length === 0 && (
-                    <View style={{
-                      paddingVertical: 48,
-                      alignItems: 'center',
-                      width: '100%'
-                    }}>
-                      <FileText size={48} color={isDarkMode ? '#9ca3af80' : '#4b556380'} strokeWidth={1} style={{ marginBottom: 16 }} />
-                      <Text style={{
-                        fontSize: 18,
-                        fontWeight: '500',
-                        color: isDarkMode ? '#9ca3af' : '#4b5563'
-                      }}>No support requests</Text>
-                      <Text style={{
-                        fontSize: 14,
-                        marginTop: 4,
-                        color: isDarkMode ? '#9ca3af' : '#4b5563'
-                      }}>Submit a ticket to get started</Text>
-                    </View>
-                  )}
-                </>
-              )}
+                  Request Plan Update
+                </Text>
+              </Pressable>
             </ScrollView>
           </View>
         </View>
-      </View>
+      </Modal>
 
       {/* Confirm Modal */}
       <Modal
@@ -880,7 +898,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 };
 

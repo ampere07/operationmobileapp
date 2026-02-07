@@ -307,36 +307,9 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
               </Pressable>
             </View>
 
-            <Pressable
-              onPress={() => setIsLogoutModalOpen(true)}
-              style={{
-                paddingHorizontal: 24,
-                paddingVertical: 8,
-                borderWidth: 1,
-                borderRadius: 9999,
-                borderColor: colorPalette?.primary || '#ef4444'
-              }}
-            >
-              <Text style={{
-                color: colorPalette?.primary || '#ef4444',
-                fontSize: 14,
-                fontWeight: 'bold'
-              }}>
-                Logout
-              </Text>
-            </Pressable>
           </View>
         </View>
 
-        <ConfirmationModal
-          isOpen={isLogoutModalOpen}
-          title="Logout Confirmation"
-          message="Are you sure you want to log out?"
-          confirmText="Logout"
-          cancelText="Cancel"
-          onConfirm={handleLogoutPress}
-          onCancel={() => setIsLogoutModalOpen(false)}
-        />
       </SafeAreaView>
     );
   }
