@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SYNC",
-    "slug": "sync",
+    "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/logo1.png",
