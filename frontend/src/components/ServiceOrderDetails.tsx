@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet } from 'react-native';
 import { X, ExternalLink, Edit, Settings } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
@@ -56,7 +56,9 @@ interface ServiceOrderDetailsProps {
   isMobile?: boolean;
 }
 
-const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder, onClose, isMobile = false }) => {
+const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder, onClose, isMobile: propIsMobile = false }) => {
+  const { width } = useWindowDimensions();
+  const isMobile = propIsMobile || width < 768;
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -273,30 +275,34 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     }
   };
 
-  const renderField = (label: string, value: any) => (
-    <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db' }}>
-      <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>{label}</Text>
-      <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>
-        {value || '-'}
-      </Text>
-    </View>
-  );
+  const valueStyle = {
+    color: isDarkMode ? '#ffffff' : '#111827',
+    fontSize: 16,
+  };
 
-  const renderImageField = (label: string, url: string | undefined, displayText: string) => (
-    <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db' }}>
-      <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>{label}</Text>
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827', marginRight: 8 }} numberOfLines={1}>
-          {url ? displayText : '-'}
-        </Text>
-        {url && (
-          <Pressable onPress={() => Linking.openURL(url)}>
-            <ExternalLink width={16} height={16} color={isDarkMode ? '#ffffff' : '#111827'} />
-          </Pressable>
-        )}
+  const renderField = (label: string, content: React.ReactNode) => (
+    <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
+      <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
+      <View style={styles.fieldValueContainer}>
+        {typeof content === 'string' ? <Text style={valueStyle}>{content || '-'}</Text> : content}
       </View>
     </View>
   );
+
+  const renderImageLink = (label: string, url: string | undefined | null) => {
+    return renderField(label, (
+      <View style={styles.imageLinkContainer}>
+        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1}>
+          {url || 'No image available'}
+        </Text>
+        {url && (
+          <Pressable onPress={() => Linking.openURL(url)}>
+            <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        )}
+      </View>
+    ));
+  };
 
   const renderFieldContent = (fieldKey: string) => {
     if (!fieldVisibility[fieldKey]) return null;
@@ -307,14 +313,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       case 'timestamp':
         return renderField('Timestamp', serviceOrder.timestamp);
       case 'accountNumber':
-        return (
-          <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Account No.</Text>
-            <Text style={{ color: '#ef4444', flex: 1 }}>
-              {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
-            </Text>
-          </View>
-        );
+        return renderField('Account Details', (
+          <Text style={{ color: '#ef4444', fontSize: 16 }}>
+            {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
+          </Text>
+        ));
       case 'dateInstalled':
         return renderField('Date Installed', serviceOrder.dateInstalled);
       case 'fullName':
@@ -324,7 +327,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       case 'fullAddress':
         return renderField('Full Address', serviceOrder.fullAddress);
       case 'houseFrontPicture':
-        return renderImageField('House Front Picture', serviceOrder.houseFrontPicture, serviceOrder.houseFrontPicture);
+        return renderImageLink('House Front Picture', serviceOrder.houseFrontPicture);
       case 'emailAddress':
         return renderField('Email Address', serviceOrder.emailAddress);
       case 'plan':
@@ -350,14 +353,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       case 'concernRemarks':
         return renderField('Concern Remarks', serviceOrder.concernRemarks);
       case 'visitStatus':
-        return (
-          <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Visit Status</Text>
-            <Text style={{ flex: 1, fontWeight: 'bold', textTransform: 'uppercase', color: getStatusColor(serviceOrder.visitStatus, 'visit') }}>
-              {serviceOrder.visitStatus || '-'}
-            </Text>
-          </View>
-        );
+        return renderField('Visit Status', (
+          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.visitStatus, 'visit') }}>
+            {serviceOrder.visitStatus || '-'}
+          </Text>
+        ));
       case 'visitBy':
         return renderField('Visit By', serviceOrder.visitBy);
       case 'visitWith':
@@ -379,14 +379,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       case 'supportRemarks':
         return renderField('Support Remarks', serviceOrder.supportRemarks);
       case 'supportStatus':
-        return (
-          <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Support Status</Text>
-            <Text style={{ flex: 1, fontWeight: 'bold', textTransform: 'uppercase', color: getStatusColor(serviceOrder.supportStatus, 'support') }}>
-              {serviceOrder.supportStatus || '-'}
-            </Text>
-          </View>
-        );
+        return renderField('Support Status', (
+          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.supportStatus, 'support') }}>
+            {serviceOrder.supportStatus || '-'}
+          </Text>
+        ));
       case 'repairCategory':
         return renderField('Repair Category', serviceOrder.repairCategory);
       case 'priorityLevel':
@@ -398,65 +395,78 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       case 'newPlan':
         return renderField('New Plan', serviceOrder.newPlan);
       case 'image1Url':
-        return renderImageField('Time In Image', serviceOrder.image1Url, 'View Image');
+        return renderImageLink('Time In Image', serviceOrder.image1Url);
       case 'image2Url':
-        return renderImageField('Modem Setup Image', serviceOrder.image2Url, 'View Image');
+        return renderImageLink('Modem Setup Image', serviceOrder.image2Url);
       case 'image3Url':
-        return renderImageField('Time Out Image', serviceOrder.image3Url, 'View Image');
+        return renderImageLink('Time Out Image', serviceOrder.image3Url);
       case 'clientSignatureUrl':
-        return renderImageField('Client Signature', serviceOrder.clientSignatureUrl, 'View Signature');
+        return renderImageLink('Client Signature', serviceOrder.clientSignatureUrl);
       case 'serviceCharge':
-        return (
-          <View style={{ flexDirection: 'row', paddingVertical: 8 }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Service Charge</Text>
-            <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }}>{serviceOrder.serviceCharge}</Text>
-          </View>
-        );
+        return renderField('Service Charge', serviceOrder.serviceCharge);
       default:
         return null;
     }
   };
 
   return (
-    <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: isDarkMode ? '#030712' : '#ffffff', borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db' }}>
-      <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontWeight: '500', maxWidth: isMobile ? 200 : 448, fontSize: isMobile ? 14 : 16, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-            {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.contactAddress}
+    <View style={[
+      styles.container,
+      {
+        borderLeftWidth: !isMobile ? 1 : 0,
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+        borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db'
+      }
+    ]}>
+      {/* Header */}
+      <View style={[
+        styles.header,
+        {
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        }
+      ]}>
+        <View style={styles.headerTitleContainer}>
+          <Text
+            style={[
+              styles.headerTitle,
+              { fontSize: isMobile ? 14 : 18, color: isDarkMode ? '#ffffff' : '#111827' }
+            ]}
+            numberOfLines={1}
+          >
+            {serviceOrder.accountNumber} | {serviceOrder.fullName}
           </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={styles.headerActions}>
           <Pressable
-            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
             onPress={handleEditClick}
           >
             <Edit width={16} height={16} color="#ffffff" style={{ marginRight: 4 }} />
-            <Text style={{ color: '#ffffff' }}>Edit</Text>
+            <Text style={styles.headerButtonText}>Edit</Text>
           </Pressable>
 
           <Pressable
             onPress={() => setShowFieldSettings(!showFieldSettings)}
-            style={{ position: 'relative' }}
+            style={styles.settingsButton}
           >
-            <Settings width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <Settings width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
           </Pressable>
 
           <Pressable onPress={onClose}>
-            <X width={18} height={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
           </Pressable>
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        <View style={{ marginHorizontal: 'auto', paddingVertical: 4, paddingHorizontal: 16, backgroundColor: isDarkMode ? '#030712' : '#ffffff' }}>
-          <View style={{ gap: 4 }}>
-            {fieldOrder.map((fieldKey) => (
-              <React.Fragment key={fieldKey}>
-                {renderFieldContent(fieldKey)}
-              </React.Fragment>
-            ))}
-          </View>
+      <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          {fieldOrder.map((fieldKey) => (
+            <React.Fragment key={fieldKey}>
+              {renderFieldContent(fieldKey)}
+            </React.Fragment>
+          ))}
         </View>
       </ScrollView>
 
@@ -468,40 +478,52 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
           onRequestClose={() => setShowFieldSettings(false)}
         >
           <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+            style={styles.modalOverlay}
             onPress={() => setShowFieldSettings(false)}
           >
             <Pressable
-              style={{ width: '90%', maxWidth: 400, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, borderWidth: 1, maxHeight: '80%', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+              style={[
+                styles.modalContent,
+                {
+                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }
+              ]}
               onPress={(e) => e.stopPropagation()}
             >
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-                <Text style={{ fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Field Visibility</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={[styles.modalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.modalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Field Visibility</Text>
+                <View style={styles.modalHeaderActions}>
                   <Pressable onPress={selectAllFields}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Show All</Text>
+                    <Text style={styles.modalActionText}>Show All</Text>
                   </Pressable>
                   <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
                   <Pressable onPress={deselectAllFields}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Hide All</Text>
+                    <Text style={styles.modalActionText}>Hide All</Text>
                   </Pressable>
                   <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
                   <Pressable onPress={resetFieldSettings}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Reset</Text>
+                    <Text style={styles.modalActionText}>Reset</Text>
                   </Pressable>
                 </View>
               </View>
-              <ScrollView style={{ padding: 8 }} showsVerticalScrollIndicator={false}>
+              <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
                 {fieldOrder.map((fieldKey) => (
                   <Pressable
                     key={fieldKey}
                     onPress={() => toggleFieldVisibility(fieldKey)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4 }}
+                    style={styles.modalItem}
                   >
-                    <View style={{ height: 16, width: 16, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: fieldVisibility[fieldKey] ? '#2563eb' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}>
-                      {fieldVisibility[fieldKey] && <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>}
+                    <View style={[
+                      styles.checkbox,
+                      {
+                        backgroundColor: fieldVisibility[fieldKey] ? (colorPalette?.primary || '#2563eb') : 'transparent',
+                        borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                      }
+                    ]}>
+                      {fieldVisibility[fieldKey] && <Text style={styles.checkboxTick}>✓</Text>}
                     </View>
-                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+                    <Text style={[styles.modalItemText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                       {getFieldLabel(fieldKey)}
                     </Text>
                   </Pressable>
@@ -523,5 +545,143 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    height: '100%',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  header: {
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTitle: {
+    fontWeight: '500',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButtonText: {
+    color: '#ffffff',
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  settingsButton: {
+    padding: 4,
+  },
+  flex1: {
+    flex: 1,
+  },
+  content: {
+    width: '100%',
+    paddingVertical: 8,
+  },
+  fieldContainer: {
+    flexDirection: 'column',
+    borderBottomWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 2,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  fieldValueContainer: {
+    width: '100%',
+  },
+  imageLinkContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  imageLinkText: {
+    flex: 1,
+    marginRight: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    fontWeight: '600',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalActionText: {
+    color: '#2563eb',
+    fontSize: 12,
+  },
+  modalList: {
+    padding: 8,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  checkbox: {
+    height: 18,
+    width: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxTick: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  modalItemText: {
+    fontSize: 14,
+  },
+});
 
 export default ServiceOrderDetails;

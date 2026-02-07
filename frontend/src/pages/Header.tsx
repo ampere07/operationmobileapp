@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService, type Notification as AppNotification } from '../services/notificationService';
 import { formUIService } from '../services/formUIService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import ConfirmationModal from '../modals/MoveToJoModal';
 
 interface HeaderProps {
   onToggleSidebar?: () => void;
@@ -23,6 +24,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   const [loading, setLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const notificationRef = useRef<View>(null);
   const mountedRef = useRef(true);
   const previousCountRef = useRef(0);
@@ -207,6 +209,15 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
   const { width } = Dimensions.get('window');
   const isTablet = width >= 768;
 
+  const handleLogoutPress = async () => {
+    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('authData');
+    if (onLogout) {
+      onLogout();
+    }
+    setIsLogoutModalOpen(false);
+  };
+
   // Customer Header (Role: customer)
   if (user && user.role === 'customer') {
     return (
@@ -297,13 +308,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
             </View>
 
             <Pressable
-              onPress={async () => {
-                await AsyncStorage.removeItem('token');
-                await AsyncStorage.removeItem('authData');
-                if (onLogout) {
-                  onLogout();
-                }
-              }}
+              onPress={() => setIsLogoutModalOpen(true)}
               style={{
                 paddingHorizontal: 24,
                 paddingVertical: 8,
@@ -322,6 +327,16 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
             </Pressable>
           </View>
         </View>
+
+        <ConfirmationModal
+          isOpen={isLogoutModalOpen}
+          title="Logout Confirmation"
+          message="Are you sure you want to log out?"
+          confirmText="Logout"
+          cancelText="Cancel"
+          onConfirm={handleLogoutPress}
+          onCancel={() => setIsLogoutModalOpen(false)}
+        />
       </SafeAreaView>
     );
   }

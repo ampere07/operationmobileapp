@@ -3,6 +3,7 @@ import { View, Text, Pressable } from 'react-native';
 import { FileCheck, Wrench, MapPinned, LogOut, Settings } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import ConfirmationModal from '../modals/MoveToJoModal';
 
 interface SidebarProps {
   activeSection: string;
@@ -23,6 +24,7 @@ interface MenuItem {
 const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLogout, userRole }) => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
     const checkDarkMode = async () => {
@@ -68,7 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
   return (
     <View style={{
       width: '100%',
-      height: 60,
+      height: 75,
       flexDirection: 'row',
       backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
       borderTopWidth: 1,
@@ -76,6 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
       justifyContent: 'space-around',
       alignItems: 'center',
       paddingHorizontal: 10,
+      paddingBottom: 15,
     }}>
       {filteredMenuItems.map((item) => {
         const isActive = activeSection === item.id;
@@ -112,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
 
       {/* Logout Item */}
       <Pressable
-        onPress={onLogout}
+        onPress={() => setIsLogoutModalOpen(true)}
         style={{
           alignItems: 'center',
           justifyContent: 'center',
@@ -131,6 +134,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
           Logout
         </Text>
       </Pressable>
+
+      <ConfirmationModal
+        isOpen={isLogoutModalOpen}
+        title="Logout Confirmation"
+        message="Are you sure you want to log out?"
+        confirmText="Logout"
+        cancelText="Cancel"
+        onConfirm={onLogout}
+        onCancel={() => setIsLogoutModalOpen(false)}
+      />
     </View>
   );
 };

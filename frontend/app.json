@@ -22,7 +22,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.atss.sync"
+      "package": "com.atss.sync",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyACI3bm9Mno0-DeH3BiSQ69Y_wSV_PMe9g"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,6 +36,9 @@
       "eas": {
         "projectId": "e250dc56-1875-4439-81b7-b29f13b3e7e2"
       }
-    }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
