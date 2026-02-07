@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking } from 'react-native';
-import { X, ExternalLink, Edit, Settings } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions } from 'react-native';
+import { X, ExternalLink, Edit } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
@@ -14,7 +14,9 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
 
-const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, onRefresh, isMobile = false }) => {
+const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false }) => {
+  const { width } = useWindowDimensions();
+  const isMobile = propIsMobile || width < 768;
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,10 +30,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [applicationData, setApplicationData] = useState<Application | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
-  const [showFieldSettings, setShowFieldSettings] = useState(false);
 
-  const FIELD_VISIBILITY_KEY = 'jobOrderDetailsFieldVisibility';
-  const FIELD_ORDER_KEY = 'jobOrderDetailsFieldOrder';
 
   const defaultFields = [
     'timestamp',
@@ -77,26 +76,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'houseFrontPicture'
   ];
 
-  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(() => {
-    return defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-  });
 
-  const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
 
   useEffect(() => {
     const loadSettings = async () => {
       const theme = await AsyncStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
-
-      const savedVisibility = await AsyncStorage.getItem(FIELD_VISIBILITY_KEY);
-      if (savedVisibility) {
-        setFieldVisibility(JSON.parse(savedVisibility));
-      }
-
-      const savedOrder = await AsyncStorage.getItem(FIELD_ORDER_KEY);
-      if (savedOrder) {
-        setFieldOrder(JSON.parse(savedOrder));
-      }
 
       const authData = await AsyncStorage.getItem('authData');
       if (authData) {
@@ -110,14 +95,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     };
     loadSettings();
   }, []);
-
-  useEffect(() => {
-    AsyncStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
-  }, [fieldVisibility]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
-  }, [fieldOrder]);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -517,451 +494,121 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     return labels[fieldKey] || fieldKey;
   };
 
-  const toggleFieldVisibility = (field: string) => {
-    setFieldVisibility((prev: Record<string, boolean>) => ({ ...prev, [field]: !prev[field] }));
+
+
+  const linkStyle = { marginLeft: 8 };
+  const valueStyle = {
+    color: isDarkMode ? '#ffffff' : '#111827',
+    fontSize: 14,
   };
 
-  const selectAllFields = () => {
-    const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-    setFieldVisibility(allVisible);
-  };
+  const renderImageLink = (url: string | undefined | null) => (
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text style={{ flex: 1, marginRight: 8, ...valueStyle }} numberOfLines={1}>
+        {url || 'No image available'}
+      </Text>
+      {url && (
+        <Pressable onPress={() => Linking.openURL(url || '')}>
+          <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+        </Pressable>
+      )}
+    </View>
+  );
 
-  const deselectAllFields = () => {
-    const allHidden: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: false }), {});
-    setFieldVisibility(allHidden);
-  };
-
-  const resetFieldSettings = () => {
-    const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-    setFieldVisibility(allVisible);
-    setFieldOrder(defaultFields);
+  const fieldRenderers: Record<string, () => React.ReactNode> = {
+    timestamp: () => <Text style={valueStyle}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
+    jobOrderNumber: () => <Text style={valueStyle}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
+    referredBy: () => <Text style={valueStyle}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
+    fullName: () => <Text style={valueStyle}>{getClientFullName()}</Text>,
+    contactNumber: () => <Text style={valueStyle}>{jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}</Text>,
+    secondContactNumber: () => <Text style={valueStyle}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
+    emailAddress: () => <Text style={valueStyle}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
+    fullAddress: () => <Text style={valueStyle}>{getClientFullAddress()}</Text>,
+    billingStatus: () => <Text style={valueStyle}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
+    billingDay: () => <Text style={valueStyle}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
+    choosePlan: () => <Text style={valueStyle}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
+    statusRemarks: () => <Text style={valueStyle}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>,
+    remarks: () => <Text style={valueStyle}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>,
+    installationLandmark: () => <Text style={valueStyle}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>,
+    connectionType: () => <Text style={valueStyle}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
+    modemRouterSn: () => <Text style={valueStyle}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
+    routerModel: () => <Text style={valueStyle}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
+    affiliateName: () => <Text style={valueStyle}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>,
+    lcpnap: () => <Text style={valueStyle}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
+    port: () => <Text style={valueStyle}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
+    vlan: () => <Text style={valueStyle}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
+    username: () => <Text style={valueStyle}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
+    ipAddress: () => <Text style={valueStyle}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
+    usageType: () => <Text style={valueStyle}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
+    dateInstalled: () => <Text style={valueStyle}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
+    visitBy: () => <Text style={valueStyle}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
+    visitWith: () => <Text style={valueStyle}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
+    visitWithOther: () => <Text style={valueStyle}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
+    onsiteStatus: () => (
+      <Text style={{ textTransform: 'capitalize', color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }}>
+        {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
+      </Text>
+    ),
+    contractTemplate: () => <Text style={valueStyle}>{jobOrder.Contract_Template || 'Standard'}</Text>,
+    contractLink: () => {
+      const link = jobOrder.Contract_Link;
+      return (
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ flex: 1, ...valueStyle }} numberOfLines={1}>
+            {link || 'Not available'}
+          </Text>
+          {link && (
+            <Pressable onPress={() => Linking.openURL(link || '')} style={linkStyle}>
+              <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            </Pressable>
+          )}
+        </View>
+      );
+    },
+    modifiedBy: () => <Text style={valueStyle}>{jobOrder.Modified_By || 'System'}</Text>,
+    modifiedDate: () => <Text style={valueStyle}>{formatDate(jobOrder.Modified_Date)}</Text>,
+    assignedEmail: () => <Text style={valueStyle}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
+    setupImage: () => renderImageLink(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url),
+    speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image),
+    signedContractImage: () => renderImageLink(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL),
+    boxReadingImage: () => renderImageLink(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL),
+    routerReadingImage: () => renderImageLink(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL),
+    portLabelImage: () => renderImageLink(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL),
+    houseFrontPicture: () => renderImageLink(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture),
   };
 
   const renderFieldContent = (fieldKey: string) => {
-    if (!fieldVisibility[fieldKey]) return null;
 
-    const baseFieldStyle = { flexDirection: 'row' as const, borderBottomWidth: 1, paddingBottom: 16, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' };
-    const labelStyle = { width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' };
-    const valueStyle = { flex: 1, color: isDarkMode ? '#ffffff' : '#111827' };
 
-    switch (fieldKey) {
-      case 'timestamp':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Timestamp:</Text>
-            <Text style={valueStyle}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>
-          </View>
-        );
+    const renderer = fieldRenderers[fieldKey];
+    if (!renderer) return null;
 
-      case 'jobOrderNumber':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Job Order #:</Text>
-            <Text style={valueStyle}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>
-          </View>
-        );
+    const baseFieldStyle = {
+      flexDirection: 'column' as const,
+      borderBottomWidth: 1,
+      paddingVertical: 4,
+      paddingHorizontal: 16,
+      borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+      alignItems: 'flex-start' as const,
+      gap: 2
+    };
+    const labelStyle = {
+      fontSize: 12,
+      color: isDarkMode ? '#9ca3af' : '#6b7280',
+      fontWeight: '500' as const
+    };
+    const valueContainerStyle = {
+      width: '100%' as import('react-native').DimensionValue,
+    };
 
-      case 'referredBy':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Referred By:</Text>
-            <Text style={valueStyle}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>
-          </View>
-        );
-
-      case 'fullName':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Full Name:</Text>
-            <Text style={valueStyle}>{getClientFullName()}</Text>
-          </View>
-        );
-
-      case 'contactNumber':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Contact Number:</Text>
-            <Text style={valueStyle}>
-              {jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}
-            </Text>
-          </View>
-        );
-
-      case 'secondContactNumber':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Second Contact Number:</Text>
-            <Text style={valueStyle}>
-              {jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}
-            </Text>
-          </View>
-        );
-
-      case 'emailAddress':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Email Address:</Text>
-            <Text style={valueStyle}>
-              {jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}
-            </Text>
-          </View>
-        );
-
-      case 'fullAddress':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Full Address:</Text>
-            <Text style={valueStyle}>{getClientFullAddress()}</Text>
-          </View>
-        );
-
-      case 'billingStatus':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Billing Status:</Text>
-            <Text style={valueStyle}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>
-          </View>
-        );
-
-      case 'billingDay':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Billing Day:</Text>
-            <Text style={valueStyle}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>
-          </View>
-        );
-
-      case 'choosePlan':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Choose Plan:</Text>
-            <Text style={valueStyle}>
-              {jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}
-            </Text>
-          </View>
-        );
-
-      case 'statusRemarks':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Status Remarks:</Text>
-            <Text style={valueStyle}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>
-          </View>
-        );
-
-      case 'remarks':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Remarks:</Text>
-            <Text style={valueStyle}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>
-          </View>
-        );
-
-      case 'installationLandmark':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Installation Landmark:</Text>
-            <Text style={valueStyle}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>
-          </View>
-        );
-
-      case 'connectionType':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Connection Type:</Text>
-            <Text style={valueStyle}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'modemRouterSn':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Modem/Router SN:</Text>
-            <Text style={valueStyle}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'routerModel':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Router Model:</Text>
-            <Text style={valueStyle}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'affiliateName':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Affiliate Name:</Text>
-            <Text style={valueStyle}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'lcpnap':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>LCPNAP:</Text>
-            <Text style={valueStyle}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'port':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>PORT:</Text>
-            <Text style={valueStyle}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'vlan':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>VLAN:</Text>
-            <Text style={valueStyle}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'username':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Username:</Text>
-            <Text style={valueStyle}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>
-          </View>
-        );
-
-      case 'ipAddress':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>IP Address:</Text>
-            <Text style={valueStyle}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'usageType':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Usage Type:</Text>
-            <Text style={valueStyle}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>
-          </View>
-        );
-
-      case 'dateInstalled':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Date Installed:</Text>
-            <Text style={valueStyle}>
-              {(jobOrder.Date_Installed || jobOrder.date_installed)
-                ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed)
-                : 'Not installed yet'}
-            </Text>
-          </View>
-        );
-
-      case 'visitBy':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Visit By:</Text>
-            <Text style={valueStyle}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>
-          </View>
-        );
-
-      case 'visitWith':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Visit With:</Text>
-            <Text style={valueStyle}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>
-          </View>
-        );
-
-      case 'visitWithOther':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Visit With Other:</Text>
-            <Text style={valueStyle}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>
-          </View>
-        );
-
-      case 'onsiteStatus':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Onsite Status:</Text>
-            <Text style={{ flex: 1, textTransform: 'capitalize', color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }}>
-              {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
-            </Text>
-          </View>
-        );
-
-      case 'contractTemplate':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Contract Template:</Text>
-            <Text style={valueStyle}>{jobOrder.Contract_Template || 'Standard'}</Text>
-          </View>
-        );
-
-      case 'contractLink':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Contract Link:</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ flex: 1, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.Contract_Link || 'Not available'}
-              </Text>
-              {jobOrder.Contract_Link && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.Contract_Link || '')} style={{ marginLeft: 8 }}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'modifiedBy':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Modified By:</Text>
-            <Text style={valueStyle}>{jobOrder.Modified_By || 'System'}</Text>
-          </View>
-        );
-
-      case 'modifiedDate':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Modified Date:</Text>
-            <Text style={valueStyle}>{formatDate(jobOrder.Modified_Date)}</Text>
-          </View>
-        );
-
-      case 'assignedEmail':
-        return (
-          <View style={baseFieldStyle}>
-            <Text style={labelStyle}>Assigned Email:</Text>
-            <Text style={valueStyle}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>
-          </View>
-        );
-
-      case 'setupImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Setup Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url || 'No image available'}
-              </Text>
-              {(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'speedtestImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Speedtest Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image || 'No image available'}
-              </Text>
-              {(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'signedContractImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Signed Contract Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL || 'No image available'}
-              </Text>
-              {(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'boxReadingImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Box Reading Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL || 'No image available'}
-              </Text>
-              {(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'routerReadingImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Router Reading Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL || 'No image available'}
-              </Text>
-              {(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'portLabelImage':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>Port Label Image</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL || 'No image available'}
-              </Text>
-              {(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      case 'houseFrontPicture':
-        return (
-          <View style={{ flexDirection: 'row', borderBottomWidth: 1, paddingVertical: 8, borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}>
-            <Text style={{ width: 160, fontSize: 14, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>House Front Picture</Text>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ flex: 1, marginRight: 8, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>
-                {jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture || 'No image available'}
-              </Text>
-              {(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture) && (
-                <Pressable onPress={() => Linking.openURL(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture || '')}>
-                  <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-                </Pressable>
-              )}
-            </View>
-          </View>
-        );
-
-      default:
-        return null;
-    }
+    return (
+      <View style={baseFieldStyle}>
+        <Text style={labelStyle}>{getFieldLabel(fieldKey)}</Text>
+        <View style={valueContainerStyle}>
+          {renderer()}
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -997,9 +644,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
             </Pressable>
           )}
 
-          <Pressable onPress={() => setShowFieldSettings(!showFieldSettings)} style={{ position: 'relative' }}>
-            <Settings width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-          </Pressable>
+
 
           <Pressable onPress={onClose}>
             <X width={18} height={18} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
@@ -1031,9 +676,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       )}
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        <View style={{ maxWidth: 672, marginHorizontal: 'auto', paddingVertical: 24, paddingHorizontal: 16, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
-          <View style={{ gap: 16 }}>
-            {fieldOrder.map((fieldKey) => (
+        <View style={{ width: '100%', paddingVertical: 8, paddingHorizontal: 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+          <View>
+            {defaultFields.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
                 {renderFieldContent(fieldKey)}
               </React.Fragment>
@@ -1041,58 +686,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
           </View>
         </View>
       </ScrollView>
-
-      {showFieldSettings && (
-        <Modal
-          visible={showFieldSettings}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowFieldSettings(false)}
-        >
-          <Pressable
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
-            onPress={() => setShowFieldSettings(false)}
-          >
-            <Pressable
-              style={{ width: '90%', maxWidth: 400, borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, borderWidth: 1, maxHeight: '80%', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-                <Text style={{ fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>Field Visibility</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable onPress={selectAllFields}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Show All</Text>
-                  </Pressable>
-                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
-                  <Pressable onPress={deselectAllFields}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Hide All</Text>
-                  </Pressable>
-                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
-                  <Pressable onPress={resetFieldSettings}>
-                    <Text style={{ color: '#2563eb', fontSize: 12 }}>Reset</Text>
-                  </Pressable>
-                </View>
-              </View>
-              <ScrollView style={{ padding: 8 }} showsVerticalScrollIndicator={false}>
-                {fieldOrder.map((fieldKey) => (
-                  <Pressable
-                    key={fieldKey}
-                    onPress={() => toggleFieldVisibility(fieldKey)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 4 }}
-                  >
-                    <View style={{ height: 16, width: 16, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: fieldVisibility[fieldKey] ? '#2563eb' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}>
-                      {fieldVisibility[fieldKey] && <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>}
-                    </View>
-                    <Text style={{ fontSize: 14, color: isDarkMode ? '#d1d5db' : '#374151' }}>
-                      {getFieldLabel(fieldKey)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
 
       <JobOrderDoneFormModal
         isOpen={isDoneModalOpen}

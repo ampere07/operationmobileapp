@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Modal, View, Text, TouchableOpacity } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface ConfirmationModalProps {
@@ -24,83 +26,107 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
+    const loadSettings = async () => {
       try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark' || theme === null);
+
         const activePalette = await settingsColorPaletteService.getActive();
         setColorPalette(activePalette);
       } catch (err) {
-        console.error('Failed to fetch color palette:', err);
+        console.error('Failed to load settings:', err);
       }
     };
-    fetchColorPalette();
-  }, []);
 
-  if (!isOpen) return null;
-  
+    if (isOpen) {
+      loadSettings();
+    }
+  }, [isOpen]);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className={`rounded shadow-lg p-6 max-w-md ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
-      }`}>
-        <div className="mb-4">
-          <h3 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>{title}</h3>
-        </div>
-        <p className={`mb-6 ${
-          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-        }`}>{message}</p>
-        <div className="flex justify-end space-x-4">
-          <button 
-            className={`px-4 py-2 rounded transition-colors ${
-              isDarkMode 
-                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-            }`}
-            onClick={onCancel}
-          >
-            {cancelText}
-          </button>
-          <button 
-            className="text-white px-4 py-2 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-            }}
-            onClick={onConfirm}
-          >
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      visible={isOpen}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)'
+      }}>
+        <View style={{
+          width: '90%',
+          maxWidth: 400,
+          padding: 24,
+          borderRadius: 8,
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 2,
+          },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+        }}>
+          <Text style={{
+            fontSize: 20,
+            fontWeight: '600',
+            marginBottom: 16,
+            color: isDarkMode ? '#ffffff' : '#111827'
+          }}>
+            {title}
+          </Text>
+
+          <Text style={{
+            fontSize: 16,
+            marginBottom: 32,
+            color: isDarkMode ? '#d1d5db' : '#4b5563',
+            lineHeight: 24
+          }}>
+            {message}
+          </Text>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+            <TouchableOpacity
+              onPress={onCancel}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 4,
+                backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }}
+            >
+              <Text style={{
+                fontWeight: '500',
+                color: isDarkMode ? '#e5e7eb' : '#374151'
+              }}>
+                {cancelText}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onConfirm}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 4,
+                backgroundColor: colorPalette?.primary || '#ea580c',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Text style={{ fontWeight: '500', color: '#ffffff' }}>
+                {confirmText}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import { X, Calendar, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
+import { X, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { userService } from '../services/userService';
@@ -216,7 +217,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [usernamePattern, setUsernamePattern] = useState<UsernamePattern | null>(null);
   const [techInputValue, setTechInputValue] = useState<string>('');
   const [lcpnapSearch, setLcpnapSearch] = useState('');
+
   const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      handleInputChange('dateInstalled', `${year}-${month}-${day}`);
+    }
+  };
 
   const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
@@ -1763,19 +1776,23 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
                       }`}>Date Installed<Text className="text-red-500">*</Text></Text>
                     <View className="relative">
-                      <TextInput
-                        value={formData.dateInstalled}
-                        onChangeText={(text) => handleInputChange('dateInstalled', text)}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                      />
-                      <Calendar
-                        className="absolute right-3 top-2.5"
-                        size={20}
-                        color={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                      />
+                      <Pressable
+                        onPress={() => setShowDatePicker(true)}
+                        className={`w-full px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} ${errors.dateInstalled ? 'border-red-500' : ''}`}
+                      >
+                        <Text className={`${formData.dateInstalled ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-500' : 'text-gray-400')}`}>
+                          {formData.dateInstalled || 'Select Date'}
+                        </Text>
+                      </Pressable>
+                      {showDatePicker && (
+                        <DateTimePicker
+                          value={formData.dateInstalled ? new Date(formData.dateInstalled) : new Date()}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={onDateChange}
+                          maximumDate={new Date()}
+                        />
+                      )}
                     </View>
                     {errors.dateInstalled && (
                       <View className="flex-row items-center mt-1">

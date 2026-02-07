@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface ApprovalConfirmationModalProps {
@@ -15,80 +16,118 @@ const ApprovalConfirmationModal: React.FC<ApprovalConfirmationModalProps> = ({
   onConfirm,
   loading = false
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
+    const loadSettings = async () => {
       try {
+        const theme = await AsyncStorage.getItem('theme');
+        setIsDarkMode(theme === 'dark');
+
         const activePalette = await settingsColorPaletteService.getActive();
         setColorPalette(activePalette);
       } catch (err) {
-        console.error('Failed to fetch color palette:', err);
+        console.error('Failed to load settings:', err);
       }
     };
-    fetchColorPalette();
-  }, []);
-  if (!isOpen) return null;
+
+    // Load settings when component mounts or when modal opens
+    loadSettings();
+  }, [isOpen]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className={`rounded-lg shadow-2xl w-full max-w-md ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
-      }`}>
-        <div className="p-6">
-          <h2 className={`text-xl font-semibold mb-4 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Confirm</h2>
-          
-          <p className={`mb-8 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>
-            Are you sure you want to approve this job order?
-          </p>
+    <Modal
+      visible={isOpen}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)'
+      }}>
+        <View style={{
+          width: '90%',
+          maxWidth: 400,
+          borderRadius: 8,
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          shadowColor: "#000",
+          shadowOffset: {
+            width: 0,
+            height: 2,
+          },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          elevation: 5,
+        }}>
+          <View style={{ padding: 24 }}>
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '600',
+              marginBottom: 16,
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>
+              Confirm
+            </Text>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className={`px-6 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                isDarkMode
-                  ? 'bg-gray-700 text-white hover:bg-gray-600'
-                  : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={loading}
-              className="px-6 py-2 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: colorPalette?.primary || '#ea580c'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent && !loading) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-              }}
-            >
-              {loading ? 'Processing...' : 'Approve'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            <Text style={{
+              fontSize: 16,
+              marginBottom: 32,
+              color: isDarkMode ? '#d1d5db' : '#374151',
+              lineHeight: 24
+            }}>
+              Are you sure you want to approve this job order?
+            </Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <TouchableOpacity
+                onPress={onClose}
+                disabled={loading}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 4,
+                  backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                  opacity: loading ? 0.5 : 1
+                }}
+              >
+                <Text style={{
+                  fontWeight: '500',
+                  color: isDarkMode ? '#e5e7eb' : '#374151'
+                }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={onConfirm}
+                disabled={loading}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 4,
+                  backgroundColor: colorPalette?.primary || '#ea580c',
+                  opacity: loading ? 0.5 : 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {loading && (
+                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                )}
+                <Text style={{ fontWeight: '500', color: '#ffffff' }}>
+                  {loading ? 'Processing...' : 'Approve'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
