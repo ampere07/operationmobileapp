@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Image, ScrollView, Alert, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, RefreshCw } from 'lucide-react-native';
+import { Bell } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService, type Notification as AppNotification } from '../services/notificationService';
 import { formUIService } from '../services/formUIService';
@@ -161,9 +161,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
     }
   };
 
-  const handleRefresh = () => {
-    Alert.alert('Refresh', 'Reload the application to refresh');
-  };
 
   const toggleNotifications = async () => {
     console.log('[UI] Toggling notifications modal');
@@ -352,12 +349,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, onSearch, onNavigate, 
         <View style={{ flex: 1 }} />
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Pressable
-            onPress={handleRefresh}
-            style={{ padding: 8 }}
-          >
-            <RefreshCw size={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-          </Pressable>
 
           <View style={{ position: 'relative' }}>
             <Pressable

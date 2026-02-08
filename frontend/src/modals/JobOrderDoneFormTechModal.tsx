@@ -218,6 +218,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [usernamePattern, setUsernamePattern] = useState<UsernamePattern | null>(null);
   const [techInputValue, setTechInputValue] = useState<string>('');
   const [lcpnapSearch, setLcpnapSearch] = useState('');
+  const [itemSearch, setItemSearch] = useState('');
+  const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
 
   const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -524,7 +526,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           const response = await getAllInventoryItems();
 
           if (response.success && Array.isArray(response.data)) {
-            setInventoryItems(response.data);
+            // Filter only items with category_id = 1
+            const filteredItems = response.data.filter(item =>
+              item.category_id === 1 || String(item.category_id) === '1'
+            );
+            setInventoryItems(filteredItems);
           } else {
             setInventoryItems([]);
           }
@@ -1503,12 +1509,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       style={{ color: isDarkMode ? '#fff' : '#000' }}
                       dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                     >
-                      <Picker.Item label="Select Plan" value="" />
+                      <Picker.Item key="default" label="Select Plan" value="" />
                       {formData.choosePlan && !plans.some(plan => {
                         const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
                         return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
                       }) && (
-                          <Picker.Item label={formData.choosePlan} value={formData.choosePlan} />
+                          <Picker.Item key="custom" label={formData.choosePlan} value={formData.choosePlan} />
                         )}
                       {plans.map((plan) => {
                         const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
@@ -1543,10 +1549,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       style={{ color: isDarkMode ? '#fff' : '#000' }}
                       dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                     >
-                      <Picker.Item label="In Progress" value="In Progress" />
-                      <Picker.Item label="Done" value="Done" />
-                      <Picker.Item label="Failed" value="Failed" />
-                      <Picker.Item label="Reschedule" value="Reschedule" />
+                      <Picker.Item key="in-progress" label="In Progress" value="In Progress" />
+                      <Picker.Item key="done" label="Done" value="Done" />
+                      <Picker.Item key="failed" label="Failed" value="Failed" />
+                      <Picker.Item key="reschedule" label="Reschedule" value="Reschedule" />
                     </Picker>
                   </View>
                 </View>
@@ -1669,12 +1675,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           style={{ color: isDarkMode ? '#fff' : '#000' }}
                           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                         >
-                          <Picker.Item label="Select Usage Type" value="" />
+                          <Picker.Item key="default" label="Select Usage Type" value="" />
                           {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                            <Picker.Item label={formData.usageType} value={formData.usageType} />
+                            <Picker.Item key="custom" label={formData.usageType} value={formData.usageType} />
                           )}
                           {usageTypes.map((usageType) => (
-                            <Picker.Item key={usageType.id} label={usageType.usage_name} value={usageType.usage_name} />
+                            <Picker.Item key={usageType.id || usageType.usage_name} label={usageType.usage_name} value={usageType.usage_name} />
                           ))}
                         </Picker>
                       </View>
@@ -1760,12 +1766,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           style={{ color: isDarkMode ? '#fff' : '#000' }}
                           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                         >
-                          <Picker.Item label="Select Router Model" value="" />
+                          <Picker.Item key="default" label="Select Router Model" value="" />
                           {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
-                            <Picker.Item label={formData.routerModel} value={formData.routerModel} />
+                            <Picker.Item key="custom" label={formData.routerModel} value={formData.routerModel} />
                           )}
                           {routerModels.map((routerModel, index) => (
-                            <Picker.Item key={index} label={routerModel.model} value={routerModel.model} />
+                            <Picker.Item key={routerModel.model || index} label={routerModel.model} value={routerModel.model} />
                           ))}
                         </Picker>
                       </View>
@@ -2033,9 +2039,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                               dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                             >
-                              <Picker.Item label="Select VLAN" value="" />
+                              <Picker.Item key="default" label="Select VLAN" value="" />
                               {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
-                                <Picker.Item label={formData.vlan} value={formData.vlan} />
+                                <Picker.Item key="custom" label={formData.vlan} value={formData.vlan} />
                               )}
                               {vlans.map((vlan) => (
                                 <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
@@ -2069,12 +2075,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           style={{ color: isDarkMode ? '#fff' : '#000' }}
                           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                         >
-                          <Picker.Item label="Select Visit By" value="" />
+                          <Picker.Item key="default" label="Select Visit By" value="" />
                           {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                            <Picker.Item label={formData.visit_by} value={formData.visit_by} />
+                            <Picker.Item key="custom" label={formData.visit_by} value={formData.visit_by} />
                           )}
                           {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
-                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                            <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                           ))}
                         </Picker>
                       </View>
@@ -2247,19 +2253,94 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         <View className="flex-row items-start gap-2">
                           <View className="flex-1">
                             <View className="relative">
-                              <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}>
-                                <Picker
-                                  selectedValue={item.itemId}
-                                  onValueChange={(value) => handleItemChange(index, 'itemId', value)}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              <Pressable
+                                onPress={() => {
+                                  setOpenItemIndex(openItemIndex === index ? null : index);
+                                  setItemSearch('');
+                                }}
+                                className={`flex-row items-center justify-between px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                                  }`}
+                              >
+                                <Text className={`text-sm ${!item.itemId ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : (isDarkMode ? 'text-white' : 'text-gray-900')}`}>
+                                  {item.itemId || `Select Item ${index + 1}`}
+                                </Text>
+                                <ChevronDown
+                                  size={18}
+                                  color={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                  style={{ transform: [{ rotate: openItemIndex === index ? '180deg' : '0deg' }] }}
+                                />
+                              </Pressable>
+
+                              {openItemIndex === index && (
+                                <View
+                                  className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                                    }`}
+                                  style={{ elevation: 10 }}
                                 >
-                                  <Picker.Item label={`Select Item ${index + 1}`} value="" />
-                                  {inventoryItems.map((invItem) => (
-                                    <Picker.Item key={invItem.id} label={invItem.item_name} value={invItem.item_name} />
-                                  ))}
-                                </Picker>
-                              </View>
+                                  <View className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
+                                    <View className={`flex-row items-center px-2 py-1.5 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                                      }`}>
+                                      <Search size={14} color="#9CA3AF" className="mr-2" />
+                                      <TextInput
+                                        autoFocus
+                                        placeholder="Search item..."
+                                        value={itemSearch}
+                                        onChangeText={setItemSearch}
+                                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                        className={`flex-1 p-1 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                                          }`}
+                                      />
+                                    </View>
+                                  </View>
+
+                                  <ScrollView className="max-h-60" nestedScrollEnabled={true}>
+                                    <Pressable
+                                      key="default-item"
+                                      className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                        }`}
+                                      onPress={() => {
+                                        handleItemChange(index, 'itemId', '');
+                                        setOpenItemIndex(null);
+                                        setItemSearch('');
+                                      }}
+                                    >
+                                      <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>
+                                        Select Item {index + 1}
+                                      </Text>
+                                    </Pressable>
+                                    {inventoryItems
+                                      .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                      .map((invItem) => (
+                                        <Pressable
+                                          key={invItem.id}
+                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                            } ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                          onPress={() => {
+                                            handleItemChange(index, 'itemId', invItem.item_name);
+                                            setOpenItemIndex(null);
+                                            setItemSearch('');
+                                          }}
+                                        >
+                                          <View className="flex-row items-center justify-between">
+                                            <Text className={`text-sm ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                              {invItem.item_name}
+                                            </Text>
+                                            {item.itemId === invItem.item_name && (
+                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                            )}
+                                          </View>
+                                        </Pressable>
+                                      ))}
+                                    {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                                      <View key="no-results" className="px-4 py-8 items-center">
+                                        <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                          No results found for "{itemSearch}"
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </ScrollView>
+                                </View>
+                              )}
                             </View>
                             {errors[`item_${index}`] && (
                               <Text className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`item_${index}`]}</Text>
@@ -2365,13 +2446,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           style={{ color: isDarkMode ? '#fff' : '#000' }}
                           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                         >
-                          <Picker.Item label="Select Visit With" value="" />
-                          <Picker.Item label="None" value="None" />
+                          <Picker.Item key="default" label="Select Visit With" value="" />
+                          <Picker.Item key="none" label="None" value="None" />
                           {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
-                            <Picker.Item label={formData.visit_with} value={formData.visit_with} />
+                            <Picker.Item key="custom" label={formData.visit_with} value={formData.visit_with} />
                           )}
                           {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
-                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                            <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                           ))}
                         </Picker>
                       </View>
@@ -2400,13 +2481,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           style={{ color: isDarkMode ? '#fff' : '#000' }}
                           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                         >
-                          <Picker.Item label="Visit With(Other)" value="" />
-                          <Picker.Item label="None" value="None" />
+                          <Picker.Item key="default" label="Visit With(Other)" value="" />
+                          <Picker.Item key="none" label="None" value="None" />
                           {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
-                            <Picker.Item label={formData.visit_with_other} value={formData.visit_with_other} />
+                            <Picker.Item key="custom" label={formData.visit_with_other} value={formData.visit_with_other} />
                           )}
                           {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
-                            <Picker.Item key={index} label={technician.name} value={technician.name} />
+                            <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                           ))}
                         </Picker>
                       </View>

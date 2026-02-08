@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
@@ -756,7 +756,17 @@ const JobOrderPage: React.FC = () => {
               Job Orders
             </Text>
           </View>
-          <ScrollView style={{ flex: 1 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={colorPalette?.primary || '#ea580c'}
+                colors={[colorPalette?.primary || '#ea580c']}
+              />
+            }
+          >
             {locationItems.map((location) => (
               <Pressable
                 key={location.id}
@@ -926,7 +936,17 @@ const JobOrderPage: React.FC = () => {
               </Text>
             </View>
           </View>
-          <ScrollView style={{ flex: 1 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={colorPalette?.primary || '#ea580c'}
+                colors={[colorPalette?.primary || '#ea580c']}
+              />
+            }
+          >
             {locationItems.map((location) => (
               <Pressable
                 key={location.id}
@@ -1057,7 +1077,17 @@ const JobOrderPage: React.FC = () => {
           </View>
 
           <View style={{ flex: 1, overflow: 'hidden', flexDirection: 'column' }}>
-            <ScrollView style={{ flex: 1 }}>
+            <ScrollView
+              style={{ flex: 1 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={colorPalette?.primary || '#ea580c'}
+                  colors={[colorPalette?.primary || '#ea580c']}
+                />
+              }
+            >
               {isLoading ? (
                 <View style={{
                   paddingHorizontal: 16,

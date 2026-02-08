@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator, TextInput, StyleSheet, Modal } from 'react-native';
-import { MapPin, Search, Plus } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator, TextInput, StyleSheet, Modal, Alert } from 'react-native';
+import { MapPin, Search, Plus, Navigation } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoLocation from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Circle } from 'react-native-maps';
 import AddLcpNapLocationModal from '../modals/AddLcpNapLocationModal';
 import LcpNapLocationDetails from '../components/LcpNapLocationDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -78,6 +78,7 @@ const LcpNapLocation: React.FC = () => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationMarker | null>(null);
   const [userRole, setUserRole] = useState<number | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const mapRef = useRef<MapView>(null);
   const { width } = useWindowDimensions();
@@ -399,8 +400,39 @@ const LcpNapLocation: React.FC = () => {
               pitchEnabled={false}
               showsUserLocation={true}
               showsMyLocationButton={true}
+              onUserLocationChange={(event) => {
+                const { coordinate } = event.nativeEvent;
+                if (coordinate) {
+                  setUserLocation({
+                    latitude: coordinate.latitude,
+                    longitude: coordinate.longitude
+                  });
+                }
+              }}
               onMapReady={handleMapReady}
+              customMapStyle={[
+                {
+                  featureType: 'poi',
+                  elementType: 'labels',
+                  stylers: [{ visibility: 'off' }],
+                },
+                {
+                  featureType: 'poi',
+                  elementType: 'geometry',
+                  stylers: [{ visibility: 'off' }],
+                },
+              ]}
             >
+              {userLocation && (
+                <Circle
+                  key="user-location-circle"
+                  center={userLocation}
+                  radius={100}
+                  fillColor="rgba(59, 130, 246, 0.2)"
+                  strokeColor="rgba(59, 130, 246, 0.5)"
+                  strokeWidth={2}
+                />
+              )}
               {markersToDisplay.map((location) => (
                 <Marker
                   key={location.id}
@@ -417,12 +449,45 @@ const LcpNapLocation: React.FC = () => {
               ))}
             </MapView>
 
-            <Pressable
-              onPress={() => setShowAddModal(true)}
-              style={[styles.addButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
-            >
-              <Plus size={24} color="white" />
-            </Pressable>
+            <View style={styles.mapActionButtons}>
+              <Pressable
+                onPress={() => setShowAddModal(true)}
+                style={[styles.mapActionButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+              >
+                <Plus size={24} color="white" />
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  try {
+                    const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+                    if (status !== 'granted') {
+                      Alert.alert('Permission denied', 'Permission to access location was denied');
+                      return;
+                    }
+
+                    const location = await ExpoLocation.getCurrentPositionAsync({
+                      accuracy: ExpoLocation.Accuracy.Balanced,
+                    });
+
+                    if (mapRef.current) {
+                      mapRef.current.animateToRegion({
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01
+                      }, 1000);
+                    }
+                  } catch (error) {
+                    console.error('Error getting my location:', error);
+                    Alert.alert('Error', 'Unable to get your current location. Make sure location services are enabled.');
+                  }
+                }}
+                style={[styles.mapActionButton, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', marginTop: 12 }]}
+              >
+                <Navigation size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
+              </Pressable>
+            </View>
 
             {isLoading && (
               <View style={[styles.loaderOverlay, { backgroundColor: isDarkMode ? 'rgba(17, 24, 39, 0.75)' : 'rgba(243, 244, 246, 0.75)' }]}>
@@ -562,10 +627,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
   },
-  addButton: {
+  mapActionButtons: {
     position: 'absolute',
     bottom: 24,
     right: 24,
+    flexDirection: 'column',
+    alignItems: 'center',
+    zIndex: 1001,
+  },
+  mapActionButton: {
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -576,7 +646,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    zIndex: 1001,
   },
   loaderOverlay: {
     ...StyleSheet.absoluteFillObject,

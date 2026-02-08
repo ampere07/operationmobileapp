@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, Platform, Alert } from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import MapView, { Marker, MapPressEvent } from 'react-native-maps';
 import { MapPin, Navigation } from 'lucide-react-native';
 import * as Location from 'expo-location';
 
@@ -14,9 +14,16 @@ interface LocationPickerProps {
 }
 
 interface Coordinates {
-  lat: number;
-  lng: number;
+  latitude: number;
+  longitude: number;
 }
+
+const DEFAULT_REGION = {
+  latitude: 14.5995,
+  longitude: 120.9842,
+  latitudeDelta: 0.01,
+  longitudeDelta: 0.01,
+};
 
 const LocationPicker: React.FC<LocationPickerProps> = ({
   value,
@@ -28,7 +35,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
 }) => {
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const webViewRef = useRef<WebView>(null);
+  const [region, setRegion] = useState(DEFAULT_REGION);
 
   useEffect(() => {
     if (value && value.trim()) {
@@ -37,155 +44,89 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         const lat = parseFloat(parts[0]);
         const lng = parseFloat(parts[1]);
         if (!isNaN(lat) && !isNaN(lng)) {
-          setCoordinates({ lat, lng });
-          updateMapPosition(lat, lng);
+          const newCoords = { latitude: lat, longitude: lng };
+          setCoordinates(newCoords);
+          setRegion({
+            ...newCoords,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
         }
       }
     }
   }, [value]);
 
-  const updateMapPosition = (lat: number, lng: number) => {
-    if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        updateMap(${lat}, ${lng});
-        true;
-      `);
-    }
-  };
-
-  const handleWebViewMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'locationSelected') {
-        const { lat, lng } = data.payload;
-        const roundedLat = parseFloat(lat.toFixed(6));
-        const roundedLng = parseFloat(lng.toFixed(6));
-        setCoordinates({ lat: roundedLat, lng: roundedLng });
-        onChange(`${roundedLat}, ${roundedLng}`);
-      }
-    } catch (error) {
-      console.error('Error parsing WebView message:', error);
-    }
-  };
-
   const handleGetCurrentLocation = async () => {
     setIsGettingLocation(true);
-
     try {
-      const enabled = await Location.hasServicesEnabledAsync();
-      if (!enabled) {
-        Alert.alert(
-          'Location Services Disabled',
-          'Please enable location services in your device settings to use this feature.',
-          [{ text: 'OK' }]
-        );
+      // 1) permission
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert('Permission Denied', 'Permission to access location was denied. Please enable it in settings.');
         setIsGettingLocation(false);
         return;
       }
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Permission to access location was denied');
+      // 2) services enabled?
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        Alert.alert('Location Services Off', 'Location services are OFF (GPS disabled). Please turn them on in settings.');
         setIsGettingLocation(false);
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 5000
-      });
+      // 3) try last known first (fast, more reliable)
+      let location = await Location.getLastKnownPositionAsync({});
 
-      const { latitude, longitude } = location.coords;
-      const roundedLat = parseFloat(latitude.toFixed(6));
-      const roundedLng = parseFloat(longitude.toFixed(6));
+      // 4) if no last known, then current position with balanced accuracy
+      if (!location) {
+        location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
 
-      setCoordinates({ lat: roundedLat, lng: roundedLng });
-      onChange(`${roundedLat}, ${roundedLng}`);
-      updateMapPosition(roundedLat, roundedLng);
+      if (location) {
+        const { latitude, longitude } = location.coords;
+        const roundedLat = parseFloat(latitude.toFixed(6));
+        const roundedLng = parseFloat(longitude.toFixed(6));
+
+        const newCoords = { latitude: roundedLat, longitude: roundedLng };
+        setCoordinates(newCoords);
+        setRegion({
+          ...newCoords,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+        onChange(`${roundedLat}, ${roundedLng}`);
+      } else {
+        Alert.alert('Location Error', 'Current location is unavailable. Check signal or map settings.');
+      }
 
     } catch (error: any) {
-      console.error('Error getting location:', error);
-      let errorMessage = 'Unable to get your location.';
-      if (error.code === 'E_LOCATION_SETTINGS_UNSATISFIED') {
-        errorMessage = 'Location settings are not satisfied. Please check your settings.';
-      } else if (error.code === 'E_LOCATION_UNAUTHORIZED') {
-        errorMessage = 'App is not authorized to use location services.';
-      } else if (error.message) {
-        errorMessage += ` ${error.message}`;
-      }
-      Alert.alert('Error', errorMessage);
+      console.log("Error getting location:", error);
+      Alert.alert('Error', error.message || 'Unable to get your current location.');
     } finally {
       setIsGettingLocation(false);
     }
   };
 
-  const leafletHtml = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-          body { margin: 0; padding: 0; }
-          #map { width: 100%; height: 100vh; }
-        </style>
-      </head>
-      <body>
-        <div id="map"></div>
-        <script>
-          var map = L.map('map').setView([14.5995, 120.9842], 13);
-          var marker;
+  const handleMapPress = (e: MapPressEvent) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    const roundedLat = parseFloat(latitude.toFixed(6));
+    const roundedLng = parseFloat(longitude.toFixed(6));
 
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-          }).addTo(map);
+    setCoordinates({ latitude: roundedLat, longitude: roundedLng });
+    onChange(`${roundedLat}, ${roundedLng}`);
+  };
 
-          function updateMap(lat, lng) {
-            if (marker) {
-              marker.setLatLng([lat, lng]);
-            } else {
-              marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-              marker.on('dragend', function(e) {
-                var position = marker.getLatLng();
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'locationSelected',
-                  payload: { lat: position.lat, lng: position.lng }
-                }));
-              });
-            }
-            map.setView([lat, lng], 16);
-          }
+  const handleMarkerDragEnd = (e: any) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    const roundedLat = parseFloat(latitude.toFixed(6));
+    const roundedLng = parseFloat(longitude.toFixed(6));
 
-          map.on('click', function(e) {
-            var lat = e.latlng.lat;
-            var lng = e.latlng.lng;
-            
-            if (marker) {
-              marker.setLatLng([lat, lng]);
-            } else {
-              marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-              marker.on('dragend', function(e) {
-                var position = marker.getLatLng();
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'locationSelected',
-                  payload: { lat: position.lat, lng: position.lng }
-                }));
-              });
-            }
-            
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'locationSelected',
-              payload: { lat: lat, lng: lng }
-            }));
-          });
-          
-          ${coordinates ? `updateMap(${coordinates.lat}, ${coordinates.lng});` : ''}
-        </script>
-      </body>
-    </html>
-  `;
+    setCoordinates({ latitude: roundedLat, longitude: roundedLng });
+    onChange(`${roundedLat}, ${roundedLng}`);
+  };
 
   return (
     <View className="mb-4">
@@ -196,25 +137,35 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
         } ${error ? 'border-red-500' : ''}`}>
         <View className="relative h-64 w-full bg-gray-200">
-          <WebView
-            ref={webViewRef}
-            originWhitelist={['*']}
-            source={{ html: leafletHtml }}
-            onMessage={handleWebViewMessage}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
+          <MapView
             style={{ flex: 1 }}
-          />
+            region={region}
+            onRegionChangeComplete={setRegion}
+            onPress={handleMapPress}
+            userInterfaceStyle={isDarkMode ? 'dark' : 'light'}
+          >
+            {coordinates && (
+              <Marker
+                draggable
+                coordinate={coordinates}
+                onDragEnd={handleMarkerDragEnd}
+              />
+            )}
+          </MapView>
 
           <Pressable
             onPress={handleGetCurrentLocation}
             disabled={isGettingLocation}
-            className={`absolute top-2 right-2 px-3 py-2 rounded shadow-lg flex-row items-center space-x-2 z-10 ${isDarkMode
-                ? 'bg-gray-800'
-                : 'bg-white'
+            className={`absolute top-2 right-2 px-3 py-2 rounded shadow-lg flex-row items-center z-10 ${isDarkMode
+              ? 'bg-gray-800'
+              : 'bg-white'
               }`}
           >
-            <Navigation size={16} color={isDarkMode ? 'white' : 'black'} className={`${isGettingLocation ? 'opacity-50' : ''}`} />
+            {isGettingLocation ? (
+              <ActivityIndicator size="small" color={isDarkMode ? '#fff' : '#000'} />
+            ) : (
+              <Navigation size={16} color={isDarkMode ? 'white' : 'black'} />
+            )}
             <Text className={`text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'} ml-2`}>
               {isGettingLocation ? 'Getting...' : 'Get My Location'}
             </Text>
@@ -223,15 +174,17 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
 
         <View className={`p-3 border-t flex-row items-center space-x-2 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
           }`}>
-          <MapPin size={16} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+          <View className="mr-2">
+            <MapPin size={16} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+          </View>
           <TextInput
-            value={coordinates ? `${coordinates.lat}, ${coordinates.lng}` : ''}
+            value={coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : ''}
             editable={false}
             placeholder="Click on map or use 'Get My Location'"
             placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
             className={`flex-1 px-3 py-2 rounded text-sm ${isDarkMode
-                ? 'bg-gray-900 text-gray-300 border-gray-700'
-                : 'bg-white text-gray-900 border-gray-300'
+              ? 'bg-gray-900 text-gray-300 border-gray-700'
+              : 'bg-white text-gray-900 border-gray-300'
               } border`}
           />
         </View>
