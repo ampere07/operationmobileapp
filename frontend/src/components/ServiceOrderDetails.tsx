@@ -284,7 +284,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
-        {typeof content === 'string' ? <Text style={valueStyle}>{content || '-'}</Text> : content}
+        {typeof content === 'string' ? <Text style={valueStyle} selectable={true}>{content || '-'}</Text> : content}
       </View>
     </View>
   );
@@ -292,7 +292,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const renderImageLink = (label: string, url: string | undefined | null) => {
     return renderField(label, (
       <View style={styles.imageLinkContainer}>
-        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1}>
+        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1} selectable={true}>
           {url || 'No image available'}
         </Text>
         {url && (
@@ -314,7 +314,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Timestamp', serviceOrder.timestamp);
       case 'accountNumber':
         return renderField('Account Details', (
-          <Text style={{ color: '#ef4444', fontSize: 16 }}>
+          <Text style={{ color: '#ef4444', fontSize: 16 }} selectable={true}>
             {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
           </Text>
         ));
@@ -354,7 +354,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Concern Remarks', serviceOrder.concernRemarks);
       case 'visitStatus':
         return renderField('Visit Status', (
-          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.visitStatus, 'visit') }}>
+          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.visitStatus, 'visit') }} selectable={true}>
             {serviceOrder.visitStatus || '-'}
           </Text>
         ));
@@ -380,7 +380,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Support Remarks', serviceOrder.supportRemarks);
       case 'supportStatus':
         return renderField('Support Status', (
-          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.supportStatus, 'support') }}>
+          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.supportStatus, 'support') }} selectable={true}>
             {serviceOrder.supportStatus || '-'}
           </Text>
         ));
@@ -433,6 +433,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
               { fontSize: isMobile ? 14 : 18, color: isDarkMode ? '#ffffff' : '#111827' }
             ]}
             numberOfLines={1}
+            selectable={true}
           >
             {serviceOrder.accountNumber} | {serviceOrder.fullName}
           </Text>

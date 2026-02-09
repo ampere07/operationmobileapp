@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated } from 'react-native';
 import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { transactionService } from '../services/transactionService';
@@ -45,6 +46,52 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+    const [currentAdPos, setCurrentAdPos] = useState(1);
+    const adsScrollRef = React.useRef<ScrollView>(null);
+
+    const ads = [
+        { id: 1, title: 'Summer Promo!', desc: 'Get 50% off on installation fee.', color: '#ef4444' },
+        { id: 2, title: 'Refer & Earn', desc: 'Earn ₱500 for every successful referral.', color: '#3b82f6' },
+        { id: 3, title: 'Upgrade Now', desc: 'Boost your speed for as low as ₱199.', color: '#10b981' }
+    ];
+
+    const displayAds = [ads[ads.length - 1], ...ads, ads[0]];
+
+    const pan = React.useRef(new Animated.ValueXY()).current;
+
+    // Reset pan position when modal opens
+    useEffect(() => {
+        if (showPaymentVerifyModal) {
+            pan.setValue({ x: 0, y: 0 });
+        }
+    }, [showPaymentVerifyModal]);
+
+    const panResponder = React.useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                // Only allow vertical drag downwards
+                return gestureState.dy > 0;
+            },
+            onPanResponderMove: Animated.event(
+                [
+                    null,
+                    { dy: pan.y }
+                ],
+                { useNativeDriver: false }
+            ),
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dy > 150) {
+                    handleCloseVerifyModal();
+                } else {
+                    Animated.spring(
+                        pan,
+                        { toValue: { x: 0, y: 0 }, useNativeDriver: false }
+                    ).start();
+                }
+            }
+        })
+    ).current;
 
     useEffect(() => {
         const loadUser = async () => {
@@ -67,6 +114,26 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
         fetchColorPalette();
     }, []);
+
+    useEffect(() => {
+        if (ads.length > 0) {
+            const adWidth = width - (isMobile ? 32 : 48);
+            const timer = setInterval(() => {
+                const nextPos = currentAdPos + 1;
+                setCurrentAdPos(nextPos);
+                adsScrollRef.current?.scrollTo({ x: nextPos * adWidth, animated: true });
+
+                // If we scrolled to the clone (at indices 0 or 4), jump to the original after animation
+                if (nextPos >= displayAds.length - 1) {
+                    setTimeout(() => {
+                        setCurrentAdPos(1);
+                        adsScrollRef.current?.scrollTo({ x: 1 * adWidth, animated: false });
+                    }, 500);
+                }
+            }, 3000);
+            return () => clearInterval(timer);
+        }
+    }, [currentAdPos, width, isMobile]);
 
     if (contextLoading && !customerDetail) return (
         <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
@@ -198,181 +265,256 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     };
 
     return (
-        <View style={{ minHeight: '100%', backgroundColor: '#f9fafb', padding: isMobile ? 16 : 24, position: 'relative' }}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={{ marginBottom: isMobile ? 24 : 32 }}>
-                    <Text style={{ fontSize: isMobile ? 24 : 30, fontWeight: 'bold', color: '#111827' }}>Hello, {displayName.split(' ')[0]}!</Text>
-                    <Text style={{ color: '#6b7280', marginTop: 4 }}>Welcome back to your dashboard.</Text>
-                </View>
+        <View style={{ flex: 1, backgroundColor: '#f9fafb', position: 'relative' }}>
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ padding: isMobile ? 16 : 24, paddingBottom: 40 }}
+                showsVerticalScrollIndicator={false}
+            >
 
-                <View style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 24 : 32 }}>
-                    <View style={{ flex: 1, gap: 24 }}>
-                        <View style={{ backgroundColor: '#ffffff', borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, padding: isMobile ? 20 : 32, alignItems: 'center', borderWidth: 1, borderColor: '#f3f4f6' }}>
-                            <View style={{ position: 'relative', marginBottom: 16 }}>
-                                <View style={{ width: 96, height: 96, backgroundColor: '#e5e7eb', borderRadius: 48, marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center' }}>
-                                    <User width={48} height={48} color="#9ca3af" />
-                                </View>
-                                <View style={{ position: 'absolute', bottom: -8, alignSelf: 'center', transform: [{ translateX: -40 }], left: '50%', backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 16 }}>
-                                    <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '500' }}>Active</Text>
-                                </View>
+
+                <View style={{ gap: 32 }}>
+                    <View style={{
+                        borderRadius: 24,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 8 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 16,
+                        elevation: 8,
+                        backgroundColor: '#ffffff'
+                    }}>
+                        <LinearGradient
+                            colors={['#ef4444', '#000000']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={{ borderRadius: 24, padding: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}
+                        >
+                            {/* Left Side */}
+                            <View style={{ flex: 1, justifyContent: 'center' }}>
+                                <Text style={{ color: '#e5e7eb', fontSize: 16, marginBottom: 8 }}>Total Amount</Text>
+                                <Text style={{ fontSize: isMobile ? 32 : 40, fontWeight: 'bold', color: '#ffffff' }}>
+                                    ₱{balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                                </Text>
                             </View>
 
-                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', marginTop: 16 }}>{displayName}</Text>
-                            <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827', marginTop: 4 }}>{accountNo}</Text>
-
-                            <View style={{ marginTop: 32, gap: 16, alignSelf: 'stretch' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f9fafb', paddingBottom: 12 }}>
-                                    <Text style={{ color: '#9ca3af', fontSize: 14 }}>Plan</Text>
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' }}>{planName}</Text>
+                            {/* Right Side */}
+                            <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 16 }}>
+                                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                                    <Text style={{ color: '#e5e7eb', fontSize: 12 }}>
+                                        Reference: <Text style={{ color: '#ffffff', fontWeight: '500' }}>{accountNo}</Text>
+                                    </Text>
+                                    <Text style={{ color: '#e5e7eb', fontSize: 12 }}>
+                                        Due Date: <Text style={{ color: '#ffffff' }}>{dueDateString}</Text>
+                                    </Text>
                                 </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#f9fafb', paddingBottom: 12 }}>
-                                    <Text style={{ color: '#9ca3af', fontSize: 14 }}>Installed</Text>
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', fontSize: 14 }}>{installationDate}</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 12 }}>
-                                    <Text style={{ color: '#9ca3af', fontSize: 14 }}>Location</Text>
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', fontSize: 14, textAlign: 'right' }}>{address}</Text>
-                                </View>
-                            </View>
 
-                            <View style={{ marginTop: 32, gap: 12, alignSelf: 'stretch' }}>
-                                <Pressable
-                                    onPress={() => onNavigate?.('customer-bills')}
-                                    style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderWidth: 1, borderRadius: 24, borderColor: colorPalette?.primary || '#0f172a' }}
-                                >
-                                    <FileText width={16} height={16} color={colorPalette?.primary || '#0f172a'} />
-                                    <Text style={{ color: colorPalette?.primary || '#0f172a', fontWeight: '600' }}>My Bills</Text>
-                                </Pressable>
-                                <Pressable
-                                    onPress={() => onNavigate?.('support')}
-                                    style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderWidth: 1, borderRadius: 24, borderColor: colorPalette?.primary || '#0f172a' }}
-                                >
-                                    <HelpCircle width={16} height={16} color={colorPalette?.primary || '#0f172a'} />
-                                    <Text style={{ color: colorPalette?.primary || '#0f172a', fontWeight: '600' }}>Help & Support</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={{ flex: isMobile ? 0 : 2, gap: 32 }}>
-                        <View style={{ borderRadius: 24, padding: isMobile ? 24 : 48, alignItems: 'center', backgroundColor: colorPalette?.primary || '#0f172a', position: 'relative', overflow: 'hidden' }}>
-                            <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '500', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>Total Amount Due</Text>
-                            <Text style={{ fontSize: isMobile ? 40 : 60, fontWeight: 'bold', marginBottom: 16, color: '#ffffff' }}>₱{balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</Text>
-                            <View style={{ flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 4 : 8, marginBottom: 32 }}>
-                                <Text style={{ color: '#9ca3af', fontSize: 14 }}>Reference: <Text style={{ color: '#ffffff', fontWeight: '500' }}>{accountNo}</Text></Text>
-                                {!isMobile && <Text style={{ color: '#9ca3af', fontSize: 14 }}>|</Text>}
-                                <Text style={{ color: '#9ca3af', fontSize: 14 }}>Due: <Text style={{ color: '#ffffff' }}>{dueDateString}</Text></Text>
-                            </View>
-
-                            <View style={{ flexDirection: isMobile ? 'column' : 'row', justifyContent: 'center', gap: 16, width: '100%' }}>
                                 <Pressable
                                     onPress={handlePayNow}
                                     disabled={isPaymentProcessing}
-                                    style={{ backgroundColor: '#ffffff', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 24, minWidth: 140, opacity: isPaymentProcessing ? 0.5 : 1 }}
+                                    style={{
+                                        borderWidth: 1,
+                                        borderColor: '#ffffff',
+                                        paddingHorizontal: 32,
+                                        paddingVertical: 10,
+                                        borderRadius: 12,
+                                        opacity: isPaymentProcessing ? 0.5 : 1
+                                    }}
                                 >
-                                    <Text style={{ color: colorPalette?.primary || '#0f172a', fontWeight: 'bold', textAlign: 'center' }}>
-                                        {isPaymentProcessing ? 'Processing' : 'PAY NOW'}
+                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
+                                        {isPaymentProcessing ? '...' : 'Pay Now'}
                                     </Text>
                                 </Pressable>
-                                <Pressable
-                                    onPress={() => onNavigate?.('customer-bills', 'payments')}
-                                    style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 24, minWidth: 140 }}
+                            </View>
+                        </LinearGradient>
+                    </View>
+
+
+
+
+                    {/* My Referrals Section */}
+                    <View style={{ gap: 16 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Users size={20} color="#ef4444" />
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>My Referrals</Text>
+                        </View>
+
+                        <ScrollView
+                            style={{ maxHeight: 270 }}
+                            showsVerticalScrollIndicator={false}
+                            nestedScrollEnabled={true}
+                            contentContainerStyle={{ gap: 12, paddingBottom: 8 }}
+                        >
+                            {[
+                                { name: 'Juan Dela Cruz', status: 'Active', color: '#10b981' },
+                                { name: 'Maria Santos', status: 'Pending', color: '#f59e0b' },
+                                { name: 'Pedro Penduko', status: 'Installation', color: '#3b82f6' },
+                                { name: 'Ana Reyes', status: 'Active', color: '#10b981' },
+                                { name: 'Lito Lapid', status: 'Pending', color: '#f59e0b' }
+                            ].map((referral, index) => (
+                                <View
+                                    key={index}
+                                    style={{
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: 16,
+                                        padding: 16,
+                                        width: '100%',
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.05,
+                                        shadowRadius: 8,
+                                        elevation: 2,
+                                        borderWidth: 1,
+                                        borderColor: '#f3f4f6'
+                                    }}
                                 >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>History</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-
-                        <View style={{ backgroundColor: '#ffffff', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, borderWidth: 1, borderColor: '#f3f4f6', overflow: 'hidden' }}>
-                            <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Clock width={20} height={20} color={colorPalette?.primary || '#0f172a'} />
-                                <Text style={{ fontWeight: 'bold', color: colorPalette?.primary || '#0f172a' }}>Recent Payments</Text>
-                            </View>
-                            <View>
-                                {payments.length === 0 ? (
-                                    <View style={{ padding: 16, alignItems: 'center' }}>
-                                        <Text style={{ color: '#6b7280' }}>No payment history found.</Text>
-                                    </View>
-                                ) : (
-                                    payments.map((payment) => (
-                                        <View key={payment.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f9fafb' }}>
-                                            <Text style={{ fontSize: 14, color: '#6b7280' }}>{payment.date}</Text>
-                                            <Text style={{ fontSize: 14, fontFamily: 'monospace', color: '#4b5563' }}>{payment.reference}</Text>
-                                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#16a34a' }}>+ ₱{payment.amount.toFixed(2)}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                        <View style={{
+                                            width: 40,
+                                            height: 40,
+                                            borderRadius: 20,
+                                            backgroundColor: '#f9fafb',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderWidth: 1,
+                                            borderColor: '#f1f5f9'
+                                        }}>
+                                            <User size={20} color="#64748b" />
                                         </View>
-                                    ))
-                                )}
+                                        <View>
+                                            <Text style={{ fontWeight: '600', color: '#1f2937', fontSize: 15 }}>{referral.name}</Text>
+                                            <Text style={{ fontSize: 12, color: '#6b7280' }}>Ref ID: #REF-{1024 + index}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{
+                                        backgroundColor: `${referral.color}15`,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 4,
+                                        borderRadius: 20,
+                                        borderWidth: 1,
+                                        borderColor: `${referral.color}30`
+                                    }}>
+                                        <Text style={{ color: referral.color, fontSize: 12, fontWeight: '600' }}>{referral.status}</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                        {/* Promotional Ads Section */}
+                        <View style={{ gap: 0 }}>
+                            <View style={{ position: 'relative' }}>
+                                <ScrollView
+                                    ref={adsScrollRef}
+                                    horizontal
+                                    pagingEnabled
+                                    showsHorizontalScrollIndicator={false}
+                                    scrollEnabled={false}
+                                    style={{ borderRadius: 20 }}
+                                    contentOffset={{ x: width - (isMobile ? 32 : 48), y: 0 }}
+                                >
+                                    {displayAds.map((ad, idx) => (
+                                        <View
+                                            key={`${ad.id}-${idx}`}
+                                            style={{
+                                                width: width - (isMobile ? 32 : 48),
+                                                height: 120,
+                                                backgroundColor: ad.color,
+                                                borderRadius: 20,
+                                                padding: 24,
+                                                justifyContent: 'center',
+                                            }}
+                                        >
+                                            <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: 'bold' }}>{ad.title}</Text>
+                                            <Text style={{ color: '#ffffff', opacity: 0.9, marginTop: 4 }}>{ad.desc}</Text>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+
+                                {/* Pagination Dots */}
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                                    {ads.map((_, i) => {
+                                        const actualActiveIndex = (currentAdPos - 1 + ads.length) % ads.length;
+                                        return (
+                                            <View
+                                                key={i}
+                                                style={{
+                                                    width: 8,
+                                                    height: 8,
+                                                    borderRadius: 4,
+                                                    backgroundColor: actualActiveIndex === i ? '#111827' : '#d1d5db'
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                </View>
                             </View>
                         </View>
 
-                        <View style={{ backgroundColor: '#ffffff', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, borderWidth: 1, borderColor: '#f3f4f6', overflow: 'hidden' }}>
-                            <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <Users width={20} height={20} color={colorPalette?.primary || '#0f172a'} />
-                                    <Text style={{ fontWeight: 'bold', color: colorPalette?.primary || '#0f172a' }}>My Referrals</Text>
-                                </View>
-                            </View>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                <View style={{ minWidth: isMobile ? 600 : '100%' }}>
-                                    <View style={{ backgroundColor: '#f9fafb', flexDirection: 'row' }}>
-                                        <Text style={{ textAlign: 'left', fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, paddingVertical: 12, paddingHorizontal: 24, flex: 1 }}>Date</Text>
-                                        <Text style={{ textAlign: 'left', fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, paddingVertical: 12, paddingHorizontal: 24, flex: 1 }}>Name</Text>
-                                        <Text style={{ textAlign: 'left', fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, paddingVertical: 12, paddingHorizontal: 24, flex: 1 }}>Stage</Text>
-                                        <Text style={{ textAlign: 'right', fontSize: 12, fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, paddingVertical: 12, paddingHorizontal: 24, flex: 1 }}>Status</Text>
-                                    </View>
-                                    <View style={{ borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
-                                        {referrals.map((referral) => (
-                                            <View key={referral.id} style={{ flexDirection: 'row' }}>
-                                                <Text style={{ paddingVertical: 16, paddingHorizontal: 24, fontSize: 14, color: '#6b7280', flex: 1 }}>{referral.date}</Text>
-                                                <Text style={{ paddingVertical: 16, paddingHorizontal: 24, fontSize: 14, fontWeight: 'bold', color: '#111827', flex: 1 }}>{referral.name}</Text>
-                                                <View style={{ paddingVertical: 16, paddingHorizontal: 24, flex: 1 }}>
-                                                    <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start' }}>
-                                                        <Text style={{ color: '#1d4ed8', fontSize: 12, fontWeight: '500' }}>{referral.stage}</Text>
-                                                    </View>
-                                                </View>
-                                                <View style={{ paddingVertical: 16, paddingHorizontal: 24, alignItems: 'flex-end', flex: 1 }}>
-                                                    <View style={{ backgroundColor: getStatusStyle(referral.status).bg, borderColor: getStatusStyle(referral.status).border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 24 }}>
-                                                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: getStatusStyle(referral.status).text }}>{referral.status}</Text>
-                                                    </View>
-                                                </View>
-                                            </View>
-                                        ))}
-                                    </View>
-                                </View>
-                            </ScrollView>
-                        </View>
                     </View>
                 </View>
             </ScrollView>
 
-            {showPaymentVerifyModal && (
-                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%' }}>
-                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
-                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', textAlign: 'center' }}>Confirm Payment</Text>
+            <Modal
+                visible={showPaymentVerifyModal}
+                transparent={true}
+                animationType="slide"
+                statusBarTranslucent={true}
+                onRequestClose={handleCloseVerifyModal}
+            >
+                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' }}>
+                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCloseVerifyModal} />
+                    <Animated.View
+                        {...panResponder.panHandlers}
+                        style={{
+                            transform: [{ translateY: pan.y }],
+                            backgroundColor: '#ffffff',
+                            borderTopLeftRadius: 40,
+                            borderTopRightRadius: 40,
+                            width: '100%',
+                            maxHeight: '90%',
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: -15 },
+                            shadowOpacity: 1.0,
+                            shadowRadius: 40,
+                            elevation: 30
+                        }}
+                    >
+
+                        {/* Header */}
+                        <View style={{ paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center' }}>
+                            <Pressable
+                                onPress={handleCloseVerifyModal}
+                                style={{ width: '100%', alignItems: 'center', paddingVertical: 8 }}
+                            >
+                                <View style={{ width: '20%', height: 3, backgroundColor: '#d1d5db', borderRadius: 2, marginBottom: 8 }} />
+                            </Pressable>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>Confirm Payment</Text>
                         </View>
-                        <View style={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#f3f4f6', padding: 16, borderRadius: 4, marginBottom: 16 }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#374151' }}>Account:</Text>
-                                    <Text style={{ fontWeight: 'bold', color: '#374151' }}>{displayName}</Text>
+
+                        {/* Content */}
+                        <ScrollView contentContainerStyle={{ padding: 24 }}>
+                            <View style={{ backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Account Name</Text>
+                                    <Text style={{ fontWeight: '600', color: '#111827', fontSize: 14 }}>{displayName}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: '#374151' }}>Current Balance:</Text>
-                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#16a34a' }}>
+                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Current Balance</Text>
+                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#16a34a', fontSize: 14 }}>
                                         ₱{balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                                     </Text>
                                 </View>
                             </View>
 
                             {errorMessage && (
-                                <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 4, marginBottom: 16, borderWidth: 1, borderColor: '#fecaca' }}>
+                                <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1, borderColor: '#fecaca' }}>
                                     <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
                                 </View>
                             )}
 
-                            <View style={{ marginBottom: 16 }}>
-                                <Text style={{ fontWeight: 'bold', marginBottom: 8, color: '#374151' }}>Payment Amount</Text>
+                            <View style={{ marginBottom: 32 }}>
+                                <Text style={{ fontWeight: '500', marginBottom: 8, color: '#374151', fontSize: 14 }}>Payment Amount</Text>
                                 <TextInput
                                     keyboardType="decimal-pad"
                                     value={paymentAmount ? paymentAmount.toString() : ''}
@@ -382,10 +524,10 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                         }
                                     }}
                                     placeholder="0.00"
-                                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, fontSize: 18, fontWeight: 'bold', borderWidth: 1, borderColor: '#d1d5db', color: '#111827' }}
+                                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' }}
                                 />
-                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 }}>
-                                    <Text style={{ fontSize: 14, color: '#6b7280' }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+                                    <Text style={{ fontSize: 12, color: '#6b7280' }}>
                                         {balance > 0 ? (
                                             `Outstanding: ₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
                                         ) : (
@@ -395,92 +537,98 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 </View>
                             </View>
 
-                            <View style={{ flexDirection: 'row', gap: 12 }}>
-                                <Pressable
-                                    onPress={handleCloseVerifyModal}
-                                    disabled={isPaymentProcessing}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#e5e7eb', opacity: isPaymentProcessing ? 0.5 : 1 }}
-                                >
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
-                                </Pressable>
-                                <Pressable
-                                    onPress={handleProceedToCheckout}
-                                    disabled={isPaymentProcessing || paymentAmount < 1}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: colorPalette?.primary || '#0f172a', opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1 }}
-                                >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
-                                        {isPaymentProcessing ? 'Processing...' : 'Proceed to Pay'}
-                                    </Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-            )}
-
-            {showPaymentLinkModal && paymentLinkData && (
-                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
-                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
-                            <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#dcfce7', marginBottom: 16 }}>
-                                <CheckCircle width={24} height={24} color="#16a34a" />
-                            </View>
-                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Payment Link Created!</Text>
-                            <Text style={{ color: '#6b7280', marginTop: 8 }}>Reference: {paymentLinkData.referenceNo}</Text>
-                        </View>
-                        <View style={{ padding: 24 }}>
-                            <Text style={{ color: '#4b5563', marginBottom: 24 }}>
-                                Please click the button below to complete your payment of
-                                <Text style={{ fontWeight: 'bold', color: '#111827' }}> ₱{paymentLinkData.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</Text>
-                            </Text>
                             <Pressable
-                                onPress={handleOpenPaymentLink}
-                                style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#16a34a', marginBottom: 12 }}
+                                onPress={handleProceedToCheckout}
+                                disabled={isPaymentProcessing || paymentAmount < 1}
+                                style={{
+                                    paddingVertical: 12,
+                                    borderRadius: 50,
+                                    backgroundColor: '#ef4444',
+                                    opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1,
+                                    width: '50%',
+                                    alignSelf: 'center',
+                                    alignItems: 'center'
+                                }}
                             >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Open Payment Portal</Text>
+                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>
+                                    {isPaymentProcessing ? 'Processing...' : 'Pay'}
+                                </Text>
                             </Pressable>
-                            <Pressable onPress={handleCancelPaymentLink}>
-                                <Text style={{ color: '#6b7280', textDecorationLine: 'underline', fontSize: 14, textAlign: 'center' }}>Close</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            )}
 
-            {showPendingPaymentModal && pendingPayment && (
-                <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
-                    <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
-                        <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
-                            <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#fef3c7', marginBottom: 16 }}>
-                                <Activity width={24} height={24} color="#ca8a04" />
+                            {/* Spacer to handle safe area if needed or just padding */}
+                            <View style={{ height: 24 }} />
+                        </ScrollView>
+                    </Animated.View>
+                </View>
+            </Modal>
+
+            {
+                showPaymentLinkModal && paymentLinkData && (
+                    <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+                        <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
+                            <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                                <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#dcfce7', marginBottom: 16 }}>
+                                    <CheckCircle width={24} height={24} color="#16a34a" />
+                                </View>
+                                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Payment Link Created!</Text>
+                                <Text style={{ color: '#6b7280', marginTop: 8 }}>Reference: {paymentLinkData.referenceNo}</Text>
                             </View>
-                            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Pending Payment Found</Text>
-                        </View>
-                        <View style={{ padding: 24 }}>
-                            <Text style={{ color: '#4b5563', marginBottom: 24 }}>
-                                You have a pending payment of
-                                <Text style={{ fontWeight: 'bold', color: '#111827' }}> ₱{pendingPayment.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</Text>.
-                                Would you like to complete it?
-                            </Text>
-                            <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <View style={{ padding: 24 }}>
+                                <Text style={{ color: '#4b5563', marginBottom: 24 }}>
+                                    Please click the button below to complete your payment of
+                                    <Text style={{ fontWeight: 'bold', color: '#111827' }}> ₱{paymentLinkData.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</Text>
+                                </Text>
                                 <Pressable
-                                    onPress={handleCancelPendingPayment}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#e5e7eb' }}
+                                    onPress={handleOpenPaymentLink}
+                                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#16a34a', marginBottom: 12 }}
                                 >
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
+                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Open Payment Portal</Text>
                                 </Pressable>
-                                <Pressable
-                                    onPress={handleResumePendingPayment}
-                                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: colorPalette?.primary || '#0f172a' }}
-                                >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Resume Payment</Text>
+                                <Pressable onPress={handleCancelPaymentLink}>
+                                    <Text style={{ color: '#6b7280', textDecorationLine: 'underline', fontSize: 14, textAlign: 'center' }}>Close</Text>
                                 </Pressable>
                             </View>
                         </View>
                     </View>
-                </View>
-            )}
-        </View>
+                )
+            }
+
+            {
+                showPendingPaymentModal && pendingPayment && (
+                    <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+                        <View style={{ backgroundColor: '#ffffff', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 24, maxWidth: 448, width: '100%', alignItems: 'center' }}>
+                            <View style={{ padding: 24, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
+                                <View style={{ marginHorizontal: 'auto', alignItems: 'center', justifyContent: 'center', height: 48, width: 48, borderRadius: 24, backgroundColor: '#fef3c7', marginBottom: 16 }}>
+                                    <Activity width={24} height={24} color="#ca8a04" />
+                                </View>
+                                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#111827' }}>Pending Payment Found</Text>
+                            </View>
+                            <View style={{ padding: 24 }}>
+                                <Text style={{ color: '#4b5563', marginBottom: 24 }}>
+                                    You have a pending payment of
+                                    <Text style={{ fontWeight: 'bold', color: '#111827' }}> ₱{pendingPayment.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</Text>.
+                                    Would you like to complete it?
+                                </Text>
+                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                    <Pressable
+                                        onPress={handleCancelPendingPayment}
+                                        style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: '#e5e7eb' }}
+                                    >
+                                        <Text style={{ color: '#111827', fontWeight: 'bold', textAlign: 'center' }}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        onPress={handleResumePendingPayment}
+                                        style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, backgroundColor: colorPalette?.primary || '#0f172a' }}
+                                    >
+                                        <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>Resume Payment</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                )
+            }
+        </View >
     );
 };
 

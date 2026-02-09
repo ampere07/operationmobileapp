@@ -504,7 +504,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
   const renderImageLink = (url: string | undefined | null) => (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Text style={{ flex: 1, marginRight: 8, ...valueStyle }} numberOfLines={1}>
+      <Text style={{ flex: 1, marginRight: 8, ...valueStyle }} numberOfLines={1} selectable={true}>
         {url || 'No image available'}
       </Text>
       {url && (
@@ -516,45 +516,45 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   );
 
   const fieldRenderers: Record<string, () => React.ReactNode> = {
-    timestamp: () => <Text style={valueStyle}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
-    jobOrderNumber: () => <Text style={valueStyle}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
-    referredBy: () => <Text style={valueStyle}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
-    fullName: () => <Text style={valueStyle}>{getClientFullName()}</Text>,
-    contactNumber: () => <Text style={valueStyle}>{jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}</Text>,
-    secondContactNumber: () => <Text style={valueStyle}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
-    emailAddress: () => <Text style={valueStyle}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
-    fullAddress: () => <Text style={valueStyle}>{getClientFullAddress()}</Text>,
-    billingStatus: () => <Text style={valueStyle}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
-    billingDay: () => <Text style={valueStyle}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
-    choosePlan: () => <Text style={valueStyle}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
-    statusRemarks: () => <Text style={valueStyle}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>,
-    remarks: () => <Text style={valueStyle}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>,
-    installationLandmark: () => <Text style={valueStyle}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>,
-    connectionType: () => <Text style={valueStyle}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
-    modemRouterSn: () => <Text style={valueStyle}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
-    routerModel: () => <Text style={valueStyle}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
-    affiliateName: () => <Text style={valueStyle}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>,
-    lcpnap: () => <Text style={valueStyle}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
-    port: () => <Text style={valueStyle}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
-    vlan: () => <Text style={valueStyle}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
-    username: () => <Text style={valueStyle}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
-    ipAddress: () => <Text style={valueStyle}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
-    usageType: () => <Text style={valueStyle}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
-    dateInstalled: () => <Text style={valueStyle}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
-    visitBy: () => <Text style={valueStyle}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
-    visitWith: () => <Text style={valueStyle}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
-    visitWithOther: () => <Text style={valueStyle}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
+    timestamp: () => <Text style={valueStyle} selectable={true}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
+    jobOrderNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
+    referredBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
+    fullName: () => <Text style={valueStyle} selectable={true}>{getClientFullName()}</Text>,
+    contactNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}</Text>,
+    secondContactNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
+    emailAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
+    fullAddress: () => <Text style={valueStyle} selectable={true}>{getClientFullAddress()}</Text>,
+    billingStatus: () => <Text style={valueStyle} selectable={true}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
+    billingDay: () => <Text style={valueStyle} selectable={true}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
+    choosePlan: () => <Text style={valueStyle} selectable={true}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
+    statusRemarks: () => <Text style={valueStyle} selectable={true}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>,
+    remarks: () => <Text style={valueStyle} selectable={true}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>,
+    installationLandmark: () => <Text style={valueStyle} selectable={true}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>,
+    connectionType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
+    modemRouterSn: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
+    routerModel: () => <Text style={valueStyle} selectable={true}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
+    affiliateName: () => <Text style={valueStyle} selectable={true}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>,
+    lcpnap: () => <Text style={valueStyle} selectable={true}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
+    port: () => <Text style={valueStyle} selectable={true}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
+    vlan: () => <Text style={valueStyle} selectable={true}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
+    username: () => <Text style={valueStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
+    ipAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
+    usageType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
+    dateInstalled: () => <Text style={valueStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
+    visitBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
+    visitWith: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
+    visitWithOther: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
     onsiteStatus: () => (
-      <Text style={{ textTransform: 'capitalize', color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }}>
+      <Text style={{ textTransform: 'capitalize', color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }} selectable={true}>
         {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
       </Text>
     ),
-    contractTemplate: () => <Text style={valueStyle}>{jobOrder.Contract_Template || 'Standard'}</Text>,
+    contractTemplate: () => <Text style={valueStyle} selectable={true}>{jobOrder.Contract_Template || 'Standard'}</Text>,
     contractLink: () => {
       const link = jobOrder.Contract_Link;
       return (
         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ flex: 1, ...valueStyle }} numberOfLines={1}>
+          <Text style={{ flex: 1, ...valueStyle }} numberOfLines={1} selectable={true}>
             {link || 'Not available'}
           </Text>
           {link && (
@@ -565,9 +565,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         </View>
       );
     },
-    modifiedBy: () => <Text style={valueStyle}>{jobOrder.Modified_By || 'System'}</Text>,
-    modifiedDate: () => <Text style={valueStyle}>{formatDate(jobOrder.Modified_Date)}</Text>,
-    assignedEmail: () => <Text style={valueStyle}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
+    modifiedBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modified_By || 'System'}</Text>,
+    modifiedDate: () => <Text style={valueStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
+    assignedEmail: () => <Text style={valueStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
     setupImage: () => renderImageLink(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url),
     speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image),
     signedContractImage: () => renderImageLink(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL),

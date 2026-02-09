@@ -83,7 +83,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
-        {typeof content === 'string' ? <Text style={valueStyle}>{content}</Text> : content}
+        {typeof content === 'string' ? <Text style={valueStyle} selectable={true}>{content}</Text> : content}
       </View>
     </View>
   );
@@ -92,7 +92,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     if (!url) return null;
     return renderField(label, (
       <View style={styles.imageLinkContainer}>
-        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1}>
+        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1} selectable={true}>
           {url}
         </Text>
         <Pressable onPress={() => Linking.openURL(url)}>
@@ -126,6 +126,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
               { fontSize: isMobile ? 18 : 24, color: isDarkMode ? '#ffffff' : '#111827' }
             ]}
             numberOfLines={1}
+            selectable={true}
           >
             {location.lcpnap_name}
           </Text>
