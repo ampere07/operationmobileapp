@@ -20,7 +20,6 @@ import { ServiceOrderProvider } from '../contexts/ServiceOrderContext';
 // import DisconnectionLogs from './DisconnectionLogs';
 // import ReconnectionLogs from './ReconnectionLogs';
 import Sidebar from './Sidebar';
-import Header from './Header';
 import DashboardContent from '../components/DashboardContent';
 // import UserManagement from './UserManagement';
 // import OrganizationManagement from './OrganizationManagement';
@@ -66,6 +65,7 @@ import Support from './Support';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
 import Bills from './Bills';
+import Menu from './Menu';
 import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -253,6 +253,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             //     return <SOAGeneration />;
             // case 'settings':
             //     return <Settings />;
+            case 'menu':
+                return <Menu onLogout={onLogout} />;
             case 'dashboard':
             default:
                 if (userData && String(userData.role_id) === '3') {
@@ -325,17 +327,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                             overflow: 'hidden',
                             backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
                         }}>
-                            {/* Fixed Header */}
-                            <View style={{ flexShrink: 0 }}>
-                                <Header
-                                    onSearch={handleSearch}
-                                    onToggleSidebar={() => { }} // No longer needed
-                                    onNavigate={handleSectionChange}
-                                    onLogout={onLogout}
-                                    activeSection={activeSection}
-                                />
-                            </View>
-
                             {/* Main Content Area */}
                             <View style={{
                                 flex: 1,
@@ -353,7 +344,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                     <Sidebar
                                         activeSection={activeSection}
                                         onSectionChange={handleSectionChange}
-                                        onLogout={onLogout}
                                         userRole={userData?.role || ''}
                                         userEmail={userData?.email || ''}
                                     />

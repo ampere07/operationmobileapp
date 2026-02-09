@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl } from 'react-native';
 import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -47,10 +47,11 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
     const [currentAdPos, setCurrentAdPos] = useState(1);
+    const [refreshing, setRefreshing] = useState(false);
     const adsScrollRef = React.useRef<ScrollView>(null);
 
     const ads = [
-        { id: 1, title: 'Summer Promo!', desc: 'Get 50% off on installation fee.', color: '#ef4444' },
+        { id: 1, title: 'Summer Promo!', desc: 'Get 50% off on installation fee.', color: colorPalette?.primary || '#ef4444' },
         { id: 2, title: 'Refer & Earn', desc: 'Earn ₱500 for every successful referral.', color: '#3b82f6' },
         { id: 3, title: 'Upgrade Now', desc: 'Boost your speed for as low as ₱199.', color: '#10b981' }
     ];
@@ -120,20 +121,31 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
             const adWidth = width - (isMobile ? 32 : 48);
             const timer = setInterval(() => {
                 const nextPos = currentAdPos + 1;
-                setCurrentAdPos(nextPos);
                 adsScrollRef.current?.scrollTo({ x: nextPos * adWidth, animated: true });
 
-                // If we scrolled to the clone (at indices 0 or 4), jump to the original after animation
-                if (nextPos >= displayAds.length - 1) {
-                    setTimeout(() => {
-                        setCurrentAdPos(1);
-                        adsScrollRef.current?.scrollTo({ x: 1 * adWidth, animated: false });
-                    }, 500);
-                }
+                // Position update and infinite jump will be handled by onMomentumScrollEnd
+                // via a small delay to allow the animation to finish
+                setTimeout(() => {
+                    handleScrollEnd(nextPos);
+                }, 500);
             }, 3000);
             return () => clearInterval(timer);
         }
     }, [currentAdPos, width, isMobile]);
+
+    const handleScrollEnd = (pos: number) => {
+        const adWidth = width - (isMobile ? 32 : 48);
+        let finalPos = pos;
+
+        if (pos <= 0) {
+            finalPos = ads.length;
+            adsScrollRef.current?.scrollTo({ x: finalPos * adWidth, animated: false });
+        } else if (pos >= displayAds.length - 1) {
+            finalPos = 1;
+            adsScrollRef.current?.scrollTo({ x: finalPos * adWidth, animated: false });
+        }
+        setCurrentAdPos(finalPos);
+    };
 
     if (contextLoading && !customerDetail) return (
         <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
@@ -264,12 +276,31 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         setPendingPayment(null);
     };
 
+    const onRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await silentRefresh();
+        } catch (error) {
+            console.error('Refresh failed:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [silentRefresh]);
+
     return (
         <View style={{ flex: 1, backgroundColor: '#f9fafb', position: 'relative' }}>
             <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={{ padding: isMobile ? 16 : 24, paddingBottom: 40 }}
                 showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingTop: 60, paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: 24 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[colorPalette?.primary || '#ef4444']} // Android
+                        tintColor={colorPalette?.primary || '#ef4444'} // iOS
+                        progressViewOffset={80}
+                    />
+                }
             >
 
 
@@ -284,7 +315,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                         backgroundColor: '#ffffff'
                     }}>
                         <LinearGradient
-                            colors={['#ef4444', '#000000']}
+                            colors={[colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={{ borderRadius: 24, padding: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}
@@ -334,7 +365,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                     {/* My Referrals Section */}
                     <View style={{ gap: 16 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Users size={20} color="#ef4444" />
+                            <Users size={20} color={colorPalette?.primary || '#ef4444'} />
                             <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>My Referrals</Text>
                         </View>
 
@@ -389,18 +420,14 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                         </View>
                                     </View>
                                     <View style={{
-                                        backgroundColor: `${referral.color}15`,
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 4,
-                                        borderRadius: 20,
-                                        borderWidth: 1,
-                                        borderColor: `${referral.color}30`
+                                        borderRadius: 20
                                     }}>
                                         <Text style={{ color: referral.color, fontSize: 12, fontWeight: '600' }}>{referral.status}</Text>
                                     </View>
                                 </View>
                             ))}
                         </ScrollView>
+                        <View style={{ height: 2, backgroundColor: '#e2e8f0', marginVertical: 16, width: '80%', alignSelf: 'center', borderRadius: 1 }} />
                         {/* Promotional Ads Section */}
                         <View style={{ gap: 0 }}>
                             <View style={{ position: 'relative' }}>
@@ -409,7 +436,12 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                     horizontal
                                     pagingEnabled
                                     showsHorizontalScrollIndicator={false}
-                                    scrollEnabled={false}
+                                    scrollEnabled={true}
+                                    onMomentumScrollEnd={(e) => {
+                                        const adWidth = width - (isMobile ? 32 : 48);
+                                        const newPos = Math.round(e.nativeEvent.contentOffset.x / adWidth);
+                                        handleScrollEnd(newPos);
+                                    }}
                                     style={{ borderRadius: 20 }}
                                     contentOffset={{ x: width - (isMobile ? 32 : 48), y: 0 }}
                                 >
@@ -501,15 +533,15 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                     <Text style={{ color: '#6b7280', fontSize: 14 }}>Current Balance</Text>
-                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? '#ef4444' : '#16a34a', fontSize: 14 }}>
+                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a', fontSize: 14 }}>
                                         ₱{balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                                     </Text>
                                 </View>
                             </View>
 
                             {errorMessage && (
-                                <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1, borderColor: '#fecaca' }}>
-                                    <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
+                                <View style={{ backgroundColor: (colorPalette?.primary || '#ef4444') + '15', padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1, borderColor: (colorPalette?.primary || '#ef4444') + '30' }}>
+                                    <Text style={{ color: colorPalette?.primary || '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
                                 </View>
                             )}
 
@@ -543,7 +575,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 style={{
                                     paddingVertical: 12,
                                     borderRadius: 50,
-                                    backgroundColor: '#ef4444',
+                                    backgroundColor: colorPalette?.primary || '#ef4444',
                                     opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1,
                                     width: '50%',
                                     alignSelf: 'center',

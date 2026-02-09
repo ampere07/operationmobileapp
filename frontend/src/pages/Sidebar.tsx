@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { FileCheck, Wrench, MapPinned, LogOut, Settings, LayoutDashboard, ReceiptText, LifeBuoy } from 'lucide-react-native';
+import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import ConfirmationModal from '../modals/MoveToJoModal';
 
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
-  onLogout: () => void;
   isCollapsed?: boolean;
   userRole: string;
   userEmail?: string;
@@ -21,9 +19,8 @@ interface MenuItem {
   allowedRoles?: string[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLogout, userRole }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userRole }) => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -49,6 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'customer-bills', label: 'Bills', icon: ReceiptText, allowedRoles: ['customer'] },
     { id: 'customer-support', label: 'Support', icon: LifeBuoy, allowedRoles: ['customer'] },
+    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator'] },
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {
@@ -107,37 +105,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, onLog
         );
       })}
 
-      {/* Logout Item */}
-      <Pressable
-        onPress={() => setIsLogoutModalOpen(true)}
-        style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 8,
-        }}
-      >
-        <LogOut
-          size={24}
-          color="#4b5563"
-        />
-        <Text style={{
-          fontSize: 10,
-          marginTop: 4,
-          color: '#4b5563'
-        }}>
-          Logout
-        </Text>
-      </Pressable>
-
-      <ConfirmationModal
-        isOpen={isLogoutModalOpen}
-        title="Logout Confirmation"
-        message="Are you sure you want to log out?"
-        confirmText="Logout"
-        cancelText="Cancel"
-        onConfirm={onLogout}
-        onCancel={() => setIsLogoutModalOpen(false)}
-      />
     </View>
   );
 };
