@@ -623,7 +623,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
         />
 
         <View style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: modalWidth, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, zIndex: 9999, flexDirection: 'column', backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, paddingTop: isMobile ? 60 : 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#1f2937' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>LCP NAP Location Form</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Pressable

@@ -658,6 +658,7 @@ const ServiceOrderPage: React.FC = () => {
         }}>
           <View style={{
             padding: 16,
+            paddingTop: 60,
             borderBottomWidth: 1,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
@@ -827,6 +828,7 @@ const ServiceOrderPage: React.FC = () => {
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{
             padding: 16,
+            paddingTop: 60,
             borderBottomWidth: 1,
             flexShrink: 0,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',

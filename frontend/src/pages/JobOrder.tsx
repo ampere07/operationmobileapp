@@ -744,6 +744,7 @@ const JobOrderPage: React.FC = () => {
         }}>
           <View style={{
             padding: 16,
+            paddingTop: 60,
             borderBottomWidth: 1,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'

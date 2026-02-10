@@ -423,7 +423,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         styles.header,
         {
           backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+          paddingTop: isMobile ? 60 : 12
         }
       ]}>
         <View style={styles.headerTitleContainer}>

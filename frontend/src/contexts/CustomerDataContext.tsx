@@ -81,13 +81,13 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
             const accNo = detail.billingAccount?.accountNo;
             const billingId = detail.billingAccount?.id;
 
-            if (accNo && billingId) {
+            if (accNo) {
                 // 2. Fetch everything else in parallel
                 const [logsRes, txRes, soaRes, invoiceRes] = await Promise.all([
                     paymentPortalLogsService.getLogsByAccountNo(accNo).catch(() => []),
                     transactionService.getAllTransactions().catch(() => ({ success: false, data: [] })),
-                    soaService.getStatementsByAccount(billingId).catch(() => []),
-                    invoiceService.getInvoicesByAccount(billingId).catch(() => [])
+                    soaService.getStatementsByAccount(accNo).catch(() => []),
+                    invoiceService.getInvoicesByAccount(accNo).catch(() => [])
                 ]);
 
                 // Process Payments

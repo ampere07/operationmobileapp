@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Image, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     User,
@@ -30,6 +30,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
     const [userData, setUserData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
 
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
@@ -142,13 +143,13 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                         width: 64,
                         height: 64,
                         borderRadius: 32,
-                        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                        backgroundColor: '#ffffff',
                         justifyContent: 'center',
                         alignItems: 'center',
                         borderWidth: 2,
                         borderColor: '#ffffff',
                     }}>
-                        <User color="#ffffff" size={32} />
+                        <User color={colorPalette?.primary || '#ef4444'} size={32} />
                     </View>
                     <View style={{ marginLeft: 20 }}>
                         <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#ffffff' }}>{userData?.full_name || userData?.name || 'User Name'}</Text>
@@ -235,7 +236,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                         overflow: 'hidden',
                     }}>
                         <Pressable
-                            onPress={onLogout}
+                            onPress={() => setShowLogoutModal(true)}
                             style={({ pressed }) => ({
                                 width: '100%',
                                 height: '100%',
@@ -261,6 +262,84 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                     marginTop: 32,
                 }}>Version 2.0.0</Text>
             </View>
+
+            {/* Logout Confirmation Modal */}
+            <Modal
+                visible={showLogoutModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowLogoutModal(false)}
+            >
+                <View style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    padding: 24
+                }}>
+                    <View style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: 24,
+                        padding: 24,
+                        width: '100%',
+                        maxWidth: 400,
+                        alignItems: 'center',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 10 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 15,
+                        elevation: 10
+                    }}>
+                        <Text style={{
+                            fontSize: 22,
+                            fontWeight: 'bold',
+                            color: '#111827',
+                            marginBottom: 12,
+                            textAlign: 'center',
+                            marginTop: 12
+                        }}>Sign Out</Text>
+
+                        <Text style={{
+                            fontSize: 16,
+                            color: '#6b7280',
+                            textAlign: 'center',
+                            marginBottom: 32,
+                            lineHeight: 24
+                        }}>Are you sure you want to sign out of your account?</Text>
+
+                        <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                            <Pressable
+                                onPress={() => setShowLogoutModal(false)}
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    backgroundColor: '#f3f4f6',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#4b5563' }}>Cancel</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => {
+                                    setShowLogoutModal(false);
+                                    if (onLogout) onLogout();
+                                }}
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    backgroundColor: colorPalette?.primary || '#ef4444',
+                                    alignItems: 'center'
+                                }}
+                            >
+                                <Text style={{ fontSize: 16, fontWeight: '600', color: '#ffffff' }}>Sign Out</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };

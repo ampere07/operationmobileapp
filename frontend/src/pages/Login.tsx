@@ -12,6 +12,7 @@ import {
   Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { login as loginUser, forgotPassword } from '../services/api';
 import { UserData } from '../types/api';
@@ -276,127 +277,133 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           {/* Login Form Section */}
           <View style={{
-            backgroundColor: colorPalette?.primary || '#6d28d9',
             borderRadius: 24,
-            padding: 30,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 10 },
             shadowOpacity: 0.1,
             shadowRadius: 20,
             elevation: 8,
             marginBottom: 30,
+            overflow: 'hidden'
           }}>
-            <View style={{ marginBottom: 30 }}>
-              <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Welcome Back</Text>
-              <Text style={{ fontSize: 14, color: '#ffffff', opacity: 0.9, fontWeight: '600' }}>Please login to your account.</Text>
-            </View>
-
-            <View style={{ width: '100%' }}>
-              <View style={{ marginBottom: 16 }}>
-                <TextInput
-                  style={{
-                    width: '100%',
-                    padding: 14,
-                    backgroundColor: '#ffffff',
-                    borderWidth: 1,
-                    borderColor: '#d1d5db',
-                    borderRadius: 12,
-                    color: '#111827',
-                    fontSize: 16,
-                  }}
-                  value={accountNo}
-                  onChangeText={setAccountNo}
-                  placeholder="Username or Email"
-                  placeholderTextColor="#6b7280"
-                  autoCapitalize="none"
-                />
+            <LinearGradient
+              colors={[colorPalette?.primary || '#6d28d9', '#000000']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ padding: 30 }}
+            >
+              <View style={{ marginBottom: 30 }}>
+                <Text style={{ fontSize: 32, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Welcome Back</Text>
+                <Text style={{ fontSize: 14, color: '#ffffff', opacity: 0.9, fontWeight: '600' }}>Please login to your account.</Text>
               </View>
 
-              <View style={{ marginBottom: 16, position: 'relative' }}>
-                <TextInput
+              <View style={{ width: '100%' }}>
+                <View style={{ marginBottom: 16 }}>
+                  <TextInput
+                    style={{
+                      width: '100%',
+                      padding: 14,
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1,
+                      borderColor: '#d1d5db',
+                      borderRadius: 12,
+                      color: '#111827',
+                      fontSize: 16,
+                    }}
+                    value={accountNo}
+                    onChangeText={setAccountNo}
+                    placeholder="Username or Email"
+                    placeholderTextColor="#6b7280"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={{ marginBottom: 16, position: 'relative' }}>
+                  <TextInput
+                    style={{
+                      width: '100%',
+                      padding: 14,
+                      paddingRight: 50,
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1,
+                      borderColor: '#d1d5db',
+                      borderRadius: 12,
+                      color: '#111827',
+                      fontSize: 16,
+                    }}
+                    value={mobileNo}
+                    onChangeText={setMobileNo}
+                    placeholder="Password"
+                    placeholderTextColor="#6b7280"
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: 14,
+                      top: 14,
+                    }}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={20} color="#6b7280" />
+                    ) : (
+                      <Eye size={20} color="#6b7280" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {error ? (
+                  <View style={{
+                    backgroundColor: '#fee2e2',
+                    padding: 12,
+                    borderRadius: 6,
+                    marginBottom: 20,
+                  }}>
+                    <Text style={{ color: '#dc2626', fontSize: 14 }}>{error}</Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={handleSubmit}
+                  disabled={isLoading}
                   style={{
                     width: '100%',
-                    padding: 14,
-                    paddingRight: 50,
-                    backgroundColor: '#ffffff',
-                    borderWidth: 1,
-                    borderColor: '#d1d5db',
-                    borderRadius: 12,
-                    color: '#111827',
-                    fontSize: 16,
-                  }}
-                  value={mobileNo}
-                  onChangeText={setMobileNo}
-                  placeholder="Password"
-                  placeholderTextColor="#6b7280"
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: 14,
-                    top: 14,
+                    padding: 16,
+                    backgroundColor: isLoading ? '#6b7280' : '#ffffff',
+                    borderRadius: 30,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 2,
                   }}
                 >
-                  {showPassword ? (
-                    <EyeOff size={20} color="#6b7280" />
-                  ) : (
-                    <Eye size={20} color="#6b7280" />
-                  )}
+                  <Text style={{
+                    color: isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9'),
+                    fontSize: 16,
+                    fontWeight: '700',
+                  }}>
+                    {isLoading ? 'LOGGING IN...' : 'SECURE LOGIN'}
+                  </Text>
+                  {!isLoading && <ArrowRight color={isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9')} size={20} />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowForgotPassword(true);
+                    setError('');
+                  }}
+                  style={{ alignItems: 'center', marginTop: 20 }}
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>Forgot Password?</Text>
                 </TouchableOpacity>
               </View>
-
-              {error ? (
-                <View style={{
-                  backgroundColor: '#fee2e2',
-                  padding: 12,
-                  borderRadius: 6,
-                  marginBottom: 20,
-                }}>
-                  <Text style={{ color: '#dc2626', fontSize: 14 }}>{error}</Text>
-                </View>
-              ) : null}
-
-              <TouchableOpacity
-                onPress={handleSubmit}
-                disabled={isLoading}
-                style={{
-                  width: '100%',
-                  padding: 16,
-                  backgroundColor: isLoading ? '#6b7280' : '#ffffff',
-                  borderRadius: 30,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
-              >
-                <Text style={{
-                  color: isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9'),
-                  fontSize: 16,
-                  fontWeight: '700',
-                }}>
-                  {isLoading ? 'LOGGING IN...' : 'SECURE LOGIN'}
-                </Text>
-                {!isLoading && <ArrowRight color={isLoading ? '#ffffff' : (colorPalette?.primary || '#6d28d9')} size={20} />}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setShowForgotPassword(true);
-                  setError('');
-                }}
-                style={{ alignItems: 'center', marginTop: 20 }}
-              >
-                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '700' }}>Forgot Password?</Text>
-              </TouchableOpacity>
-            </View>
+            </LinearGradient>
           </View>
 
           {/* New Here Section */}

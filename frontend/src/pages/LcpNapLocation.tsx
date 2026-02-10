@@ -371,7 +371,7 @@ const LcpNapLocation: React.FC = () => {
       {/* Map View Area */}
       <View style={[styles.flex1, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
         <View style={styles.flexColumnFull}>
-          <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+          <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb', paddingTop: isTablet ? 16 : 60 }]}>
             <View style={[styles.searchWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
               <Search size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} style={styles.iconMargin} />
               <TextInput

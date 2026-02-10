@@ -67,7 +67,7 @@ export const soaService = {
     }
   },
 
-  async getStatementsByAccount(accountId: number): Promise<SOARecord[]> {
+  async getStatementsByAccount(accountId: number | string): Promise<SOARecord[]> {
     try {
       const response = await apiClient.get<SOAResponse>('/billing-generation/statements', {
         params: { account_id: accountId }

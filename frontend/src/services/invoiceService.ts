@@ -65,7 +65,7 @@ export const invoiceService = {
     }
   },
 
-  async getInvoicesByAccount(accountId: number): Promise<InvoiceRecord[]> {
+  async getInvoicesByAccount(accountId: number | string): Promise<InvoiceRecord[]> {
     try {
       const response = await apiClient.get<InvoiceResponse>('/billing-generation/invoices', {
         params: { account_id: accountId }
