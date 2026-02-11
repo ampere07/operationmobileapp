@@ -296,7 +296,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         style={{ flex: 1, width: '100%' }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: 60,
+          paddingTop: !isMobile ? 16 : 60,
           paddingHorizontal: isMobile ? 16 : 24,
           paddingBottom: 100,
           alignItems: 'center'

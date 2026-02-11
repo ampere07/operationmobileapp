@@ -744,7 +744,7 @@ const JobOrderPage: React.FC = () => {
         }}>
           <View style={{
             padding: 16,
-            paddingTop: 60,
+            paddingTop: !isTablet ? 60 : 16,
             borderBottomWidth: 1,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
@@ -846,6 +846,7 @@ const JobOrderPage: React.FC = () => {
           }}>
             <View style={{
               padding: 16,
+              paddingTop: 60,
               borderBottomWidth: 1,
               flexDirection: 'row',
               alignItems: 'center',
@@ -1006,6 +1007,7 @@ const JobOrderPage: React.FC = () => {
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{
             padding: 16,
+            paddingTop: isTablet ? 16 : 60,
             borderBottomWidth: 1,
             flexShrink: 0,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',

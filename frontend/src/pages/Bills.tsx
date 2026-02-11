@@ -241,7 +241,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: 60, paddingBottom: 100 }}
+                contentContainerStyle={{ paddingTop: !isMobile ? 16 : 60, paddingBottom: 100 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}

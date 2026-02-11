@@ -284,7 +284,13 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
-        {typeof content === 'string' ? <Text style={valueStyle} selectable={true}>{content || '-'}</Text> : content}
+        {(typeof content === 'string' || typeof content === 'number') ? (
+          <Text style={valueStyle} selectable={true}>
+            {(content !== null && content !== undefined && content !== '') ? content : '-'}
+          </Text>
+        ) : (
+          content
+        )}
       </View>
     </View>
   );

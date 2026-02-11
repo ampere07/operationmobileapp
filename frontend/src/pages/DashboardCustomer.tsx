@@ -360,7 +360,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         <View style={{ flex: 1, backgroundColor: '#f9fafb', position: 'relative' }}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: 60, paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: 24 }}
+                contentContainerStyle={{ paddingTop: !isMobile ? 16 : 60, paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: 24 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
