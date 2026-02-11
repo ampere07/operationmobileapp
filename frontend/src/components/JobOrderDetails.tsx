@@ -27,6 +27,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>([]);
   const [userRole, setUserRole] = useState<string>('');
+  const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [applicationData, setApplicationData] = useState<Application | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -50,7 +51,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'connectionType',
     'modemRouterSn',
     'routerModel',
-    'affiliateName',
     'lcpnap',
     'port',
     'vlan',
@@ -62,8 +62,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'visitWith',
     'visitWithOther',
     'onsiteStatus',
-    'contractTemplate',
-    'contractLink',
     'modifiedBy',
     'modifiedDate',
     'assignedEmail',
@@ -88,6 +86,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         try {
           const userData = JSON.parse(authData);
           setUserRole(userData.role?.toLowerCase() || '');
+          setUserRoleId(userData.role_id);
         } catch (error) {
           console.error('Error parsing auth data:', error);
         }
@@ -466,7 +465,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       connectionType: 'Connection Type',
       modemRouterSn: 'Modem/Router SN',
       routerModel: 'Router Model',
-      affiliateName: 'Affiliate Name',
       lcpnap: 'LCPNAP',
       port: 'PORT',
       vlan: 'VLAN',
@@ -478,8 +476,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       visitWith: 'Visit With',
       visitWithOther: 'Visit With Other',
       onsiteStatus: 'Onsite Status',
-      contractTemplate: 'Contract Template',
-      contractLink: 'Contract Link',
       modifiedBy: 'Modified By',
       modifiedDate: 'Modified Date',
       assignedEmail: 'Assigned Email',
@@ -533,7 +529,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     connectionType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
     modemRouterSn: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
     routerModel: () => <Text style={valueStyle} selectable={true}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
-    affiliateName: () => <Text style={valueStyle} selectable={true}>{jobOrder.group_name || jobOrder.Group_Name || 'Not specified'}</Text>,
     lcpnap: () => <Text style={valueStyle} selectable={true}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
     port: () => <Text style={valueStyle} selectable={true}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
     vlan: () => <Text style={valueStyle} selectable={true}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
@@ -549,22 +544,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
       </Text>
     ),
-    contractTemplate: () => <Text style={valueStyle} selectable={true}>{jobOrder.Contract_Template || 'Standard'}</Text>,
-    contractLink: () => {
-      const link = jobOrder.Contract_Link;
-      return (
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ flex: 1, ...valueStyle }} numberOfLines={1} selectable={true}>
-            {link || 'Not available'}
-          </Text>
-          {link && (
-            <Pressable onPress={() => Linking.openURL(link || '')} style={linkStyle}>
-              <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-            </Pressable>
-          )}
-        </View>
-      );
-    },
     modifiedBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modified_By || 'System'}</Text>,
     modifiedDate: () => <Text style={valueStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
     assignedEmail: () => <Text style={valueStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
@@ -640,7 +619,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
               onPress={handleDoneClick}
               disabled={loading}
             >
-              <Text style={{ color: '#ffffff', fontSize: isMobile ? 14 : 16, fontWeight: '500' }}>Done</Text>
+              <Text style={{ color: '#ffffff', fontSize: isMobile ? 14 : 16, fontWeight: '500' }}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
+
             </Pressable>
           )}
 

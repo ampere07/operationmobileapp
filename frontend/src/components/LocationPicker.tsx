@@ -37,7 +37,15 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [region, setRegion] = useState(DEFAULT_REGION);
 
+  const [latInput, setLatInput] = useState('');
+  const [lngInput, setLngInput] = useState('');
+
   useEffect(() => {
+    if (value !== undefined) {
+      const parts = value.split(',');
+      if (parts.length >= 1) setLatInput(parts[0].trim());
+      if (parts.length >= 2) setLngInput(parts[1].trim());
+    }
     if (value && value.trim()) {
       const parts = value.split(',').map(p => p.trim());
       if (parts.length === 2) {
@@ -55,6 +63,59 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       }
     }
   }, [value]);
+
+  const updateCoordinates = (lat: number, lng: number) => {
+    const newCoords = { latitude: lat, longitude: lng };
+    setCoordinates(newCoords);
+    setRegion({
+      ...newCoords,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    });
+    onChange(`${lat}, ${lng}`);
+    setLatInput(lat.toString());
+    setLngInput(lng.toString());
+  };
+
+  const handleLatChange = (text: string) => {
+    setLatInput(text);
+    const lat = parseFloat(text);
+    const lng = parseFloat(lngInput);
+    if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) && text.trim() !== '' && lngInput.trim() !== '') {
+      // Update map only if both are valid
+      const newCoords = { latitude: lat, longitude: lng };
+      setCoordinates(newCoords);
+      setRegion({
+        ...newCoords,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      onChange(`${lat}, ${lng}`);
+    } else {
+      // Just update parent text
+      onChange(`${text}, ${lngInput}`);
+    }
+  };
+
+  const handleLngChange = (text: string) => {
+    setLngInput(text);
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(text);
+    if (!isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng) && latInput.trim() !== '' && text.trim() !== '') {
+      // Update map only if both are valid
+      const newCoords = { latitude: lat, longitude: lng };
+      setCoordinates(newCoords);
+      setRegion({
+        ...newCoords,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      onChange(`${lat}, ${lng}`);
+    } else {
+      // Just update parent text
+      onChange(`${latInput}, ${text}`);
+    }
+  };
 
   const handleGetCurrentLocation = async () => {
     setIsGettingLocation(true);
@@ -89,15 +150,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         const { latitude, longitude } = location.coords;
         const roundedLat = parseFloat(latitude.toFixed(6));
         const roundedLng = parseFloat(longitude.toFixed(6));
-
-        const newCoords = { latitude: roundedLat, longitude: roundedLng };
-        setCoordinates(newCoords);
-        setRegion({
-          ...newCoords,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-        onChange(`${roundedLat}, ${roundedLng}`);
+        updateCoordinates(roundedLat, roundedLng);
       } else {
         Alert.alert('Location Error', 'Current location is unavailable. Check signal or map settings.');
       }
@@ -114,18 +167,14 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     const { latitude, longitude } = e.nativeEvent.coordinate;
     const roundedLat = parseFloat(latitude.toFixed(6));
     const roundedLng = parseFloat(longitude.toFixed(6));
-
-    setCoordinates({ latitude: roundedLat, longitude: roundedLng });
-    onChange(`${roundedLat}, ${roundedLng}`);
+    updateCoordinates(roundedLat, roundedLng);
   };
 
   const handleMarkerDragEnd = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     const roundedLat = parseFloat(latitude.toFixed(6));
     const roundedLng = parseFloat(longitude.toFixed(6));
-
-    setCoordinates({ latitude: roundedLat, longitude: roundedLng });
-    onChange(`${roundedLat}, ${roundedLng}`);
+    updateCoordinates(roundedLat, roundedLng);
   };
 
   return (
@@ -177,16 +226,32 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
           <View className="mr-2">
             <MapPin size={16} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
           </View>
-          <TextInput
-            value={coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : ''}
-            editable={false}
-            placeholder="Click on map or use 'Get My Location'"
-            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-            className={`flex-1 px-3 py-2 rounded text-sm ${isDarkMode
-              ? 'bg-gray-900 text-gray-300 border-gray-700'
-              : 'bg-white text-gray-900 border-gray-300'
-              } border`}
-          />
+          <View className="flex-1 flex-row space-x-2">
+            <TextInput
+              value={latInput}
+              editable={true}
+              onChangeText={handleLatChange}
+              placeholder="Latitude"
+              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+              keyboardType="numeric"
+              className={`flex-1 px-3 py-2 rounded text-sm ${isDarkMode
+                ? 'bg-gray-900 text-white border-gray-700'
+                : 'bg-white text-gray-900 border-gray-300'
+                } border`}
+            />
+            <TextInput
+              value={lngInput}
+              editable={true}
+              onChangeText={handleLngChange}
+              placeholder="Longitude"
+              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+              keyboardType="numeric"
+              className={`flex-1 px-3 py-2 rounded text-sm ${isDarkMode
+                ? 'bg-gray-900 text-white border-gray-700'
+                : 'bg-white text-gray-900 border-gray-300'
+                } border`}
+            />
+          </View>
         </View>
       </View>
 

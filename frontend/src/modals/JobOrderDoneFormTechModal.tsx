@@ -220,6 +220,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [lcpnapSearch, setLcpnapSearch] = useState('');
   const [itemSearch, setItemSearch] = useState('');
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
+  const [usedPorts, setUsedPorts] = useState<Set<string>>(new Set());
 
   const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -479,6 +480,53 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchPorts();
   }, [isOpen, jobOrderData, formData.lcpnap]);
 
+  // Fetch used ports for the selected LCPNAP
+  useEffect(() => {
+    const fetchUsedPorts = async () => {
+      if (!isOpen || !formData.lcpnap) {
+        setUsedPorts(new Set());
+        return;
+      }
+
+      try {
+        // Fetch job orders to check for used ports
+        // We use a large limit to capture as many as possible
+        const response = await apiClient.get('/job-orders', {
+          params: {
+            lcpnap: formData.lcpnap,
+            limit: 2000
+          }
+        });
+
+        if (response.data && response.data.success && Array.isArray(response.data.data)) {
+          const used = new Set<string>();
+          const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+
+          response.data.data.forEach((jo: any) => {
+            // Check LCPNAP match (in case backend didn't filter)
+            const joLcpnap = jo.lcpnap || jo.LCPNAP;
+
+            if (joLcpnap === formData.lcpnap) {
+              const joPort = jo.port || jo.PORT;
+              const joId = jo.id || jo.JobOrder_ID;
+
+              // If port is used by ANOTHER job order, mark it as used
+              if (joPort && String(joId) !== String(currentId)) {
+                used.add(joPort.toString());
+              }
+            }
+          });
+
+          setUsedPorts(used);
+        }
+      } catch (error) {
+        console.error('Failed to fetch used ports:', error);
+      }
+    };
+
+    fetchUsedPorts();
+  }, [isOpen, formData.lcpnap, jobOrderData]);
+
   useEffect(() => {
     const fetchVlans = async () => {
       if (isOpen) {
@@ -610,7 +658,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         if (value === null || value === undefined || value === '') return true;
         if (typeof value === 'string') {
           const trimmed = value.trim().toLowerCase();
-          return trimmed === 'null';
+          return trimmed === 'null' || trimmed === 'undefined';
         }
         return false;
       };
@@ -1411,6 +1459,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const fullName = `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim();
 
+  const selectedLcpnap = lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap);
+  const portTotal = selectedLcpnap?.port_total || 0;
+
 
 
   return (
@@ -1533,7 +1584,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
                 }}
               >
-                <Text className="text-white text-sm font-medium">{loading ? 'Saving...' : 'Save'}</Text>
+                <Text className="text-white text-sm font-medium">{loading ? 'Submitting...' : 'Submit'}</Text>
               </Pressable>
             </View>
           </View>
@@ -1928,21 +1979,41 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             LCP-NAP<Text className="text-red-500">*</Text>
                           </Text>
                           <View className="relative">
-                            {/* Display Field (The "Closed" state) */}
-                            <Pressable
-                              onPress={() => setIsLcpnapOpen(!isLcpnapOpen)}
-                              className={`flex-row items-center justify-between px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                                } ${errors.lcpnap ? 'border-red-500' : ''}`}
-                            >
-                              <Text className={`text-sm ${!formData.lcpnap ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : (isDarkMode ? 'text-white' : 'text-gray-900')}`}>
-                                {formData.lcpnap || 'Select LCP-NAP'}
-                              </Text>
-                              <ChevronDown
-                                size={18}
-                                color={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                style={{ transform: [{ rotate: isLcpnapOpen ? '180deg' : '0deg' }] }}
+                            {/* Search Input Field */}
+                            <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                              } ${errors.lcpnap ? 'border-red-500' : ''}`}>
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <TextInput
+                                placeholder="Search LCP-NAP..."
+                                value={isLcpnapOpen ? lcpnapSearch : (formData.lcpnap || lcpnapSearch)}
+                                onChangeText={(text) => {
+                                  setLcpnapSearch(text);
+                                  if (!isLcpnapOpen) setIsLcpnapOpen(true);
+                                }}
+                                onFocus={() => setIsLcpnapOpen(true)}
+                                placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
                               />
-                            </Pressable>
+                              {(isLcpnapOpen || formData.lcpnap) && (
+                                <Pressable
+                                  onPress={() => {
+                                    if (isLcpnapOpen) {
+                                      setIsLcpnapOpen(false);
+                                      setLcpnapSearch('');
+                                    } else {
+                                      handleInputChange('lcpnap', '');
+                                      setLcpnapSearch('');
+                                    }
+                                  }}
+                                  className="p-1"
+                                >
+                                  <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                </Pressable>
+                              )}
+                              {!isLcpnapOpen && !formData.lcpnap && (
+                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              )}
+                            </View>
 
                             {/* Dropdown Menu */}
                             {isLcpnapOpen && (
@@ -1951,58 +2022,39 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                   }`}
                                 style={{ elevation: 5 }}
                               >
-                                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                                  {/* Search Box at Top of Dropdown */}
-                                  <View className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
-                                    <View className={`flex-row items-center px-2 py-1.5 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                                      }`}>
-                                      <Search size={14} color="#9CA3AF" className="mr-2" />
-                                      <TextInput
-                                        autoFocus
-                                        placeholder="Search LCP-NAP..."
-                                        value={lcpnapSearch}
-                                        onChangeText={setLcpnapSearch}
-                                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                        className={`flex-1 p-1 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                          }`}
-                                      />
+                                {/* Options List */}
+                                <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                                  {lcpnaps
+                                    .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
+                                    .map((lcpnap) => (
+                                      <Pressable
+                                        key={lcpnap.id}
+                                        className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                          } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                        onPress={() => {
+                                          handleInputChange('lcpnap', lcpnap.lcpnap_name);
+                                          setLcpnapSearch('');
+                                          setIsLcpnapOpen(false);
+                                        }}
+                                      >
+                                        <View className="flex-row items-center justify-between">
+                                          <Text className={`text-sm ${formData.lcpnap === lcpnap.lcpnap_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                            {lcpnap.lcpnap_name}
+                                          </Text>
+                                          {formData.lcpnap === lcpnap.lcpnap_name && (
+                                            <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                          )}
+                                        </View>
+                                      </Pressable>
+                                    ))}
+                                  {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
+                                    <View className="px-4 py-8 items-center">
+                                      <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        No results found for "{lcpnapSearch}"
+                                      </Text>
                                     </View>
-                                  </View>
-
-                                  {/* Options List */}
-                                  <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
-                                    {lcpnaps
-                                      .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
-                                      .map((lcpnap) => (
-                                        <Pressable
-                                          key={lcpnap.id}
-                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                            } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
-                                          onPress={() => {
-                                            handleInputChange('lcpnap', lcpnap.lcpnap_name);
-                                            setLcpnapSearch('');
-                                            setIsLcpnapOpen(false);
-                                          }}
-                                        >
-                                          <View className="flex-row items-center justify-between">
-                                            <Text className={`text-sm ${formData.lcpnap === lcpnap.lcpnap_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
-                                              {lcpnap.lcpnap_name}
-                                            </Text>
-                                            {formData.lcpnap === lcpnap.lcpnap_name && (
-                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
-                                            )}
-                                          </View>
-                                        </Pressable>
-                                      ))}
-                                    {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
-                                      <View className="px-4 py-8 items-center">
-                                        <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                          No results found for "{lcpnapSearch}"
-                                        </Text>
-                                      </View>
-                                    )}
-                                  </ScrollView>
-                                </KeyboardAvoidingView>
+                                  )}
+                                </ScrollView>
                               </View>
                             )}
                           </View>
@@ -2030,39 +2082,30 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 style={{ color: isDarkMode ? '#fff' : '#000' }}
                                 dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                               >
-                                <Picker.Item label="Select PORT" value="" />
-                                <Picker.Item label="PORT 001" value="PORT 001" />
-                                <Picker.Item label="PORT 002" value="PORT 002" />
-                                <Picker.Item label="PORT 003" value="PORT 003" />
-                                <Picker.Item label="PORT 004" value="PORT 004" />
-                                <Picker.Item label="PORT 005" value="PORT 005" />
-                                <Picker.Item label="PORT 006" value="PORT 006" />
-                                <Picker.Item label="PORT 007" value="PORT 007" />
-                                <Picker.Item label="PORT 008" value="PORT 008" />
-                                <Picker.Item label="PORT 009" value="PORT 009" />
-                                <Picker.Item label="PORT 010" value="PORT 010" />
-                                <Picker.Item label="PORT 011" value="PORT 011" />
-                                <Picker.Item label="PORT 012" value="PORT 012" />
-                                <Picker.Item label="PORT 013" value="PORT 013" />
-                                <Picker.Item label="PORT 014" value="PORT 014" />
-                                <Picker.Item label="PORT 015" value="PORT 015" />
-                                <Picker.Item label="PORT 016" value="PORT 016" />
-                                <Picker.Item label="PORT 017" value="PORT 017" />
-                                <Picker.Item label="PORT 018" value="PORT 018" />
-                                <Picker.Item label="PORT 019" value="PORT 019" />
-                                <Picker.Item label="PORT 020" value="PORT 020" />
-                                <Picker.Item label="PORT 021" value="PORT 021" />
-                                <Picker.Item label="PORT 022" value="PORT 022" />
-                                <Picker.Item label="PORT 023" value="PORT 023" />
-                                <Picker.Item label="PORT 024" value="PORT 024" />
-                                <Picker.Item label="PORT 025" value="PORT 025" />
-                                <Picker.Item label="PORT 026" value="PORT 026" />
-                                <Picker.Item label="PORT 027" value="PORT 027" />
-                                <Picker.Item label="PORT 028" value="PORT 028" />
-                                <Picker.Item label="PORT 029" value="PORT 029" />
-                                <Picker.Item label="PORT 030" value="PORT 030" />
-                                <Picker.Item label="PORT 031" value="PORT 031" />
-                                <Picker.Item label="PORT 032" value="PORT 032" />
+                                <Picker.Item label="Select PORT" value="" enabled={false} />
+                                {(() => {
+                                  if (!formData.port) return null;
+                                  const p = String(formData.port);
+                                  const low = p.toLowerCase().trim();
+                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+
+                                  const isGenerated = Array.from({ length: portTotal }).some((_, i) => `p${(i + 1).toString().padStart(2, '0')}` === p);
+                                  if (isGenerated) return null;
+
+                                  return <Picker.Item label={p} value={p} />;
+                                })()}
+                                {Array.from({ length: portTotal }, (_, i) => {
+                                  const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+
+                                  // Hide port if it is used
+                                  if (usedPorts.has(portVal)) {
+                                    return null;
+                                  }
+
+                                  return (
+                                    <Picker.Item key={portVal} label={portVal} value={portVal} />
+                                  );
+                                })}
                               </Picker>
                             </View>
                           </View>
@@ -2126,10 +2169,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Select Visit By" value="" />
-                            {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                              <Picker.Item key="custom" label={formData.visit_by} value={formData.visit_by} />
-                            )}
+                            <Picker.Item key="default" label="Select Visit By" value="" enabled={false} />
+                            {(() => {
+                              if (!formData.visit_by) return null;
+                              const val = String(formData.visit_by);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item key="custom" label={val} value={val} />;
+                            })()}
                             {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
                               <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                             ))}
@@ -2160,11 +2208,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item label="Select Visit With" value="" />
+                            <Picker.Item label="Select Visit With" value="" enabled={false} />
                             <Picker.Item label="None" value="None" />
-                            {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
-                              <Picker.Item label={formData.visit_with} value={formData.visit_with} />
-                            )}
+                            {(() => {
+                              if (!formData.visit_with) return null;
+                              const val = String(formData.visit_with);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (val === 'None' || val === '') return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item label={val} value={val} />;
+                            })()}
                             {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
@@ -2195,11 +2249,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item label="Visit With(Other)" value="" />
+                            <Picker.Item label="Visit With(Other)" value="" enabled={false} />
                             <Picker.Item label="None" value="None" />
-                            {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
-                              <Picker.Item label={formData.visit_with_other} value={formData.visit_with_other} />
-                            )}
+                            {(() => {
+                              if (!formData.visit_with_other) return null;
+                              const val = String(formData.visit_with_other);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (val === 'None' || val === '') return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item label={val} value={val} />;
+                            })()}
                             {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
@@ -2465,10 +2525,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item label="Select Visit By" value="" />
-                            {formData.visit_by && !technicians.some(t => t.name === formData.visit_by) && (
-                              <Picker.Item label={formData.visit_by} value={formData.visit_by} />
-                            )}
+                            <Picker.Item label="Select Visit By" value="" enabled={false} />
+                            {(() => {
+                              if (!formData.visit_by) return null;
+                              const val = String(formData.visit_by);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item label={val} value={val} />;
+                            })()}
                             {technicians.map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
@@ -2499,11 +2564,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Select Visit With" value="" />
+                            <Picker.Item key="default" label="Select Visit With" value="" enabled={false} />
                             <Picker.Item key="none" label="None" value="None" />
-                            {formData.visit_with && formData.visit_with !== 'None' && formData.visit_with !== '' && !technicians.some(t => t.name === formData.visit_with) && (
-                              <Picker.Item key="custom" label={formData.visit_with} value={formData.visit_with} />
-                            )}
+                            {(() => {
+                              if (!formData.visit_with) return null;
+                              const val = String(formData.visit_with);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (val === 'None' || val === '') return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item key="custom" label={val} value={val} />;
+                            })()}
                             {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
                               <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                             ))}
@@ -2534,11 +2605,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Visit With(Other)" value="" />
+                            <Picker.Item key="default" label="Visit With(Other)" value="" enabled={false} />
                             <Picker.Item key="none" label="None" value="None" />
-                            {formData.visit_with_other && formData.visit_with_other !== 'None' && formData.visit_with_other !== '' && !technicians.some(t => t.name === formData.visit_with_other) && (
-                              <Picker.Item key="custom" label={formData.visit_with_other} value={formData.visit_with_other} />
-                            )}
+                            {(() => {
+                              if (!formData.visit_with_other) return null;
+                              const val = String(formData.visit_with_other);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+                              if (val === 'None' || val === '') return null;
+                              if (technicians.some(t => t.name === val)) return null;
+                              return <Picker.Item key="custom" label={val} value={val} />;
+                            })()}
                             {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
                               <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                             ))}

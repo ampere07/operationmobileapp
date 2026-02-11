@@ -201,6 +201,9 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
   const [ports, setPorts] = useState<Port[]>([]);
   const [vlans, setVlans] = useState<VLAN[]>([]);
 
+  const selectedLcpnap = lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap);
+  const portTotal = selectedLcpnap ? Number(selectedLcpnap.port_total || 0) : 0;
+
   const [usageTypes, setUsageTypes] = useState<UsageType[]>([]);
   const [lcpnapSearch, setLcpnapSearch] = useState('');
   const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
@@ -2012,38 +2015,18 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
                         style={{ color: isDarkMode ? '#fff' : '#000' }}
                       >
                         <Picker.Item label="Select PORT" value="" />
-                        <Picker.Item label="PORT 001" value="PORT 001" />
-                        <Picker.Item label="PORT 002" value="PORT 002" />
-                        <Picker.Item label="PORT 003" value="PORT 003" />
-                        <Picker.Item label="PORT 004" value="PORT 004" />
-                        <Picker.Item label="PORT 005" value="PORT 005" />
-                        <Picker.Item label="PORT 006" value="PORT 006" />
-                        <Picker.Item label="PORT 007" value="PORT 007" />
-                        <Picker.Item label="PORT 008" value="PORT 008" />
-                        <Picker.Item label="PORT 009" value="PORT 009" />
-                        <Picker.Item label="PORT 010" value="PORT 010" />
-                        <Picker.Item label="PORT 011" value="PORT 011" />
-                        <Picker.Item label="PORT 012" value="PORT 012" />
-                        <Picker.Item label="PORT 013" value="PORT 013" />
-                        <Picker.Item label="PORT 014" value="PORT 014" />
-                        <Picker.Item label="PORT 015" value="PORT 015" />
-                        <Picker.Item label="PORT 016" value="PORT 016" />
-                        <Picker.Item label="PORT 017" value="PORT 017" />
-                        <Picker.Item label="PORT 018" value="PORT 018" />
-                        <Picker.Item label="PORT 019" value="PORT 019" />
-                        <Picker.Item label="PORT 020" value="PORT 020" />
-                        <Picker.Item label="PORT 021" value="PORT 021" />
-                        <Picker.Item label="PORT 022" value="PORT 022" />
-                        <Picker.Item label="PORT 023" value="PORT 023" />
-                        <Picker.Item label="PORT 024" value="PORT 024" />
-                        <Picker.Item label="PORT 025" value="PORT 025" />
-                        <Picker.Item label="PORT 026" value="PORT 026" />
-                        <Picker.Item label="PORT 027" value="PORT 027" />
-                        <Picker.Item label="PORT 028" value="PORT 028" />
-                        <Picker.Item label="PORT 029" value="PORT 029" />
-                        <Picker.Item label="PORT 030" value="PORT 030" />
-                        <Picker.Item label="PORT 032" value="PORT 032" />
-                        <Picker.Item label="PORT 032" value="PORT 032" />
+                        {formData.port &&
+                          formData.port.trim().toLowerCase() !== 'undefined' &&
+                          formData.port.trim().toLowerCase() !== 'null' &&
+                          !Array.from({ length: portTotal }).some((_, i) => `p${(i + 1).toString().padStart(2, '0')}` === formData.port) && (
+                            <Picker.Item label={formData.port} value={formData.port} />
+                          )}
+                        {Array.from({ length: portTotal }, (_, i) => {
+                          const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+                          return (
+                            <Picker.Item key={portVal} label={portVal} value={portVal} />
+                          );
+                        })}
                       </Picker>
                     </View>
                     {errors.port && (

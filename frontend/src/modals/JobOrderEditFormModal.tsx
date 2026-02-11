@@ -229,6 +229,9 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     title: '',
     message: ''
   });
+
+  const selectedLcpnap = lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap);
+  const portTotal = selectedLcpnap ? Number(selectedLcpnap.port_total || 0) : 0;
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   const [activeImageSize, setActiveImageSize] = useState<ImageSizeSetting | null>(null);
@@ -1817,38 +1820,20 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
                       } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
                       }`}>
                       <option value="">Select PORT</option>
-                      <option value="PORT 001">PORT 001</option>
-                      <option value="PORT 002">PORT 002</option>
-                      <option value="PORT 003">PORT 003</option>
-                      <option value="PORT 004">PORT 004</option>
-                      <option value="PORT 005">PORT 005</option>
-                      <option value="PORT 006">PORT 006</option>
-                      <option value="PORT 007">PORT 007</option>
-                      <option value="PORT 008">PORT 008</option>
-                      <option value="PORT 009">PORT 009</option>
-                      <option value="PORT 010">PORT 010</option>
-                      <option value="PORT 011">PORT 011</option>
-                      <option value="PORT 012">PORT 012</option>
-                      <option value="PORT 013">PORT 013</option>
-                      <option value="PORT 014">PORT 014</option>
-                      <option value="PORT 015">PORT 015</option>
-                      <option value="PORT 016">PORT 016</option>
-                      <option value="PORT 017">PORT 017</option>
-                      <option value="PORT 018">PORT 018</option>
-                      <option value="PORT 019">PORT 019</option>
-                      <option value="PORT 020">PORT 020</option>
-                      <option value="PORT 021">PORT 021</option>
-                      <option value="PORT 022">PORT 022</option>
-                      <option value="PORT 023">PORT 023</option>
-                      <option value="PORT 024">PORT 024</option>
-                      <option value="PORT 025">PORT 025</option>
-                      <option value="PORT 026">PORT 026</option>
-                      <option value="PORT 027">PORT 027</option>
-                      <option value="PORT 028">PORT 028</option>
-                      <option value="PORT 029">PORT 029</option>
-                      <option value="PORT 030">PORT 030</option>
-                      <option value="PORT 032">PORT 032</option>
-                      <option value="PORT 032">PORT 032</option>
+                      {formData.port &&
+                        formData.port.trim().toLowerCase() !== 'undefined' &&
+                        formData.port.trim().toLowerCase() !== 'null' &&
+                        !Array.from({ length: portTotal }).some((_, i) => `p${(i + 1).toString().padStart(2, '0')}` === formData.port) && (
+                          <option value={formData.port}>{formData.port}</option>
+                        )}
+                      {Array.from({ length: portTotal }, (_, i) => {
+                        const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+                        return (
+                          <option key={portVal} value={portVal}>
+                            {portVal}
+                          </option>
+                        );
+                      })}
                     </select>
                     <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`} size={20} />
