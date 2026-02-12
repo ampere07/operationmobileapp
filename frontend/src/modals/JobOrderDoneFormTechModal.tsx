@@ -52,7 +52,6 @@ interface JobOrderDoneFormData {
   region: string;
   city: string;
   barangay: string;
-  location: string;
   lcpnap: string;
   port: string;
   vlan: string;
@@ -144,7 +143,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     region: '',
     city: '',
     barangay: '',
-    location: '',
     lcpnap: '',
     port: '',
     vlan: '',
@@ -707,7 +705,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 region: getValue(appData.region || jobOrderData.Region || jobOrderData.region, 'region'),
                 city: getValue(appData.city || jobOrderData.City || jobOrderData.city, 'city'),
                 barangay: getValue(appData.barangay || jobOrderData.Barangay || jobOrderData.barangay, 'barangay'),
-                location: getValue(appData.location || jobOrderData.Location || jobOrderData.location, 'location'),
                 onsiteStatus: loadedOnsiteStatus,
                 onsiteRemarks: getValue(jobOrderData.Onsite_Remarks || jobOrderData.onsite_remarks, 'onsiteRemarks'),
                 itemName1: getValue(jobOrderData.Item_Name_1 || jobOrderData.item_name_1, 'itemName1'),
@@ -766,7 +763,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           region: getValue(jobOrderData.Region || jobOrderData.region, 'region'),
           city: getValue(jobOrderData.City || jobOrderData.city, 'city'),
           barangay: getValue(jobOrderData.Barangay || jobOrderData.barangay, 'barangay'),
-          location: getValue(jobOrderData.Location || jobOrderData.location, 'location'),
           onsiteStatus: loadedOnsiteStatus,
           onsiteRemarks: getValue(jobOrderData.Onsite_Remarks || jobOrderData.onsite_remarks, 'onsiteRemarks'),
           itemName1: getValue(jobOrderData.Item_Name_1 || jobOrderData.item_name_1, 'itemName1'),
@@ -820,14 +816,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (field === 'region') {
         newData.city = '';
         newData.barangay = '';
-        newData.location = '';
       }
       if (field === 'city') {
         newData.barangay = '';
-        newData.location = '';
       }
       if (field === 'barangay') {
-        newData.location = '';
       }
       return newData;
     });
@@ -897,7 +890,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     if (!formData.region.trim()) newErrors.region = 'Region is required';
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.barangay.trim()) newErrors.barangay = 'Barangay is required';
-    if (!formData.location.trim()) newErrors.location = 'Location is required';
 
     if (formData.onsiteStatus === 'Done') {
       if (!formData.dateInstalled.trim()) newErrors.dateInstalled = 'Date Installed is required';
@@ -1349,7 +1341,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             region: updatedFormData.region,
             city: updatedFormData.city,
             barangay: updatedFormData.barangay,
-            location: updatedFormData.location,
             desired_plan: updatedFormData.choosePlan,
             referred_by: referredBy,
             promo: promo
@@ -1359,7 +1350,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
           saveMessages.push({
             type: 'success',
-            text: `Application updated: Plan: ${updatedFormData.choosePlan}, Location: ${updatedFormData.region}, ${updatedFormData.city}, ${updatedFormData.barangay}, ${updatedFormData.location}`
+            text: `Application updated: Plan: ${updatedFormData.choosePlan}, Location: ${updatedFormData.region}, ${updatedFormData.city}, ${updatedFormData.barangay}`
           });
         } catch (appError: any) {
           const errorMsg = appError.response?.data?.message || appError.message || 'Unknown error';
@@ -1589,10 +1580,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             </View>
           </View>
 
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ flex: 1 }}
-          >
+          <View style={{ flex: 1 }}>
             <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }}>
               <View className="space-y-4">
                 <View className="mb-4">
@@ -1713,19 +1701,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   />
                 </View>
 
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Location</Text>
-                  <TextInput
-                    value={formData.location}
-                    editable={false}
-                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
-                  />
-                </View>
 
                 {formData.onsiteStatus === 'Done' && (
                   <>
@@ -2360,98 +2335,92 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
                         }`}>Items<Text className="text-red-500">*</Text></Text>
                       {orderItems.map((item, index) => (
-                        <View key={index} className="mb-4">
+                        <View
+                          key={index}
+                          className="mb-4"
+                          style={{ zIndex: openItemIndex === index ? 1000 : 1 }}
+                        >
                           <View className="flex-row items-start gap-2">
                             <View className="flex-1">
                               <View className="relative">
-                                <Pressable
-                                  onPress={() => {
-                                    setOpenItemIndex(openItemIndex === index ? null : index);
-                                    setItemSearch('');
-                                  }}
-                                  className={`flex-row items-center justify-between px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                                    }`}
-                                >
-                                  <Text className={`text-sm ${!item.itemId ? (isDarkMode ? 'text-gray-500' : 'text-gray-400') : (isDarkMode ? 'text-white' : 'text-gray-900')}`}>
-                                    {item.itemId || `Select Item ${index + 1}`}
-                                  </Text>
-                                  <ChevronDown
-                                    size={18}
-                                    color={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                    style={{ transform: [{ rotate: openItemIndex === index ? '180deg' : '0deg' }] }}
+                                {/* Search Input Field for Item */}
+                                <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                                  } ${errors[`item_${index}`] ? 'border-red-500' : ''}`}>
+                                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  <TextInput
+                                    placeholder={`Select Item ${index + 1}`}
+                                    value={openItemIndex === index ? itemSearch : (item.itemId || itemSearch)}
+                                    onChangeText={(text) => {
+                                      setItemSearch(text);
+                                      if (openItemIndex !== index) setOpenItemIndex(index);
+                                    }}
+                                    onFocus={() => {
+                                      setOpenItemIndex(index);
+                                      setItemSearch('');
+                                    }}
+                                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                                    className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
                                   />
-                                </Pressable>
+                                  {(openItemIndex === index || item.itemId) && (
+                                    <Pressable
+                                      onPress={() => {
+                                        if (openItemIndex === index) {
+                                          setOpenItemIndex(null);
+                                          setItemSearch('');
+                                        } else {
+                                          handleItemChange(index, 'itemId', '');
+                                          setItemSearch('');
+                                        }
+                                      }}
+                                      className="p-1"
+                                    >
+                                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                    </Pressable>
+                                  )}
+                                  {openItemIndex !== index && !item.itemId && (
+                                    <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  )}
+                                </View>
 
+                                {/* Dropdown Menu for Item */}
                                 {openItemIndex === index && (
                                   <View
                                     className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                                       }`}
                                     style={{ elevation: 10 }}
                                   >
-                                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-                                      <View className={`p-2 border-b ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
-                                        <View className={`flex-row items-center px-2 py-1.5 rounded-lg border ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                                          }`}>
-                                          <Search size={14} color="#9CA3AF" className="mr-2" />
-                                          <TextInput
-                                            autoFocus
-                                            placeholder="Search item..."
-                                            value={itemSearch}
-                                            onChangeText={setItemSearch}
-                                            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                            className={`flex-1 p-1 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                              }`}
-                                          />
-                                        </View>
-                                      </View>
-
-                                      <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
-                                        <Pressable
-                                          key="default-item"
-                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                            }`}
-                                          onPress={() => {
-                                            handleItemChange(index, 'itemId', '');
-                                            setOpenItemIndex(null);
-                                            setItemSearch('');
-                                          }}
-                                        >
-                                          <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>
-                                            Select Item {index + 1}
+                                    <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                                      {inventoryItems
+                                        .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                        .map((invItem) => (
+                                          <Pressable
+                                            key={invItem.id}
+                                            className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                              } ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                            onPress={() => {
+                                              handleItemChange(index, 'itemId', invItem.item_name);
+                                              setOpenItemIndex(null);
+                                              setItemSearch('');
+                                            }}
+                                          >
+                                            <View className="flex-row items-center justify-between">
+                                              <Text className={`text-sm ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                                {invItem.item_name}
+                                              </Text>
+                                              {item.itemId === invItem.item_name && (
+                                                <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                              )}
+                                            </View>
+                                          </Pressable>
+                                        ))}
+                                      {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                                        <View className="px-4 py-8 items-center">
+                                          <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                            No results found for "{itemSearch}"
                                           </Text>
-                                        </Pressable>
-                                        {inventoryItems
-                                          .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
-                                          .map((invItem) => (
-                                            <Pressable
-                                              key={invItem.id}
-                                              className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                                } ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
-                                              onPress={() => {
-                                                handleItemChange(index, 'itemId', invItem.item_name);
-                                                setOpenItemIndex(null);
-                                                setItemSearch('');
-                                              }}
-                                            >
-                                              <View className="flex-row items-center justify-between">
-                                                <Text className={`text-sm ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
-                                                  {invItem.item_name}
-                                                </Text>
-                                                {item.itemId === invItem.item_name && (
-                                                  <View className="w-2 h-2 rounded-full bg-orange-500" />
-                                                )}
-                                              </View>
-                                            </Pressable>
-                                          ))}
-                                        {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
-                                          <View key="no-results" className="px-4 py-8 items-center">
-                                            <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                              No results found for "{itemSearch}"
-                                            </Text>
-                                          </View>
-                                        )}
-                                      </ScrollView>
-                                    </KeyboardAvoidingView>
+                                        </View>
+                                      )}
+                                    </ScrollView>
                                   </View>
                                 )}
                               </View>
@@ -2696,7 +2665,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 )}
               </View>
             </ScrollView>
-          </KeyboardAvoidingView>
+          </View>
         </View >
       </View >
     </Modal >

@@ -10,12 +10,6 @@ import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrder } from '../types/jobOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
-interface LocationItem {
-  id: string;
-  name: string;
-  count: number;
-}
-
 type DisplayMode = 'card' | 'table';
 
 const allColumns = [
@@ -72,7 +66,6 @@ const allColumns = [
   { key: 'region', label: 'Region', width: 'min-w-28' },
   { key: 'city', label: 'City', width: 'min-w-28' },
   { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-  { key: 'location', label: 'Location', width: 'min-w-32' },
   { key: 'choosePlan', label: 'Choose Plan', width: 'min-w-36' },
   { key: 'referredBy', label: 'Referred By', width: 'min-w-32' },
   { key: 'startTimestamp', label: 'Start Timestamp', width: 'min-w-40' },
@@ -82,11 +75,9 @@ const allColumns = [
 
 const JobOrderPage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-  const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrder | null>(null);
   const { jobOrders, isLoading, error, refreshJobOrders, silentRefresh } = useJobOrderContext();
-  const [cities, setCities] = useState<City[]>([]);
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [userRole, setUserRole] = useState<string>('');
@@ -105,7 +96,7 @@ const JobOrderPage: React.FC = () => {
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
   const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [mobileView, setMobileView] = useState<'locations' | 'orders' | 'details'>('locations');
+  const [mobileView, setMobileView] = useState<'orders' | 'details'>('orders');
   // const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const dropdownRef = useRef<View>(null);
   const filterDropdownRef = useRef<View>(null);
@@ -148,7 +139,7 @@ const JobOrderPage: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedLocation, searchQuery, sortColumn, sortDirection]);
+  }, [searchQuery, sortColumn, sortDirection]);
 
   const formatDate = (dateStr?: string | null): string => {
     if (!dateStr) return '-';
@@ -219,9 +210,6 @@ const JobOrderPage: React.FC = () => {
   useEffect(() => {
     const fetchLookupData = async () => {
       try {
-        const citiesData = await getCities();
-        setCities(citiesData);
-
         const billingStatusesData = await getBillingStatuses();
         setBillingStatuses(billingStatusesData);
       } catch (err) {
@@ -253,7 +241,6 @@ const JobOrderPage: React.FC = () => {
   const getClientFullAddress = (jobOrder: JobOrder): string => {
     const addressParts = [
       jobOrder.Address || jobOrder.address,
-      jobOrder.Location || jobOrder.location,
       jobOrder.Barangay || jobOrder.barangay,
       jobOrder.City || jobOrder.city,
       jobOrder.Region || jobOrder.region
@@ -262,47 +249,19 @@ const JobOrderPage: React.FC = () => {
     return addressParts.length > 0 ? addressParts.join(', ') : '-';
   };
 
-  const locationItems: LocationItem[] = [
-    {
-      id: 'all',
-      name: 'All',
-      count: jobOrders.length
-    }
-  ];
-
-  cities.forEach(city => {
-    const cityCount = jobOrders.filter(job => {
-      const jobCity = ((job.City || job.city) || '').toLowerCase();
-      const cityName = city.name.toLowerCase();
-      return jobCity.includes(cityName) || cityName.includes(jobCity);
-    }).length;
-
-    locationItems.push({
-      id: city.name.toLowerCase(),
-      name: city.name,
-      count: cityCount
-    });
-  });
 
 
 
-  let filteredJobOrders = jobOrders.filter(jobOrder => {
-    const jobLocation = ((jobOrder.City || jobOrder.city) || '').toLowerCase();
 
-    const matchesLocation = selectedLocation === 'all' ||
-      jobLocation.includes(selectedLocation) ||
-      selectedLocation.includes(jobLocation);
-
+  const filteredJobOrders = jobOrders.filter(jobOrder => {
     const fullName = getClientFullName(jobOrder).toLowerCase();
     const matchesSearch = searchQuery === '' ||
       fullName.includes(searchQuery.toLowerCase()) ||
       ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesLocation && matchesSearch;
+    return matchesSearch;
   });
-
-
 
   const presortedJobOrders = [...filteredJobOrders].sort((a, b) => {
     const idA = parseInt(String(a.id)) || 0;
@@ -436,18 +395,10 @@ const JobOrderPage: React.FC = () => {
     );
   };
 
-  const handleLocationSelect = (locationId: string) => {
-    setSelectedLocation(locationId);
-    setMobileMenuOpen(false);
-    setMobileView('orders');
-  };
-
   const handleMobileBack = () => {
     if (mobileView === 'details') {
       setSelectedJobOrder(null);
       setMobileView('orders');
-    } else if (mobileView === 'orders') {
-      setMobileView('locations');
     }
   };
 
@@ -710,8 +661,6 @@ const JobOrderPage: React.FC = () => {
         return getValue(jobOrder.City || jobOrder.city);
       case 'barangay':
         return getValue(jobOrder.Barangay || jobOrder.barangay);
-      case 'location':
-        return getValue(jobOrder.Location || jobOrder.location);
       case 'choosePlan':
         return getValue(jobOrder.Choose_Plan || jobOrder.Desired_Plan || jobOrder.choose_plan || jobOrder.desired_plan);
       case 'referredBy':
@@ -734,86 +683,7 @@ const JobOrderPage: React.FC = () => {
       overflow: 'hidden',
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
-      {mobileView === 'locations' && (
-        <View style={{
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
-          display: isTablet ? 'none' : 'flex'
-        }}>
-          <View style={{
-            padding: 16,
-            paddingTop: !isTablet ? 60 : 16,
-            borderBottomWidth: 1,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: '600',
-              color: isDarkMode ? '#ffffff' : '#111827'
-            }}>
-              Job Orders
-            </Text>
-          </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={colorPalette?.primary || '#ea580c'}
-                colors={[colorPalette?.primary || '#ea580c']}
-              />
-            }
-          >
-            {locationItems.map((location) => (
-              <Pressable
-                key={location.id}
-                onPress={() => handleLocationSelect(location.id)}
-                style={{
-                  width: '100%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 16,
-                  paddingVertical: 16,
-                  borderBottomWidth: 1,
-                  backgroundColor: selectedLocation === location.id
-                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                    : 'transparent',
-                  borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 12 }} />
-                  <Text style={{
-                    textTransform: 'capitalize',
-                    fontSize: 16,
-                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
-                  }}>{location.name}</Text>
-                </View>
-                {location.count > 0 && (
-                  <View style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 9999,
-                    backgroundColor: selectedLocation === location.id
-                      ? (colorPalette?.primary || '#ea580c')
-                      : (isDarkMode ? '#374151' : '#e5e7eb')
-                  }}>
-                    <Text style={{
-                      fontSize: 14,
-                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
-                    }}>{location.count}</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+
 
       {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
         <View style={{
@@ -864,50 +734,9 @@ const JobOrderPage: React.FC = () => {
                 <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
               </Pressable>
             </View>
-            <ScrollView style={{ flex: 1 }}>
-              {locationItems.map((location) => (
-                <Pressable
-                  key={location.id}
-                  onPress={() => handleLocationSelect(location.id)}
-                  style={{
-                    width: '100%',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    backgroundColor: selectedLocation === location.id
-                      ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                      : 'transparent'
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
-                    <Text style={{
-                      textTransform: 'capitalize',
-                      fontSize: 14,
-                      color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151'),
-                      fontWeight: selectedLocation === location.id ? '500' : 'normal'
-                    }}>{location.name}</Text>
-                  </View>
-                  {location.count > 0 && (
-                    <View style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 9999,
-                      backgroundColor: selectedLocation === location.id
-                        ? (colorPalette?.primary || '#ea580c')
-                        : (isDarkMode ? '#374151' : '#e5e7eb')
-                    }}>
-                      <Text style={{
-                        fontSize: 12,
-                        color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
-                      }}>{location.count}</Text>
-                    </View>
-                  )}
-                </Pressable>
-              ))}
-            </ScrollView>
+            <View style={{ padding: 16 }}>
+              <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
+            </View>
           </View>
         </View>
       )}
@@ -938,62 +767,9 @@ const JobOrderPage: React.FC = () => {
               </Text>
             </View>
           </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={colorPalette?.primary || '#ea580c'}
-                colors={[colorPalette?.primary || '#ea580c']}
-              />
-            }
-          >
-            {locationItems.map((location) => (
-              <Pressable
-                key={location.id}
-                onPress={() => {
-                  setSelectedLocation(location.id);
-                }}
-                style={{
-                  width: '100%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  backgroundColor: selectedLocation === location.id
-                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                    : 'transparent'
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
-                  <Text style={{
-                    textTransform: 'capitalize',
-                    fontSize: 14,
-                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151'),
-                    fontWeight: selectedLocation === location.id ? '500' : 'normal'
-                  }}>{location.name}</Text>
-                </View>
-                {location.count > 0 && (
-                  <View style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 9999,
-                    backgroundColor: selectedLocation === location.id
-                      ? (colorPalette?.primary || '#ea580c')
-                      : (isDarkMode ? '#374151' : '#e5e7eb')
-                  }}>
-                    <Text style={{
-                      fontSize: 12,
-                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
-                    }}>{location.count}</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={{ padding: 16 }}>
+            <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
+          </View>
         </View>
       )}
 
@@ -1002,7 +778,7 @@ const JobOrderPage: React.FC = () => {
         flex: 1,
         flexDirection: 'column',
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        display: (mobileView === 'locations' || mobileView === 'details') && !isTablet ? 'none' : 'flex'
+        display: mobileView === 'details' && !isTablet ? 'none' : 'flex'
       }}>
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{

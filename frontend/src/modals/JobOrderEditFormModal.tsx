@@ -56,7 +56,6 @@ interface JobOrderEditFormData {
   barangay: string;
   city: string;
   region: string;
-  location: string;
   addressCoordinates: string;
   choosePlan: string;
   status: string;
@@ -164,7 +163,6 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     barangay: '',
     city: '',
     region: '',
-    location: '',
     addressCoordinates: '',
     choosePlan: '',
     status: 'Confirmed',
@@ -831,17 +829,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
       if (field === 'lcpnap') {
         newData.port = '';
       }
-      if (field === 'region') {
-        newData.city = '';
-        newData.barangay = '';
-        newData.location = '';
-      }
-      if (field === 'city') {
-        newData.barangay = '';
-        newData.location = '';
-      }
       if (field === 'barangay') {
-        newData.location = '';
       }
       return newData;
     });
@@ -1018,7 +1006,6 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     if (!formData.barangay.trim()) newErrors.barangay = 'Barangay is required';
     if (!formData.city.trim()) newErrors.city = 'City is required';
     if (!formData.region.trim()) newErrors.region = 'Region is required';
-    if (!formData.location.trim()) newErrors.location = 'Location is required';
     if (!formData.choosePlan.trim()) newErrors.choosePlan = 'Choose Plan is required';
     if (!formData.status.trim()) newErrors.status = 'Status is required';
 
@@ -1577,33 +1564,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
               {errors.barangay && <p className="text-red-500 text-xs mt-1">{errors.barangay}</p>}
             </div>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Location<span className="text-red-500">*</span></label>
-              <div className="relative">
-                <select
-                  value={formData.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!formData.barangay}
-                  className={`w-full px-3 py-2 border rounded appearance-none disabled:opacity-50 disabled:cursor-not-allowed ${errors.location ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                    } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                    }`}
-                >
-                  <option value="">{formData.barangay ? 'Select Location' : 'Select Barangay First'}</option>
-                  {formData.location && !filteredLocations.some(loc => loc.location_name === formData.location) && (
-                    <option value={formData.location}>{formData.location}</option>
-                  )}
-                  {filteredLocations.map((location) => (
-                    <option key={location.id} value={location.location_name}>
-                      {location.location_name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`} size={20} />
-              </div>
-              {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
-            </div>
+
 
             {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (
               <div>

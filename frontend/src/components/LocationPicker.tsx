@@ -40,6 +40,8 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   const [latInput, setLatInput] = useState('');
   const [lngInput, setLngInput] = useState('');
 
+  const mapRef = React.useRef<MapView>(null);
+
   useEffect(() => {
     if (value !== undefined) {
       const parts = value.split(',');
@@ -54,11 +56,13 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         if (!isNaN(lat) && !isNaN(lng)) {
           const newCoords = { latitude: lat, longitude: lng };
           setCoordinates(newCoords);
-          setRegion({
+          const newRegion = {
             ...newCoords,
             latitudeDelta: 0.01,
             longitudeDelta: 0.01,
-          });
+          };
+          setRegion(newRegion);
+          mapRef.current?.animateToRegion(newRegion, 1000);
         }
       }
     }
@@ -67,11 +71,13 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   const updateCoordinates = (lat: number, lng: number) => {
     const newCoords = { latitude: lat, longitude: lng };
     setCoordinates(newCoords);
-    setRegion({
+    const newRegion = {
       ...newCoords,
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
-    });
+    };
+    setRegion(newRegion);
+    mapRef.current?.animateToRegion(newRegion, 1000);
     onChange(`${lat}, ${lng}`);
     setLatInput(lat.toString());
     setLngInput(lng.toString());
@@ -85,11 +91,13 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       // Update map only if both are valid
       const newCoords = { latitude: lat, longitude: lng };
       setCoordinates(newCoords);
-      setRegion({
+      const newRegion = {
         ...newCoords,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
-      });
+      };
+      setRegion(newRegion);
+      mapRef.current?.animateToRegion(newRegion, 1000);
       onChange(`${lat}, ${lng}`);
     } else {
       // Just update parent text
@@ -105,11 +113,13 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       // Update map only if both are valid
       const newCoords = { latitude: lat, longitude: lng };
       setCoordinates(newCoords);
-      setRegion({
+      const newRegion = {
         ...newCoords,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
-      });
+      };
+      setRegion(newRegion);
+      mapRef.current?.animateToRegion(newRegion, 1000);
       onChange(`${lat}, ${lng}`);
     } else {
       // Just update parent text
@@ -187,6 +197,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         } ${error ? 'border-red-500' : ''}`}>
         <View className="relative h-64 w-full bg-gray-200">
           <MapView
+            ref={mapRef}
             style={{ flex: 1 }}
             region={region}
             onRegionChangeComplete={setRegion}
@@ -201,7 +212,6 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
               />
             )}
           </MapView>
-
           <Pressable
             onPress={handleGetCurrentLocation}
             disabled={isGettingLocation}

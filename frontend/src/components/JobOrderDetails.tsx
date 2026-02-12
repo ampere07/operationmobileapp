@@ -13,6 +13,7 @@ import ConfirmationModal from '../modals/MoveToJoModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
+import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 
 const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false }) => {
   const { width } = useWindowDimensions();
@@ -29,6 +30,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [applicationData, setApplicationData] = useState<Application | null>(null);
+  const [jobOrderItems, setJobOrderItems] = useState<JobOrderItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
 
@@ -57,6 +59,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'username',
     'ipAddress',
     'usageType',
+    'jobOrderItems',
     'dateInstalled',
     'visitBy',
     'visitWith',
@@ -118,6 +121,23 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     };
     fetchBillingStatuses();
   }, []);
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      const id = jobOrder.id || jobOrder.JobOrder_ID;
+      if (id) {
+        try {
+          const response = await getJobOrderItems(Number(id));
+          if (response.success && Array.isArray(response.data)) {
+            setJobOrderItems(response.data);
+          }
+        } catch (error) {
+          console.error('Error fetching job order items:', error);
+        }
+      }
+    };
+    fetchItems();
+  }, [jobOrder]);
 
   useEffect(() => {
     const fetchApplicationData = async () => {
@@ -207,7 +227,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const getClientFullAddress = (): string => {
     const joAddressParts = [
       jobOrder.Installation_Address || jobOrder.installation_address || jobOrder.Address || jobOrder.address,
-      jobOrder.Location || jobOrder.location,
       jobOrder.Barangay || jobOrder.barangay,
       jobOrder.City || jobOrder.city,
       jobOrder.Region || jobOrder.region
@@ -218,7 +237,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     if (applicationData) {
       const appAddressParts = [
         applicationData.installation_address,
-        applicationData.location,
         applicationData.barangay,
         applicationData.city,
         applicationData.region
@@ -471,6 +489,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       username: 'Username',
       ipAddress: 'IP Address',
       usageType: 'Usage Type',
+      jobOrderItems: 'Job Order Items',
       dateInstalled: 'Date Installed',
       visitBy: 'Visit By',
       visitWith: 'Visit With',
@@ -535,6 +554,19 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     username: () => <Text style={valueStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
     ipAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
     usageType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
+    jobOrderItems: () => (
+      <View style={{ flexDirection: 'column', gap: 4 }}>
+        {jobOrderItems.length > 0 ? (
+          jobOrderItems.map((item, index) => (
+            <Text key={index} style={valueStyle} selectable={true}>
+              {item.item_name} (Qty: {item.quantity})
+            </Text>
+          ))
+        ) : (
+          <Text style={valueStyle} selectable={true}>No items recorded</Text>
+        )}
+      </View>
+    ),
     dateInstalled: () => <Text style={valueStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
     visitBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
     visitWith: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
