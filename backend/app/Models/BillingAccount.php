@@ -70,3 +70,4 @@ class BillingAccount extends Model
         return $this->belongsTo(BillingStatus::class, 'billing_status_id');
     }
 }
+

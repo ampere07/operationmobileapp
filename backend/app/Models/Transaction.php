@@ -17,8 +17,7 @@ class Transaction extends Model
         'received_payment',
         'payment_date',
         'date_processed',
-        'processed_by_user_id',
-        'payment_method_id',
+        'processed_by_user',
         'payment_method',
         'reference_no',
         'or_no',
@@ -40,9 +39,22 @@ class Transaction extends Model
         return $this->belongsTo(BillingAccount::class, 'account_no', 'account_no');
     }
 
-    public function processedByUser()
+    public function processor()
     {
-        return $this->belongsTo(User::class, 'processed_by_user_id');
+        return $this->belongsTo(User::class, 'processed_by_user', 'id');
+    }
+
+    public function getProcessedByUserAttribute($value)
+    {
+        if ($this->relationLoaded('processor')) {
+            return $this->processor ? $this->processor->full_name : $value;
+        }
+        return $value;
+    }
+
+    public function paymentMethodInfo()
+    {
+        return $this->belongsTo(PaymentMethod::class, 'payment_method', 'payment_method');
     }
 
 
@@ -52,3 +64,4 @@ class Transaction extends Model
         return $this->hasMany(Invoice::class, 'transaction_id');
     }
 }
+

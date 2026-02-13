@@ -1,301 +1,327 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\Overdue;
-use App\Models\BillingAccount;
+use App\Models\StatementOfAccount;
 use App\Models\Invoice;
+use App\Models\BillingAccount;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Exception;
 
-class OverdueApiController extends Controller
+/**
+ * Billing Records Controller
+ * 
+ * Handles direct fetching of SOA and Invoice records from database tables
+ * Separate from BillingGenerationController to avoid conflicts
+ */
+class BillingRecordsController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Get all Statement of Account records
+     * Fetches directly from statement_of_accounts table
+     */
+    public function getSOARecords(Request $request): JsonResponse
     {
         try {
-            $page = $request->input('page', 1);
-            $limit = $request->input('limit', 50); // Reduced to 50 for faster response
-            $search = $request->input('search', '');
-            $date = $request->input('date', '');
-            $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
-
-            $query = Overdue::orderBy('overdue_date', 'desc');
-
-            if ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('account_no', 'LIKE', "%{$search}%");
-                });
-            }
-
-            if ($date) {
-                $query->whereDate('overdue_date', $date);
-            }
-
-            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
-            $overdues = $query->skip(($page - 1) * $limit)
-                ->take($limit + 1) // Fetch one extra
-                ->get();
-
-            // Check if there are more pages
-            $hasMore = $overdues->count() > $limit;
-
-            // Remove the extra record if it exists
-            if ($hasMore) {
-                $overdues = $overdues->slice(0, $limit);
-            }
-
-            // Fast mode: Return data immediately without customer details
+            // Pagination parameters - smaller default for faster loading
+            $perPage = $request->get('per_page', 50); // Reduced to 50 for faster response
+            $page = $request->get('page', 1);
+            $fastMode = $request->get('fast', false); // Fast mode: skip customer data loading
+            
+            // Build base query - use simple query for fast mode, joins for normal mode
             if ($fastMode) {
-                $enrichedData = $overdues->map(function ($overdue) {
-                    return [
-                        'id' => $overdue->id,
-                        'account_no' => $overdue->account_no,
-                        'invoice_id' => $overdue->invoice_id,
-                        'overdue_date' => $overdue->overdue_date?->format('Y-m-d H:i:s'),
-                        'print_link' => $overdue->print_link,
-                        'created_at' => $overdue->created_at?->format('Y-m-d H:i:s'),
-                        'created_by_user_id' => $overdue->created_by_user_id,
-                        'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
-                        'updated_by_user_id' => $overdue->updated_by_user_id,
-                    ];
-                });
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $enrichedData->values(),
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $limit,
-                        'has_more' => $hasMore
-                    ]
+                // Fast mode: Direct query without joins
+                $query = StatementOfAccount::query();
+            } else {
+                // Normal mode: Include joins for customer data
+                $query = StatementOfAccount::query()
+                    ->select('statement_of_accounts.*')
+                    ->leftJoin('billing_accounts', 'statement_of_accounts.account_no', '=', 'billing_accounts.account_no')
+                    ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+            }
+            
+            // Filter by account number
+            if ($request->has('account_no')) {
+                $query->where($fastMode ? 'account_no' : 'statement_of_accounts.account_no', $request->account_no);
+            }
+            
+            if ($request->has('account_id')) {
+                $query->where($fastMode ? 'account_no' : 'statement_of_accounts.account_no', $request->account_id);
+            }
+            
+            // Filter by date range
+            if ($request->has('date_from') && $request->has('date_to')) {
+                $query->whereBetween($fastMode ? 'statement_date' : 'statement_of_accounts.statement_date', [
+                    $request->date_from,
+                    $request->date_to
                 ]);
             }
-
-            // Normal mode: Fetch customer data in bulk to avoid N+1 queries
-            $accountNos = $overdues->pluck('account_no')->unique()->toArray();
-
+            
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+            $statements = $query
+                ->orderBy('statement_of_accounts.statement_date', 'desc')
+                ->skip(($page - 1) * $perPage)
+                ->take($perPage + 1) // Fetch one extra
+                ->get();
+            
+            // Check if there are more pages
+            $hasMore = $statements->count() > $perPage;
+            
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $statements = $statements->slice(0, $perPage);
+            }
+            
+            // Fast mode: Return data immediately without customer details
+            if ($fastMode) {
+                $statementsData = $statements->map(function($statement) {
+                    return $statement->toArray();
+                });
+                
+                Log::info('Fetched SOA records (fast mode)', [
+                    'count' => $statementsData->count(),
+                    'page' => $page,
+                    'has_more' => $hasMore
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'data' => $statementsData->values(),
+                    'count' => $statementsData->count(),
+                    'total' => StatementOfAccount::count(), // Added total count for pagination
+                    'pagination' => [
+                        'current_page' => (int)$page,
+                        'per_page' => (int)$perPage,
+                        'has_more' => $hasMore
+                    ],
+                    'fast_mode' => true
+                ]);
+            }
+            
+            // Normal mode: Fetch all related data in bulk to avoid N+1 queries
+            $accountNos = $statements->pluck('account_no')->unique()->toArray();
+            
             // Bulk fetch accounts with customers
             $accounts = BillingAccount::whereIn('account_no', $accountNos)
                 ->with('customer')
                 ->get()
                 ->keyBy('account_no');
-
-            $enrichedData = $overdues->map(function ($overdue) use ($accounts) {
-                $billingAccount = $accounts->get($overdue->account_no);
-                $customer = $billingAccount?->customer;
-                
-                return [
-                    'id' => $overdue->id,
-                    'account_no' => $overdue->account_no,
-                    'invoice_id' => $overdue->invoice_id,
-                    'overdue_date' => $overdue->overdue_date?->format('Y-m-d H:i:s'),
-                    'print_link' => $overdue->print_link,
-                    'created_at' => $overdue->created_at?->format('Y-m-d H:i:s'),
-                    'created_by_user_id' => $overdue->created_by_user_id,
-                    'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
-                    'updated_by_user_id' => $overdue->updated_by_user_id,
-                    'full_name' => $customer?->full_name ?? null,
-                    'contact_number' => $customer?->contact_number_primary ?? null,
-                    'email_address' => $customer?->email_address ?? null,
-                    'address' => $customer?->address ?? null,
-                    'plan' => $customer?->desired_plan ?? null,
-                ];
-            });
-
-            return response()->json([
-                'success' => true,
-                'data' => $enrichedData->values(),
-                'pagination' => [
-                    'current_page' => (int) $page,
-                    'per_page' => (int) $limit,
-                    'has_more' => $hasMore
-                ]
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Overdue API error', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch Overdue records',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function show($id)
-    {
-        try {
-            $overdue = Overdue::findOrFail($id);
-
-            $billingAccount = BillingAccount::where('account_no', $overdue->account_no)->with('customer')->first();
-            $customer = $billingAccount?->customer;
             
-            $data = [
-                'id' => $overdue->id,
-                'account_no' => $overdue->account_no,
-                'invoice_id' => $overdue->invoice_id,
-                'overdue_date' => $overdue->overdue_date?->format('Y-m-d H:i:s'),
-                'print_link' => $overdue->print_link,
-                'created_at' => $overdue->created_at?->format('Y-m-d H:i:s'),
-                'created_by_user_id' => $overdue->created_by_user_id,
-                'updated_at' => $overdue->updated_at?->format('Y-m-d H:i:s'),
-                'updated_by_user_id' => $overdue->updated_by_user_id,
-                'full_name' => $customer?->full_name ?? null,
-                'contact_number' => $customer?->contact_number_primary ?? null,
-                'email_address' => $customer?->email_address ?? null,
-                'address' => $customer?->address ?? null,
-                'plan' => $customer?->desired_plan ?? null,
-            ];
-
+            // Convert to array and attach account and customer data
+            $statementsData = $statements->map(function($statement) use ($accounts) {
+                $data = $statement->toArray();
+                $account = $accounts->get($statement->account_no);
+                
+                if ($account) {
+                    $data['account'] = [
+                        'account_no' => $account->account_no,
+                        'date_installed' => $account->date_installed,
+                        'billing_day' => $account->billing_day,
+                    ];
+                    
+                    if ($account->customer) {
+                        $data['account']['customer'] = [
+                            'full_name' => $account->customer->full_name ?? '',
+                            'contact_number_primary' => $account->customer->contact_number_primary ?? '',
+                            'email_address' => $account->customer->email_address ?? '',
+                            'address' => $account->customer->address ?? '',
+                            'desired_plan' => $account->customer->desired_plan ?? '',
+                            'barangay' => $account->customer->barangay ?? '',
+                            'city' => $account->customer->city ?? '',
+                            'region' => $account->customer->region ?? '',
+                        ];
+                    }
+                }
+                
+                return $data;
+            });
+            
+            Log::info('Fetched SOA records successfully', [
+                'count' => $statementsData->count(),
+                'page' => $page,
+                'has_more' => $hasMore
+            ]);
+            
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $statementsData->values(), // Reset array keys
+                'count' => $statementsData->count(),
+                'total' => StatementOfAccount::count(), // Added total count for pagination
+                'pagination' => [
+                    'current_page' => (int)$page,
+                    'per_page' => (int)$perPage,
+                    'has_more' => $hasMore
+                ],
+                'fast_mode' => false
             ]);
-
-        } catch (Exception $e) {
-            Log::error('Overdue show error', [
-                'id' => $id,
-                'message' => $e->getMessage()
-            ]);
-
+            
+        } catch (\Exception $e) {
+            Log::error('Error fetching SOA records: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Overdue record not found',
-                'error' => $e->getMessage()
-            ], 404);
-        }
-    }
-
-    public function store(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'account_no' => 'required|string',
-                'invoice_id' => 'nullable|integer',
-                'overdue_date' => 'required|date',
-                'print_link' => 'nullable|string|max:255',
-            ]);
-
-            $authData = $request->user();
-            $validated['created_by_user_id'] = $authData?->id;
-
-            $overdue = Overdue::create($validated);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Overdue record created successfully',
-                'data' => $overdue
-            ], 201);
-
-        } catch (Exception $e) {
-            Log::error('Overdue create error', [
-                'message' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create Overdue record',
+                'message' => 'Failed to fetch SOA records',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
-
-    public function update(Request $request, $id)
+    
+    /**
+     * Get all Invoice records
+     * Fetches directly from invoices table
+     */
+    public function getInvoiceRecords(Request $request): JsonResponse
     {
         try {
-            $overdue = Overdue::findOrFail($id);
-
-            $validated = $request->validate([
-                'account_no' => 'sometimes|required|string',
-                'invoice_id' => 'nullable|integer',
-                'overdue_date' => 'sometimes|required|date',
-                'print_link' => 'nullable|string|max:255',
+            // Pagination parameters - smaller default for faster loading
+            $perPage = $request->get('per_page', 50); // Reduced to 50 for faster response
+            $page = $request->get('page', 1);
+            $fastMode = $request->get('fast', false); // Fast mode: skip customer data loading
+            
+            // Build base query - use simple query for fast mode, joins for normal mode
+            if ($fastMode) {
+                // Fast mode: Direct query without joins
+                $query = Invoice::query();
+            } else {
+                // Normal mode: Include joins for customer data
+                $query = Invoice::query()
+                    ->select('invoices.*')
+                    ->leftJoin('billing_accounts', 'invoices.account_no', '=', 'billing_accounts.account_no')
+                    ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+            }
+            
+            // Filter by account number
+            if ($request->has('account_no')) {
+                $query->where($fastMode ? 'account_no' : 'invoices.account_no', $request->account_no);
+            }
+            
+            if ($request->has('account_id')) {
+                $query->where($fastMode ? 'account_no' : 'invoices.account_no', $request->account_id);
+            }
+            
+            // Filter by status
+            if ($request->has('status')) {
+                $query->where($fastMode ? 'status' : 'invoices.status', $request->status);
+            }
+            
+            // Filter by date range
+            if ($request->has('date_from') && $request->has('date_to')) {
+                $query->whereBetween($fastMode ? 'invoice_date' : 'invoices.invoice_date', [
+                    $request->date_from,
+                    $request->date_to
+                ]);
+            }
+            
+            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+            $invoices = $query
+                ->orderBy('invoices.invoice_date', 'desc')
+                ->skip(($page - 1) * $perPage)
+                ->take($perPage + 1) // Fetch one extra
+                ->get();
+            
+            // Check if there are more pages
+            $hasMore = $invoices->count() > $perPage;
+            
+            // Remove the extra record if it exists
+            if ($hasMore) {
+                $invoices = $invoices->slice(0, $perPage);
+            }
+            
+            // Fast mode: Return data immediately without customer details
+            if ($fastMode) {
+                $invoicesData = $invoices->map(function($invoice) {
+                    return $invoice->toArray();
+                });
+                
+                Log::info('Fetched invoice records (fast mode)', [
+                    'count' => $invoicesData->count(),
+                    'page' => $page,
+                    'has_more' => $hasMore
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'data' => $invoicesData->values(),
+                    'count' => $invoicesData->count(),
+                    'total' => Invoice::count(), // Added total count for pagination
+                    'pagination' => [
+                        'current_page' => (int)$page,
+                        'per_page' => (int)$perPage,
+                        'has_more' => $hasMore
+                    ],
+                    'fast_mode' => true
+                ]);
+            }
+            
+            // Normal mode: Fetch all related data in bulk to avoid N+1 queries
+            $accountNos = $invoices->pluck('account_no')->unique()->toArray();
+            
+            // Bulk fetch accounts with customers
+            $accounts = BillingAccount::whereIn('account_no', $accountNos)
+                ->with('customer')
+                ->get()
+                ->keyBy('account_no');
+            
+            // Convert to array and attach account and customer data
+            $invoicesData = $invoices->map(function($invoice) use ($accounts) {
+                $data = $invoice->toArray();
+                $account = $accounts->get($invoice->account_no);
+                
+                if ($account) {
+                    $data['account'] = [
+                        'account_no' => $account->account_no,
+                        'date_installed' => $account->date_installed,
+                        'billing_day' => $account->billing_day,
+                    ];
+                    
+                    if ($account->customer) {
+                        $data['account']['customer'] = [
+                            'full_name' => $account->customer->full_name ?? '',
+                            'contact_number_primary' => $account->customer->contact_number_primary ?? '',
+                            'email_address' => $account->customer->email_address ?? '',
+                            'address' => $account->customer->address ?? '',
+                            'desired_plan' => $account->customer->desired_plan ?? '',
+                            'barangay' => $account->customer->barangay ?? '',
+                            'city' => $account->customer->city ?? '',
+                            'region' => $account->customer->region ?? '',
+                        ];
+                    }
+                }
+                
+                return $data;
+            });
+            
+            Log::info('Fetched invoice records successfully', [
+                'count' => $invoicesData->count(),
+                'page' => $page,
+                'has_more' => $hasMore
             ]);
-
-            $authData = $request->user();
-            $validated['updated_by_user_id'] = $authData?->id;
-
-            $overdue->update($validated);
-
+            
             return response()->json([
                 'success' => true,
-                'message' => 'Overdue record updated successfully',
-                'data' => $overdue
+                'data' => $invoicesData->values(), // Reset array keys
+                'count' => $invoicesData->count(),
+                'total' => Invoice::count(), // Added total count for pagination
+                'pagination' => [
+                    'current_page' => (int)$page,
+                    'per_page' => (int)$perPage,
+                    'has_more' => $hasMore
+                ],
+                'fast_mode' => false
             ]);
-
-        } catch (Exception $e) {
-            Log::error('Overdue update error', [
-                'id' => $id,
-                'message' => $e->getMessage()
-            ]);
-
+            
+        } catch (\Exception $e) {
+            Log::error('Error fetching invoice records: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update Overdue record',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function destroy($id)
-    {
-        try {
-            $overdue = Overdue::findOrFail($id);
-            $overdue->delete();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Overdue record deleted successfully'
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Overdue delete error', [
-                'id' => $id,
-                'message' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete Overdue record',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function getStatistics()
-    {
-        try {
-            $total = Overdue::count();
-            $thisMonth = Overdue::whereMonth('overdue_date', now()->month)
-                ->whereYear('overdue_date', now()->year)
-                ->count();
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'total_overdue' => $total,
-                    'this_month' => $thisMonth,
-                ]
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Overdue statistics error', [
-                'message' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch statistics',
+                'message' => 'Failed to fetch invoice records',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
 }
+

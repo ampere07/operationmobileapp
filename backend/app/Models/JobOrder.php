@@ -81,3 +81,4 @@ class JobOrder extends Model
         return $this->belongsTo(LCPNAPLocation::class, 'lcpnap', 'lcpnap_name');
     }
 }
+

@@ -54,61 +54,13 @@ class Kernel extends ConsoleKernel
                  });
 
         // ===================================================================
-        // OVERDUE NOTIFICATIONS (CONFIG-BASED)
+        // OVERDUE & DISCONNECTION NOTICES
         // ===================================================================
 
-        // Process overdue notifications at 1:00 AM daily
-        // Uses: billing_config table for overdue_day, disconnection_notice settings
-        // Sends SMS notifications for:
-        // - Day 1 overdue (based on overdue_day config)
-        // - Day 3 overdue
-        // - Day 7 overdue
-        // - Disconnection notice (based on disconnection_notice config)
-        // Logs: storage/logs/overdue/overduelogs.log
-        $schedule->command('cron:process-overdue-notifications')
-                 ->dailyAt('01:00')
-                 ->withoutOverlapping()
-                 ->runInBackground()
-                 ->onSuccess(function () {
-                     \Illuminate\Support\Facades\Log::info('Overdue notifications processed successfully');
-                 })
-                 ->onFailure(function () {
-                     \Illuminate\Support\Facades\Log::error('Overdue notifications processing failed');
-                 });
-
-        // Send disconnection notices at 11:00 AM for invoices 3 days past due
-        // Uses: BillingNotificationService
-        // Dependencies: EmailQueueService, GoogleDrivePdfGenerationService, ItexmoSmsService
-        $schedule->command('billing:send-dc-notices --days=3')
-                 ->dailyAt('11:00')
-                 ->withoutOverlapping()
-                 ->runInBackground()
-                 ->onSuccess(function () {
-                     \Illuminate\Support\Facades\Log::info('DC notices sent successfully');
-                 })
-                 ->onFailure(function () {
-                     \Illuminate\Support\Facades\Log::error('DC notices sending failed');
-                 });
-
-        // ===================================================================
-        // DISCONNECTION NOTICE TABLE POPULATION
-        // ===================================================================
-
-        // Process disconnection notice table at 1:00 AM daily (same time as overdue)
-        // Uses: billing_config table for disconnection_notice setting
-        // Populates disconnection_notice table with accounts scheduled for disconnection
-        // Does NOT modify any account data - read-only table population
-        // Logs: storage/logs/disconnectionlogs.log
-        $schedule->command('cron:process-disconnection-notices')
-                 ->dailyAt('01:00')
-                 ->withoutOverlapping()
-                 ->runInBackground()
-                 ->onSuccess(function () {
-                     \Illuminate\Support\Facades\Log::info('Disconnection notices processed successfully');
-                 })
-                 ->onFailure(function () {
-                     \Illuminate\Support\Facades\Log::error('Disconnection notices processing failed');
-                 });
+        // Note: Overdue and Disconnection notices are now generated and sent 
+        // as part of the 'cron:generate-daily-billings' command defined above.
+        // The previous standalone commands 'cron:process-overdue-notifications'
+        // and 'cron:process-disconnection-notices' have been deprecated and removed.
 
         // ===================================================================
         // AUTO DISCONNECT & PULLOUT
@@ -253,4 +205,5 @@ class Kernel extends ConsoleKernel
         require base_path('routes/console.php');
     }
 }
+
 

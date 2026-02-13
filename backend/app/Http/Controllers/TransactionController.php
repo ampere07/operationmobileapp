@@ -18,7 +18,7 @@ class TransactionController extends Controller
             $limit = request()->input('limit');
             $offset = request()->input('offset');
 
-            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processedByUser'])
+            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
                 ->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc');
 
@@ -91,6 +91,11 @@ class TransactionController extends Controller
             $validated['status'] = $validated['status'] ?? 'Pending';
             $validated['created_by_user'] = Auth::check() ? Auth::user()->email : 'unknown';
             $validated['updated_by_user'] = Auth::check() ? Auth::user()->email : 'unknown';
+            
+            if (isset($validated['processed_by_user_id'])) {
+                $validated['processed_by_user'] = $validated['processed_by_user_id'];
+                unset($validated['processed_by_user_id']);
+            }
 
             $autoApplyPayment = $validated['auto_apply_payment'] ?? false;
             unset($validated['auto_apply_payment']);
@@ -145,7 +150,7 @@ class TransactionController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Transaction created successfully',
-                'data' => $transaction->load(['account.customer', 'account.technicalDetails', 'processedByUser'])
+                'data' => $transaction->load(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
@@ -178,7 +183,7 @@ class TransactionController extends Controller
     public function show(string $id): JsonResponse
     {
         try {
-            $transaction = Transaction::with(['account.customer', 'account.technicalDetails', 'processedByUser'])
+            $transaction = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
                 ->findOrFail($id);
 
             return response()->json([
@@ -272,6 +277,106 @@ class TransactionController extends Controller
                 'invoices_paid' => $invoiceUpdateResult['invoices_paid'],
                 'invoices_partial' => $invoiceUpdateResult['invoices_partial']
             ]);
+
+            // Send Paid SMS if invoices were paid
+            try {
+                if (!empty($invoiceUpdateResult['invoices_paid'])) {
+                    $billingAccount->load('customer');
+                    $customer = $billingAccount->customer;
+                    
+                    if ($customer && !empty($customer->contact_number_primary)) {
+                        $paidTemplate = DB::table('sms_templates')
+                            ->where('template_type', 'Paid')
+                            ->where('is_active', 1)
+                            ->first();
+                            
+                        if ($paidTemplate) {
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            
+                            foreach ($invoiceUpdateResult['invoices_paid'] as $paidInvoice) {
+                                $message = $paidTemplate->message_content;
+                                
+                                // Replace variables
+                                $message = str_replace('{{customer_name}}', $customer->full_name, $message);
+                                $message = str_replace('{{account_no}}', $accountNo, $message);
+                                $message = str_replace('{{invoice_id}}', $paidInvoice['invoice_id'], $message);
+                                $message = str_replace('{{amount_paid}}', $paidInvoice['amount_paid'], $message);
+                                $message = str_replace('{{date}}', date('Y-m-d'), $message);
+                                
+                                $result = $smsService->send([
+                                    'contact_no' => $customer->contact_number_primary,
+                                    'message' => $message
+                                ]);
+                                
+                                if ($result['success']) {
+                                    \Log::info('Paid Invoice SMS sent', [
+                                        'invoice_id' => $paidInvoice['invoice_id'], 
+                                        'customer_id' => $customer->id
+                                    ]);
+                                } else {
+                                    \Log::error('Paid Invoice SMS Failed: ' . ($result['error'] ?? 'Unknown error'));
+                                }
+                            }
+                        } else {
+                            \Log::warning('Paid SMS template not found');
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::error('Failed to send Paid SMS: ' . $e->getMessage());
+            }
+
+            // Send Paid Email if invoices were paid
+            try {
+                if (!empty($invoiceUpdateResult['invoices_paid'])) {
+                    if (!$customer) {
+                         $billingAccount->load('customer');
+                         $customer = $billingAccount->customer;
+                    }
+
+                    if ($customer && !empty($customer->email_address)) {
+                         $paidEmailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'PAID')
+                             ->where('Is_Active', true)
+                             ->first();
+                         
+                         if ($paidEmailTemplate) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             
+                             foreach ($invoiceUpdateResult['invoices_paid'] as $paidInvoice) {
+                                  $emailBody = $paidEmailTemplate->email_body;
+                                  
+                                  // Replace variables
+                                  $emailBody = str_replace('{{customer_name}}', $customer->full_name, $emailBody);
+                                  $emailBody = str_replace('{{account_no}}', $accountNo, $emailBody);
+                                  $emailBody = str_replace('{{invoice_id}}', $paidInvoice['invoice_id'], $emailBody);
+                                  $emailBody = str_replace('{{amount_paid}}', $paidInvoice['amount_paid'], $emailBody);
+                                  $emailBody = str_replace('{{date}}', date('Y-m-d'), $emailBody);
+
+                                  if (!empty($emailBody)) {
+                                       $emailService->queueEmail([
+                                           'account_no' => $accountNo,
+                                           'recipient_email' => $customer->email_address,
+                                           'subject' => $paidEmailTemplate->Subject_Line ?? 'Payment Received', 
+                                           'body_html' => nl2br($emailBody), 
+                                           'attachment_path' => null
+                                       ]);
+                                       
+                                       \Log::info('Paid Invoice Email queued', [
+                                           'invoice_id' => $paidInvoice['invoice_id'], 
+                                           'email' => $customer->email_address
+                                       ]);
+                                  } else {
+                                      \Log::warning('Paid Invoice Email Body is empty');
+                                  }
+                             }
+                         } else {
+                             \Log::warning('Paid Email (WELCOME) template not found or inactive');
+                         }
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::error('Failed to send Paid Email: ' . $e->getMessage());
+            }
 
             // Attempt reconnection after successful approval
             $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount);
@@ -642,12 +747,15 @@ class TransactionController extends Controller
 
     /**
      * Attempt to reconnect user account after transaction approval
-     * Only reconnects if session_status is 'inactive' or 'blocked' and balance is 0 or negative
+     * Only reconnects if billing_status_id is not 1 (Active) and balance is 0 or negative
      */
     private function attemptReconnectionAfterApproval($billingAccount): string
     {
         try {
+            // Reload billing account to get latest balance and status
+            $billingAccount = BillingAccount::find($billingAccount->id);
             $accountNo = $billingAccount->account_no;
+            
             \Log::info('[TRANSACTION RECONNECT] Starting check for account: ' . $accountNo);
 
             // Step 1: Check if balance qualifies (0 or negative)
@@ -657,61 +765,46 @@ class TransactionController extends Controller
                 return 'balance_positive';
             }
 
-            // Step 2: Get account details with PPPoE username and plan
-            $accountDetails = DB::table('billing_accounts')
-                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                ->where('billing_accounts.account_no', $accountNo)
-                ->select(
-                    'billing_accounts.id as account_id',
-                    'billing_accounts.account_no',
-                    'billing_accounts.pppoe_username',
-                    'billing_accounts.account_balance',
-                    'customers.desired_plan'
-                )
-                ->first();
-
-            if (!$accountDetails) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] Account details not found: ' . $accountNo);
-                return 'account_not_found';
+            // Step 2: Check if billing status is NOT 1 (Active)
+            if ($billingAccount->billing_status_id == 1) {
+                \Log::info('[TRANSACTION RECONNECT SKIP] Account is already Active (Status ID: 1)');
+                return 'already_active';
             }
 
-            $username = $accountDetails->pppoe_username;
-            if (!$username) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] No PPPoE username for account: ' . $accountNo);
+            // Step 3: Get account details (PPPoE Username and Plan)
+            // Join with technical_details for username, and customers for plan
+            $accountInfo = DB::table('billing_accounts')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.id', $billingAccount->id)
+                ->select('technical_details.username as pppoe_username', 'customers.desired_plan')
+                ->first();
+
+            $username = $accountInfo->pppoe_username ?? null;
+            $plan = $accountInfo->desired_plan ?? null;
+
+            if (empty($username)) {
+                \Log::info('[TRANSACTION RECONNECT SKIP] No PPPoE username found in technical_details');
                 return 'no_username';
             }
 
-            // Step 3: Check online_status for session_status
-            $onlineStatus = DB::table('online_status')
-                ->where('account_id', $accountDetails->account_id)
-                ->orWhere('username', $username)
-                ->select('session_status', 'username')
-                ->first();
-
-            if (!$onlineStatus) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] No online_status record for account: ' . $accountNo);
-                return 'no_online_status';
-            }
-
-            $sessionStatus = strtolower($onlineStatus->session_status ?? '');
-            \Log::info('[TRANSACTION RECONNECT] Session status: ' . $sessionStatus . ' for account: ' . $accountNo);
-
-            // Step 4: Check if session_status is 'inactive' or 'blocked'
-            if (!in_array($sessionStatus, ['inactive', 'blocked'])) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] Session status is \'' . $sessionStatus . '\' (not inactive/blocked)');
-                return 'session_active';
-            }
-
-            \Log::info('[TRANSACTION RECONNECT PROCEED] Conditions met - Session: ' . $sessionStatus . ', Balance: ₱' . $balance);
-
-            // Step 5: Get plan information
-            $plan = $accountDetails->desired_plan ?? '';
             if (empty($plan)) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] No plan found for account: ' . $accountNo);
+                \Log::info('[TRANSACTION RECONNECT SKIP] No plan found');
                 return 'no_plan';
             }
 
-            // Step 6: Prepare parameters for ManualRadiusOperationsService
+            \Log::info('[TRANSACTION RECONNECT PROCEED] Conditions met - Status not Active, Balance: ₱' . $balance);
+
+            // Step 4: Update billing_status_id to 1 (Active) BEFORE reconnecting
+            // The user requested: "it will update the billing_status_id of that account_no to 1 and after the update it will use the reconnectUser"
+            $billingAccount->billing_status_id = 1;
+            $billingAccount->updated_at = now();
+            $billingAccount->updated_by = Auth::id();
+            $billingAccount->save();
+            
+            \Log::info('[TRANSACTION RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
+
+            // Step 5: Prepare parameters for ManualRadiusOperationsService
             $params = [
                 'accountNumber' => $accountNo,
                 'username' => $username,
@@ -719,22 +812,97 @@ class TransactionController extends Controller
                 'updatedBy' => 'Transaction Approval Auto-Reconnect'
             ];
 
-            // Step 7: Call ManualRadiusOperationsService reconnectUser
+            // Step 6: Call ManualRadiusOperationsService reconnectUser
+            // This will:
+            // 1. Update Radius Group (to plan name)
+            // 2. Kill User Session (isDisconnectAction = true)
+            // 3. Update DB Status (again)
             \Log::info('[TRANSACTION RECONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            
             $manualRadiusService = new ManualRadiusOperationsService();
             $result = $manualRadiusService->reconnectUser($params);
 
             if ($result['status'] === 'success') {
-                // Step 8: Update billing_status_id to 5 (Active status)
-                DB::table('billing_accounts')
-                    ->where('account_no', $accountNo)
-                    ->update([
-                        'billing_status_id' => 5,
-                        'updated_at' => now(),
-                        'updated_by' => Auth::id()
-                    ]);
+                \Log::info('[TRANSACTION RECONNECT SUCCESS] Reconnection and Session Kill completed successfully');
 
-                \Log::info('[TRANSACTION RECONNECT SUCCESS] Account ' . $accountNo . ' reconnected - billing_status_id updated to 5');
+                // Send SMS Notification
+                try {
+                    // Fetch SMS template
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Reconnect')
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if ($smsTemplate) {
+                        // Get Customer Name and Contact Number
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                                'customers.contact_number_primary',
+                                'customers.email_address',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                            )
+                            ->first();
+
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            // Replace variables
+                            $message = $smsTemplate->message_content;
+                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+
+                            // Send SMS
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[TRANSACTION RECONNECT SMS] SMS sent to ' . $customerInfo->contact_number_primary);
+                            } else {
+                                \Log::error('[TRANSACTION RECONNECT SMS FAILED] ' . ($smsResult['error'] ?? 'Unknown error'));
+                            }
+                        } else {
+                            \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No contact number found for account ' . $accountNo);
+                        }
+                    } else {
+                        \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No active Reconnect SMS template found');
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[TRANSACTION RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                }
+
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+                    
+                    if ($emailTemplate && !empty($customerInfo->email_address)) {
+                         // Use email_body as the content (body) as requested
+                         $body = $emailTemplate->email_body;
+                         
+                         if (!empty($body)) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             
+                             $emailService->queueEmail([
+                                 'account_no' => $accountNo,
+                                 'recipient_email' => $customerInfo->email_address,
+                                 'subject' => $emailTemplate->Subject_Line ?? 'Reconnection Notice', 
+                                 'body_html' => nl2br($body), 
+                                 'attachment_path' => null
+                             ]);
+                             
+                             \Log::info('[TRANSACTION RECONNECT EMAIL] Email queued for ' . $customerInfo->email_address);
+                         } else {
+                             \Log::warning('[TRANSACTION RECONNECT EMAIL SKIP] email_body is empty');
+                         }
+                    } else {
+                        if (!$emailTemplate) \Log::warning('[TRANSACTION RECONNECT EMAIL SKIP] RECONNECT template not found');
+                        if (empty($customerInfo->email_address)) \Log::warning('[TRANSACTION RECONNECT EMAIL SKIP] No email address for customer');
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[TRANSACTION RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
+
                 return 'success';
             } else {
                 \Log::info('[TRANSACTION RECONNECT FAILED] ' . $result['message']);
@@ -748,3 +916,4 @@ class TransactionController extends Controller
         }
     }
 }
+

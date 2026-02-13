@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\BillingAccount;
 use App\Models\TechnicalDetail;
+use App\Models\Plan;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,27 @@ use Illuminate\Support\Facades\Storage;
 class CustomerDetailUpdateController extends Controller
 {
     /**
+     * Unified update method dispatches based on editType
+     */
+    public function update(Request $request, $accountNo): JsonResponse
+    {
+        $editType = $request->input('editType');
+
+        if ($editType === 'customer_details') {
+            return $this->updateCustomerDetails($request, $accountNo);
+        } elseif ($editType === 'billing_details') {
+            return $this->updateBillingDetails($request, $accountNo);
+        } elseif ($editType === 'technical_details') {
+            return $this->updateTechnicalDetails($request, $accountNo);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid or missing edit type'
+        ], 400);
+    }
+
+    /**
      * Update customer details
      */
     public function updateCustomerDetails(Request $request, $accountNo): JsonResponse
@@ -21,18 +43,18 @@ class CustomerDetailUpdateController extends Controller
         try {
             $validated = $request->validate([
                 'firstName' => 'required|string|max:255',
-                'middleInitial' => 'nullable|string|max:1',
+                'middleInitial' => 'nullable|string|max:10',
                 'lastName' => 'required|string|max:255',
-                'emailAddress' => 'required|email|max:255',
-                'contactNumberPrimary' => 'required|string|max:20',
-                'contactNumberSecondary' => 'nullable|string|max:20',
-                'address' => 'required|string|max:255',
+                'emailAddress' => 'nullable|string|max:255',
+                'contactNumberPrimary' => 'required|string|max:50',
+                'contactNumberSecondary' => 'nullable|string|max:50',
+                'address' => 'required|string',
                 'region' => 'required|string|max:255',
                 'city' => 'required|string|max:255',
                 'barangay' => 'required|string|max:255',
-                'location' => 'required|string|max:255',
+                'location' => 'nullable|string|max:255',
                 'addressCoordinates' => 'nullable|string|max:255',
-                'housingStatus' => 'nullable|string|max:50',
+                'housingStatus' => 'nullable|string|max:255',
                 'referredBy' => 'nullable|string|max:255',
                 'groupName' => 'nullable|string|max:255',
                 'houseFrontPicture' => 'nullable'
@@ -43,34 +65,32 @@ class CustomerDetailUpdateController extends Controller
             $billingAccount = BillingAccount::where('account_no', $accountNo)->firstOrFail();
             $customer = Customer::findOrFail($billingAccount->customer_id);
 
+            $houseFrontPictureUrl = $customer->house_front_picture_url;
+
             // Handle house front picture upload if provided
             if ($request->hasFile('houseFrontPicture')) {
                 $file = $request->file('houseFrontPicture');
-                
-                // Upload to Google Drive (you'll need to implement this)
                 $houseFrontPictureUrl = $this->uploadToGoogleDrive($file, $accountNo);
-                
-                $validated['houseFrontPictureUrl'] = $houseFrontPictureUrl;
             }
 
             // Update customer record
             $customer->update([
                 'first_name' => $validated['firstName'],
-                'middle_initial' => $validated['middleInitial'],
+                'middle_initial' => $validated['middleInitial'] ?? $customer->middle_initial,
                 'last_name' => $validated['lastName'],
                 'email_address' => $validated['emailAddress'],
                 'contact_number_primary' => $validated['contactNumberPrimary'],
-                'contact_number_secondary' => $validated['contactNumberSecondary'],
+                'contact_number_secondary' => $validated['contactNumberSecondary'] ?? $customer->contact_number_secondary,
                 'address' => $validated['address'],
                 'region' => $validated['region'],
                 'city' => $validated['city'],
                 'barangay' => $validated['barangay'],
-                'location' => $validated['location'],
-                'address_coordinates' => $validated['addressCoordinates'],
-                'housing_status' => $validated['housingStatus'],
-                'referred_by' => $validated['referredBy'],
-                'group_name' => $validated['groupName'],
-                'house_front_picture_url' => $validated['houseFrontPictureUrl'] ?? $customer->house_front_picture_url,
+                'location' => $validated['location'] ?? $customer->location,
+                'address_coordinates' => $validated['addressCoordinates'] ?? $customer->address_coordinates,
+                'housing_status' => $validated['housingStatus'] ?? $customer->housing_status,
+                'referred_by' => $validated['referredBy'] ?? $customer->referred_by,
+                'group_name' => $validated['groupName'] ?? $customer->group_name,
+                'house_front_picture_url' => $houseFrontPictureUrl,
                 'updated_by' => $request->user()->id ?? 1,
             ]);
 
@@ -117,34 +137,39 @@ class CustomerDetailUpdateController extends Controller
     {
         try {
             $validated = $request->validate([
-                'plan' => 'required|string|max:255',
-                'billingDay' => 'nullable|integer|min:0|max:31',
-                'billingStatus' => 'required|in:Active,Inactive,Suspended,Pending,Disconnected'
+                'billingStatus' => 'nullable'
             ]);
 
             DB::beginTransaction();
 
             $billingAccount = BillingAccount::where('account_no', $accountNo)->firstOrFail();
 
-            // Map billing status to billing_status_id
-            $statusMap = [
-                'Active' => 2,
-                'Inactive' => 1,
-                'Suspended' => 3,
-                'Pending' => 4,
-                'Disconnected' => 5
-            ];
+            // Resolve billing_status_id
+            $billingStatusId = $billingAccount->billing_status_id;
+            if (!empty($validated['billingStatus'])) {
+                if (is_numeric($validated['billingStatus'])) {
+                    $billingStatusId = (int)$validated['billingStatus'];
+                } else {
+                    // Attempt to find by name in the database
+                    $dbStatus = DB::table('billing_status')->where('status_name', $validated['billingStatus'])->first();
+                    if ($dbStatus) {
+                        $billingStatusId = $dbStatus->id;
+                    } else {
+                        // Fallback mapping
+                        $statusMap = [
+                            'Active' => 1,
+                            'Disconnected' => 2,
+                            'Pending' => 3,
+                            'Terminated' => 4,
+                            'Suspended' => 5
+                        ];
+                        $billingStatusId = $statusMap[$validated['billingStatus']] ?? $billingStatusId;
+                    }
+                }
+            }
 
             $billingAccount->update([
-                'billing_day' => $validated['billingDay'],
-                'billing_status_id' => $statusMap[$validated['billingStatus']] ?? 1,
-                'updated_by' => $request->user()->id ?? 1,
-            ]);
-
-            // Update customer's desired plan
-            $customer = Customer::findOrFail($billingAccount->customer_id);
-            $customer->update([
-                'desired_plan' => $validated['plan'],
+                'billing_status_id' => $billingStatusId,
                 'updated_by' => $request->user()->id ?? 1,
             ]);
 
@@ -157,7 +182,7 @@ class CustomerDetailUpdateController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Billing details updated successfully',
+                'message' => 'Billing status updated successfully',
                 'data' => $billingAccount->fresh()
             ]);
 
@@ -191,17 +216,17 @@ class CustomerDetailUpdateController extends Controller
     {
         try {
             $validated = $request->validate([
-                'username' => 'required|string|max:255',
-                'usernameStatus' => 'nullable|in:Online,Offline',
-                'connectionType' => 'required|in:Antenna,Fiber,Local',
-                'routerModel' => 'required|string|max:255',
+                'username' => 'nullable|string|max:255',
+                'connectionType' => 'nullable|string|max:100',
+                'routerModel' => 'nullable|string|max:255',
                 'routerModemSn' => 'nullable|string|max:255',
                 'ipAddress' => 'nullable|string|max:45',
-                'lcp' => 'nullable|string|max:50',
-                'nap' => 'nullable|string|max:50',
-                'port' => 'nullable|string|max:50',
-                'vlan' => 'nullable|string|max:50',
-                'usageType' => 'nullable|string|max:50'
+                'lcp' => 'nullable|string|max:255',
+                'nap' => 'nullable|string|max:255',
+                'lcpnap' => 'nullable|string|max:255',
+                'port' => 'nullable|string|max:255',
+                'vlan' => 'nullable|string|max:255',
+                'usageType' => 'nullable|string|max:255'
             ]);
 
             DB::beginTransaction();
@@ -214,26 +239,41 @@ class CustomerDetailUpdateController extends Controller
             if (!$technicalDetail) {
                 $technicalDetail = new TechnicalDetail();
                 $technicalDetail->account_id = $billingAccount->id;
+                $technicalDetail->account_no = $billingAccount->account_no;
                 $technicalDetail->created_by = $request->user()->id ?? 1;
             }
 
-            // Generate LCPNAP if LCP and NAP are provided
-            $lcpnap = '';
-            if (!empty($validated['lcp']) && !empty($validated['nap'])) {
-                $lcpnap = $validated['lcp'] . '-' . $validated['nap'];
+            // Generate LCPNAP if LCP and NAP are provided, or use direct lcpnap
+            $lcpnap = $technicalDetail->lcpnap;
+            $newLcp = $validated['lcp'] ?? null;
+            $newNap = $validated['nap'] ?? null;
+            $newLcpNapInput = $validated['lcpnap'] ?? null;
+
+            if ($newLcp && $newNap) {
+                $lcpnap = trim($newLcp . ' - ' . $newNap);
+            } elseif ($newLcpNapInput) {
+                $lcpnap = $newLcpNapInput;
+                // If lcp/nap are missing but lcpnap is present, try to split them
+                if (!$newLcp || !$newNap) {
+                    $parts = preg_split('/[-\s]+/', $newLcpNapInput);
+                    if (count($parts) >= 2) {
+                        $newLcp = $parts[0];
+                        $newNap = $parts[1];
+                    }
+                }
             }
 
-            $technicalDetail->username = $validated['username'];
-            $technicalDetail->username_status = $validated['usernameStatus'] ?? $technicalDetail->username_status;
-            $technicalDetail->connection_type = $validated['connectionType'];
-            $technicalDetail->router_model = $validated['routerModel'];
-            $technicalDetail->router_modem_sn = $validated['routerModemSn'];
-            $technicalDetail->ip_address = $validated['ipAddress'];
-            $technicalDetail->lcp = $validated['lcp'];
-            $technicalDetail->nap = $validated['nap'];
-            $technicalDetail->port = $validated['port'];
-            $technicalDetail->vlan = $validated['vlan'];
+            $technicalDetail->username = (!empty($validated['username'])) ? $validated['username'] : $technicalDetail->username;
+            $technicalDetail->connection_type = (!empty($validated['connectionType'])) ? $validated['connectionType'] : $technicalDetail->connection_type;
+            $technicalDetail->router_model = (!empty($validated['routerModel'])) ? $validated['routerModel'] : $technicalDetail->router_model;
+            $technicalDetail->router_modem_sn = $validated['routerModemSn'] ?? $technicalDetail->router_modem_sn;
+            $technicalDetail->ip_address = $validated['ipAddress'] ?? $technicalDetail->ip_address;
+            $technicalDetail->lcp = $newLcp ?? $technicalDetail->lcp;
+            $technicalDetail->nap = $newNap ?? $technicalDetail->nap;
+            $technicalDetail->port = $validated['port'] ?? $technicalDetail->port;
+            $technicalDetail->vlan = $validated['vlan'] ?? $technicalDetail->vlan;
             $technicalDetail->lcpnap = $lcpnap;
+            $technicalDetail->usage_type = $validated['usageType'] ?? $technicalDetail->usage_type;
             $technicalDetail->updated_by = $request->user()->id ?? 1;
             
             $technicalDetail->save();
@@ -280,7 +320,9 @@ class CustomerDetailUpdateController extends Controller
     private function uploadToGoogleDrive($file, $accountNo)
     {
         // TODO: Implement Google Drive upload
-        // For now, return a placeholder URL
+        // For now, return a placeholder URL or use existing logic if any
         return 'https://drive.google.com/file/d/placeholder';
     }
 }
+
+

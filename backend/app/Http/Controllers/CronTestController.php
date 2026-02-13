@@ -4,20 +4,21 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use App\Services\EnhancedBillingGenerationServiceWithNotifications;
+use Illuminate\Support\Facades\Log;
 
 class CronTestController extends Controller
 {
     public function processOverdueNotifications()
     {
         try {
-            Artisan::call('cron:process-overdue-notifications');
-            
-            $output = Artisan::output();
+            $service = app(EnhancedBillingGenerationServiceWithNotifications::class);
+            $results = $service->generateOverdueNotices(false, 1);
             
             return response()->json([
                 'success' => true,
                 'message' => 'Overdue notifications processed successfully',
-                'output' => $output
+                'output' => json_encode($results)
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -31,14 +32,13 @@ class CronTestController extends Controller
     public function processDisconnectionNotices()
     {
         try {
-            Artisan::call('cron:process-disconnection-notices');
-            
-            $output = Artisan::output();
+            $service = app(EnhancedBillingGenerationServiceWithNotifications::class);
+            $results = $service->generateDCNotices(false, 1, true);
             
             return response()->json([
                 'success' => true,
                 'message' => 'Disconnection notices processed successfully',
-                'output' => $output
+                'output' => json_encode($results)
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -70,3 +70,4 @@ class CronTestController extends Controller
         }
     }
 }
+

@@ -173,11 +173,14 @@ class ApplicationController extends Controller
         try {
             $data = [
                 'id' => $application->id,
+                'type' => 'application',
                 'customer_name' => $this->getFullName($application),
                 'plan_name' => $application->desired_plan ?? 'Unknown',
                 'status' => $application->status ?? 'pending',
-                'created_at' => $application->created_at,
-                'formatted_date' => $application->created_at->diffForHumans(),
+                'title' => '🔔 New Application',
+                'message' => 'A new customer application has been received',
+                'timestamp' => now()->timestamp,
+                'formatted_date' => now()->format('Y-m-d h:i:s A') // e.g. 2026-02-11 05:53:42 PM
             ];
 
             Http::timeout(2)->post('http://127.0.0.1:3001/broadcast/new-application', $data);
@@ -410,3 +413,4 @@ class ApplicationController extends Controller
         }
     }
 }
+

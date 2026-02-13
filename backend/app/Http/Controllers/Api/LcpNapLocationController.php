@@ -492,3 +492,4 @@ class LcpNapLocationController extends Controller
         }
     }
 }
+

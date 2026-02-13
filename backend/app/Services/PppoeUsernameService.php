@@ -249,3 +249,4 @@ class PppoeUsernameService
         return $baseUsername . time();
     }
 }
+

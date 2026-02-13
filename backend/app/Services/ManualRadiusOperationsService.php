@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 use Exception;
 
 class ManualRadiusOperationsService
@@ -30,7 +31,7 @@ class ManualRadiusOperationsService
             }
 
             // Determine status based on remarks
-            $status = ($remarks === "Pullout") ? "Pullout" : "Inactive";
+            $status = ($remarks === "Pullout") ? "Pullout" : "Disconnected";
             $this->writeLog("Status Set: $status");
 
             // Get RADIUS configurations
@@ -56,8 +57,9 @@ class ManualRadiusOperationsService
                 'output' => 'Success: User Disconnected'
             ];
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("[TRACE] " . $e->getTraceAsString());
             $this->writeLog("=== DISCONNECT USER END ===");
             
             return [
@@ -104,7 +106,7 @@ class ManualRadiusOperationsService
                 $username,
                 $cleanPlan,
                 'Active',
-                false, // isDisconnectAction
+                true, // isDisconnectAction
                 $accountNo,
                 $updatedBy
             );
@@ -118,8 +120,9 @@ class ManualRadiusOperationsService
                 'output' => 'Success: User Reconnected'
             ];
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("[TRACE] " . $e->getTraceAsString());
             $this->writeLog("=== RECONNECT USER END ===");
             
             return [
@@ -149,8 +152,8 @@ class ManualRadiusOperationsService
                 throw new Exception("Current username is required");
             }
 
-            if (empty($newUsername) || empty($newPassword)) {
-                throw new Exception("New username and password are required");
+            if (empty($newUsername)) {
+                throw new Exception("New username is required");
             }
 
             // Get RADIUS configurations
@@ -185,8 +188,9 @@ class ManualRadiusOperationsService
                 'output' => 'Success: Credentials Updated (RADIUS updated, DB username updated)'
             ];
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("[TRACE] " . $e->getTraceAsString());
             $this->writeLog("=== UPDATE CREDENTIALS END ===");
             
             return [
@@ -200,7 +204,7 @@ class ManualRadiusOperationsService
     /**
      * Update RADIUS credentials (username and password)
      */
-    private function updateRadiusCredentials(array $radiusEndpoints, string $oldUsername, string $newUsername, string $newPassword): bool
+    public function updateRadiusCredentials(array $radiusEndpoints, string $oldUsername, string $newUsername, ?string $newPassword = null): bool
     {
         $this->writeLog("[CREDENTIALS] Attempting to update from '$oldUsername' to '$newUsername'");
 
@@ -233,11 +237,14 @@ class ManualRadiusOperationsService
             return false;
         }
 
-        // Step 2: Patch the user (rename & new password)
+        // Step 2: Patch the user (rename & optionally new password)
         $payload = [
-            'name' => $newUsername,
-            'password' => $newPassword
+            'name' => $newUsername
         ];
+
+        if (!empty($newPassword)) {
+            $payload['password'] = $newPassword;
+        }
 
         $updateSuccess = false;
         foreach ($radiusEndpoints as $endpoint) {
@@ -266,21 +273,24 @@ class ManualRadiusOperationsService
     }
 
     /**
-     * Update database credentials (username only, no password in DB)
+     * Update database credentials (username only)
      */
     private function updateDatabaseCredentials(string $accountNo, string $oldUsername, string $newUsername, string $updatedBy): void
     {
         $rowsUpdated = 0;
 
-        // Try via Account No first
+        // PPPoE Username is in technical_details table, not billing_accounts
         if (!empty($accountNo)) {
-            $rowsUpdated = DB::table('billing_accounts')
-                ->where('account_no', $accountNo)
-                ->update([
-                    'pppoe_username' => $newUsername,
-                    'updated_at' => now(),
-                    'updated_by' => $updatedBy
-                ]);
+            $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
+            if ($billingAccount) {
+                $rowsUpdated = DB::table('technical_details')
+                    ->where('account_id', $billingAccount->id)
+                    ->update([
+                        'username' => $newUsername,
+                        'updated_at' => now(),
+                        'updated_by' => $updatedBy
+                    ]);
+            }
 
             if ($rowsUpdated > 0) {
                 $this->writeLog("[DB] Updated username via Account No: $accountNo");
@@ -288,12 +298,12 @@ class ManualRadiusOperationsService
             }
         }
 
-        // Fallback to old username
+        // Fallback to old username in technical_details
         $this->writeLog("[DB] Account No update failed/skipped. Trying old username...");
-        $rowsUpdated = DB::table('billing_accounts')
-            ->where('pppoe_username', $oldUsername)
+        $rowsUpdated = DB::table('technical_details')
+            ->where('username', $oldUsername)
             ->update([
-                'pppoe_username' => $newUsername,
+                'username' => $newUsername,
                 'updated_at' => now(),
                 'updated_by' => $updatedBy
             ]);
@@ -350,7 +360,9 @@ class ManualRadiusOperationsService
                 $this->writeLog("[PATCH] Mismatch ($currentRadiusGroup != $targetGroup). Updating group...");
                 $payload = ['group' => $targetGroup];
 
-                foreach ($radiusEndpoints as $endpoint) {
+                // FAILOVER LOGIC: Try each server in order, stop on first success
+                foreach ($radiusEndpoints as $index => $endpoint) {
+                    $this->writeLog("[PATCH] Trying RADIUS server #" . ($index + 1) . ": {$endpoint['url']}");
                     $targetUrl = $endpoint['url'] . "/rest/user-manage/user/" . $radiusId;
                     $result = $this->callApiWithRetry(
                         $targetUrl,
@@ -361,8 +373,11 @@ class ManualRadiusOperationsService
                     );
 
                     if ($result !== false) {
-                        $this->writeLog("[PATCH] Success at {$endpoint['url']}");
+                        $this->writeLog("[PATCH] Success at {$endpoint['url']} (Server #" . ($index + 1) . ")");
                         $patchHappened = true;
+                        break; // Stop on first successful server
+                    } else {
+                        $this->writeLog("[PATCH] Failed at {$endpoint['url']}, trying next server...");
                     }
                 }
             }
@@ -372,7 +387,7 @@ class ManualRadiusOperationsService
 
             if ($shouldKill) {
                 $this->writeLog("[DECISION] Killing session...");
-                $this->killUserSession($radiusEndpoints, $username);
+                $this->killUserSession($radiusEndpoints, $username, $patchHappened);
             } else {
                 $this->writeLog("[DECISION] No changes needed, keeping session");
             }
@@ -389,6 +404,19 @@ class ManualRadiusOperationsService
      */
     private function updateDatabaseStatus(string $accountNo, string $username, string $dbStatus, string $updatedBy): void
     {
+        // Get status ID from billing_status table
+        $statusId = DB::table('billing_status')->where('status_name', $dbStatus)->value('id');
+
+        // If status name not found (e.g. "Inactive"), try "Disconnected" as fallback
+        if (!$statusId && $dbStatus === 'Inactive') {
+             $statusId = DB::table('billing_status')->where('status_name', 'Disconnected')->value('id');
+        }
+
+        if (!$statusId) {
+            $this->writeLog("[WARNING] Status '$dbStatus' not found in billing_status table. Database update skipped.");
+            return;
+        }
+
         $rowsUpdated = 0;
 
         // Try via Account No first
@@ -396,37 +424,45 @@ class ManualRadiusOperationsService
             $rowsUpdated = DB::table('billing_accounts')
                 ->where('account_no', $accountNo)
                 ->update([
-                    'billing_status' => $dbStatus,
+                    'billing_status_id' => $statusId,
                     'updated_at' => now(),
                     'updated_by' => $updatedBy
                 ]);
         }
 
-        // Fallback to username
-        if ($rowsUpdated === 0) {
-            $rowsUpdated = DB::table('billing_accounts')
-                ->where('pppoe_username', $username)
-                ->update([
-                    'billing_status' => $dbStatus,
-                    'updated_at' => now(),
-                    'updated_by' => $updatedBy
-                ]);
+        // Fallback to searching technical_details since billing_accounts doesn't have username
+        if ($rowsUpdated === 0 && !empty($username)) {
+            try {
+                $techDetail = DB::table('technical_details')->where('username', $username)->first();
+                if ($techDetail) {
+                    $rowsUpdated = DB::table('billing_accounts')
+                        ->where('id', $techDetail->account_id)
+                        ->update([
+                            'billing_status_id' => $statusId,
+                            'updated_at' => now(),
+                            'updated_by' => $updatedBy
+                        ]);
+                }
+            } catch (Throwable $e) {
+                $this->writeLog("[DB ERROR] Error updating status via tech details: " . $e->getMessage());
+            }
         }
 
         if ($rowsUpdated > 0) {
-            $this->writeLog("[DB] Status updated to: $dbStatus");
+            $this->writeLog("[DB] Status updated to: $dbStatus (ID: $statusId)");
         } else {
-            $this->writeLog("[WARNING] Database status update affected 0 rows");
+            $this->writeLog("[WARNING] Database status update affected 0 rows for Account: $accountNo, User: $username");
         }
     }
 
     /**
-     * Kill active user sessions
+     * Kill active user sessions (with failover support)
      */
-    private function killUserSession(array $radiusEndpoints, string $username): void
+    private function killUserSession(array $radiusEndpoints, string $username, bool $useFailover = true): void
     {
         $sessPath = "/rest/user-manage/session?user=" . urlencode($username);
         $sessions = null;
+        $activeEndpoint = null;
 
         // Find active sessions
         foreach ($radiusEndpoints as $endpoint) {
@@ -441,7 +477,8 @@ class ManualRadiusOperationsService
 
             if ($result && is_array($result)) {
                 $sessions = $result;
-                $this->writeLog("[SESSION] Found " . count($sessions) . " active session(s)");
+                $activeEndpoint = $endpoint;
+                $this->writeLog("[SESSION] Found " . count($sessions) . " active session(s) on {$endpoint['url']}");
                 break;
             }
         }
@@ -451,21 +488,37 @@ class ManualRadiusOperationsService
             return;
         }
 
-        // Kill all sessions
+        // Kill sessions - FAILOVER LOGIC: only kill on the server where we found the session
         foreach ($sessions as $session) {
             if (isset($session['.id'])) {
                 $sessionId = $session['.id'];
                 
-                foreach ($radiusEndpoints as $endpoint) {
-                    $delUrl = $endpoint['url'] . "/rest/user-manage/session/" . $sessionId;
-                    $this->callApiWithRetry(
+                if ($useFailover && $activeEndpoint) {
+                    // Only kill on the active endpoint
+                    $delUrl = $activeEndpoint['url'] . "/rest/user-manage/session/" . $sessionId;
+                    $result = $this->callApiWithRetry(
                         $delUrl,
                         'DELETE',
                         null,
-                        $endpoint['username'],
-                        $endpoint['password']
+                        $activeEndpoint['username'],
+                        $activeEndpoint['password']
                     );
-                    $this->writeLog("[KILL] Terminated session ID $sessionId");
+                    if ($result !== false) {
+                        $this->writeLog("[KILL] Terminated session ID $sessionId on {$activeEndpoint['url']}");
+                    }
+                } else {
+                    // Legacy: Kill on all endpoints
+                    foreach ($radiusEndpoints as $endpoint) {
+                        $delUrl = $endpoint['url'] . "/rest/user-manage/session/" . $sessionId;
+                        $this->callApiWithRetry(
+                            $delUrl,
+                            'DELETE',
+                            null,
+                            $endpoint['username'],
+                            $endpoint['password']
+                        );
+                        $this->writeLog("[KILL] Terminated session ID $sessionId on {$endpoint['url']}");
+                    }
                 }
             }
         }
@@ -568,3 +621,4 @@ class ManualRadiusOperationsService
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }
 }
+

@@ -132,7 +132,7 @@ class JobOrderController extends Controller
                     'Installation_Fee' => $jobOrder->installation_fee,
                     'Billing_Day' => $jobOrder->billing_day,
                     'Onsite_Status' => $jobOrder->onsite_status,
-                    'billing_status_id' => $jobOrder->billing_status_id,
+                    'billing_status' => $jobOrder->billing_status,
                     'Status_Remarks' => $jobOrder->status_remarks,
                     'Assigned_Email' => $jobOrder->assigned_email,
                     'Contract_Template' => $jobOrder->contract_link,
@@ -191,7 +191,7 @@ class JobOrderController extends Controller
                     'Secondary_Mobile_Number' => $application ? $application->secondary_mobile_number : null,
                     'Desired_Plan' => $application ? $application->desired_plan : null,
                     'Referred_By' => $application ? $application->referred_by : null,
-                    'Billing_Status' => $jobOrder->billing_status_id,
+                    'Billing_Status' => $jobOrder->billing_status,
                 ];
             });
 
@@ -227,7 +227,7 @@ class JobOrderController extends Controller
                 'timestamp' => 'nullable|date',
                 'installation_fee' => 'nullable|numeric|min:0',
                 'billing_day' => 'nullable|integer|min:0|max:31',
-                'billing_status_id' => 'nullable|integer|exists:billing_status,id',
+                'billing_status' => 'nullable|string|max:255',
                 'onsite_status' => 'nullable|string|max:255',
                 'assigned_email' => 'nullable|email|max:255',
                 'onsite_remarks' => 'nullable|string',
@@ -261,8 +261,8 @@ class JobOrderController extends Controller
             }
             
             // Set default values if not provided
-            if (!isset($data['billing_status_id'])) {
-                $data['billing_status_id'] = 2; // Default to pending/initial status (assuming 1 is Active)
+            if (!isset($data['billing_status'])) {
+                $data['billing_status'] = 'Pending';
             }
             
             if (!isset($data['onsite_status'])) {
@@ -533,7 +533,12 @@ class JobOrderController extends Controller
                 'pppoe_password_length' => isset($data['pppoe_password']) ? strlen($data['pppoe_password']) : 0
             ]);
 
+            $oldStatus = $jobOrder->onsite_status;
             $jobOrder->update($data);
+            
+            if (($data['onsite_status'] ?? null) === 'Done' && $oldStatus !== 'Done') {
+                $this->broadcastJobOrderDone($jobOrder);
+            }
             
             \Log::info('JobOrder After Update', [
                 'id' => $id,
@@ -626,6 +631,30 @@ class JobOrderController extends Controller
         }
     }
 
+    private function broadcastJobOrderDone($jobOrder)
+    {
+        try {
+            $application = $jobOrder->application;
+            $data = [
+                'id' => $jobOrder->id,
+                'type' => 'job_order_done',
+                'customer_name' => trim(($application->first_name ?? '') . ' ' . ($application->last_name ?? '')),
+                'plan_name' => $application->desired_plan ?? 'Unknown Plan',
+                'title' => 'Job Order Completed',
+                'message' => 'Onsite status marked as Done',
+                'timestamp' => now()->timestamp,
+                'formatted_date' => now()->format('Y-m-d h:i:s A') // e.g. 2026-02-11 05:53:42 PM
+            ];
+
+            Http::timeout(2)->post('http://127.0.0.1:3001/broadcast/job-order-done', $data);
+            \Log::info('Real-time broadcast sent for Job Order Done', ['id' => $jobOrder->id]);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast Job Order Done to socket server', [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
     public function destroy($id): JsonResponse
     {
         try {
@@ -674,28 +703,43 @@ class JobOrderController extends Controller
                 ]);
             }
 
-            $customer = Customer::create([
-                'first_name' => $application->first_name,
-                'middle_initial' => $application->middle_initial,
-                'last_name' => $application->last_name,
-                'email_address' => $application->email_address,
-                'contact_number_primary' => $application->mobile_number,
-                'contact_number_secondary' => $application->secondary_mobile_number,
-                'address' => $application->installation_address,
-                'location' => $application->location,
-                'barangay' => $application->barangay,
-                'city' => $application->city,
-                'region' => $application->region,
-                'address_coordinates' => $jobOrder->address_coordinates,
-                'housing_status' => $application->housing_status,
-                'referred_by' => $application->referred_by,
-                'desired_plan' => $application->desired_plan,
-                'house_front_picture_url' => $jobOrder->house_front_picture_url,
-                'created_by' => $defaultUserId,
-                'updated_by' => $defaultUserId,
-            ]);
+            if ($jobOrder->billing_status === 'Done' || $jobOrder->account_id) {
+                throw new \Exception('Job order has already been approved and has an associated billing account.');
+            }
 
-            \Log::info('Customer Created with Contact Numbers', [
+            // Check if a customer with the same email and names already exists to maintain 1-to-1
+            $existingCustomer = Customer::where('email_address', $application->email_address)
+                ->where('first_name', $application->first_name)
+                ->where('last_name', $application->last_name)
+                ->first();
+
+            if ($existingCustomer) {
+                $customer = $existingCustomer;
+                \Log::info('Using existing customer for approval', ['customer_id' => $customer->id]);
+            } else {
+                $customer = Customer::create([
+                    'first_name' => $application->first_name,
+                    'middle_initial' => $application->middle_initial,
+                    'last_name' => $application->last_name,
+                    'email_address' => $application->email_address,
+                    'contact_number_primary' => $application->mobile_number,
+                    'contact_number_secondary' => $application->secondary_mobile_number,
+                    'address' => $application->installation_address,
+                    'location' => $application->location,
+                    'barangay' => $application->barangay,
+                    'city' => $application->city,
+                    'region' => $application->region,
+                    'address_coordinates' => $jobOrder->address_coordinates,
+                    'housing_status' => $application->housing_status,
+                    'referred_by' => $application->referred_by,
+                    'desired_plan' => $application->desired_plan,
+                    'house_front_picture_url' => $jobOrder->house_front_picture_url,
+                    'created_by' => $defaultUserId,
+                    'updated_by' => $defaultUserId,
+                ]);
+            }
+
+            \Log::info('Customer Ready with Contact Numbers', [
                 'customer_id' => $customer->id,
                 'contact_number_primary' => $customer->contact_number_primary,
                 'contact_number_secondary' => $customer->contact_number_secondary,
@@ -704,6 +748,11 @@ class JobOrderController extends Controller
 
             $accountNumber = $this->generateAccountNumber();
             
+            // Final safety check for 1-to-1 account_no uniqueness
+            if (BillingAccount::where('account_no', $accountNumber)->exists()) {
+                throw new \Exception('Billing account already exists with this account number.');
+            }
+
             \Log::info('Generated account number', [
                 'generated_account_no' => $accountNumber
             ]);
@@ -772,25 +821,22 @@ class JobOrderController extends Controller
                 'plan_id_stored' => $billingAccount->plan_id
             ]);
 
-            $lastName = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $application->last_name ?? 'user'));
-            $mobileNumber = preg_replace('/[^0-9]/', '', $application->mobile_number ?? '');
-            $usernameForTechnical = $lastName . $mobileNumber;
-            
-            $existingUsername = TechnicalDetail::where('username', $usernameForTechnical)->first();
-            if ($existingUsername) {
-                $usernameForTechnical = $usernameForTechnical . '_' . time();
-            }
+            // Use username from job order if exists, otherwise fallback to account number
+            $usernameValue = $jobOrder->pppoe_username ?: ($jobOrder->username ?: $accountNumber);
+            $usernameForTechnical = $usernameValue;
 
             $modemSN = $jobOrder->modem_router_sn;
             if ($modemSN) {
-                $existingModemSN = TechnicalDetail::where('router_modem_sn', $modemSN)->first();
-                if ($existingModemSN) {
-                    $modemSN = $modemSN . '_' . time();
+                // Check if technical detail already exists for this modem SN
+                if (TechnicalDetail::where('router_modem_sn', $modemSN)->exists()) {
+                    throw new \Exception('Technical details already exist with this modem serial number.');
                 }
             }
 
-            $usernameForTechnical = \DB::table('billing_accounts')->where('account_no', $accountNumber)->value('username');
-
+            // Check for technical details with same account number to ensure 1-to-1
+            if (TechnicalDetail::where('account_no', $accountNumber)->exists()) {
+                throw new \Exception('Technical details already exist for this account number.');
+            }
             // Manual lookup for LCPNAP Location to ensure trimming
             $lcpnapValue = trim($jobOrder->lcpnap);
             $lcpnapData = LCPNAPLocation::where('lcpnap_name', $lcpnapValue)
@@ -822,69 +868,35 @@ class JobOrderController extends Controller
 
 
 
-            // Generate PPPoE credentials using pattern-based service
-            \Log::info('=== STARTING PPPOE CREDENTIAL GENERATION ===', [
-                'job_order_id' => $id,
-                'customer_first_name' => $application->first_name,
-                'customer_last_name' => $application->last_name,
-                'customer_mobile' => $application->mobile_number
-            ]);
-            
-            $pppoeService = new PppoeUsernameService();
-            
-            // Using the already fetched and trimmed technical info
-            $customerData = [
-                'first_name' => $application->first_name ?? '',
-                'middle_initial' => $application->middle_initial ?? '',
-                'last_name' => $application->last_name ?? '',
-                'mobile_number' => $application->mobile_number ?? '',
-                'lcp' => $lcpValue,
-                'nap' => $napValue,
-                'port' => $portValue,
-            ];
-            
-            // Generate unique PPPoE username based on patterns
-            $pppoeUsername = $pppoeService->generateUniqueUsername($customerData, $id);
-            $pppoePassword = $pppoeService->generatePassword($customerData);
-            
-            if (empty($pppoeUsername)) {
-                throw new \Exception('Failed to generate PPPoE username');
-            }
-            
-            if (empty($pppoePassword)) {
-                throw new \Exception('Failed to generate PPPoE password');
+            // Use the calculated username and contact number for credentials
+            $generatedUsername = $usernameValue;
+            $generatedPassword = $jobOrder->pppoe_password ?: $customer->contact_number_primary;
+
+            // Check if online status already exists for this username
+            if (OnlineStatus::where('username', $generatedUsername)->exists()) {
+                throw new \Exception('theirs already a data in database');
             }
 
             OnlineStatus::create([
                 'account_id' => $billingAccount->id,
                 'account_no' => $accountNumber,
-                'username' => $pppoeUsername,
+                'username' => $generatedUsername,
                 'session_status' => '',
             ]);
             
-            \Log::info('PPPoE credentials generated successfully', [
-                'job_order_id' => $id,
-                'pppoe_username' => $pppoeUsername,
-                'pppoe_password' => '***' . substr($pppoePassword, -4), // Masked for security
-                'username_length' => strlen($pppoeUsername),
-                'password_length' => strlen($pppoePassword),
-                'username_pattern_source' => 'pppoe_username_patterns table (pattern_type=username)',
-                'password_pattern_source' => 'pppoe_username_patterns table (pattern_type=password)'
-            ]);
-
             $jobOrder->update([
                 'billing_status' => 'Done',
                 'account_id' => $billingAccount->id,
-                'pppoe_username' => $pppoeUsername,
-                'pppoe_password' => $pppoePassword,
+                'pppoe_username' => $generatedUsername,
+                'pppoe_password' => $generatedPassword,
                 'updated_by_user_email' => 'system@ampere.com'
             ]);
             
-            \Log::info('PPPoE credentials saved to job_orders table', [
+            \Log::info('Credentials saved to job_orders table', [
                 'job_order_id' => $id,
                 'table' => 'job_orders',
-                'columns_updated' => ['pppoe_username', 'pppoe_password', 'billing_status', 'account_id'],
-                'pppoe_username_saved' => $pppoeUsername
+                'columns_updated' => ['username', 'password', 'billing_status', 'account_id'],
+                'username_saved' => $generatedUsername
             ]);
 
             $customerRoleId = 3;
@@ -929,6 +941,83 @@ class JobOrderController extends Controller
 
             DB::commit();
 
+            // Send Welcome SMS
+            try {
+                if (!empty($customer->contact_number_primary)) {
+                    $welcomeTemplate = \App\Models\SMSTemplate::where('template_type', 'Welcome')
+                        ->where('is_active', 1)
+                        ->first();
+                        
+                    if ($welcomeTemplate) {
+                        $message = $welcomeTemplate->message_content;
+                        
+                        // Replace variables
+                        $message = str_replace('{{customer_name}}', $customer->full_name, $message);
+                        $message = str_replace('{{account_no}}', $accountNumber, $message);
+                        $message = str_replace('{{username}}', $generatedUsername, $message);
+                        $message = str_replace('{{password}}', $generatedPassword, $message);
+                        
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsService->send([
+                            'contact_no' => $customer->contact_number_primary,
+                            'message' => $message
+                        ]);
+                        
+                        \Log::info('Welcome SMS sent successfully', [
+                             'customer_id' => $customer->id,
+                             'account_no' => $accountNumber
+                        ]);
+                    } else {
+                        \Log::warning('Welcome SMS template not found');
+                    }
+                }
+            } catch (\Exception $e) {
+                // Log but don't fail the request since approval is committed
+                \Log::error('Failed to send Welcome SMS: ' . $e->getMessage()); 
+            }
+
+            // Send Welcome Email
+            try {
+                if (!empty($customer->email_address)) {
+                    $welcomeEmailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'WELCOME')
+                        ->where('Is_Active', true)
+                        ->first();
+
+                    if ($welcomeEmailTemplate) {
+                        $emailBody = $welcomeEmailTemplate->email_body;
+
+                        // Replace variables in email body
+                        $emailBody = str_replace('{{customer_name}}', $customer->full_name, $emailBody);
+                        $emailBody = str_replace('{{account_no}}', $accountNumber, $emailBody);
+                        $emailBody = str_replace('{{username}}', $generatedUsername, $emailBody);
+                        $emailBody = str_replace('{{password}}', $generatedPassword, $emailBody);
+
+                         if (!empty($emailBody)) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             
+                             $emailService->queueEmail([
+                                 'account_no' => $accountNumber,
+                                 'recipient_email' => $customer->email_address,
+                                 'subject' => $welcomeEmailTemplate->Subject_Line ?? 'Welcome to Ampere', 
+                                 'body_html' => nl2br($emailBody), 
+                                 'attachment_path' => null
+                             ]);
+                             
+                             \Log::info('Welcome Email queued successfully', [
+                                  'customer_id' => $customer->id,
+                                  'email' => $customer->email_address
+                             ]);
+                         } else {
+                             \Log::warning('Welcome Email Body is empty');
+                         }
+                    } else {
+                        \Log::warning('Welcome Email template not found or inactive');
+                    }
+                }
+            } catch (\Exception $e) {
+                 \Log::error('Failed to send Welcome Email: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Job order approved successfully',
@@ -945,8 +1034,8 @@ class JobOrderController extends Controller
                     'contact_number_secondary' => $customer->contact_number_secondary,
                     'user_created' => !isset($existingUser),
                     'user_username' => $accountNumber,
-                    'pppoe_username' => $pppoeUsername,
-                    'pppoe_password' => $pppoePassword,
+                    'username' => $generatedUsername,
+                    'password' => $generatedPassword,
                 ]
             ]);
 
@@ -955,6 +1044,31 @@ class JobOrderController extends Controller
             
             \Log::error('Error approving job order: ' . $e->getMessage());
             \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            // Map common error messages to user-friendly "duplicate" message
+            $duplicateMessages = [
+                'theirs already a data in database',
+                'Duplicate entry',
+                'Integrity constraint violation',
+                'Billing account already exists',
+                'Technical details already exist'
+            ];
+            
+            $isDuplicate = false;
+            foreach ($duplicateMessages as $msg) {
+                if (strpos($e->getMessage(), $msg) !== false) {
+                    $isDuplicate = true;
+                    break;
+                }
+            }
+            
+            if ($isDuplicate) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'theirs already a data in database',
+                    'error' => $e->getMessage(),
+                ], 409); // Conflict
+            }
             
             return response()->json([
                 'success' => false,

@@ -59,3 +59,4 @@ class ExpensesLogController extends Controller
         }
     }
 }
+

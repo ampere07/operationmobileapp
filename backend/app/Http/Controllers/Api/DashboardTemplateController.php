@@ -144,3 +144,4 @@ class DashboardTemplateController extends Controller
         ]);
     }
 }
+

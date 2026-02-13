@@ -9,6 +9,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use App\Models\BillingAccount;
+use App\Services\ManualRadiusOperationsService;
+use App\Services\PppoeUsernameService;
+use Illuminate\Support\Facades\Auth;
 
 class ServiceOrderController extends Controller
 {
@@ -263,13 +267,33 @@ class ServiceOrderController extends Controller
             Log::info('Inserted service order:', (array)$insertedOrder);
             
             Log::info('Service order created successfully', ['id' => $serviceOrderId, 'ticket_id' => $ticketId]);
+            
+            $currentConcern = trim($request->input('concern'));
+            $supportStatus = strtolower(trim($request->input('support_status')));
+            
+            \Log::info('Reconnection check (store) debug:', [
+                'current_concern' => $currentConcern,
+                'request_support_status' => $supportStatus
+            ]);
+            
+            $reconnectStatus = null;
+            if ($currentConcern && strtolower($currentConcern) === 'reconnect' && $supportStatus === 'resolved') {
+                $billingAccount = BillingAccount::where('account_no', $request->account_no)->first();
+                if ($billingAccount) {
+                    Log::info('Triggering auto-reconnect for NEW Service Order with Reconnect concern', [
+                        'account_no' => $request->account_no
+                    ]);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount);
+                }
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Service order created successfully',
                 'data' => [
                     'id' => $serviceOrderId,
-                    'ticket_id' => $ticketId
+                    'ticket_id' => $ticketId,
+                    'reconnect_status' => $reconnectStatus
                 ],
             ], 201);
         } catch (\Exception $e) {
@@ -433,37 +457,84 @@ class ServiceOrderController extends Controller
             if ($request->has('plan')) {
                 $customerUpdateData['desired_plan'] = $request->plan;
             }
+
+            if ($request->has('new_plan')) {
+                $billingAccount = DB::table('billing_accounts')
+                    ->where('account_no', $order->account_no)
+                    ->first();
+                
+                if ($billingAccount) {
+                    $oldPlan = DB::table('customers')
+                        ->where('id', $billingAccount->customer_id)
+                        ->value('desired_plan');
+                    $updateData['old_plan'] = $oldPlan;
+                }
+
+                $customerUpdateData['desired_plan'] = $request->new_plan;
+                $updateData['new_plan'] = $request->new_plan;
+            }
             
+            // Handle technical details and old/new preservation
+            $technicalDetails = DB::table('technical_details')
+                ->where('account_no', $order->account_no)
+                ->first();
+
+            if ($technicalDetails) {
+                // Preservation and update logic
+                $hasTechUpdate = $request->filled('new_lcp') || $request->filled('new_nap') || 
+                                $request->filled('new_port') || $request->filled('new_vlan') || 
+                                $request->filled('new_router_modem_sn') || $request->filled('router_modem_sn') ||
+                                $request->filled('lcp') || $request->filled('nap') || $request->filled('port') || $request->filled('vlan');
+
+                if ($hasTechUpdate) {
+                    Log::info('Technical details update detected in ServiceOrderController');
+                    
+                    // Old values
+                    $updateData['old_lcp'] = $technicalDetails->lcp;
+                    $updateData['old_nap'] = $technicalDetails->nap;
+                    $updateData['old_port'] = $technicalDetails->port;
+                    $updateData['old_vlan'] = $technicalDetails->vlan;
+                    $updateData['old_router_modem_sn'] = $technicalDetails->router_modem_sn;
+                    $updateData['old_lcpnap'] = $technicalDetails->lcpnap;
+
+                    // New values (checking both 'new_lcp' and legacy 'lcp' fields)
+                    $newLcp = $request->input('new_lcp') ?? $request->input('lcp') ?? $technicalDetails->lcp;
+                    $newNap = $request->input('new_nap') ?? $request->input('nap') ?? $technicalDetails->nap;
+                    $newPort = $request->input('new_port') ?? $request->input('port') ?? $technicalDetails->port;
+                    $newVlan = $request->input('new_vlan') ?? $request->input('vlan') ?? $technicalDetails->vlan;
+                    $newSN = $request->input('new_router_modem_sn') ?? $request->input('router_modem_sn') ?? $technicalDetails->router_modem_sn;
+                    
+                    // Calculate LCPNAP
+                    $newLcpNap = trim(($newLcp ?? '') . ' - ' . ($newNap ?? ''), ' - ');
+
+                    // Store new values in service_orders
+                    $updateData['new_lcp'] = $newLcp;
+                    $updateData['new_nap'] = $newNap;
+                    $updateData['new_port'] = $newPort;
+                    $updateData['new_vlan'] = $newVlan;
+                    $updateData['new_router_modem_sn'] = $newSN;
+                    $updateData['new_lcpnap'] = $newLcpNap;
+
+                    // Sync to technical_details table
+                    $technicalUpdateData = [
+                        'lcp' => $newLcp,
+                        'nap' => $newNap,
+                        'port' => $newPort,
+                        'vlan' => $newVlan,
+                        'router_modem_sn' => $newSN,
+                        'lcpnap' => $newLcpNap,
+                        'updated_at' => now(),
+                        'updated_by' => Auth::user()->name ?? 'Web'
+                    ];
+                }
+            }
+
             if ($request->has('username')) {
                 $technicalUpdateData['username'] = $request->username;
             }
             
             if ($request->has('connection_type')) {
                 $technicalUpdateData['connection_type'] = $request->connection_type;
-            }
-            
-            if ($request->has('router_modem_sn')) {
-                $technicalUpdateData['router_modem_sn'] = $request->router_modem_sn;
-            }
-            
-            if ($request->has('lcp')) {
-                $technicalUpdateData['lcp'] = $request->lcp;
-            }
-            
-            if ($request->has('nap')) {
-                $technicalUpdateData['nap'] = $request->nap;
-            }
-            
-            if ($request->has('port')) {
-                $technicalUpdateData['port'] = $request->port;
-            }
-            
-            if ($request->has('vlan')) {
-                $technicalUpdateData['vlan'] = $request->vlan;
-            }
-            
-            if ($request->has('lcpnap')) {
-                $technicalUpdateData['lcpnap'] = $request->lcpnap;
             }
             
             if ($request->has('concern_remarks')) {
@@ -629,9 +700,92 @@ class ServiceOrderController extends Controller
                 }
             }
 
+            // Trigger Reconnection if concern is 'Reconnect'
+            $currentConcern = trim($request->input('concern'));
+            if (!$currentConcern && isset($order->concern)) {
+                $currentConcern = trim($order->concern);
+            }
+
+            $supportStatus = strtolower(trim($request->input('support_status') ?? ''));
+            if (empty($supportStatus) && isset($order->support_status)) {
+                $supportStatus = strtolower(trim($order->support_status));
+            }
+
+            \Log::info('Reconnection check debug:', [
+                'current_concern' => $currentConcern,
+                'request_support_status' => $supportStatus
+            ]);
+
+            $reconnectStatus = null;
+            $normalizedConcern = $currentConcern ? strtolower(trim($currentConcern)) : '';
+            if ($normalizedConcern && ($normalizedConcern === 'reconnect' || $normalizedConcern === 'upgrade/downgrade plan') && $supportStatus === 'resolved') {
+                $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
+                if ($billingAccount) {
+                    \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
+                        'account_no' => $order->account_no
+                    ]);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount);
+                }
+            }
+
+            // Trigger Disconnection if concern is 'Disconnect' and support status is 'Resolved'
+            $disconnectStatus = null;
+            if ($currentConcern && strtolower($currentConcern) === 'disconnect' && $supportStatus === 'resolved') {
+                $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
+                if ($billingAccount) {
+                    \Log::info('Triggering auto-disconnect for Service Order with Disconnect concern', [
+                        'account_no' => $order->account_no
+                    ]);
+                    $disconnectStatus = $this->attemptDisconnection($billingAccount);
+                }
+            }
+
+            // Trigger Pullout if repair category is 'Pullout' and visit status is 'Done'
+            $pulloutStatus = null;
+            
+            $visitStatus = strtolower(trim($request->input('visit_status') ?? ''));
+            if (empty($visitStatus) && isset($order->visit_status)) {
+                $visitStatus = strtolower(trim($order->visit_status));
+            }
+            
+            $repairCategory = strtolower(trim($request->input('repair_category') ?? ''));
+            if (empty($repairCategory) && isset($order->repair_category)) {
+                $repairCategory = strtolower(trim($order->repair_category));
+            }
+
+            if ($repairCategory === 'pullout' && $visitStatus === 'done') {
+                $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
+                if ($billingAccount) {
+                    \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
+                        'account_no' => $order->account_no
+                    ]);
+                    $pulloutStatus = $this->attemptPullout($billingAccount);
+                }
+            }
+
+            // Trigger Migration if repair category is 'Migrate' and visit status is 'Done'
+            $migrationStatus = null;
+            if ($repairCategory === 'migrate' && $visitStatus === 'done') {
+                $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
+                if ($billingAccount) {
+                    $newRouterModemSN = $request->input('new_router_modem_sn');
+                    if ($newRouterModemSN) {
+                        \Log::info('Triggering auto-migration for Service Order', [
+                            'account_no' => $order->account_no,
+                            'new_sn' => $newRouterModemSN
+                        ]);
+                        $migrationStatus = $this->attemptMigration($billingAccount, $newRouterModemSN);
+                    }
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Service order updated successfully',
+                'reconnect_status' => $reconnectStatus,
+                'disconnect_status' => $disconnectStatus,
+                'pullout_status' => $pulloutStatus,
+                'migration_status' => $migrationStatus
             ]);
         } catch (\Exception $e) {
             Log::error('Error updating service order: ' . $e->getMessage());
@@ -664,6 +818,477 @@ class ServiceOrderController extends Controller
         }
     }
 
+    private function attemptReconnection($billingAccount): string
+    {
+        try {
+            // Reload billing account
+            $billingAccount = BillingAccount::find($billingAccount->id);
+            $accountNo = $billingAccount->account_no;
+            
+            \Log::info('[SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
+
+            // Step 3: Get account details (PPPoE Username and Plan)
+            $accountInfo = DB::table('billing_accounts')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.id', $billingAccount->id)
+                ->select('technical_details.username as pppoe_username', 'customers.desired_plan')
+                ->first();
+
+            $username = $accountInfo->pppoe_username ?? null;
+            $plan = $accountInfo->desired_plan ?? null;
+
+            if (empty($username)) {
+                \Log::info('[SERVICE ORDER RECONNECT SKIP] No PPPoE username found in technical_details');
+                return 'no_username';
+            }
+
+            if (empty($plan)) {
+                \Log::info('[SERVICE ORDER RECONNECT SKIP] No plan found');
+                return 'no_plan';
+            }
+
+            \Log::info('[SERVICE ORDER RECONNECT PROCEED] Reconnecting user for account: ' . $accountNo);
+
+            // Step 4: Update billing_status_id to 1 (Active) BEFORE reconnecting
+            $billingAccount->billing_status_id = 1;
+            $billingAccount->updated_at = now();
+            $billingAccount->updated_by = Auth::id();
+            $billingAccount->save();
+            
+            \Log::info('[SERVICE ORDER RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
+
+            // Step 5: Prepare parameters for ManualRadiusOperationsService
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $username,
+                'plan' => $plan,
+                'updatedBy' => 'Service Order Auto-Reconnect'
+            ];
+
+            // Step 6: Call ManualRadiusOperationsService reconnectUser
+            \Log::info('[SERVICE ORDER RECONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            
+            $manualRadiusService = new ManualRadiusOperationsService();
+            $result = $manualRadiusService->reconnectUser($params);
+
+            if ($result['status'] === 'success') {
+                \Log::info('[SERVICE ORDER RECONNECT SUCCESS] Reconnection completed successfully');
+
+                // Send SMS Notification
+                try {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Reconnect')
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if ($smsTemplate) {
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                                'customers.contact_number_primary',
+                                'customers.email_address',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                            )
+                            ->first();
+
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            $message = $smsTemplate->message_content;
+                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                }
+
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+                    
+                    if ($emailTemplate && !empty($customerInfo->email_address)) {
+                         $body = $emailTemplate->email_body;
+                         
+                         if (!empty($body)) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             $emailService->queueEmail([
+                                 'account_no' => $accountNo,
+                                 'recipient_email' => $customerInfo->email_address,
+                                 'subject' => $emailTemplate->Subject_Line ?? 'Reconnection Notice', 
+                                 'body_html' => nl2br($body), 
+                                 'attachment_path' => null
+                             ]);
+                             \Log::info('[SERVICE ORDER RECONNECT EMAIL] Email queued');
+                         }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
+
+                return 'success';
+            } else {
+                \Log::info('[SERVICE ORDER RECONNECT FAILED] ' . $result['message']);
+                return 'failed';
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('[SERVICE ORDER RECONNECT EXCEPTION] ' . $e->getMessage());
+            return 'exception';
+        }
+    }
+
+    private function attemptDisconnection($billingAccount): string
+    {
+        try {
+            // Reload billing account
+            $billingAccount = BillingAccount::find($billingAccount->id);
+            $accountNo = $billingAccount->account_no;
+            
+            \Log::info('[SERVICE ORDER DISCONNECT] Force starting for account: ' . $accountNo);
+
+            // Get account details (PPPoE Username)
+            $accountInfo = DB::table('billing_accounts')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.id', $billingAccount->id)
+                ->select('technical_details.username as pppoe_username')
+                ->first();
+
+            $username = $accountInfo->pppoe_username ?? null;
+
+            if (empty($username)) {
+                \Log::info('[SERVICE ORDER DISCONNECT SKIP] No PPPoE username found in technical_details');
+                return 'no_username';
+            }
+
+            \Log::info('[SERVICE ORDER DISCONNECT PROCEED] Disconnecting user for account: ' . $accountNo);
+
+            // Prepare parameters for ManualRadiusOperationsService
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $username,
+                'remarks' => 'Disconnect',
+                'updatedBy' => 'Service Order Auto-Disconnect'
+            ];
+
+            // Call ManualRadiusOperationsService disconnectUser
+            \Log::info('[SERVICE ORDER DISCONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            
+            $manualRadiusService = new ManualRadiusOperationsService();
+            $result = $manualRadiusService->disconnectUser($params);
+
+            if ($result['status'] === 'success') {
+                \Log::info('[SERVICE ORDER DISCONNECT SUCCESS] Disconnection completed successfully');
+
+                // Update billing_status_id to 4 (Disconnected) AFTER successful RADIUS disconnect
+                $billingAccount->billing_status_id = 4;
+                $billingAccount->updated_at = now();
+                $billingAccount->updated_by = Auth::id();
+                $billingAccount->save();
+                
+                \Log::info('[SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
+
+                // Send SMS Notification
+                try {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Disconnected')
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if ($smsTemplate) {
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                                'customers.contact_number_primary',
+                                'customers.email_address',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                                'billing_accounts.account_balance'
+                            )
+                            ->first();
+
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            $message = $smsTemplate->message_content;
+                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+                            $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                            $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[SERVICE ORDER DISCONNECT SMS] SMS sent');
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER DISCONNECT SMS EXCEPTION] ' . $e->getMessage());
+                }
+
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
+                    
+                    if ($emailTemplate && !empty($customerInfo->email_address)) {
+                         $body = $emailTemplate->email_body;
+                         
+                         if (!empty($body)) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             $emailService->queueEmail([
+                                 'account_no' => $accountNo,
+                                 'recipient_email' => $customerInfo->email_address,
+                                 'subject' => $emailTemplate->Subject_Line ?? 'Disconnection Notice', 
+                                 'body_html' => nl2br($body), 
+                                 'attachment_path' => null
+                             ]);
+                             \Log::info('[SERVICE ORDER DISCONNECT EMAIL] Email queued');
+                         }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
+
+                return 'success';
+            } else {
+                \Log::info('[SERVICE ORDER DISCONNECT FAILED] ' . $result['message']);
+                return 'failed';
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('[SERVICE ORDER DISCONNECT EXCEPTION] ' . $e->getMessage());
+            return 'exception';
+        }
+    }
+
+    private function attemptPullout($billingAccount): string
+    {
+        try {
+            // Reload billing account
+            $billingAccount = BillingAccount::find($billingAccount->id);
+            $accountNo = $billingAccount->account_no;
+            
+            \Log::info('[SERVICE ORDER PULLOUT] Force starting for account: ' . $accountNo);
+
+            // Get account details (PPPoE Username)
+            $accountInfo = DB::table('billing_accounts')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.id', $billingAccount->id)
+                ->select('technical_details.username as pppoe_username')
+                ->first();
+
+            $username = $accountInfo->pppoe_username ?? null;
+
+            if (empty($username)) {
+                \Log::info('[SERVICE ORDER PULLOUT SKIP] No PPPoE username found in technical_details');
+                return 'no_username';
+            }
+
+            \Log::info('[SERVICE ORDER PULLOUT PROCEED] Executing pullout for account: ' . $accountNo);
+
+            // Prepare parameters for ManualRadiusOperationsService
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $username,
+                'remarks' => 'Pullout',
+                'updatedBy' => 'Service Order Auto-Pullout'
+            ];
+
+            // Call ManualRadiusOperationsService disconnectUser
+            \Log::info('[SERVICE ORDER PULLOUT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            
+            $manualRadiusService = new ManualRadiusOperationsService();
+            $result = $manualRadiusService->disconnectUser($params);
+
+            if ($result['status'] === 'success') {
+                \Log::info('[SERVICE ORDER PULLOUT SUCCESS] Disconnection completed successfully');
+
+                // Update billing_status_id to 5 (Pullout) AFTER successful RADIUS disconnect
+                $billingAccount->billing_status_id = 5;
+                $billingAccount->updated_at = now();
+                $billingAccount->updated_by = Auth::id();
+                $billingAccount->save();
+                
+                \Log::info('[SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
+
+                // Clear technical details
+                DB::table('technical_details')
+                    ->where('account_no', $accountNo)
+                    ->update([
+                        'connection_type' => null,
+                        'router_model' => null,
+                        'router_modem_sn' => null,
+                        'ip_address' => null,
+                        'lcp' => null,
+                        'nap' => null,
+                        'port' => null,
+                        'vlan' => null,
+                        'lcpnap' => null,
+                        'usage_type' => null,
+                        'updated_at' => now()
+                    ]);
+
+                \Log::info('[SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
+
+                // Send SMS Notification
+                try {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Disconnected')
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if ($smsTemplate) {
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                                'customers.contact_number_primary',
+                                'customers.email_address',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                                'billing_accounts.account_balance'
+                            )
+                            ->first();
+
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            $message = $smsTemplate->message_content;
+                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+                            $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                            $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[SERVICE ORDER PULLOUT SMS] SMS sent');
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER PULLOUT SMS EXCEPTION] ' . $e->getMessage());
+                }
+
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
+                    
+                    if ($emailTemplate && !empty($customerInfo->email_address)) {
+                         $body = $emailTemplate->email_body;
+                         
+                         if (!empty($body)) {
+                             $emailService = app(\App\Services\EmailQueueService::class);
+                             $emailService->queueEmail([
+                                 'account_no' => $accountNo,
+                                 'recipient_email' => $customerInfo->email_address,
+                                 'subject' => $emailTemplate->Subject_Line ?? 'Disconnection Notice', 
+                                 'body_html' => nl2br($body), 
+                                 'attachment_path' => null
+                             ]);
+                             \Log::info('[SERVICE ORDER PULLOUT EMAIL] Email queued');
+                         }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
+
+                return 'success';
+            } else {
+                \Log::info('[SERVICE ORDER PULLOUT FAILED] ' . $result['message']);
+                return 'failed';
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('[SERVICE ORDER PULLOUT EXCEPTION] ' . $e->getMessage());
+            return 'exception';
+        }
+    }
+
+    private function attemptMigration($billingAccount, $newRouterModemSN): string
+    {
+        try {
+            $accountNo = $billingAccount->account_no;
+            
+            \Log::info('[SERVICE ORDER MIGRATION] Force starting for account: ' . $accountNo);
+
+            // Get data for username generation
+            $fullInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.first_name',
+                    'customers.middle_initial',
+                    'customers.last_name',
+                    'customers.contact_number_primary as mobile_number',
+                    'technical_details.lcp',
+                    'technical_details.nap',
+                    'technical_details.port',
+                    'technical_details.username as pppoe_username'
+                )
+                ->first();
+
+            $oldUsername = $fullInfo->pppoe_username ?? null;
+
+            if (empty($oldUsername)) {
+                \Log::info('[SERVICE ORDER MIGRATION SKIP] No PPPoE username found');
+                return 'no_username';
+            }
+
+            // Generate new username using the same logic as JobOrderController
+            $pppoeService = new PppoeUsernameService();
+            $customerData = (array)$fullInfo;
+            $newUsername = $pppoeService->generateUniqueUsername($customerData);
+
+            \Log::info('[SERVICE ORDER MIGRATION] Generated new username', [
+                'old' => $oldUsername,
+                'new' => $newUsername
+            ]);
+
+            // Prepare parameters for ManualRadiusOperationsService
+            // Password is NOT changed during migration
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $oldUsername,
+                'newUsername' => $newUsername,
+                'updatedBy' => 'Service Order Auto-Migration'
+            ];
+
+            \Log::info('[SERVICE ORDER MIGRATION EXECUTE] Calling ManualRadiusOperationsService for ' . $oldUsername);
+            
+            $manualRadiusService = new ManualRadiusOperationsService();
+            $result = $manualRadiusService->updateCredentials($params);
+
+            if ($result['status'] === 'success') {
+                \Log::info('[SERVICE ORDER MIGRATION SUCCESS] Migration completed successfully');
+                return 'success';
+            } else {
+                \Log::info('[SERVICE ORDER MIGRATION FAILED] ' . $result['message']);
+                return 'failed';
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('[SERVICE ORDER MIGRATION EXCEPTION] ' . $e->getMessage());
+            return 'exception';
+        }
+    }
+
     private function generateTicketId(): string
     {
         $currentYear = date('Y');
@@ -687,3 +1312,4 @@ class ServiceOrderController extends Controller
         return $ticketId;
     }
 }
+

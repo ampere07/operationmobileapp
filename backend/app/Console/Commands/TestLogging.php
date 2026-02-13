@@ -44,3 +44,4 @@ class TestLogging extends Command
         return 0;
     }
 }
+

@@ -23,6 +23,7 @@ class Inventory extends Model
         'category_id',
         'supplier_id',
         'quantity_alert',
+        'total_quantity',
         'image_url',
         'created_by_user_id',
         'updated_by_user_id'
@@ -30,6 +31,7 @@ class Inventory extends Model
     
     protected $casts = [
         'quantity_alert' => 'integer',
+        'total_quantity' => 'integer',
         'category_id' => 'integer',
         'supplier_id' => 'integer',
         'created_at' => 'datetime',
@@ -44,3 +46,4 @@ class Inventory extends Model
         return $this->belongsTo(InventoryCategory::class, 'category_id');
     }
 }
+

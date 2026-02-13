@@ -18,7 +18,7 @@ class Plan extends Model
         'description',
         'price',
         'group_id',
-        'modified_by_user',
+        'modified_by_user_id',
         'modified_date',
     ];
 

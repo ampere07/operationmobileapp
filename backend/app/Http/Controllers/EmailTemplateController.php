@@ -38,11 +38,17 @@ class EmailTemplateController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'Template_Code' => 'required|string|max:50|unique:email_templates,Template_Code',
-                'Subject_Line' => 'required|string|max:150',
-                'Body_HTML' => 'required|string',
+                'Template_Code' => 'nullable|string|max:50|unique:email_templates,Template_Code',
+                'Subject_Line' => 'nullable|string|max:150',
+                'cc' => 'nullable|string|max:255',
+                'bcc' => 'nullable|string|max:255',
+                'email_sender' => 'nullable|string|max:255',
+                'sender_name' => 'nullable|string|max:255',
+                'reply_to' => 'nullable|string|max:255',
+                'Body_HTML' => 'nullable|string',
                 'Description' => 'nullable|string|max:255',
-                'Is_Active' => 'nullable|boolean'
+                'Is_Active' => 'nullable|boolean',
+                'email_body' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
@@ -57,12 +63,23 @@ class EmailTemplateController extends Controller
                 'data' => $request->except(['Body_HTML'])
             ]);
 
+            $templateCode = $request->input('Template_Code');
+            if (empty($templateCode)) {
+                $templateCode = uniqid('TPL_');
+            }
+
             $template = EmailTemplate::create([
-                'Template_Code' => $request->input('Template_Code'),
+                'Template_Code' => $templateCode,
                 'Subject_Line' => $request->input('Subject_Line'),
+                'cc' => $request->input('cc'),
+                'bcc' => $request->input('bcc'),
+                'email_sender' => $request->input('email_sender'),
+                'sender_name' => $request->input('sender_name'),
+                'reply_to' => $request->input('reply_to'),
                 'Body_HTML' => $request->input('Body_HTML'),
                 'Description' => $request->input('Description'),
-                'Is_Active' => $request->input('Is_Active', 1)
+                'Is_Active' => $request->input('Is_Active', 1),
+                'email_body' => $request->input('email_body')
             ]);
 
             return response()->json([
@@ -127,10 +144,16 @@ class EmailTemplateController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'Subject_Line' => 'sometimes|string|max:150',
-                'Body_HTML' => 'sometimes|string',
+                'Subject_Line' => 'nullable|string|max:150',
+                'cc' => 'nullable|string|max:255',
+                'bcc' => 'nullable|string|max:255',
+                'email_sender' => 'nullable|string|max:255',
+                'sender_name' => 'nullable|string|max:255',
+                'reply_to' => 'nullable|string|max:255',
+                'Body_HTML' => 'nullable|string',
                 'Description' => 'nullable|string|max:255',
-                'Is_Active' => 'nullable|boolean'
+                'Is_Active' => 'nullable|boolean',
+                'email_body' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
@@ -151,6 +174,21 @@ class EmailTemplateController extends Controller
             if ($request->has('Subject_Line')) {
                 $updateData['Subject_Line'] = $request->input('Subject_Line');
             }
+            if ($request->has('cc')) {
+                $updateData['cc'] = $request->input('cc');
+            }
+            if ($request->has('bcc')) {
+                $updateData['bcc'] = $request->input('bcc');
+            }
+            if ($request->has('email_sender')) {
+                $updateData['email_sender'] = $request->input('email_sender');
+            }
+            if ($request->has('sender_name')) {
+                $updateData['sender_name'] = $request->input('sender_name');
+            }
+            if ($request->has('reply_to')) {
+                $updateData['reply_to'] = $request->input('reply_to');
+            }
             if ($request->has('Body_HTML')) {
                 $updateData['Body_HTML'] = $request->input('Body_HTML');
             }
@@ -159,6 +197,9 @@ class EmailTemplateController extends Controller
             }
             if ($request->has('Is_Active')) {
                 $updateData['Is_Active'] = $request->input('Is_Active');
+            }
+            if ($request->has('email_body')) {
+                $updateData['email_body'] = $request->input('email_body');
             }
 
             $template->update($updateData);
@@ -259,3 +300,4 @@ class EmailTemplateController extends Controller
         }
     }
 }
+

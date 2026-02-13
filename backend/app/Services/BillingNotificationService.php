@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BillingAccount;
 use App\Models\Invoice;
 use App\Models\StatementOfAccount;
+use App\Models\SMSTemplate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
@@ -133,7 +134,7 @@ class BillingNotificationService
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
-                    'OVERDUE_DESIGN_EMAIL',
+                    'OVERDUE_DESIGN',
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
                         'google_drive_url' => $pdfResult['url'],
@@ -193,7 +194,7 @@ class BillingNotificationService
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
-                    'DCNOTICE_DESIGN_EMAIL',
+                    'DCNOTICE_DESIGN',
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
                         'google_drive_url' => $pdfResult['url'],
@@ -305,15 +306,50 @@ class BillingNotificationService
 
         $amount = $invoice ? $invoice->total_amount : $soa->total_amount_due;
         $dueDate = $invoice ? $invoice->due_date : $soa->due_date;
+        $dcDate = $dueDate->copy()->addDays(4); // Default rule
 
-        return [
+        // Common Data
+        $data = [
+            'Full_Name' => $customer->full_name,
+            'Address' => $customer->address,
+            'Contact_No' => $customer->contact_number_primary,
+            'Email' => $customer->email_address,
+            'Account_No' => $account->account_no,
+            'Plan' => $customer->desired_plan,
+            'Due_Date' => $dueDate->format('F d, Y'),
+            'DC_Date' => $dcDate->format('F d, Y'),
+            'Total_Due' => number_format($amount ?? 0, 2),
+            'Amount_Due' => number_format($amount ?? 0, 2),
+            // Legacy mapping used by some simple templates
             'account_no' => $account->account_no,
             'customer_name' => $customer->full_name,
-            'total_amount' => number_format($amount, 2),
+            'total_amount' => number_format($amount ?? 0, 2),
             'due_date' => $dueDate->format('F d, Y'),
             'plan' => $customer->desired_plan,
             'contact_no' => $customer->contact_number_primary
         ];
+
+        if ($soa) {
+            $data['SOA_No'] = $soa->statement_no ?? '';
+            $data['Statement_Date'] = $soa->statement_date ? $soa->statement_date->format('F d, Y') : '';
+            $data['Prev_Balance'] = number_format($soa->balance_from_previous_bill ?? 0, 2);
+            $data['Prev_Payment'] = number_format($soa->payment_received_previous ?? 0, 2);
+            $data['Rem_Balance'] = number_format($soa->remaining_balance_previous ?? 0, 2);
+            // SOA usually covers a billing period; simplified here as start/end might be logic-dependent
+            $data['Period_Start'] = ''; 
+            $data['Period_End'] = ''; 
+        } elseif ($invoice) {
+             // Invoice specific data
+            $data['SOA_No'] = $invoice->invoice_no ?? ''; // Or N/A
+            $data['Statement_Date'] = $invoice->invoice_date ? $invoice->invoice_date->format('F d, Y') : '';
+            $data['Prev_Balance'] = '0.00';
+            $data['Prev_Payment'] = number_format($invoice->received_payment ?? 0, 2);
+            $data['Rem_Balance'] = number_format($invoice->invoice_balance ?? 0, 2);
+            $data['Period_Start'] = '';
+            $data['Period_End'] = '';
+        }
+
+        return $data;
     }
 
     protected function buildBillingSmsMessage(
@@ -324,18 +360,46 @@ class BillingNotificationService
         $customer = $account->customer;
         $accountBalance = $account->account_balance;
         $dueDate = $soa ? $soa->due_date : $invoice->due_date;
+        $paymentLink = config('app.payment_link', 'https://pay.example.com');
+
+        $template = SMSTemplate::where('template_type', 'StatementofAccount')
+            ->where('is_active', true)
+            ->first();
+
+        if ($template) {
+            $message = $template->message_content;
+            $message = str_replace('{{customer_name}}', $customer->full_name, $message);
+            $message = str_replace('{{account_no}}', $account->account_no, $message);
+            $message = str_replace('{{amount_due}}', number_format($accountBalance, 2), $message);
+            $message = str_replace('{{due_date}}', $dueDate->format('M d, Y'), $message);
+            $message = str_replace('{{payment_link}}', $paymentLink, $message);
+            return $message;
+        }
 
         return sprintf(
             "Your billing statement for %s is ready. Amount Due: ₱%s. Due Date: %s. Check your email for details or pay online at %s",
             $account->account_no,
             number_format($accountBalance, 2),
             $dueDate->format('M d, Y'),
-            config('app.payment_link', 'https://pay.example.com')
+            $paymentLink
         );
     }
 
     protected function buildOverdueSmsMessage(BillingAccount $account, Invoice $invoice): string
     {
+        $template = SMSTemplate::where('template_type', 'Overdue')
+            ->where('is_active', true)
+            ->first();
+
+        if ($template) {
+            $message = $template->message_content;
+            $message = str_replace('{{customer_name}}', $account->customer->full_name, $message);
+            $message = str_replace('{{account_no}}', $account->account_no, $message);
+            $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
+            $message = str_replace('{{due_date}}', $invoice->due_date->format('M d, Y'), $message);
+            return $message;
+        }
+
         return sprintf(
             "OVERDUE NOTICE: Your account %s has an overdue balance of ₱%s. Original due date: %s. Please settle immediately to avoid service interruption.",
             $account->account_no,
@@ -347,6 +411,19 @@ class BillingNotificationService
     protected function buildDcNoticeSmsMessage(BillingAccount $account, Invoice $invoice): string
     {
         $dcDate = $invoice->due_date->copy()->addDays(4);
+        
+        $template = SMSTemplate::where('template_type', 'DCNotice')
+            ->where('is_active', true)
+            ->first();
+
+        if ($template) {
+            $message = $template->message_content;
+            $message = str_replace('{{customer_name}}', $account->customer->full_name, $message);
+            $message = str_replace('{{account_no}}', $account->account_no, $message);
+            $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
+            $message = str_replace('{{dc_date}}', $dcDate->format('M d, Y'), $message);
+            return $message;
+        }
 
         return sprintf(
             "DISCONNECTION NOTICE: Your account %s will be disconnected on %s. Outstanding balance: ₱%s. Pay now to avoid service interruption.",
@@ -368,3 +445,4 @@ class BillingNotificationService
         }
     }
 }
+

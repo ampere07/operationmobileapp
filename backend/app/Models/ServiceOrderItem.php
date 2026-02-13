@@ -21,3 +21,4 @@ class ServiceOrderItem extends Model
         return $this->belongsTo(ServiceOrder::class);
     }
 }
+

@@ -27,3 +27,4 @@ class BillingStatus extends Model
         return $this->hasMany(JobOrder::class, 'billing_status_id');
     }
 }
+

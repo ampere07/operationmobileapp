@@ -14,6 +14,8 @@ use App\Models\MassRebate;
 use App\Models\RebateUsage;
 use App\Models\Barangay;
 use App\Models\BillingConfig;
+use App\Models\Overdue;
+use App\Models\DCNotice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -164,7 +166,7 @@ class EnhancedBillingGenerationServiceWithNotifications
             'technicalDetails',
             'plan'
         ])
-            ->where('billing_status_id', 2)
+            ->where('billing_status_id', 1)
             ->whereNotNull('date_installed')
             ->whereNotNull('account_no');
 
@@ -205,6 +207,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     public function createEnhancedStatement(BillingAccount $account, Carbon $statementDate, int $userId): StatementOfAccount
     {
+        $statementDate = $statementDate->copy()->setTimezone('Asia/Manila');
         DB::beginTransaction();
 
         try {
@@ -262,7 +265,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
             $statement = StatementOfAccount::create([
                 'account_no' => $account->account_no,
-                'statement_date' => $statementDate,
+                'statement_date' => $statementDate->format('Y-m-d'),
                 'balance_from_previous_bill' => round($previousBalance, 2),
                 'payment_received_previous' => round($paymentReceived, 2),
                 'remaining_balance_previous' => round($remainingBalance, 2),
@@ -299,6 +302,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     public function createEnhancedInvoice(BillingAccount $account, Carbon $invoiceDate, int $userId): Invoice
     {
+        $invoiceDate = $invoiceDate->copy()->setTimezone('Asia/Manila');
         DB::beginTransaction();
 
         try {
@@ -349,7 +353,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
             $invoice = Invoice::create([
                 'account_no' => $account->account_no,
-                'invoice_date' => $invoiceDate,
+                'invoice_date' => $invoiceDate->format('Y-m-d'),
                 'invoice_balance' => round($prorateAmount, 2),
                 'others_and_basic_charges' => round($othersBasicCharges, 2),
                 'service_charge' => round($charges['service_fees'], 2),
@@ -374,7 +378,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
             $account->update([
                 'account_balance' => round($newBalance, 2),
-                'balance_update_date' => $invoiceDate
+                'balance_update_date' => $invoiceDate->format('Y-m-d')
             ]);
             
             $this->log('info', 'Invoice created with discount applied to balance', [
@@ -496,7 +500,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     public function generateAllBillingsForToday(int $userId): array
     {
-        $today = Carbon::now();
+        $today = Carbon::now('Asia/Manila');
         $targetBillingDays = $this->calculateTargetBillingDays($today);
         $advanceGenerationDay = $this->getAdvanceGenerationDay();
 
@@ -513,36 +517,99 @@ class EnhancedBillingGenerationServiceWithNotifications
             
             $this->log('info', "Processing billing day: {$billingDayLabel}");
             
-            $soaResults = $this->generateSOAForBillingDay($billingDay, $today, $userId);
-            $invoiceResults = $this->generateInvoicesForBillingDay($billingDay, $today, $userId);
+            // Use Unified Billing Generation to prevent duplicate SMS
+            $unifiedResults = $this->generateUnifiedBilling($billingDay, $today, $userId);
             
             $results['billing_days_processed'][] = $billingDayLabel;
-            $results['invoices']['success'] += $invoiceResults['success'];
-            $results['invoices']['failed'] += $invoiceResults['failed'];
-            $results['invoices']['errors'] = array_merge($results['invoices']['errors'], $invoiceResults['errors']);
-            $results['invoices']['notifications'] = array_merge($results['invoices']['notifications'], $invoiceResults['notifications'] ?? []);
             
-            $results['statements']['success'] += $soaResults['success'];
-            $results['statements']['failed'] += $soaResults['failed'];
-            $results['statements']['errors'] = array_merge($results['statements']['errors'], $soaResults['errors']);
-            $results['statements']['notifications'] = array_merge($results['statements']['notifications'], $soaResults['notifications'] ?? []);
+            // Merge Invoice Results
+            $results['invoices']['success'] += $unifiedResults['invoices']['success'];
+            $results['invoices']['failed'] += $unifiedResults['invoices']['failed'];
+            $results['invoices']['errors'] = array_merge($results['invoices']['errors'], $unifiedResults['invoices']['errors']);
+            
+            // Merge Statement Results
+            $results['statements']['success'] += $unifiedResults['statements']['success'];
+            $results['statements']['failed'] += $unifiedResults['statements']['failed'];
+            $results['statements']['errors'] = array_merge($results['statements']['errors'], $unifiedResults['statements']['errors']);
+            
+            // Merge Notifications (Unified) - adding to statements for tracking, though it covers both
+            $results['statements']['notifications'] = array_merge($results['statements']['notifications'], $unifiedResults['notifications'] ?? []);
         }
 
         return $results;
     }
 
+    public function generateUnifiedBilling(int $billingDay, Carbon $generationDate, int $userId): array
+    {
+        $results = [
+            'invoices' => ['success' => 0, 'failed' => 0, 'errors' => []],
+            'statements' => ['success' => 0, 'failed' => 0, 'errors' => []],
+            'notifications' => []
+        ];
+
+        try {
+            $accounts = $this->getActiveAccountsForBillingDay($billingDay, $generationDate);
+
+            foreach ($accounts as $account) {
+                $soa = null;
+                $invoice = null;
+
+                // 1. Generate SOA
+                try {
+                    $soa = $this->createEnhancedStatement($account, $generationDate, $userId);
+                    $results['statements']['success']++;
+                } catch (\Exception $e) {
+                    $results['statements']['failed']++;
+                    $results['statements']['errors'][] = [
+                        'account_id' => $account->id,
+                        'account_no' => $account->account_no,
+                        'error' => "SOA Error: " . $e->getMessage()
+                    ];
+                    $this->log('error', "Failed to generate SOA for account {$account->account_no}: " . $e->getMessage());
+                }
+
+                // 2. Generate Invoice
+                try {
+                    $invoice = $this->createEnhancedInvoice($account, $generationDate, $userId);
+                    $results['invoices']['success']++;
+                } catch (\Exception $e) {
+                    $results['invoices']['failed']++;
+                    $results['invoices']['errors'][] = [
+                        'account_id' => $account->id,
+                        'account_no' => $account->account_no,
+                        'error' => "Invoice Error: " . $e->getMessage()
+                    ];
+                    $this->log('error', "Failed to generate Invoice for account {$account->account_no}: " . $e->getMessage());
+                }
+
+                // 3. Notify ONCE (if either exists)
+                if ($soa || $invoice) {
+                     $notificationResult = $this->queueNotification($account, $invoice, $soa);
+                     $results['notifications'][] = $notificationResult;
+                }
+            }
+        } catch (\Exception $e) {
+            $this->log('error', "Error in generateUnifiedBilling: " . $e->getMessage());
+            // In case of catastrophic failure, we just return partial results with the error logged
+            // You might want to bubble this up depending on desire
+        }
+        
+        return $results;
+    }
+
     public function generateBillingsForSpecificDay(int $billingDay, int $userId): array
     {
-        $today = Carbon::now();
+        $today = Carbon::now('Asia/Manila');
 
-        $soaResults = $this->generateSOAForBillingDay($billingDay, $today, $userId);
-        $invoiceResults = $this->generateInvoicesForBillingDay($billingDay, $today, $userId);
+        // Use Unified Billing
+        $unifiedResults = $this->generateUnifiedBilling($billingDay, $today, $userId);
 
         return [
             'date' => $today->format('Y-m-d'),
             'billing_day' => $billingDay === self::END_OF_MONTH_BILLING ? 'End of Month (0)' : $billingDay,
-            'invoices' => $invoiceResults,
-            'statements' => $soaResults
+            'invoices' => $unifiedResults['invoices'],
+            'statements' => $unifiedResults['statements'],
+            'notifications' => $unifiedResults['notifications']
         ];
     }
 
@@ -785,7 +852,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     protected function markRebatesAsUsed(BillingAccount $account, int $userId, string $invoiceId): void
     {
-        $currentMonth = Carbon::now()->format('F');
+        $currentMonth = Carbon::now('Asia/Manila')->format('F');
         $customer = $account->customer;
         
         if (!$customer) {
@@ -889,4 +956,156 @@ class EnhancedBillingGenerationServiceWithNotifications
             $this->log('error', 'Error tracking staggered invoice association: ' . $e->getMessage());
         }
     }
+
+    public function generateOverdueNotices(bool $force = false, int $userId = 1): array
+    {
+        $config = [
+            'overdue_off' => 1 // Default 1 day after due date
+        ];
+        
+        $targetDue = Carbon::now('Asia/Manila')->subDays($config['overdue_off'])->format('Y-m-d');
+        $this->log('info', ">> OVERDUE GEN: Finding Invoices with Due Date = $targetDue");
+
+        $invoices = Invoice::whereDate('due_date', $targetDue)
+            ->whereIn('status', ['Unpaid', 'Partial'])
+            ->get();
+            
+        $this->log('info', ">> Found " . $invoices->count() . " potential overdue invoices.");
+
+        $cnt = 0;
+        $results = [
+            'success' => 0, 
+            'failed' => 0, 
+            'errors' => [],
+            'target_due_date' => $targetDue,
+            'found_invoices' => $invoices->count()
+        ];
+
+        foreach ($invoices as $inv) {
+            if (!$force) {
+                // Check if Overdue record exists
+                $exists = Overdue::where('invoice_id', $inv->id)->exists();
+                if ($exists) {
+                    $this->log('info', "   Skipping Inv: {$inv->id} (Overdue notice already sent)");
+                    continue;
+                }
+            }
+
+            $this->log('info', "   Processing Overdue for Inv: {$inv->id} (Acct: {$inv->account_no})");
+
+            try {
+                $systemUserId = $userId; 
+
+                // Use Notification Service to Generate PDF and Send Notifications
+                $notificationResult = $this->notificationService->notifyOverdue($inv);
+                
+                if (!$notificationResult['pdf_generated']) {
+                     throw new \Exception("Failed to generate PDF: " . implode(', ', $notificationResult['errors']));
+                }
+                
+                $pdfUrl = $notificationResult['pdf_url'];
+
+                // Insert into Overdue table
+                Overdue::create([
+                    'account_no' => $inv->account_no,
+                    'invoice_id' => $inv->id, 
+                    'overdue_date' => now(),
+                    'print_link' => $pdfUrl,
+                    'created_by_user_id' => $systemUserId,
+                    'updated_by_user_id' => $systemUserId
+                ]);
+
+                $cnt++;
+                $results['success']++;
+
+            } catch (\Exception $e) {
+                $results['failed']++;
+                $results['errors'][] = "Error processing invoice {$inv->id}: " . $e->getMessage();
+                $this->log('error', "ERROR in Overdue {$inv->account_no}: " . $e->getMessage());
+            }
+        }
+
+        return $results;
+    }
+
+    public function generateDCNotices(bool $force = false, int $userId = 1, bool $bypassDateCheck = false): array
+    {
+        $config = [
+            'dc_note_off' => 3 // Default 3 days after due date
+        ];
+
+        $targetDue = Carbon::now('Asia/Manila')->subDays($config['dc_note_off'])->format('Y-m-d');
+        $query = Invoice::whereIn('status', ['Unpaid', 'Partial']);
+        
+        if (!$bypassDateCheck) {
+            $query->whereDate('due_date', $targetDue);
+            $this->log('info', ">> DC NOTICE GEN: Finding Invoices with Due Date = $targetDue");
+        } else {
+            $this->log('info', ">> DC NOTICE GEN: Bypassing Date Check (Fetching ALL Unpaid)");
+        }
+            
+        $invoices = $query->get();
+            
+        $this->log('info', ">> Found " . $invoices->count() . " invoices qualifying for DC Notice.");
+
+        $cnt = 0;
+        $results = [
+            'success' => 0, 
+            'failed' => 0, 
+            'errors' => [],
+            'target_due_date' => $targetDue,
+            'found_invoices' => $invoices->count()
+        ];
+
+        foreach ($invoices as $inv) {
+            if (!$force) {
+                // Check if DC Notice record exists
+                $exists = DCNotice::where('invoice_id', $inv->id)->exists();
+                if ($exists) {
+                    $this->log('info', "   Skipping Inv: {$inv->id} (DC notice already sent)");
+                    continue;
+                }
+            }
+
+            $this->log('info', "   Processing DC Notice for Inv: {$inv->id}");
+
+            try {
+                $systemUserId = $userId;
+
+                // Use Notification Service
+                $notificationResult = $this->notificationService->notifyDcNotice($inv);
+
+                if (!$notificationResult['pdf_generated']) {
+                     throw new \Exception("Failed to generate PDF: " . implode(', ', $notificationResult['errors']));
+                }
+                
+                $pdfUrl = $notificationResult['pdf_url'];
+                
+                if (!$inv->account_no) {
+                     throw new \Exception("Invoice {$inv->id} has no account_no");
+                }
+
+                // Insert into DC Notice table
+                DCNotice::create([
+                    'account_no' => $inv->account_no,
+                    'invoice_id' => $inv->id,
+                    'overdue_date' => now(),
+                    'print_link' => $pdfUrl,
+                    'created_by_user_id' => $systemUserId,
+                    'updated_by_user_id' => $systemUserId
+                ]);
+
+                $cnt++;
+                $results['success']++;
+
+            } catch (\Exception $e) {
+                $results['failed']++;
+                $results['errors'][] = "Error processing invoice {$inv->id}: " . $e->getMessage();
+                $this->log('error', "ERROR in DC Notice {$inv->account_no}: " . $e->getMessage());
+            }
+        }
+
+        return $results;
+    }
 }
+

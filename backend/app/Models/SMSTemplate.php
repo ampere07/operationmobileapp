@@ -19,6 +19,7 @@ class SMSTemplate extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'created_at' => 'datetime',
-        'updated_at' => 'datetime'
+        'updated_at' => 'datetime',
+        'variables' => 'array'
     ];
 }

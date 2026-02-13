@@ -12,9 +12,31 @@ class CustomerController extends Controller
     public function index(): JsonResponse
     {
         try {
+            // Pre-calculate transactions total for 'done' status
+            $transactions = \DB::table('transactions')
+                ->where('status', 'done')
+                ->select('account_no', \DB::raw('SUM(received_payment) as total'))
+                ->groupBy('account_no')
+                ->get()
+                ->pluck('total', 'account_no');
+
+            // Pre-calculate payment portal logs total for 'success' status
+            $portalLogs = \DB::table('payment_portal_logs')
+                ->where('status', 'success')
+                ->select('account_id', \DB::raw('SUM(total_amount) as total'))
+                ->groupBy('account_id')
+                ->get()
+                ->pluck('total', 'account_id');
+
             $customers = Customer::with(['group', 'billingAccounts'])
                 ->get()
-                ->map(function ($customer) {
+                ->map(function ($customer) use ($transactions, $portalLogs) {
+                    $totalPaid = 0;
+                    foreach ($customer->billingAccounts as $account) {
+                        $accNo = $account->account_no;
+                        $totalPaid += ($transactions[$accNo] ?? 0) + ($portalLogs[$accNo] ?? 0);
+                    }
+
                     return [
                         'id' => $customer->id,
                         'first_name' => $customer->first_name,
@@ -35,7 +57,9 @@ class CustomerController extends Controller
                         'desired_plan' => $customer->desired_plan,
                         'house_front_picture_url' => $customer->house_front_picture_url,
                         'group_id' => $customer->group_id,
-                        'group_name' => $customer->group ? $customer->group->name : null,
+                        'group_name' => $customer->group_name,
+                        'groupName' => $customer->group_name,
+                        'total_paid' => $totalPaid,
                         'created_by' => $customer->created_by,
                         'updated_by' => $customer->updated_by,
                         'created_at' => $customer->created_at?->format('Y-m-d H:i:s'),
@@ -84,7 +108,8 @@ class CustomerController extends Controller
                 'desired_plan' => $customer->desired_plan,
                 'house_front_picture_url' => $customer->house_front_picture_url,
                 'group_id' => $customer->group_id,
-                'group_name' => $customer->group ? $customer->group->name : null,
+                'group_name' => $customer->group_name,
+                'groupName' => $customer->group_name,
                 'created_by' => $customer->created_by,
                 'updated_by' => $customer->updated_by,
                 'created_at' => $customer->created_at?->format('Y-m-d H:i:s'),
@@ -235,3 +260,4 @@ class CustomerController extends Controller
         }
     }
 }
+

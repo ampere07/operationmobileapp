@@ -45,17 +45,19 @@ class ServeWithSocket extends Command
         $laravelProcess->setTimeout(null);
         $laravelProcess->start();
 
-        // Handle Ctrl+C gracefully
-        pcntl_async_signals(true);
-        pcntl_signal(SIGINT, function () {
-            $this->cleanup();
-            exit(0);
-        });
+        // Handle signals gracefully if supported (not on Windows)
+        if (function_exists('pcntl_async_signals')) {
+            pcntl_async_signals(true);
+            pcntl_signal(SIGINT, function () {
+                $this->cleanup();
+                exit(0);
+            });
 
-        pcntl_signal(SIGTERM, function () {
-            $this->cleanup();
-            exit(0);
-        });
+            pcntl_signal(SIGTERM, function () {
+                $this->cleanup();
+                exit(0);
+            });
+        }
 
         // Monitor both processes
         while ($laravelProcess->isRunning() || $this->socketProcess->isRunning()) {
@@ -86,3 +88,4 @@ class ServeWithSocket extends Command
         }
     }
 }
+

@@ -782,3 +782,4 @@ class MonitorController extends Controller
         }
     }
 }
+

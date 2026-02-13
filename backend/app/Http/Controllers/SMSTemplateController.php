@@ -56,7 +56,7 @@ class SMSTemplateController extends Controller
                 'template_name' => 'required|string|max:255',
                 'template_type' => 'required|string|max:255',
                 'message_content' => 'required|string',
-                'variables' => 'nullable|string',
+                'variables' => 'nullable',
                 'is_active' => 'boolean'
             ]);
 
@@ -100,7 +100,7 @@ class SMSTemplateController extends Controller
                 'template_name' => 'required|string|max:255',
                 'template_type' => 'required|string|max:255',
                 'message_content' => 'required|string',
-                'variables' => 'nullable|string',
+                'variables' => 'nullable',
                 'is_active' => 'boolean'
             ]);
 

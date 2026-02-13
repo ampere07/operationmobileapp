@@ -21,6 +21,7 @@ class BillingConfig extends Model
         'disconnection_notice',
         'disconnection_fee',
         'pullout_offset',
+        'pullout_day',
         'updated_by'
     ];
 
@@ -32,7 +33,9 @@ class BillingConfig extends Model
         'disconnection_notice' => 'integer',
         'disconnection_fee' => 'decimal:2',
         'pullout_offset' => 'integer',
+        'pullout_day' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 }
+

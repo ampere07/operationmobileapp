@@ -87,3 +87,4 @@ class Application extends Model
         return $this->timestamp->format('m/d/Y H:i:s');
     }
 }
+

@@ -20,6 +20,7 @@ use App\Http\Controllers\EmergencyLocationController;
 use App\Http\Controllers\RadiusController;
 use App\Http\Controllers\RadiusConfigController;
 use App\Http\Controllers\SmsConfigController;
+use App\Http\Controllers\SMSTemplateController;
 use App\Http\Controllers\EmailTemplateController;
 use App\Http\Controllers\EmailQueueController;
 use App\Http\Controllers\TransactionController;
@@ -36,13 +37,19 @@ use App\Http\Controllers\Api\SmsBlastController;
 use App\Http\Controllers\Api\ExpensesLogController;
 use App\Http\Controllers\Api\DisconnectionLogsController;
 use App\Http\Controllers\Api\ReconnectionLogsController;
+use App\Http\Controllers\ConsolidatedNotificationController;
+use App\Http\Controllers\Api\ServiceOrderItemApiController;
 
 Route::get('/monitor/handle', [MonitorController::class, 'handle']);
 Route::post('/monitor/handle', [MonitorController::class, 'handle']); // Ensure POST is also handled for save_template actions if not using REST
 Route::get('/sms-blast', [SmsBlastController::class, 'index']);
 Route::get('/expenses-logs', [ExpensesLogController::class, 'index']);
 Route::get('/disconnection-logs', [DisconnectionLogsController::class, 'index']);
+Route::get('/smart-olt/validate-sn', [\App\Http\Controllers\SmartOltController::class, 'validateOnuSn']);
 Route::get('/reconnection-logs', [ReconnectionLogsController::class, 'index']);
+
+// SMS Template Routes
+Route::apiResource('sms-templates', SMSTemplateController::class);
 
 // Handle all OPTIONS requests
 Route::options('{any}', function() {
@@ -226,6 +233,30 @@ Route::prefix('service-charges')->group(function () {
             ], 500);
         }
     });
+});
+
+// Statement of Accounts Routes
+Route::prefix('statement-of-accounts')->group(function () {
+    Route::get('/by-account/{accountNo}', [RelatedDataController::class, 'getStatementOfAccountsByAccount']);
+    Route::get('/{id}', [RelatedDataController::class, 'getStatementOfAccountById']);
+});
+
+// Invoice Routes
+Route::prefix('invoices')->group(function () {
+    Route::get('/by-account/{accountNo}', [RelatedDataController::class, 'getInvoicesByAccount']);
+    Route::get('/{id}', [RelatedDataController::class, 'getInvoiceById']);
+});
+
+// Payment Portal Logs Routes
+Route::prefix('payment-portal-logs')->group(function () {
+    Route::get('/by-account/{accountNo}', [RelatedDataController::class, 'getPaymentPortalLogsByAccount']);
+    Route::get('/{id}', [RelatedDataController::class, 'getPaymentPortalLogById']);
+});
+
+// Transaction Routes
+Route::prefix('transactions')->group(function () {
+    Route::get('/by-account/{accountNo}', [RelatedDataController::class, 'getTransactionsByAccount']);
+    Route::get('/{id}', [RelatedDataController::class, 'getTransactionById']);
 });
 
 // Installment Management Routes (Enhanced)
@@ -1138,6 +1169,10 @@ Route::get('/debug/organizations', function () {
     }
 });
 
+// SmartOLT Validation Route
+Route::get('/smart-olt/validate-sn', [\App\Http\Controllers\SmartOltController::class, 'validateOnuSn']);
+
+
 // Group Management Routes
 Route::prefix('groups')->middleware('ensure.database.tables')->group(function () {
     Route::get('/', [GroupController::class, 'index']);
@@ -1207,15 +1242,6 @@ Route::prefix('job-order-items')->group(function () {
     Route::get('/{id}', [\App\Http\Controllers\Api\JobOrderItemApiController::class, 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\JobOrderItemApiController::class, 'update']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\JobOrderItemApiController::class, 'destroy']);
-});
-
-// Service Order Items Management Routes
-Route::prefix('service-order-items')->group(function () {
-    Route::get('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'index']);
-    Route::post('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'store']);
-    Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'show']);
-    Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'update']);
-    Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'destroy']);
 });
 
 // Test endpoint for job-order-items
@@ -1436,6 +1462,7 @@ Route::get('/debug/status-remarks-structure', function() {
 Route::prefix('inventory')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\InventoryApiController::class, 'index']);
     Route::post('/', [\App\Http\Controllers\Api\InventoryApiController::class, 'store']);
+    Route::post('/upload-image', [\App\Http\Controllers\Api\InventoryApiController::class, 'uploadImage']);
     Route::get('/debug', [\App\Http\Controllers\Api\InventoryApiController::class, 'debug']);
     Route::get('/statistics', [\App\Http\Controllers\Api\InventoryApiController::class, 'getStatistics']);
     Route::get('/categories', [\App\Http\Controllers\Api\InventoryApiController::class, 'getCategories']);
@@ -1486,6 +1513,7 @@ Route::prefix('port')->group(function () {
 
 // Ports (plural) for frontend compatibility
 Route::prefix('ports')->group(function () {
+    Route::get('/used', [\App\Http\Controllers\Api\PortApiController::class, 'getUsedPorts']);
     Route::get('/', [\App\Http\Controllers\Api\PortApiController::class, 'index']);
     Route::post('/', [\App\Http\Controllers\Api\PortApiController::class, 'store']);
     Route::get('/statistics', [\App\Http\Controllers\Api\PortApiController::class, 'getStatistics']);
@@ -1545,6 +1573,12 @@ Route::prefix('inventory-items')->group(function () {
     Route::get('/{itemName}', [\App\Http\Controllers\Api\InventoryApiController::class, 'show']);
     Route::put('/{itemName}', [\App\Http\Controllers\Api\InventoryApiController::class, 'update']);
     Route::delete('/{itemName}', [\App\Http\Controllers\Api\InventoryApiController::class, 'destroy']);
+});
+
+// Inventory Logs
+Route::prefix('inventory-logs')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\InventoryLogApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\InventoryLogApiController::class, 'store']);
 });
 
 
@@ -1651,6 +1685,24 @@ Route::prefix('service-orders')->group(function () {
     Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class, 'destroy']);
 });
 
+// Service Order Items Management Routes
+Route::prefix('service-order-items')->group(function () {
+    Route::get('/', [ServiceOrderItemApiController::class, 'index']);
+    Route::post('/', [ServiceOrderItemApiController::class, 'store']);
+    Route::get('/{id}', [ServiceOrderItemApiController::class, 'show']);
+    Route::put('/{id}', [ServiceOrderItemApiController::class, 'update']);
+    Route::delete('/{id}', [ServiceOrderItemApiController::class, 'destroy']);
+});
+
+// Also add underscore version for compatibility
+Route::prefix('service_order_items')->group(function () {
+    Route::get('/', [ServiceOrderItemApiController::class, 'index']);
+    Route::post('/', [ServiceOrderItemApiController::class, 'store']);
+    Route::get('/{id}', [ServiceOrderItemApiController::class, 'show']);
+    Route::put('/{id}', [ServiceOrderItemApiController::class, 'update']);
+    Route::delete('/{id}', [ServiceOrderItemApiController::class, 'destroy']);
+});
+
 // Also add underscore version for compatibility
 Route::prefix('service_orders')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\ServiceOrderApiController::class, 'index']);
@@ -1664,6 +1716,7 @@ Route::prefix('service_orders')->group(function () {
 Route::get('/customer-detail/{accountNo}', [\App\Http\Controllers\CustomerDetailController::class, 'show']);
 
 // Customer Detail Update Routes - Update customer, billing, and technical details
+Route::put('/customer-detail/{accountNo}', [\App\Http\Controllers\CustomerDetailUpdateController::class, 'update']);
 Route::put('/customer-detail/{accountNo}/customer', [\App\Http\Controllers\CustomerDetailUpdateController::class, 'updateCustomerDetails']);
 Route::put('/customer-detail/{accountNo}/billing', [\App\Http\Controllers\CustomerDetailUpdateController::class, 'updateBillingDetails']);
 Route::put('/customer-detail/{accountNo}/technical', [\App\Http\Controllers\CustomerDetailUpdateController::class, 'updateTechnicalDetails']);
@@ -2693,6 +2746,7 @@ Route::prefix('notifications')->group(function () {
     Route::get('/recent-applications', [\App\Http\Controllers\NotificationController::class, 'getRecentApplications']);
     Route::get('/unread-count', [\App\Http\Controllers\NotificationController::class, 'getUnreadCount']);
     Route::get('/debug-timezone', [\App\Http\Controllers\NotificationController::class, 'debugTimezone']);
+    Route::get('/consolidated', [ConsolidatedNotificationController::class, 'index']);
 });
 
 Route::post('/debug/verify-password', function(Request $request) {
@@ -2960,6 +3014,7 @@ Route::get('/plan-change-logs/by-account/{accountNo}', [RelatedDataController::c
 Route::get('/service-charge-logs/by-account/{accountNo}', [RelatedDataController::class, 'getServiceChargeLogsByAccount']);
 Route::get('/change-due-logs/by-account/{accountNo}', [RelatedDataController::class, 'getChangeDueLogsByAccount']);
 Route::get('/security-deposits/by-account/{accountNo}', [RelatedDataController::class, 'getSecurityDepositsByAccount']);
+Route::get('/statement-of-accounts/by-account/{accountNo}', [RelatedDataController::class, 'getStatementOfAccountsByAccount']);
 
 // Inventory Related Data Routes
 Route::get('/inventory-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getInventoryLogsByItem']);

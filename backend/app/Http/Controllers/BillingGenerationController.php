@@ -484,6 +484,7 @@ class BillingGenerationController extends Controller
                 : Carbon::now();
 
             $accounts = \App\Models\BillingAccount::with(['customer'])
+                ->where('billing_status_id', 1)
                 ->whereNotNull('date_installed')
                 ->whereNotNull('account_no')
                 ->get();
@@ -705,3 +706,4 @@ class BillingGenerationController extends Controller
         }
     }
 }
+

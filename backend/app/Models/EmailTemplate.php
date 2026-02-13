@@ -22,11 +22,15 @@ class EmailTemplate extends Model
     protected $fillable = [
         'Template_Code',
         'Subject_Line',
-        'CC',        // ADD THIS LINE
-        'BCC',       // ADD THIS LINE
+        'cc',
+        'bcc',
+        'email_sender',
+        'sender_name',
+        'reply_to',
         'Body_HTML',
         'Description',
-        'Is_Active'
+        'Is_Active',
+        'email_body'
     ];
 
     protected $casts = [
@@ -34,3 +38,4 @@ class EmailTemplate extends Model
         'Body_HTML' => 'string'
     ];
 }
+

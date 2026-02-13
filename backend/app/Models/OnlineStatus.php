@@ -39,3 +39,4 @@ class OnlineStatus extends Model
         return $this->belongsTo(BillingAccount::class, 'account_id');
     }
 }
+

@@ -69,16 +69,37 @@ class ServiceOrderItemApiController extends Controller
 
             $items = $request->input('items');
             $insertedItems = [];
+            
+            // Check table structure once outside the loop
+            $hasIsPullout = \Illuminate\Support\Facades\Schema::hasColumn('service_order_items', 'is_pullout');
+            $hasSerialNumber = \Illuminate\Support\Facades\Schema::hasColumn('service_order_items', 'serial_number');
+            $hasItemName = \Illuminate\Support\Facades\Schema::hasColumn('service_order_items', 'item_name');
+            $hasItemId = \Illuminate\Support\Facades\Schema::hasColumn('service_order_items', 'item_id');
 
             foreach ($items as $index => $item) {
                 try {
-                    $serviceOrderItem = ServiceOrderItem::create([
+                    $insertData = [
                         'service_order_id' => $item['service_order_id'],
-                        'item_name' => $item['item_name'],
                         'quantity' => $item['quantity'],
-                        'is_pullout' => $item['is_pullout'] ?? false,
-                        'serial_number' => $item['serial_number'] ?? null,
-                    ]);
+                    ];
+                    
+                    if ($hasItemName) {
+                        $insertData['item_name'] = $item['item_name'];
+                    }
+                    
+                    if ($hasItemId && isset($item['item_id'])) {
+                        $insertData['item_id'] = $item['item_id'];
+                    }
+                    
+                    if ($hasIsPullout) {
+                        $insertData['is_pullout'] = $item['is_pullout'] ?? false;
+                    }
+                    
+                    if ($hasSerialNumber) {
+                        $insertData['serial_number'] = $item['serial_number'] ?? null;
+                    }
+
+                    $serviceOrderItem = ServiceOrderItem::create($insertData);
                     
                     $insertedItems[] = $serviceOrderItem;
 
@@ -86,7 +107,7 @@ class ServiceOrderItemApiController extends Controller
                         'index' => $index,
                         'item_id' => $serviceOrderItem->id,
                         'service_order_id' => $item['service_order_id'],
-                        'item_name' => $item['item_name'],
+                        'item_name' => $item['item_name'] ?? ($item['item_id'] ?? 'N/A'),
                         'quantity' => $item['quantity']
                     ]);
                 } catch (\Exception $itemError) {
@@ -175,7 +196,16 @@ class ServiceOrderItemApiController extends Controller
                 ], 404);
             }
 
-            $item->update($request->all());
+            // Filter out fields that don't exist in the table
+            $updateData = $request->only(['service_order_id', 'item_name', 'quantity', 'is_pullout', 'serial_number', 'item_id']);
+            $finalUpdateData = [];
+            foreach ($updateData as $key => $value) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('service_order_items', $key)) {
+                    $finalUpdateData[$key] = $value;
+                }
+            }
+
+            $item->update($finalUpdateData);
 
             return response()->json([
                 'success' => true,
@@ -226,3 +256,4 @@ class ServiceOrderItemApiController extends Controller
         }
     }
 }
+

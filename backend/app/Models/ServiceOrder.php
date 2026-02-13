@@ -15,6 +15,7 @@ class ServiceOrder extends Model
     
     protected $fillable = [
         'ticket_id',
+        'Ticket_ID',
         'Timestamp',
         'Account_Number',
         'Full_Name',

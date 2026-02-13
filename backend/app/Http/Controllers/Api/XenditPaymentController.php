@@ -75,8 +75,8 @@ class XenditPaymentController extends Controller
             $referenceNo = $accountNo . '-' . $randomSuffix;
 
             // Create redirect URLs - redirect back to portal with success/failure indicators
-            $redirectSuccess = $request->input('redirect_url') ?: $this->portalLink . '/?payment=success&ref=' . $referenceNo;
-            $redirectFail = $request->input('redirect_url') ?: $this->portalLink . '/?payment=failed&ref=' . $referenceNo;
+            $redirectSuccess = $this->portalLink . '/?payment=success&ref=' . $referenceNo;
+            $redirectFail = $this->portalLink . '/?payment=failed&ref=' . $referenceNo;
 
             // Parse customer name
             $fullNameParts = explode(' ', trim($account->full_name ?? 'Customer'));

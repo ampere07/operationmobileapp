@@ -15,10 +15,10 @@ class InventoryRelatedDataController extends Controller
     public function getInventoryLogsByItem(string $itemId): JsonResponse
     {
         try {
-            // inventory_logs has 'Item ID' column (with space)
+            // inventory_logs has 'item_id' column
             $logs = DB::table('inventory_logs')
-                ->where('Item ID', $itemId)
-                ->orderBy('Date', 'desc')
+                ->where('item_id', $itemId)
+                ->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -47,10 +47,10 @@ class InventoryRelatedDataController extends Controller
     public function getBorrowedLogsByItem(string $itemId): JsonResponse
     {
         try {
-            // borrowed_logs has 'Item ID' column (with space)
+            // borrowed_logs has 'item_id' column based on CREATE TABLE
             $logs = DB::table('borrowed_logs')
-                ->where('Item ID', $itemId)
-                ->orderBy('Date', 'desc')
+                ->where('item_id', $itemId)
+                ->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -94,8 +94,8 @@ class InventoryRelatedDataController extends Controller
             }
 
             $logs = DB::table('defective_logs')
-                ->where('Item Name', $item->item_name)
-                ->orderBy('Date', 'desc')
+                ->where('item_name', $item->item_name)
+                ->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -220,3 +220,4 @@ class InventoryRelatedDataController extends Controller
         }
     }
 }
+

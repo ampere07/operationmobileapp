@@ -20,10 +20,6 @@ return new class extends Migration
             $table->string('ewallet_type', 100)->nullable();
             $table->string('payment_channel', 100)->nullable();
             $table->string('type', 100)->nullable();
-            $table->text('payment_url')->nullable();
-            $table->text('json_payload')->nullable();
-            $table->longText('callback_payload')->nullable();
-            $table->timestamp('updated_at')->nullable();
         });
     }
 

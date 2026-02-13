@@ -55,7 +55,14 @@ class PaymentPortalLogsController extends Controller
                 });
             }
 
-            $records = $query->get();
+            // Get total count before pagination
+            $total = $query->count();
+
+            // Apply pagination
+            $limit = $request->input('limit', 100);
+            $offset = $request->input('offset', 0);
+            
+            $records = $query->limit($limit)->offset($offset)->get();
 
             // Transform the data to match frontend expectations
             $transformedRecords = $records->map(function($record) {
@@ -91,7 +98,9 @@ class PaymentPortalLogsController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $transformedRecords
+                'data' => $transformedRecords,
+                'total' => $total,
+                'count' => count($transformedRecords)
             ]);
 
         } catch (Exception $e) {
@@ -223,3 +232,4 @@ class PaymentPortalLogsController extends Controller
         }
     }
 }
+

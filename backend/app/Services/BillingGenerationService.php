@@ -90,7 +90,7 @@ class BillingGenerationService
     {
         return BillingAccount::with(['customer'])
             ->where('billing_day', $billingDay)
-            ->where('billing_status_id', 2) // Active status
+            ->where('billing_status_id', 1) // Active status
             ->whereNotNull('date_installed')
             ->get();
     }
@@ -271,3 +271,4 @@ class BillingGenerationService
         ];
     }
 }
+

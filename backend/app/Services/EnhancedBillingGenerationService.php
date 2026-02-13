@@ -144,7 +144,7 @@ class EnhancedBillingGenerationService
             'technicalDetails',
             'plan'
         ])
-            ->where('billing_status_id', 2)
+            ->where('billing_status_id', 1)
             ->whereNotNull('date_installed')
             ->whereNotNull('account_no');
 
@@ -1085,3 +1085,4 @@ class EnhancedBillingGenerationService
         }
     }
 }
+

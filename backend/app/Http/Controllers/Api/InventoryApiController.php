@@ -8,6 +8,7 @@ use App\Models\Inventory;
 use App\Models\InventoryCategory;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InventoryApiController extends Controller
 {
@@ -16,6 +17,9 @@ class InventoryApiController extends Controller
      */
     private function getCurrentUser()
     {
+        if (auth()->check()) {
+            return auth()->user()->email;
+        }
         return 'ravenampere0123@gmail.com';
     }
 
@@ -39,7 +43,9 @@ class InventoryApiController extends Controller
                     'item_id' => $item->id,
                     'modified_by' => $this->getCurrentUser(),
                     'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser()
+                    'modified_date' => $item->updated_at,
+                    'user_email' => $this->getCurrentUser(),
+                    'total_quantity' => $item->total_quantity
                 ];
             });
             
@@ -49,7 +55,7 @@ class InventoryApiController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Inventory API Error: ' . $e->getMessage());
+            Log::error('Inventory API Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -88,7 +94,6 @@ class InventoryApiController extends Controller
                 if ($category) {
                     $categoryId = $category->id;
                 } else {
-                    // Category doesn't exist, return error
                     return response()->json([
                         'success' => false,
                         'message' => 'Category not found: ' . $request->category
@@ -100,14 +105,13 @@ class InventoryApiController extends Controller
             $item->item_name = $request->item_name;
             $item->item_description = $request->item_description;
             $item->category_id = $categoryId;
-            $item->supplier_id = null; // Handle supplier later if needed
+            $item->supplier_id = null;
             $item->quantity_alert = $request->quantity_alert ?? 0;
             $item->image_url = $request->image ?? '';
-            $item->created_by_user_id = null;
-            $item->updated_by_user_id = null;
+            $item->created_by_user_id = auth()->id();
+            $item->updated_by_user_id = auth()->id();
             $item->save();
             
-            // Load the category relationship
             $item->load('category');
             
             return response()->json([
@@ -124,13 +128,14 @@ class InventoryApiController extends Controller
                     'item_id' => $item->id,
                     'modified_by' => $this->getCurrentUser(),
                     'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser()
+                    'modified_date' => $item->updated_at,
+                    'user_email' => $this->getCurrentUser(),
+                    'total_quantity' => $item->total_quantity
                 ]
             ], 201);
             
         } catch (\Exception $e) {
-            \Log::error('Inventory Store Error: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Inventory Store Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -169,12 +174,14 @@ class InventoryApiController extends Controller
                     'item_id' => $item->id,
                     'modified_by' => $this->getCurrentUser(),
                     'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser()
+                    'modified_date' => $item->updated_at,
+                    'user_email' => $this->getCurrentUser(),
+                    'total_quantity' => $item->total_quantity
                 ]
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Inventory Show Error: ' . $e->getMessage());
+            Log::error('Inventory Show Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -236,7 +243,7 @@ class InventoryApiController extends Controller
             $item->category_id = $categoryId;
             $item->quantity_alert = $request->quantity_alert ?? 0;
             $item->image_url = $request->image ?? '';
-            $item->updated_by_user_id = null;
+            $item->updated_by_user_id = auth()->id();
             $item->save();
             
             $item->load('category');
@@ -255,13 +262,14 @@ class InventoryApiController extends Controller
                     'item_id' => $item->id,
                     'modified_by' => $this->getCurrentUser(),
                     'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser()
+                    'modified_date' => $item->updated_at,
+                    'user_email' => $this->getCurrentUser(),
+                    'total_quantity' => $item->total_quantity
                 ]
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Inventory Update Error: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Inventory Update Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -271,13 +279,12 @@ class InventoryApiController extends Controller
     }
 
     /**
-     * Delete an item from inventory_items table
+     * Delete an item from inventory_items
      */
     public function destroy($itemName)
     {
         try {
             $decodedItemName = urldecode($itemName);
-            
             $item = Inventory::where('item_name', $decodedItemName)->first();
             
             if (!$item) {
@@ -295,42 +302,11 @@ class InventoryApiController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Inventory Delete Error: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Inventory Delete Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
                 'message' => 'Error deleting inventory item: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get inventory statistics
-     */
-    public function getStatistics()
-    {
-        try {
-            $totalItems = Inventory::count();
-            $itemsWithAlerts = Inventory::where('quantity_alert', '>', 0)->count();
-            $categories = Inventory::whereNotNull('category_id')->distinct('category_id')->count();
-            
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'total_items' => $totalItems,
-                    'items_with_alerts' => $itemsWithAlerts,
-                    'total_categories' => $categories,
-                    'total_suppliers' => 0
-                ]
-            ]);
-            
-        } catch (\Exception $e) {
-            \Log::error('Inventory Statistics Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching inventory statistics: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -341,16 +317,13 @@ class InventoryApiController extends Controller
     public function getCategories()
     {
         try {
-            $categories = InventoryCategory::orderBy('category_name')->pluck('category_name');
-            
+            $categories = InventoryCategory::orderBy('category_name')->get();
             return response()->json([
                 'success' => true,
                 'data' => $categories
             ]);
-            
         } catch (\Exception $e) {
-            \Log::error('Get Categories Error: ' . $e->getMessage());
-            
+            Log::error('Get Categories Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching categories: ' . $e->getMessage()
@@ -363,45 +336,91 @@ class InventoryApiController extends Controller
      */
     public function getSuppliers()
     {
-        try {
-            return response()->json([
-                'success' => true,
-                'data' => []
-            ]);
-            
-        } catch (\Exception $e) {
-            \Log::error('Get Suppliers Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching suppliers: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'data' => []
+        ]);
     }
 
     /**
-     * Debug inventory
+     * Get statistics
+     */
+    public function getStatistics()
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_items' => Inventory::count(),
+                'low_stock' => Inventory::whereRaw('id in (select item_id from inventory_logs group by item_id having sum(item_quantity) < 10)')->count() // dummy logic
+            ]
+        ]);
+    }
+
+    /**
+     * Debug method
      */
     public function debug()
     {
+        return response()->json([
+            'success' => true,
+            'message' => 'Inventory API is working'
+        ]);
+    }
+
+    /**
+     * Upload an image for inventory item
+     */
+    public function uploadImage(Request $request)
+    {
         try {
-            $response = [
-                'items_count' => Inventory::count(),
-                'categories_count' => InventoryCategory::count(),
-                'sample_items' => Inventory::with('category')->take(5)->get(),
-                'all_categories' => InventoryCategory::all()
-            ];
+            $validator = Validator::make($request->all(), [
+                'image' => 'required|image|max:10240', // Max 10MB
+                'folder_name' => 'nullable|string|max:255'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $folderName = $request->input('folder_name', 'Inventory Items');
+            $driveService = new \App\Services\GoogleDriveService();
             
+            $folderId = $driveService->createFolder($folderName);
+
+            $file = $request->file('image');
+            $fileName = 'inventory_' . time() . '_' . $file->getClientOriginalName();
+            
+            $imageUrl = $driveService->uploadFile(
+                $file,
+                $folderId,
+                $fileName,
+                $file->getMimeType()
+            );
+
+            if (strpos($imageUrl, 'drive.google.com') !== false && strpos($imageUrl, '/view') === false) {
+                 if (!preg_match('/\/view$/', $imageUrl) && !preg_match('/\/view\?/', $imageUrl)) {
+                     $imageUrl = rtrim($imageUrl, '/') . '/view';
+                 }
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => $response
+                'message' => 'Image uploaded successfully',
+                'url' => $imageUrl
             ]);
-            
+
         } catch (\Exception $e) {
+            Log::error('Inventory Image Upload Error: ' . $e->getMessage());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Debug failed: ' . $e->getMessage()
+                'message' => 'Error uploading image: ' . $e->getMessage()
             ], 500);
         }
     }
 }
+

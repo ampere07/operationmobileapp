@@ -280,3 +280,4 @@ class PlanApiController extends Controller
         return $this->destroy($id);
     }
 }
+
