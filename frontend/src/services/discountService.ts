@@ -1,7 +1,14 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../config/api';
 
+const getApiBaseUrl = (): string => {
+  const baseUrl = process.env.REACT_APP_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("REACT_APP_API_BASE_URL is not defined");
+  }
+  return baseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -11,8 +18,8 @@ const axiosInstance = axios.create({
   },
 });
 
-axiosInstance.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem('auth_token');
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }

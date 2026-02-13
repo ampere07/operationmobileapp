@@ -25,6 +25,7 @@ interface ApiResponse<T> {
     current_page: number;
     per_page: number;
     has_more: boolean;
+    total?: number;
   };
 }
 

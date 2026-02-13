@@ -2,7 +2,7 @@ import apiClient from '../config/api';
 
 export interface MassRebateData {
   number_of_dates: number;
-  rebate_type: 'lcpnap' | 'lcp' | 'location';
+  rebate_type: 'lcpnap' | 'lcp' | 'barangay';
   selected_rebate: string;
   month: string;
   status: 'Unused' | 'Used' | 'Pending';
@@ -13,7 +13,7 @@ export interface MassRebateData {
 export interface MassRebate {
   id: number;
   number_of_dates: number;
-  rebate_type: 'lcpnap' | 'lcp' | 'location';
+  rebate_type: 'lcpnap' | 'lcp' | 'barangay';
   selected_rebate: string;
   month: string;
   status: 'Unused' | 'Used' | 'Pending';

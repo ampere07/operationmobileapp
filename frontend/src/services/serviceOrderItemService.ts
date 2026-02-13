@@ -28,7 +28,7 @@ export const createServiceOrderItems = async (items: ServiceOrderItem[]): Promis
 
 export const getServiceOrderItems = async (serviceOrderId: number): Promise<ApiResponse<ServiceOrderItem[]>> => {
   try {
-    const response = await apiClient.get<ApiResponse<ServiceOrderItem[]>>(`/service-order-items?service_order_id=${serviceOrderId}`);
+    const response = await apiClient.get<ApiResponse<ServiceOrderItem[]>>(`/service-order-items/${serviceOrderId}`);
     return response.data;
   } catch (error: any) {
     console.error('Error fetching service order items:', error);
@@ -50,12 +50,12 @@ export const updateServiceOrderItems = async (serviceOrderId: number, items: Ser
   }
 };
 
-export const deleteServiceOrderItem = async (id: number): Promise<ApiResponse<null>> => {
+export const deleteServiceOrderItems = async (serviceOrderId: number): Promise<ApiResponse<null>> => {
   try {
-    const response = await apiClient.delete<ApiResponse<null>>(`/service-order-items/${id}`);
+    const response = await apiClient.delete<ApiResponse<null>>(`/service-order-items/${serviceOrderId}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error deleting service order item:', error);
+    console.error('Error deleting service order items:', error);
     throw error;
   }
 };

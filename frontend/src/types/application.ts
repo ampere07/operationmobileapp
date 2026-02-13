@@ -32,14 +32,14 @@ export interface Application {
   updated_at?: string;
   created_by_user_id?: number;
   updated_by_user_id?: number;
-  
+
   customer_name?: string;
   address?: string;
   address_line?: string;
-  location?: string;
+
   create_date?: string;
   create_time?: string;
-  
+
   plan_id?: string | number;
   promo_id?: string | number;
   cityId?: number | null;

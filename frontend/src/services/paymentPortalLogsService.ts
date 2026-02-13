@@ -1,7 +1,14 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../config/api';
 
+const getApiBaseUrl = (): string => {
+  const baseUrl = process.env.REACT_APP_API_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("REACT_APP_API_BASE_URL is not defined");
+  }
+  return baseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface PaymentPortalLog {
   id: string | number;
@@ -35,6 +42,8 @@ export interface PaymentPortalLog {
 export interface PaymentPortalLogsResponse {
   status: string;
   data: PaymentPortalLog[];
+  total?: number;
+  count?: number;
 }
 
 export interface PaymentPortalLogResponse {
@@ -51,9 +60,11 @@ export const paymentPortalLogsService = {
     account_no?: string;
     city?: string;
     search?: string;
-  }): Promise<PaymentPortalLog[]> => {
+    limit?: number;
+    offset?: number;
+  }): Promise<any> => {
     try {
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let token = '';
 
       if (authData) {
@@ -72,10 +83,21 @@ export const paymentPortalLogsService = {
         }
       );
 
-      return response.data.data || [];
+      return {
+        success: response.data.status === 'success',
+        data: response.data.data || [],
+        total: response.data.total || 0,
+        count: response.data.count || 0
+      };
     } catch (error: any) {
       console.error('Error fetching payment portal logs:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || 'Failed to fetch payment portal logs');
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Failed to fetch payment portal logs',
+        data: [],
+        total: 0,
+        count: 0
+      };
     }
   },
 
@@ -84,7 +106,7 @@ export const paymentPortalLogsService = {
    */
   getLogById: async (id: string | number): Promise<PaymentPortalLog | null> => {
     try {
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let token = '';
 
       if (authData) {
@@ -114,7 +136,7 @@ export const paymentPortalLogsService = {
    */
   getLogsByAccountNo: async (accountNo: string): Promise<PaymentPortalLog[]> => {
     try {
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let token = '';
 
       if (authData) {

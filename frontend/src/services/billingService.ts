@@ -15,13 +15,15 @@ interface BillingDetailApiResponse {
   status?: string;
 }
 
-export const getBillingRecords = async (): Promise<BillingRecord[]> => {
+export const getBillingRecords = async (page: number = 1, perPage: number = 50): Promise<{ data: BillingRecord[], total: number, hasMore: boolean }> => {
   try {
-    const response = await apiClient.get<any>('/billing');
+    const response = await apiClient.get<any>('/billing', {
+      params: { page, per_page: perPage }
+    });
     const responseData = response.data;
 
     if (responseData?.data && Array.isArray(responseData.data)) {
-      return responseData.data.map((item: any): BillingRecord => ({
+      const data = responseData.data.map((item: any): BillingRecord => ({
         id: item.Account_No || item.id,
         applicationId: item.Account_No || '',
         accountNo: item.Account_No || '',
@@ -31,7 +33,6 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         middleInitial: item.Middle_Initial || item.middle_initial || '',
         lastName: item.Last_Name || item.last_name || '',
         address: item.Address || '',
-        location: item.Location || item.location || '',
         status: item.Status || 'Inactive',
         balance: parseFloat(item.account_balance) || parseFloat(item.Account_Balance) || 0,
         onlineStatus: item.Online_Session_Status || 'Offline',
@@ -39,6 +40,7 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         regionId: null,
         timestamp: item.Modified_Date || '',
         billingStatus: item.Billing_Status_Name || (item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : ''),
+        billing_status_id: item.Billing_Status_ID,
         dateInstalled: item.Date_Installed || '',
         contactNumber: item.Contact_Number || '',
         secondContactNumber: item.Second_Contact_Number || '',
@@ -52,7 +54,7 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         port: item.PORT || '',
         vlan: item.VLAN || '',
         billingDay: item.Billing_Day === 'Every end of month' ? 0 : (item.Billing_Day || 0),
-        totalPaid: 0,
+        totalPaid: item.Total_Paid || 0,
         provider: item.Provider || '',
         lcp: item.LCP || '',
         nap: item.NAP || '',
@@ -61,14 +63,21 @@ export const getBillingRecords = async (): Promise<BillingRecord[]> => {
         barangay: item.Barangay || '',
         city: item.City || '',
         region: item.Region || '',
-        usageType: item.Usage_Type || item.usage_type || ''
+        usageType: item.Usage_Type || item.usage_type || '',
+        lcpnapport: item.LCP_NAP_PORT || item.LCPNAPPORT || ''
       }));
+
+      return {
+        data,
+        total: responseData.total || data.length,
+        hasMore: responseData.pagination?.has_more || false
+      };
     }
 
-    return [];
+    return { data: [], total: 0, hasMore: false };
   } catch (error) {
     console.error('Error fetching billing records:', error);
-    return [];
+    return { data: [], total: 0, hasMore: false };
   }
 };
 
@@ -94,6 +103,7 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         regionId: null,
         timestamp: item.Modified_Date || '',
         billingStatus: item.Billing_Status_Name || (item.Billing_Status_ID ? `Status ${item.Billing_Status_ID}` : ''),
+        billing_status_id: item.Billing_Status_ID,
         dateInstalled: item.Date_Installed || '',
         contactNumber: item.Contact_Number || '',
         secondContactNumber: item.Second_Contact_Number || '',
@@ -107,7 +117,7 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         port: item.PORT || '',
         vlan: item.VLAN || '',
         billingDay: item.Billing_Day === 'Every end of month' ? 0 : (item.Billing_Day || 0),
-        totalPaid: 0,
+        totalPaid: item.Total_Paid || 0,
         provider: item.Provider || '',
         lcp: item.LCP || '',
         nap: item.NAP || '',
@@ -134,7 +144,6 @@ export const getBillingRecordDetails = async (id: string): Promise<BillingDetail
         houseFrontPicture: item.house_front_picture_url || '',
         referralContactNo: item.Referral_Contact_No || item.referral_contact_no || '',
         housingStatus: item.Housing_Status || item.housing_status || '',
-        location: item.Location || item.location || '',
         addressCoordinates: item.Address_Coordinates || item.address_coordinates || '',
         relatedInvoices: 'Related Invoices (0)',
         relatedStatementOfAccount: 'Related Statement of Account...',

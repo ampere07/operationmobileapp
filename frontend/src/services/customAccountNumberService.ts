@@ -1,5 +1,4 @@
 import apiClient from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface CustomAccountNumber {
   starting_number: string;
@@ -28,9 +27,9 @@ export const customAccountNumberService = {
 
   create: async (startingNumber: string): Promise<ApiResponse<CustomAccountNumber>> => {
     try {
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let userEmail = 'unknown@user.com';
-
+      
       if (authData) {
         try {
           const userData = JSON.parse(authData);
@@ -53,9 +52,9 @@ export const customAccountNumberService = {
 
   update: async (startingNumber: string): Promise<ApiResponse<CustomAccountNumber>> => {
     try {
-      const authData = await AsyncStorage.getItem('authData');
+      const authData = localStorage.getItem('authData');
       let userEmail = 'unknown@user.com';
-
+      
       if (authData) {
         try {
           const userData = JSON.parse(authData);

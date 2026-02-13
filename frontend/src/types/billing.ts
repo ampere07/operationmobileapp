@@ -8,14 +8,14 @@ export interface BillingRecord {
   middleInitial?: string;
   lastName?: string;
   address: string;
-  location?: string;
-  status: 'Active' | 'Inactive';
+  status: string;
   balance: number;
   onlineStatus: string;
   cityId?: number | null;
   regionId?: number | null;
   timestamp?: string;
   billingStatus?: string;
+  billing_status_id?: number;
   dateInstalled?: string;
   contactNumber?: string;
   secondContactNumber?: string;
@@ -39,6 +39,7 @@ export interface BillingRecord {
   city?: string;
   region?: string;
   usageType?: string;
+  lcpnapport?: string;
 }
 
 export interface BillingDetailRecord extends BillingRecord {
@@ -51,12 +52,16 @@ export interface BillingDetailRecord extends BillingRecord {
   accountBalance?: number;
   email?: string;
   housingStatus?: string;
-  location?: string;
   addressCoordinates?: string;
 
   // Extended fields for detailed view
   lcpnapport?: string;
   referrersAccountNumber?: string;
+  balanceUpdateDate?: string;
+  billingAccountCreatedBy?: string;
+  billingAccountCreatedAt?: string;
+  billingAccountUpdatedBy?: string;
+  billingAccountUpdatedAt?: string;
   relatedInvoices?: string;
   relatedStatementOfAccount?: string;
   relatedDiscounts?: string;

@@ -1,7 +1,6 @@
-import apiClient, { API_BASE_URL } from '../config/api';
+import apiClient from '../config/api';
 
-const API_URL = API_BASE_URL;
-
+const API_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
 
 export interface CustomerDetailsUpdate {
   firstName: string;
@@ -26,6 +25,8 @@ export interface BillingDetailsUpdate {
   plan: string;
   billingDay?: number;
   billingStatus: string;
+  dateInstalled?: string;
+  accountBalance?: number | string;
 }
 
 export interface TechnicalDetailsUpdate {
@@ -43,88 +44,68 @@ export interface TechnicalDetailsUpdate {
 }
 
 export const customerDetailUpdateService = {
-  async updateCustomerDetails(accountNo: string, data: CustomerDetailsUpdate) {
+  /**
+   * Unified update method that takes editType
+   */
+  async update(accountNo: string, editType: string, data: any) {
     try {
-      const formData = new FormData();
+      const isFormData = data.houseFrontPicture instanceof File;
+      let body: any;
+      let headers: Record<string, string> = {};
 
-      formData.append('firstName', data.firstName);
-      if (data.middleInitial) formData.append('middleInitial', data.middleInitial);
-      formData.append('lastName', data.lastName);
-      formData.append('emailAddress', data.emailAddress);
-      formData.append('contactNumberPrimary', data.contactNumberPrimary);
-      if (data.contactNumberSecondary) formData.append('contactNumberSecondary', data.contactNumberSecondary);
-      formData.append('address', data.address);
-      formData.append('region', data.region);
-      formData.append('city', data.city);
-      formData.append('barangay', data.barangay);
-      formData.append('location', data.location);
-      if (data.addressCoordinates) formData.append('addressCoordinates', data.addressCoordinates);
-      if (data.housingStatus) formData.append('housingStatus', data.housingStatus);
-      if (data.referredBy) formData.append('referredBy', data.referredBy);
-      if (data.groupName) formData.append('groupName', data.groupName);
+      const method = (isFormData || editType === 'customer_details') ? 'POST' : 'PUT';
 
-      if (data.houseFrontPicture && data.houseFrontPicture instanceof File) {
-        formData.append('houseFrontPicture', data.houseFrontPicture);
+      if (isFormData || editType === 'customer_details') {
+        const formData = new FormData();
+        formData.append('_method', 'PUT');
+        formData.append('editType', editType);
+        Object.keys(data).forEach(key => {
+          if (data[key] !== undefined && data[key] !== null) {
+            formData.append(key, data[key]);
+          }
+        });
+        body = formData;
+      } else {
+        body = JSON.stringify({
+          ...data,
+          editType
+        });
+        headers['Content-Type'] = 'application/json';
       }
 
-      const response = await fetch(`${API_URL}/customer-detail/${accountNo}/customer`, {
-        method: 'PUT',
-        body: formData,
+      const response = await fetch(`${API_URL}/customer-detail/${accountNo}`, {
+        method,
+        headers,
+        body,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update customer details');
+        if (response.status === 422 && errorData.errors) {
+          console.error('[Validation Failed]', errorData.errors);
+          const errorMessages = Object.values(errorData.errors).flat().join(', ');
+          throw new Error(`Validation failed: ${errorMessages}`);
+        }
+        throw new Error(errorData.message || `Failed to update ${editType.replace('_', ' ')}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('Error updating customer details:', error);
+      console.error(`Error updating ${editType}:`, error);
       throw error;
     }
+  },
+
+  async updateCustomerDetails(accountNo: string, data: CustomerDetailsUpdate) {
+    return this.update(accountNo, 'customer_details', data);
   },
 
   async updateBillingDetails(accountNo: string, data: BillingDetailsUpdate) {
-    try {
-      const response = await fetch(`${API_URL}/customer-detail/${accountNo}/billing`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update billing details');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating billing details:', error);
-      throw error;
-    }
+    return this.update(accountNo, 'billing_details', data);
   },
 
   async updateTechnicalDetails(accountNo: string, data: TechnicalDetailsUpdate) {
-    try {
-      const response = await fetch(`${API_URL}/customer-detail/${accountNo}/technical`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update technical details');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating technical details:', error);
-      throw error;
-    }
+    return this.update(accountNo, 'technical_details', data);
   },
 };
+

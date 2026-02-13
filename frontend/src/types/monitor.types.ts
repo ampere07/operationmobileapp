@@ -25,6 +25,7 @@ export interface WidgetState {
   endDate?: string;   // YYYY-MM-DD
   visible: boolean;
   layout?: Layout;
+  fontSize?: number; // per-widget font size
 }
 
 export type FilterType =

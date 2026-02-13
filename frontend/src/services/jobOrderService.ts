@@ -1,5 +1,4 @@
 import apiClient from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { JobOrderData } from '../types/jobOrder';
 
 // Export JobOrderData for backwards compatibility
@@ -13,6 +12,12 @@ interface ApiResponse<T> {
   count?: number;
   table?: string;
   debug?: any;
+  pagination?: {
+    current_page: number;
+    per_page: number;
+    total_count?: number;
+    has_more: boolean;
+  };
 }
 
 export const createJobOrder = async (jobOrderData: JobOrderData) => {
@@ -25,15 +30,26 @@ export const createJobOrder = async (jobOrderData: JobOrderData) => {
   }
 };
 
-export const getJobOrders = async (assignedEmail?: string) => {
+export const getJobOrders = async (
+  fastMode: boolean = false,
+  page: number = 1,
+  limit: number = 50,
+  search?: string,
+  assignedEmail?: string
+) => {
   try {
-    const params: { assigned_email?: string; user_role?: string } = {};
+    const params: any = {
+      fast: fastMode ? '1' : '0',
+      page,
+      limit,
+      search
+    };
 
     if (assignedEmail) {
       params.assigned_email = assignedEmail;
     }
 
-    const authData = await AsyncStorage.getItem('authData');
+    const authData = localStorage.getItem('authData');
     if (authData) {
       try {
         const userData = JSON.parse(authData);
@@ -53,26 +69,27 @@ export const getJobOrders = async (assignedEmail?: string) => {
       const processedData = response.data.data.map(item => {
         return {
           ...item,
-          // Add any field mappings here if the database column names differ from our interface
-          // For example, if the database returns job_order_id but our interface expects JobOrder_ID:
-          // JobOrder_ID: item.job_order_id,
           id: item.id || item.JobOrder_ID
         };
       });
 
       return {
         ...response.data,
-        data: processedData
+        jobOrders: processedData // Consistent with getApplications returning 'applications'
       };
     }
 
-    return response.data;
+    return {
+      ...response.data,
+      jobOrders: [],
+      pagination: response.data.pagination || { current_page: page, per_page: limit, has_more: false }
+    };
   } catch (error) {
     console.error('Error fetching job orders:', error);
-    // Return a formatted error response instead of throwing
     return {
       success: false,
-      data: [],
+      jobOrders: [],
+      pagination: { current_page: page, per_page: limit, has_more: false },
       message: error instanceof Error ? error.message : 'Unknown error fetching job orders'
     };
   }

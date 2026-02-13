@@ -5,9 +5,14 @@ export interface Notification {
   id: number;
   customer_name: string;
   plan_name: string;
-  status: string;
-  created_at: string;
+  status?: string;
+  created_at?: string;
   formatted_date: string;
+  // Consolidated fields
+  type?: 'application' | 'job_order_done';
+  title?: string;
+  message?: string;
+  timestamp?: number;
 }
 
 export interface NotificationResponse {
@@ -79,6 +84,23 @@ export const notificationService = {
         console.error('Failed to fetch unread count:', error);
       }
       return 0;
+    }
+  },
+
+  async getConsolidatedStream(limit: number = 15): Promise<Notification[]> {
+    try {
+      // Use shorter cache for stream to feel more "real-time"
+      return await requestCache.get(
+        `consolidated_stream_${limit}`,
+        async () => {
+          const response = await apiClient.get<{ success: boolean, data: Notification[] }>(`/notifications/consolidated?limit=${limit}&t=${Date.now()}`);
+          return response.data.data || [];
+        },
+        1000
+      );
+    } catch (error) {
+      console.error('Failed to fetch consolidated stream:', error);
+      return [];
     }
   }
 };

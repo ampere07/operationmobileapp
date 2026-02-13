@@ -28,7 +28,7 @@ export const createJobOrderItems = async (items: JobOrderItem[]): Promise<ApiRes
 
 export const getJobOrderItems = async (jobOrderId: number): Promise<ApiResponse<JobOrderItem[]>> => {
   try {
-    const response = await apiClient.get<ApiResponse<JobOrderItem[]>>(`/job-order-items?job_order_id=${jobOrderId}`);
+    const response = await apiClient.get<ApiResponse<JobOrderItem[]>>(`/job-order-items/${jobOrderId}`);
     return response.data;
   } catch (error: any) {
     console.error('Error fetching job order items:', error);
@@ -50,12 +50,12 @@ export const updateJobOrderItems = async (jobOrderId: number, items: JobOrderIte
   }
 };
 
-export const deleteJobOrderItem = async (id: number): Promise<ApiResponse<null>> => {
+export const deleteJobOrderItems = async (jobOrderId: number): Promise<ApiResponse<null>> => {
   try {
-    const response = await apiClient.delete<ApiResponse<null>>(`/job-order-items/${id}`);
+    const response = await apiClient.delete<ApiResponse<null>>(`/job-order-items/${jobOrderId}`);
     return response.data;
   } catch (error: any) {
-    console.error('Error deleting job order item:', error);
+    console.error('Error deleting job order items:', error);
     throw error;
   }
 };

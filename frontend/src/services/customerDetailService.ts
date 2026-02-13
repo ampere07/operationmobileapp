@@ -10,7 +10,6 @@ export interface CustomerDetailData {
   contactNumberPrimary: string;
   contactNumberSecondary?: string;
   address: string;
-  location?: string;
   barangay?: string;
   city?: string;
   region?: string;
@@ -47,6 +46,7 @@ export interface CustomerDetailData {
     vlan?: string;
     lcpnap?: string;
     usageTypeId?: number;
+    usageType?: string;
   };
 
   createdAt?: string;

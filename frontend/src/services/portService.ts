@@ -34,7 +34,7 @@ export const getAllPorts = async (lcpnap?: string, page: number = 1, limit: numb
     if (currentJobOrderId) {
       params.current_job_order_id = currentJobOrderId;
     }
-    
+
     const response = await apiClient.get<ApiResponse<Port[]>>('/ports', { params });
     return response.data;
   } catch (error: any) {
@@ -43,6 +43,34 @@ export const getAllPorts = async (lcpnap?: string, page: number = 1, limit: numb
       success: false,
       data: [],
       message: error.message || 'Failed to fetch ports'
+    };
+  }
+};
+
+export const getUsedPorts = async (lcpnap: string, currentJobOrderId?: number): Promise<ApiResponse<{ used: string[], total: number }>> => {
+  try {
+    const params: any = { lcpnap };
+    if (currentJobOrderId) {
+      params.current_job_order_id = currentJobOrderId;
+    }
+    const response = await apiClient.get<any>('/ports/used', { params });
+
+    // Transform backend structure to expected structure if needed
+    // The backend returns { success: true, data: string[], total_ports: number }
+    return {
+      success: response.data.success,
+      data: {
+        used: response.data.data,
+        total: response.data.total_ports
+      },
+      message: response.data.message
+    };
+  } catch (error: any) {
+    console.error('Error fetching used ports:', error);
+    return {
+      success: false,
+      data: { used: [], total: 32 },
+      message: error.message || 'Failed to fetch used ports'
     };
   }
 };

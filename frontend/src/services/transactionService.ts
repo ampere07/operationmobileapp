@@ -5,6 +5,7 @@ interface ApiResponse<T = any> {
   message?: string;
   error?: string;
   count?: number;
+  total?: number;
 }
 
 interface ApproveTransactionResponse {
@@ -84,7 +85,8 @@ export const transactionService = {
       return {
         success: true,
         data: response.data.data || [],
-        count: response.data.count || 0
+        count: response.data.count || 0,
+        total: response.data.total || 0
       };
     } catch (error: any) {
       console.error('Error fetching transactions:', error);

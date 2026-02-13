@@ -14,6 +14,10 @@ export interface Transaction {
     image_url: string | null;
     created_at: string;
     updated_at: string;
+    payment_method_info?: {
+        id: number;
+        payment_method: string;
+    };
     account?: {
         id: number;
         account_no: string;

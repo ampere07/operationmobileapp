@@ -1,5 +1,4 @@
 import { API_BASE_URL } from '../config/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_PREFIX = 'user_pref_';
 
@@ -12,18 +11,18 @@ const getLocalStorageKey = (key: string): string => {
   return `${STORAGE_PREFIX}${key}`;
 };
 
-const saveToLocalStorage = async (key: string, value: any): Promise<void> => {
+const saveToLocalStorage = (key: string, value: any): void => {
   try {
-    await AsyncStorage.setItem(getLocalStorageKey(key), JSON.stringify(value));
+    localStorage.setItem(getLocalStorageKey(key), JSON.stringify(value));
     console.log('[UserPreferenceService] Saved to localStorage', { key, value });
   } catch (error) {
     console.error('[UserPreferenceService] Failed to save to localStorage', error);
   }
 };
 
-const getFromLocalStorage = async (key: string): Promise<any | null> => {
+const getFromLocalStorage = (key: string): any | null => {
   try {
-    const stored = await AsyncStorage.getItem(getLocalStorageKey(key));
+    const stored = localStorage.getItem(getLocalStorageKey(key));
     if (stored) {
       const parsed = JSON.parse(stored);
       console.log('[UserPreferenceService] Retrieved from localStorage', { key, value: parsed });
@@ -56,23 +55,23 @@ export const getUserPreference = async (key: string, defaultValue: any = null): 
 
     if (!response.ok) {
       console.log('[UserPreferenceService] Server fetch failed, checking localStorage');
-      const localValue = await getFromLocalStorage(key);
+      const localValue = getFromLocalStorage(key);
       return localValue !== null ? localValue : defaultValue;
     }
 
     const result = await response.json();
     console.log('[UserPreferenceService] Fetch result:', result);
-
+    
     if (result.success && result.data.value) {
       return result.data.value;
     }
-
+    
     console.log('[UserPreferenceService] No server value, checking localStorage');
-    const localValue = await getFromLocalStorage(key);
+    const localValue = getFromLocalStorage(key);
     return localValue !== null ? localValue : defaultValue;
   } catch (error) {
     console.error('[UserPreferenceService] Fetch exception, falling back to localStorage:', error);
-    const localValue = await getFromLocalStorage(key);
+    const localValue = getFromLocalStorage(key);
     return localValue !== null ? localValue : defaultValue;
   }
 };
@@ -110,9 +109,9 @@ export const setUserPreference = async (key: string, value: any): Promise<boolea
       console.error('[UserPreferenceService] Failed to parse JSON response');
       const text = await response.text();
       console.error('[UserPreferenceService] Response text:', text);
-
+      
       console.log('[UserPreferenceService] Server error, saving to localStorage as fallback');
-      await saveToLocalStorage(key, value);
+      saveToLocalStorage(key, value);
       return true;
     }
 
@@ -122,13 +121,13 @@ export const setUserPreference = async (key: string, value: any): Promise<boolea
         statusText: response.statusText,
         responseData: result
       });
-
-      await saveToLocalStorage(key, value);
+      
+      saveToLocalStorage(key, value);
       return true;
     }
-
+    
     console.log('[UserPreferenceService] Successfully saved to server');
-    await saveToLocalStorage(key, value);
+    saveToLocalStorage(key, value);
     return true;
   } catch (error) {
     console.error('[UserPreferenceService] Exception occurred, falling back to localStorage:', error);
@@ -138,8 +137,8 @@ export const setUserPreference = async (key: string, value: any): Promise<boolea
         stack: error.stack
       });
     }
-
-    await saveToLocalStorage(key, value);
+    
+    saveToLocalStorage(key, value);
     return true;
   }
 };

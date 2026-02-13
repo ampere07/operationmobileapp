@@ -123,6 +123,25 @@ export const relatedDataService = {
     }
   },
 
+  // Fetch service order by ID
+  getServiceOrderById: async (id: string | number): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/service-orders/${id}`);
+      return {
+        success: true,
+        data: response.data.data || null,
+        count: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching service order:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch service order'
+      };
+    }
+  },
+
   // Fetch related reconnection logs by account number
   getRelatedReconnectionLogs: async (accountNo: string): Promise<ApiResponse> => {
     try {
@@ -256,10 +275,29 @@ export const relatedDataService = {
     }
   },
 
+  // Fetch related statement of accounts by account number
+  getRelatedStatementOfAccounts: async (accountNo: string): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/statement-of-accounts/by-account/${accountNo}`);
+      return {
+        success: true,
+        data: response.data.data || [],
+        count: response.data.count || 0
+      };
+    } catch (error: any) {
+      console.error('Error fetching statement of accounts:', error);
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch statement of accounts'
+      };
+    }
+  },
+
   // Fetch related inventory logs by item ID
   getRelatedInventoryLogs: async (itemId: string | number): Promise<ApiResponse> => {
     try {
-      const response = await apiClient.get<ApiResponse>(`/inventory-logs/by-item/${itemId}`);
+      const response = await apiClient.get<ApiResponse>(`/inventory-stock-logs/by-item/${itemId}`);
       return {
         success: true,
         data: response.data.data || [],
@@ -332,7 +370,7 @@ export const relatedDataService = {
     }
   },
 
-  // Fetch related service orders by item ID
+  // Fetch service orders by item ID
   getRelatedServiceOrdersByItem: async (itemId: string | number): Promise<ApiResponse> => {
     try {
       const response = await apiClient.get<ApiResponse>(`/service-orders/by-item/${itemId}`);
@@ -347,6 +385,82 @@ export const relatedDataService = {
         success: false,
         data: [],
         message: error.response?.data?.message || 'Failed to fetch service orders'
+      };
+    }
+  },
+
+  // Fetch statement of account by ID
+  getStatementOfAccountById: async (id: string | number): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/statement-of-accounts/${id}`);
+      return {
+        success: true,
+        data: response.data.data || null,
+        count: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching statement of account:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch statement of account'
+      };
+    }
+  },
+
+  // Fetch invoice by ID
+  getInvoiceById: async (id: string | number): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/invoices/${id}`);
+      return {
+        success: true,
+        data: response.data.data || null,
+        count: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching invoice:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch invoice'
+      };
+    }
+  },
+
+  // Fetch payment portal log by ID
+  getPaymentPortalLogById: async (id: string | number): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/payment-portal-logs/${id}`);
+      return {
+        success: true,
+        data: response.data.data || null,
+        count: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching payment portal log:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch payment portal log'
+      };
+    }
+  },
+
+  // Fetch transaction by ID
+  getTransactionById: async (id: string | number): Promise<ApiResponse> => {
+    try {
+      const response = await apiClient.get<ApiResponse>(`/transactions/${id}`);
+      return {
+        success: true,
+        data: response.data.data || null,
+        count: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching transaction:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch transaction'
       };
     }
   }
