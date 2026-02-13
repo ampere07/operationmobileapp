@@ -19,7 +19,7 @@ interface ServiceOrderDetailsProps {
     houseFrontPicture: string;
     emailAddress: string;
     plan: string;
-    affiliate: string;
+    affiliate?: string;
     username: string;
     connectionType: string;
     routerModemSN: string;
@@ -36,7 +36,6 @@ interface ServiceOrderDetailsProps {
     visitRemarks: string;
     modifiedBy: string;
     modifiedDate: string;
-    userEmail: string;
     requestedBy: string;
     assignedEmail: string;
     supportRemarks: string;
@@ -78,7 +77,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     'houseFrontPicture',
     'emailAddress',
     'plan',
-    'affiliate',
     'username',
     'connectionType',
     'routerModemSN',
@@ -95,13 +93,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     'visitRemarks',
     'modifiedBy',
     'modifiedDate',
-    'userEmail',
     'requestedBy',
     'assignedEmail',
     'supportRemarks',
     'supportStatus',
     'repairCategory',
-    'priorityLevel',
     'newRouterSn',
     'newLcpnap',
     'newPlan',
@@ -181,7 +177,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       houseFrontPicture: 'House Front Picture',
       emailAddress: 'Email Address',
       plan: 'Plan',
-      affiliate: 'Affiliate',
       username: 'Username',
       connectionType: 'Connection Type',
       routerModemSN: 'Router/Modem SN',
@@ -198,13 +193,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       visitRemarks: 'Visit Remarks',
       modifiedBy: 'Modified By',
       modifiedDate: 'Modified Date',
-      userEmail: 'User Email',
       requestedBy: 'Requested by',
       assignedEmail: 'Assigned Email',
       supportRemarks: 'Support Remarks',
       supportStatus: 'Support Status',
       repairCategory: 'Repair Category',
-      priorityLevel: 'Priority Level',
       newRouterSn: 'New Router SN',
       newLcpnap: 'New LCP/NAP',
       newPlan: 'New Plan',
@@ -338,8 +331,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Email Address', serviceOrder.emailAddress);
       case 'plan':
         return renderField('Plan', serviceOrder.plan);
-      case 'affiliate':
-        return renderField('Affiliate', serviceOrder.affiliate);
       case 'username':
         return renderField('Username', serviceOrder.username);
       case 'connectionType':
@@ -376,8 +367,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Modified By', serviceOrder.modifiedBy);
       case 'modifiedDate':
         return renderField('Modified Date', serviceOrder.modifiedDate);
-      case 'userEmail':
-        return renderField('User Email', serviceOrder.userEmail);
       case 'requestedBy':
         return renderField('Requested by', serviceOrder.requestedBy);
       case 'assignedEmail':
@@ -392,8 +381,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         ));
       case 'repairCategory':
         return renderField('Repair Category', serviceOrder.repairCategory);
-      case 'priorityLevel':
-        return renderField('Priority Level', serviceOrder.priorityLevel);
       case 'newRouterSn':
         return renderField('New Router SN', serviceOrder.newRouterSn);
       case 'newLcpnap':

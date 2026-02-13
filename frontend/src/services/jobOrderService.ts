@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../config/api';
 import { JobOrderData } from '../types/jobOrder';
 
@@ -49,7 +50,7 @@ export const getJobOrders = async (
       params.assigned_email = assignedEmail;
     }
 
-    const authData = localStorage.getItem('authData');
+    const authData = await AsyncStorage.getItem('authData');
     if (authData) {
       try {
         const userData = JSON.parse(authData);

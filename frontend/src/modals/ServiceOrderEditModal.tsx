@@ -1,20 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet, TouchableOpacity } from 'react-native';
-import { Picker } from '@react-native-picker/picker'; // requires @react-native-picker/picker package
-import * as ImagePicker from 'expo-image-picker'; // requires expo-image-picker
-import { X, Calendar, ChevronDown, Minus, Plus, Upload } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker'; // requires @react-native-community/datetimepicker
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import SignatureScreen from 'react-native-signature-canvas';
+import * as ExpoFileSystem from 'expo-file-system';
+
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
-import { createServiceOrderItems, ServiceOrderItem, deleteServiceOrderItem } from '../services/serviceOrderItemService';
+import { createServiceOrderItems, ServiceOrderItem, deleteServiceOrderItems } from '../services/serviceOrderItemService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-// import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService'; // Web only, currently disabled for mobile
+import { concernService, Concern } from '../services/concernService';
+import { getUsedPorts } from '../services/portService';
+import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
+import { routerModelService, RouterModel } from '../services/routerModelService';
 
+// Define UserData interface locally if not available in '../types/api'
 interface UserData {
   email?: string;
   email_address?: string;
   role?: string | { role_name: string };
+  role_id?: number;
   first_name?: string;
   last_name?: string;
   username?: string;
@@ -64,7 +72,6 @@ interface ServiceOrderEditFormData {
   concernRemarks: string;
   modifiedBy: string;
   modifiedDate: string;
-  userEmail: string;
   supportRemarks: string;
   serviceCharge: string;
   status: string;
@@ -74,6 +81,8 @@ interface ServiceOrderEditFormData {
   newPort: string;
   newVlan: string;
   routerModel: string;
+  newPlan: string;
+  newLcpnap: string;
 }
 
 interface ImageFiles {
@@ -92,15 +101,22 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  const [userRole, setUserRole] = useState<string>('');
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('unknown@ampere.com');
+  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const currentUserEmail = currentUser?.email || currentUser?.email_address || 'unknown@ampere.com';
+  const isTechnician = currentUser?.role_id === 2 || (typeof currentUser?.role === 'string' && currentUser.role.toLowerCase() === 'technician') || (typeof currentUser?.role === 'object' && currentUser.role.role_name.toLowerCase() === 'technician');
 
   const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
   const [lcps, setLcps] = useState<string[]>([]);
   const [naps, setNaps] = useState<string[]>([]);
-  const [ports, setPorts] = useState<string[]>([]);
+  const [usedPorts, setUsedPorts] = useState<string[]>([]);
+  const [totalPorts, setTotalPorts] = useState<number>(32);
+  const [lcpnaps, setLcpnaps] = useState<LCPNAP[]>([]);
   const [vlans, setVlans] = useState<string[]>([]);
+  const [concerns, setConcerns] = useState<Concern[]>([]);
+  const [plans, setPlans] = useState<string[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [routerModels, setRouterModels] = useState<RouterModel[]>([]);
+
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ itemId: '', quantity: '' }]);
 
   const [formData, setFormData] = useState<ServiceOrderEditFormData>({
@@ -110,6 +126,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     contactNumber: '',
     emailAddress: '',
     plan: '',
+
     username: '',
     connectionType: '',
     routerModemSN: '',
@@ -132,9 +149,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     assignedEmail: '',
     concern: '',
     concernRemarks: '',
-    modifiedBy: '',
-    modifiedDate: new Date().toISOString(),
-    userEmail: '',
+    modifiedBy: currentUserEmail,
+    modifiedDate: new Date().toLocaleString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }),
     supportRemarks: '',
     serviceCharge: '0.00',
     status: 'unused',
@@ -143,7 +167,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     newNap: '',
     newPort: '',
     newVlan: '',
-    routerModel: ''
+    routerModel: '',
+    newPlan: '',
+    newLcpnap: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -154,7 +180,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     timeOutFile: null,
     clientSignatureFile: null
   });
-  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Signature Drawing State
+  const signatureRef = useRef<any>(null);
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Load User Data and Theme
@@ -162,14 +192,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     const loadSettings = async () => {
       try {
         const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme !== 'light'); // Default to dark if null or 'dark'
+        setIsDarkMode(theme !== 'light');
 
         const authData = await AsyncStorage.getItem('authData');
         if (authData) {
           const user = JSON.parse(authData);
-          setCurrentUserEmail(user.email || 'unknown@ampere.com');
-          setUserRole(user.role || '');
-          setFormData(prev => ({ ...prev, userEmail: user.email || 'unknown@ampere.com' }));
+          setCurrentUser(user);
         }
 
         const palette = await settingsColorPaletteService.getActive();
@@ -181,72 +209,248 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     loadSettings();
   }, []);
 
-  // Fetch Dropdown Data
+  // UseEffects for data fetching
   useEffect(() => {
-    if (isOpen) {
-      const fetchData = async () => {
+    const fetchRouterModels = async () => {
+      if (isOpen) {
         try {
-          // Technicians
-          const usersRes = await apiClient.get<{ success: boolean; data: any[] }>('/users');
-          if (usersRes.data.success) {
-            const techs = usersRes.data.data
-              .filter(u => {
-                const role = typeof u.role === 'string' ? u.role : (u.role as any)?.role_name || '';
-                return role.toLowerCase() === 'technician';
-              })
-              .map(u => ({
-                email: u.email_address || u.email || '',
-                name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || ''
-              }))
-              .filter(t => t.name);
-            setTechnicians(techs);
-          }
-
-          // Technical Details
-          const [lcpRes, napRes, portRes, vlanRes] = await Promise.all([
-            apiClient.get('/lcp'),
-            apiClient.get('/nap'),
-            apiClient.get('/port'),
-            apiClient.get('/vlan')
-          ]);
-
-          if (lcpRes.data.success) setLcps(lcpRes.data.data.map((i: any) => i.lcp_name || i.lcp || i.name).filter(Boolean));
-          if (napRes.data.success) setNaps(napRes.data.data.map((i: any) => i.nap_name || i.nap || i.name).filter(Boolean));
-          if (portRes.data.success) setPorts(portRes.data.data.map((i: any) => i.Label).filter(Boolean));
-          if (vlanRes.data.success) setVlans(vlanRes.data.data.map((i: any) => i.value).filter(Boolean));
-
-          // Inventory
-          const invRes = await getAllInventoryItems();
-          if (invRes.success) setInventoryItems(invRes.data);
-
+          const fetchedRouterModels = await routerModelService.getAllRouterModels();
+          setRouterModels(fetchedRouterModels);
         } catch (error) {
-          console.error('Error fetching data:', error);
+          console.error('Failed to fetch router models:', error);
         }
-      };
-      fetchData();
-    }
+      }
+    };
+    fetchRouterModels();
   }, [isOpen]);
 
-  // Load Service Order Data
   useEffect(() => {
-    if (isOpen && serviceOrderData) {
+    const fetchServiceOrderItems = async () => {
+      if (isOpen && serviceOrderData) {
+        const serviceOrderId = serviceOrderData.id;
+        if (serviceOrderId) {
+          try {
+            const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
+            const data = response.data;
+
+            if (data.success && Array.isArray(data.data)) {
+              const items = data.data;
+
+              if (items.length > 0) {
+                const uniqueItems = new Map();
+
+                items.forEach((item: any) => {
+                  const key = item.item_name;
+                  if (uniqueItems.has(key)) {
+                    const existing = uniqueItems.get(key);
+                    uniqueItems.set(key, {
+                      itemId: item.item_name || '',
+                      quantity: (parseInt(existing.quantity) + parseInt(item.quantity || 0)).toString()
+                    });
+                  } else {
+                    uniqueItems.set(key, {
+                      itemId: item.item_name || '',
+                      quantity: item.quantity ? item.quantity.toString() : ''
+                    });
+                  }
+                });
+
+                const formattedItems = Array.from(uniqueItems.values());
+                formattedItems.push({ itemId: '', quantity: '' });
+
+                setOrderItems(formattedItems);
+              } else {
+                setOrderItems([{ itemId: '', quantity: '' }]);
+              }
+            }
+          } catch (error) {
+            setOrderItems([{ itemId: '', quantity: '' }]);
+          }
+        }
+      }
+    };
+
+    fetchServiceOrderItems();
+  }, [isOpen, serviceOrderData]);
+
+  useEffect(() => {
+    const fetchInventoryItems = async () => {
+      if (isOpen) {
+        try {
+          const response = await getAllInventoryItems();
+          if (response.success && Array.isArray(response.data)) {
+            setInventoryItems(response.data);
+          } else {
+            setInventoryItems([]);
+          }
+        } catch (error) {
+          setInventoryItems([]);
+        }
+      }
+    };
+
+    fetchInventoryItems();
+  }, [isOpen]);
+
+  useEffect(() => {
+    const fetchTechnicians = async () => {
+      try {
+        const response = await apiClient.get<{ success: boolean; data: any[] }>('/users');
+        if (response.data.success && Array.isArray(response.data.data)) {
+          const technicianUsers = response.data.data
+            .filter(user => {
+              const role = typeof user.role === 'string' ? user.role : (user.role as any)?.role_name || '';
+              return role.toLowerCase() === 'technician';
+            })
+            .map(user => {
+              const firstName = (user.first_name || '').trim();
+              const lastName = (user.last_name || '').trim();
+              const fullName = `${firstName} ${lastName}`.trim();
+              return {
+                email: user.email_address || user.email || '',
+                name: fullName || user.username || user.email_address || user.email || ''
+              };
+            })
+            .filter(tech => tech.name);
+          setTechnicians(technicianUsers);
+        }
+      } catch (error) {
+        console.error('Error fetching technicians:', error);
+      }
+    };
+
+    const fetchTechnicalDetails = async () => {
+      try {
+        const [lcpResponse, napResponse, vlanResponse, lcpnapsRes] = await Promise.all([
+          apiClient.get<{ success: boolean; data: any[] }>('/lcp'),
+          apiClient.get<{ success: boolean; data: any[] }>('/nap'),
+          apiClient.get<{ success: boolean; data: any[] }>('/vlan'),
+          getAllLCPNAPs('', 1, 1000)
+        ]);
+
+        if (lcpResponse.data.success && Array.isArray(lcpResponse.data.data)) {
+          const lcpOptions = lcpResponse.data.data.map(item => item.lcp_name || item.lcp || item.name).filter(Boolean);
+          setLcps(lcpOptions as string[]);
+        }
+
+        if (napResponse.data.success && Array.isArray(napResponse.data.data)) {
+          const napOptions = napResponse.data.data.map(item => item.nap_name || item.nap || item.name).filter(Boolean);
+          setNaps(napOptions as string[]);
+        }
+
+        if (vlanResponse.data.success && Array.isArray(vlanResponse.data.data)) {
+          const vlanOptions = vlanResponse.data.data.map(item => item.value).filter(Boolean);
+          setVlans(vlanOptions as string[]);
+        }
+
+        // Plans
+        const planResponse = await apiClient.get<{ success: boolean; data: any[] }>('/plans');
+        if (planResponse.data.success && Array.isArray(planResponse.data.data)) {
+          setPlans(planResponse.data.data.map((p: any) => p.plan_name || p.name).filter(Boolean));
+        }
+
+        if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data)) {
+          setLcpnaps(lcpnapsRes.data);
+        }
+      } catch (error) {
+        console.error('Error fetching technical details:', error);
+      }
+    };
+
+    const fetchConcerns = async () => {
+      try {
+        const data = await concernService.getAllConcerns();
+        setConcerns(data);
+      } catch (error) {
+        console.error('Error fetching concerns:', error);
+      }
+    };
+
+    if (isOpen) {
+      fetchTechnicians();
+      fetchTechnicalDetails();
+      fetchConcerns();
+    }
+
+  }, [isOpen]);
+
+  // Used Ports Effect
+  useEffect(() => {
+    const fetchUsedPortsFunc = async () => {
+      if (isOpen && formData.newLcpnap) {
+        try {
+          const serviceOrderId = serviceOrderData?.id;
+
+          // Also fetch total ports for this LCP-NAP
+          const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
+          if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data) && lcpnapsRes.data.length > 0) {
+            const match = lcpnapsRes.data.find((item: any) => item.lcpnap_name === formData.newLcpnap);
+            if (match) {
+              setTotalPorts(match.port_total || 32);
+            }
+          }
+
+          const usedRes = await getUsedPorts(formData.newLcpnap, serviceOrderId);
+
+          if (usedRes.success && usedRes.data) {
+            setUsedPorts(usedRes.data.used);
+            if (!totalPorts) setTotalPorts(usedRes.data.total);
+          } else {
+            setUsedPorts([]);
+            if (!totalPorts) setTotalPorts(32);
+          }
+        } catch (error) {
+          console.error('Error fetching used ports/location:', error);
+          setUsedPorts([]);
+          setTotalPorts(32);
+        }
+      } else {
+        setUsedPorts([]);
+        setTotalPorts(32);
+      }
+    };
+    fetchUsedPortsFunc();
+  }, [isOpen, formData.newLcpnap, serviceOrderData?.id]);
+
+  // Initialize Form Data
+  useEffect(() => {
+    if (serviceOrderData && isOpen) {
+      // Helper to format date for input if needed
+      const formatDateForInput = (dateStr?: string): string => {
+        if (!dateStr) return '';
+        try {
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return '';
+          return date.toISOString().split('T')[0];
+        } catch (e) { return ''; }
+      };
+
+      const normalizePort = (rawPort: any) => {
+        if (!rawPort) return '';
+        const portNum = String(rawPort).toUpperCase().replace(/[^\d]/g, '');
+        return portNum ? `p${portNum.padStart(2, '0')}` : '';
+      };
+
       setFormData(prev => ({
         ...prev,
         accountNo: serviceOrderData.accountNumber || serviceOrderData.account_no || '',
-        dateInstalled: serviceOrderData.dateInstalled || serviceOrderData.date_installed || '',
+        dateInstalled: formatDateForInput(serviceOrderData.dateInstalled || serviceOrderData.date_installed),
         fullName: serviceOrderData.fullName || serviceOrderData.full_name || '',
         contactNumber: serviceOrderData.contactNumber || serviceOrderData.contact_number || '',
         emailAddress: serviceOrderData.emailAddress || serviceOrderData.email_address || '',
         plan: serviceOrderData.plan || '',
+
         username: serviceOrderData.username || '',
         connectionType: serviceOrderData.connectionType || serviceOrderData.connection_type || '',
         routerModemSN: serviceOrderData.routerModemSN || serviceOrderData.router_modem_sn || '',
         lcp: serviceOrderData.lcp || '',
         nap: serviceOrderData.nap || '',
-        port: serviceOrderData.port || '',
+        port: normalizePort(serviceOrderData.port || serviceOrderData.PORT),
         vlan: serviceOrderData.vlan || '',
-        supportStatus: serviceOrderData.supportStatus || serviceOrderData.support_status || 'In Progress',
-        visitStatus: serviceOrderData.visitStatus || serviceOrderData.visit_status || 'In Progress',
+        supportStatus: (serviceOrderData.supportStatus || serviceOrderData.support_status) === 'Pending'
+          ? 'In Progress'
+          : (serviceOrderData.supportStatus || serviceOrderData.support_status || 'In Progress'),
+        visitStatus: serviceOrderData.visitStatus || serviceOrderData.visit_status === 'Pending' ? 'In Progress' : (serviceOrderData.visitStatus || serviceOrderData.visit_status || 'In Progress'),
         repairCategory: serviceOrderData.repairCategory || serviceOrderData.repair_category || '',
         visitBy: serviceOrderData.visitBy || serviceOrderData.visit_by || '',
         visitWith: serviceOrderData.visitWith || serviceOrderData.visit_with || '',
@@ -260,44 +464,38 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         assignedEmail: serviceOrderData.assignedEmail || serviceOrderData.assigned_email || '',
         concern: serviceOrderData.concern || '',
         concernRemarks: serviceOrderData.concernRemarks || serviceOrderData.concern_remarks || '',
-        modifiedBy: currentUserEmail,
-        modifiedDate: new Date().toLocaleString(),
-        userEmail: currentUserEmail,
         supportRemarks: serviceOrderData.supportRemarks || serviceOrderData.support_remarks || '',
-        serviceCharge: serviceOrderData.serviceCharge ? serviceOrderData.serviceCharge.toString().replace('₱', '').trim() : '0.00',
+        newPlan: serviceOrderData.new_plan || '',
+        serviceCharge: serviceOrderData.serviceCharge ? serviceOrderData.serviceCharge.toString().replace('₱', '').trim() : (serviceOrderData.service_charge ? serviceOrderData.service_charge.toString().replace('₱', '').trim() : '0.00'),
         status: serviceOrderData.status || 'unused',
+        newRouterModemSN: '',
+        newLcp: '',
+        newNap: '',
+        newPort: '',
+        newVlan: '',
+        routerModel: ''
       }));
-
-      // Only fetch items if ID exists
-      if (serviceOrderData.id) {
-        apiClient.get(`/service-order-items?service_order_id=${serviceOrderData.id}`)
-          .then(res => {
-            if (res.data.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
-              const formattedItems = res.data.data.map((item: any) => ({
-                itemId: item.item_name || '',
-                quantity: item.quantity ? item.quantity.toString() : ''
-              }));
-              // Ensure at least one empty item if formattedItems is empty (though length > 0 check handles it)
-              setOrderItems(formattedItems.length ? formattedItems : [{ itemId: '', quantity: '' }]);
-            } else {
-              setOrderItems([{ itemId: '', quantity: '' }]);
-            }
-          })
-          .catch(() => setOrderItems([{ itemId: '', quantity: '' }]));
-      }
     }
-  }, [isOpen, serviceOrderData, currentUserEmail]);
+  }, [serviceOrderData, isOpen, currentUserEmail]);
 
   const handleInputChange = (field: keyof ServiceOrderEditFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
+    setFormData(prev => {
+      const newState = { ...prev, [field]: value };
+      if (field === 'newLcp' || field === 'newNap' || field === 'newLcpnap') {
+        newState.newPort = '';
+      }
+      return newState;
+    });
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
   };
 
   const handleImageChange = async (field: keyof ImageFiles) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false, // Set to true if cropping is needed
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -310,22 +508,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
   };
 
-  const activeColor = colorPalette?.primary || '#ea580c';
-  const textColor = isDarkMode ? '#ffffff' : '#111827';
-  const subTextColor = isDarkMode ? '#9ca3af' : '#4b5563';
-  const bgColor = isDarkMode ? '#1f2937' : '#ffffff';
-  const inputBgColor = isDarkMode ? '#374151' : '#f9fafb';
-  const borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
-
-  const uploadImageToGoogleDrive = async (asset: ImagePicker.ImagePickerAsset): Promise<string> => {
+  const uploadImageToGoogleDrive = async (asset: ImagePicker.ImagePickerAsset | { uri: string; mimeType?: string }): Promise<string> => {
     const formData = new FormData();
-    const filename = asset.uri.split('/').pop() || 'image.jpg';
+    const randomName = Math.random().toString(36).substring(7);
+    const filename = asset.uri.split('/').pop() || `signature_${randomName}.png`;
+    const fileType = (asset as any).mimeType || 'image/png';
 
-    // Append the file correctly for React Native
     formData.append('file', {
       uri: asset.uri,
       name: filename,
-      type: asset.mimeType || 'image/jpeg',
+      type: fileType,
     } as any);
 
     const response = await apiClient.post('/google-drive/upload', formData, {
@@ -338,9 +530,166 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     throw new Error('Upload failed');
   };
 
-  const handleSave = async () => {
-    setLoading(true);
+  // Signature handlers
+  const handleSignatureOK = async (signature: string) => {
+    // signature is a base64 string provided by the component
+    setIsDrawingSignature(false);
+
+    // Save base64 to a temporary file because upload expects URI
     try {
+      const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
+      // Remove data:image/png;base64, prefix
+      const base64Code = signature.replace('data:image/png;base64,', '');
+
+      await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, {
+        encoding: (ExpoFileSystem as any).EncodingType.Base64,
+      });
+
+      // Set into state logic similar to other images
+      // We'll treat it as clientSignatureFile
+      const asset = {
+        uri: path,
+        mimeType: 'image/png',
+        width: 500, // Dummy dimensions
+        height: 200
+      } as ImagePicker.ImagePickerAsset;
+
+      setImageFiles(prev => ({ ...prev, clientSignatureFile: asset }));
+      // Also update form data previews if needed, but we rely on imageFiles for upload
+    } catch (e) {
+      console.error('Error handling signature:', e);
+      Alert.alert('Error', 'Failed to save signature');
+    }
+  };
+
+  const handleSignatureClear = () => {
+    if (signatureRef.current) {
+      signatureRef.current.clearSignature();
+    }
+    // Also clear stored file
+    setImageFiles(prev => ({ ...prev, clientSignatureFile: null }));
+    setFormData(prev => ({ ...prev, clientSignature: '' }));
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.accountNo.trim()) newErrors.accountNo = 'Account No is required';
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
+    if (!formData.contactNumber.trim()) newErrors.contactNumber = 'Contact Number is required';
+
+    if (!formData.emailAddress.trim()) {
+      newErrors.emailAddress = 'Email Address is required';
+    }
+
+    if (!formData.plan.trim()) newErrors.plan = 'Plan is required';
+    if (!formData.username.trim()) newErrors.username = 'Username is required';
+    if (!formData.connectionType.trim()) newErrors.connectionType = 'Connection Type is required';
+    if (!formData.supportStatus.trim()) newErrors.supportStatus = 'Support Status is required';
+    if (!formData.concern.trim()) newErrors.concern = 'Concern is required';
+
+    if (formData.concern === 'Upgrade/Downgrade Plan' && !formData.newPlan.trim()) {
+      newErrors.newPlan = 'New Plan is required';
+    }
+
+    const validItems = orderItems.filter(item => item.itemId && item.quantity);
+    if (validItems.length === 0) {
+      newErrors.items = 'At least one item required';
+    }
+
+    if (['Migrate', 'Relocate', 'Relocate Router', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory)) {
+      if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+      if (!formData.newLcpnap.trim()) newErrors.newLcpnap = 'New LCP-NAP is required';
+      if (!formData.newPort.trim()) newErrors.newPort = 'New Port is required';
+      if (!formData.routerModel.trim()) newErrors.routerModel = 'Router Model is required';
+    }
+
+    if (formData.repairCategory === 'Replace Router') {
+      if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = async () => {
+    const updatedFormData = {
+      ...formData,
+      modifiedBy: currentUserEmail,
+      modifiedDate: new Date().toLocaleString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      })
+    };
+
+    setFormData(updatedFormData);
+    setLoading(true);
+
+    if (!validateForm()) {
+      setLoading(false);
+      Alert.alert('Validation Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    try {
+      // SmartOLT Validation Logic
+      if (updatedFormData.connectionType === 'Fiber') {
+        // Validate Router Modem SN if provided
+        if (updatedFormData.routerModemSN?.trim()) {
+          try {
+            console.log('[SMARTOLT VALIDATION] Validating Modem SN:', updatedFormData.routerModemSN);
+            const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+              params: { sn: updatedFormData.routerModemSN }
+            });
+
+            if (!(smartOltResponse.data as any).success) {
+              setLoading(false);
+              const errorMessage = (smartOltResponse.data as any).message || 'Invalid Modem SN';
+              setErrors(prev => ({ ...prev, routerModemSN: errorMessage }));
+              Alert.alert('SmartOLT Verification Failed', errorMessage);
+              return;
+            }
+          } catch (error: any) {
+            console.error('[SMARTOLT VALIDATION] API Error:', error);
+            setLoading(false);
+            const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
+            setErrors(prev => ({ ...prev, routerModemSN: errorMessage }));
+            Alert.alert('Validation Error', errorMessage);
+            return;
+          }
+        }
+
+        // Validate New Router Modem SN if provided
+        if (updatedFormData.newRouterModemSN?.trim()) {
+          try {
+            console.log('[SMARTOLT VALIDATION] Validating New Modem SN:', updatedFormData.newRouterModemSN);
+            const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+              params: { sn: updatedFormData.newRouterModemSN }
+            });
+
+            if (!(smartOltResponse.data as any).success) {
+              setLoading(false);
+              const errorMessage = (smartOltResponse.data as any).message || 'Invalid New Modem SN';
+              setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
+              Alert.alert('SmartOLT Verification Failed', errorMessage);
+              return;
+            }
+          } catch (error: any) {
+            console.error('[SMARTOLT VALIDATION] API Error:', error);
+            setLoading(false);
+            const errorMessage = error.response?.data?.message || 'Failed to validate New Modem SN with SmartOLT system.';
+            setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
+            Alert.alert('Validation Error', errorMessage);
+            return;
+          }
+        }
+      }
+
       const serviceOrderId = serviceOrderData?.id;
       if (!serviceOrderId) throw new Error('Missing Service Order ID');
 
@@ -361,57 +710,64 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       }
 
       // Update Service Order
-      const updateData = {
-        account_no: formData.accountNo,
-        date_installed: formData.dateInstalled,
-        full_name: formData.fullName,
-        contact_number: formData.contactNumber,
-        email_address: formData.emailAddress,
-        plan: formData.plan,
-        username: formData.username,
-        connection_type: formData.connectionType,
-        router_modem_sn: formData.routerModemSN,
-        lcp: formData.lcp,
-        nap: formData.nap,
-        port: formData.port,
-        vlan: formData.vlan,
-        support_status: formData.supportStatus,
-        visit_status: formData.visitStatus,
-        repair_category: formData.repairCategory,
-        visit_by_user: formData.visitBy,
-        visit_with: formData.visitWith,
-        visit_remarks: formData.visitRemarks,
-        client_signature: uploadedUrls.client_signature_url || formData.clientSignature,
-        item_name_1: formData.itemName1,
-        image1_url: uploadedUrls.image1_url || formData.timeIn,
-        image2_url: uploadedUrls.image2_url || formData.modemSetupImage,
-        image3_url: uploadedUrls.image3_url || formData.timeOut,
-        assigned_email: formData.assignedEmail,
-        concern: formData.concern,
-        concern_remarks: formData.concernRemarks,
+      const updateData: any = {
+        account_no: updatedFormData.accountNo,
+        date_installed: updatedFormData.dateInstalled,
+        full_name: updatedFormData.fullName,
+        contact_number: updatedFormData.contactNumber,
+        email_address: updatedFormData.emailAddress,
+        plan: updatedFormData.plan,
+        username: updatedFormData.username,
+        connection_type: updatedFormData.connectionType,
+        router_modem_sn: updatedFormData.routerModemSN,
+        lcp: updatedFormData.lcp,
+        nap: updatedFormData.nap,
+        port: updatedFormData.port,
+        vlan: updatedFormData.vlan,
+        support_status: updatedFormData.supportStatus,
+        visit_status: updatedFormData.visitStatus,
+        repair_category: updatedFormData.repairCategory,
+        visit_by_user: updatedFormData.visitBy,
+        visit_with: updatedFormData.visitWith,
+        visit_with_other: updatedFormData.visitWithOther,
+        visit_remarks: updatedFormData.visitRemarks,
+        client_signature: uploadedUrls.client_signature_url || updatedFormData.clientSignature,
+        item_name_1: updatedFormData.itemName1,
+        image1_url: uploadedUrls.image1_url || updatedFormData.timeIn,
+        image2_url: uploadedUrls.image2_url || updatedFormData.modemSetupImage,
+        image3_url: uploadedUrls.image3_url || updatedFormData.timeOut,
+        assigned_email: updatedFormData.assignedEmail,
+        concern: updatedFormData.concern,
+        concern_remarks: updatedFormData.concernRemarks,
         updated_by: currentUserEmail,
-        support_remarks: formData.supportRemarks,
-        service_charge: parseFloat(formData.serviceCharge),
-        status: formData.status,
-        new_router_modem_sn: formData.newRouterModemSN,
-        new_lcp: formData.newLcp,
-        new_nap: formData.newNap,
-        new_port: formData.newPort,
-        new_vlan: formData.newVlan,
-        router_model: formData.routerModel
+        updated_date: updatedFormData.modifiedDate,
+        support_remarks: updatedFormData.supportRemarks,
+        service_charge: parseFloat(updatedFormData.serviceCharge),
+        status: updatedFormData.status,
+        new_router_modem_sn: updatedFormData.newRouterModemSN,
+        new_lcpnap: updatedFormData.newLcpnap,
+        new_port: updatedFormData.newPort,
+        new_vlan: updatedFormData.newVlan,
+        router_model: updatedFormData.routerModel,
+        new_plan: updatedFormData.newPlan
       };
 
-      await apiClient.put(`/service-orders/${serviceOrderId}`, updateData);
+      const response = await apiClient.put(`/service-orders/${serviceOrderId}`, updateData);
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Service order update failed');
+      }
 
       // Save Items
       const validItems = orderItems.filter(i => i.itemId && i.itemId.trim() !== '');
       if (validItems.length > 0) {
-        // First delete existing (simplified logic, ideally update)
         try {
           const existing = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
           if (existing.data.success && existing.data.data.length > 0) {
             for (const item of existing.data.data) {
-              await deleteServiceOrderItem(item.id);
+              try {
+                await apiClient.delete(`/service-order-items/${item.id}`);
+              } catch (e) { }
             }
           }
         } catch (e) { }
@@ -424,8 +780,35 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         await createServiceOrderItems(newItems);
       }
 
-      onSave(updateData);
-      Alert.alert('Success', 'Service Order updated successfully');
+      let successMessage = 'Service Order updated successfully!';
+
+      // Reconnection Messages
+      if (response.data.reconnect_status === 'success') {
+        if (updatedFormData.concern === 'Upgrade/Downgrade Plan') {
+          successMessage = 'Plan upgraded and User reconnected successfully!';
+        } else {
+          successMessage = 'Service Order updated and User reconnected successfully!';
+        }
+      } else if (response.data.reconnect_status === 'balance_positive') {
+        successMessage = 'Service Order updated. Reconnection skipped: Account has a remaining balance.';
+      } else if (response.data.reconnect_status === 'failed') {
+        successMessage = 'Service Order updated, but reconnection failed. Please check technical details.';
+      }
+
+      // Migration / Relocation Messages
+      if (response.data.migration_status === 'success') {
+        successMessage += '\n\nRADIUS account updated/relocated successfully!';
+      } else if (response.data.migration_status === 'failed') {
+        successMessage += '\n\nWarning: Failed to update RADIUS account for relocation.';
+      }
+
+      // Pullout Messages
+      if (response.data.pullout_status === 'success') {
+        successMessage += '\n\nRADIUS account disabled for pullout.';
+      }
+
+      onSave(updatedFormData);
+      Alert.alert('Success', successMessage);
       onClose();
 
     } catch (error: any) {
@@ -445,6 +828,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
   };
 
+  // Render Helpers
+  const activeColor = colorPalette?.primary || '#ea580c';
+
   const renderLabel = (text: string, required = false) => (
     <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
       {text} {required && <Text className="text-red-500">*</Text>}
@@ -461,8 +847,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       {renderLabel(placeholder.replace('Enter ', ''), !editable && field !== 'dateInstalled' ? false : true)}
       <TextInput
         className={`border rounded-lg p-3 text-base ${!editable
-            ? (isDarkMode ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200')
-            : (isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300')
+          ? (isDarkMode ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200')
+          : (isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300')
           } ${errors[field] ? 'border-red-500' : ''}`}
         value={String(formData[field])}
         onChangeText={(text) => handleInputChange(field, text)}
@@ -480,7 +866,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const renderPicker = (
     field: keyof ServiceOrderEditFormData,
     items: string[],
-    label: string
+    label: string,
+    enabled = true
   ) => (
     <View className="mb-4">
       {renderLabel(label)}
@@ -488,6 +875,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         <Picker
           selectedValue={formData[field]}
           onValueChange={(val) => handleInputChange(field, val)}
+          enabled={enabled}
           dropdownIconColor={isDarkMode ? '#fff' : '#000'}
           style={{ color: isDarkMode ? '#fff' : '#000' }}
         >
@@ -500,6 +888,55 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     </View>
   );
 
+  const renderLcpNapPicker = () => (
+    <View className="mb-4">
+      {renderLabel('New LCP-NAP', true)}
+      <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+        <Picker
+          selectedValue={formData.newLcpnap}
+          onValueChange={(val) => handleInputChange('newLcpnap', val)}
+          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+          style={{ color: isDarkMode ? '#fff' : '#000' }}
+        >
+          <Picker.Item label="Select LCP-NAP" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+          {lcpnaps.map((item) => (
+            <Picker.Item key={item.id} label={item.lcpnap_name} value={item.lcpnap_name} color={isDarkMode ? '#fff' : '#000'} />
+          ))}
+        </Picker>
+      </View>
+    </View>
+  );
+
+  const renderNewPortPicker = () => {
+    // Generate ports based on totalPorts
+    const ports = Array.from({ length: totalPorts }, (_, i) => {
+      const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+      return portVal;
+    });
+
+    return (
+      <View className="mb-4">
+        {renderLabel('New Port', true)}
+        <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+          <Picker
+            selectedValue={formData.newPort}
+            onValueChange={(val) => handleInputChange('newPort', val)}
+            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+            style={{ color: isDarkMode ? '#fff' : '#000' }}
+          >
+            <Picker.Item label="Select Port" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+            {ports.map((port) => {
+              const isUsed = usedPorts.includes(port);
+              const isSelected = formData.newPort === port;
+              if (isUsed && !isSelected) return null; // Hide used ports unless selected
+              return <Picker.Item key={port} label={port} value={port} color={isDarkMode ? '#fff' : '#000'} />;
+            })}
+          </Picker>
+        </View>
+      </View>
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -511,32 +948,28 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       onRequestClose={onClose}
     >
       <View className="flex-1 bg-black/50 justify-end">
-        <View className={`h-[90%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <View className={`h-[95%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
 
           {/* Header */}
           <View className={`px-6 py-4 flex-row items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
             <View className="flex-row items-center space-x-3">
               <Text className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                {serviceOrderData?.ticket_id} | {formData.fullName}
+                {serviceOrderData?.ticket_id || serviceOrderData?.id} | {formData.fullName}
               </Text>
             </View>
             <View className="flex-row items-center space-x-3 gap-2">
               <Pressable
                 onPress={onClose}
                 className="px-4 py-2 border rounded-lg"
-                style={{
-                  borderColor: colorPalette?.primary || '#ea580c',
-                }}
+                style={{ borderColor: activeColor }}
               >
-                <Text style={{ color: colorPalette?.primary || '#ea580c' }} className="text-sm font-medium">Cancel</Text>
+                <Text style={{ color: activeColor }} className="text-sm font-medium">Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
                 disabled={loading}
                 className="px-6 py-2 rounded-lg"
-                style={{
-                  backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
-                }}
+                style={{ backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : activeColor }}
               >
                 {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white text-sm font-medium">Save</Text>}
               </Pressable>
@@ -547,40 +980,22 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
-            <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }}>
+            <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }} scrollEnabled={!isDrawingSignature}>
               <View className="space-y-4">
 
-                {/* Read Only Fields */}
                 {renderInput('accountNo', 'Account No', false)}
 
                 {/* Date Installed */}
                 <View className="mb-4">
                   <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Date Installed<Text className="text-red-500">*</Text></Text>
-                  <View className="relative">
-                    {Platform.OS === 'web' ? (
-                      <TextInput
-                        style={{
-                          backgroundColor: isDarkMode ? '#1f2937' : '#fff',
-                          color: isDarkMode ? '#fff' : '#000',
-                          borderColor: errors.dateInstalled ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                          borderWidth: 1,
-                          borderRadius: 8,
-                          padding: 12
-                        }}
-                        value={formData.dateInstalled}
-                        onChangeText={(t) => handleInputChange('dateInstalled', t)}
-                      />
-                    ) : (
-                      <Pressable
-                        onPress={() => setShowDatePicker(true)}
-                        className={`border rounded-lg p-3 ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
-                      >
-                        <Text style={{ color: formData.dateInstalled ? (isDarkMode ? '#fff' : '#000') : (isDarkMode ? '#9ca3af' : '#6b7280') }}>
-                          {formData.dateInstalled ? new Date(formData.dateInstalled).toLocaleDateString() : 'Select Date'}
-                        </Text>
-                      </Pressable>
-                    )}
-                  </View>
+                  <Pressable
+                    onPress={() => setShowDatePicker(true)}
+                    className={`border rounded-lg p-3 ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+                  >
+                    <Text style={{ color: formData.dateInstalled ? (isDarkMode ? '#fff' : '#000') : (isDarkMode ? '#9ca3af' : '#6b7280') }}>
+                      {formData.dateInstalled ? formData.dateInstalled : 'Select Date'}
+                    </Text>
+                  </Pressable>
                   {showDatePicker && (
                     <DateTimePicker
                       value={formData.dateInstalled ? new Date(formData.dateInstalled) : new Date()}
@@ -598,7 +1013,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 {renderInput('contactNumber', 'Contact Number', false)}
                 {renderInput('emailAddress', 'Email Address', false)}
                 {renderInput('plan', 'Plan', false)}
-                {renderInput('username', 'Username')}
+                {renderInput('username', 'Username', false)}
 
                 {/* Connection Type */}
                 <View className="mb-4">
@@ -614,7 +1029,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   </View>
                 </View>
 
-                {renderInput('routerModemSN', 'Router/Modem SN')}
+                {renderInput('routerModemSN', 'Router/Modem SN', false)}
                 {renderInput('lcp', 'LCP', false)}
                 {renderInput('nap', 'NAP', false)}
                 {renderInput('port', 'PORT', false)}
@@ -627,7 +1042,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                     {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
 
                     <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Assigned Email</Text>
+                      {renderLabel('Assigned Email', true)}
                       <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
                         <Picker
                           selectedValue={formData.assignedEmail}
@@ -650,23 +1065,39 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
                           <>
                             {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
-                            {renderPicker('newLcp', lcps, 'New LCP')}
-                            {renderPicker('newNap', naps, 'New NAP')}
-                            {renderPicker('newPort', ports, 'New Port')}
+                            {renderLcpNapPicker()}
+                            {renderNewPortPicker()}
                             {renderPicker('newVlan', vlans, 'New VLAN')}
-                            {formData.repairCategory === 'Migrate' && renderInput('routerModel', 'Router Model')}
+
+                            {/* Router Model Picker */}
+                            <View className="mb-4">
+                              {renderLabel('Router Model', true)}
+                              <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                                <Picker
+                                  selectedValue={formData.routerModel}
+                                  onValueChange={(val) => handleInputChange('routerModel', val)}
+                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
+                                >
+                                  <Picker.Item label="Select Router Model" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                  {routerModels.map((rm, i) => (
+                                    <Picker.Item key={i} label={rm.model} value={rm.model} color={isDarkMode ? '#fff' : '#000'} />
+                                  ))}
+                                </Picker>
+                              </View>
+                            </View>
                           </>
                         )}
                         {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
                           <>
                             {formData.repairCategory === 'Replace Router' && renderInput('newRouterModemSN', 'New Router SN')}
-                            {renderInput('routerModel', 'Router Model')}
                           </>
                         )}
                         {formData.repairCategory === 'Update Vlan' && renderPicker('newVlan', vlans, 'New VLAN')}
 
+                        {/* Visit By */}
                         <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Visit By</Text>
+                          {renderLabel('Visit By', true)}
                           <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
                             <Picker
                               selectedValue={formData.visitBy}
@@ -682,24 +1113,86 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           </View>
                         </View>
 
+                        {/* Visit With */}
+                        <View className="mb-4">
+                          {renderLabel('Visit With')}
+                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.visitWith}
+                              onValueChange={(val) => handleInputChange('visitWith', val)}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                            >
+                              <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWithOther).map((t, i) => (
+                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        {/* Visit With Other */}
+                        <View className="mb-4">
+                          {renderLabel('Visit With Other')}
+                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.visitWithOther}
+                              onValueChange={(val) => handleInputChange('visitWithOther', val)}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                            >
+                              <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWith).map((t, i) => (
+                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+
                         {renderInput('visitRemarks', 'Visit Remarks')}
 
-                        <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Client Signature</Text>
-                          <Pressable
-                            onPress={() => handleImageChange('clientSignatureFile')}
-                            className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}
-                          >
-                            {imageFiles.clientSignatureFile || formData.clientSignature ? (
-                              <Image source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
-                            ) : (
-                              <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Upload Signature</Text>
-                            )}
-                          </Pressable>
+                        <View className="mb-4 z-50">
+                          {renderLabel('Client Signature')}
+                          {!isDrawingSignature ? (
+                            <View>
+                              <Pressable
+                                onPress={() => setIsDrawingSignature(true)}
+                                className={`h-40 border border-dashed rounded-lg items-center justify-center mb-2 ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}
+                              >
+                                {imageFiles.clientSignatureFile || formData.clientSignature ? (
+                                  <Image source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
+                                ) : (
+                                  <View className="items-center">
+                                    <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Tap to Draw Signature</Text>
+                                  </View>
+                                )}
+                              </Pressable>
+                              {imageFiles.clientSignatureFile && (
+                                <Pressable onPress={handleSignatureClear} className="self-end px-3 py-1 bg-red-500 rounded-md">
+                                  <Text className="text-white text-xs">Clear Signature</Text>
+                                </Pressable>
+                              )}
+                            </View>
+                          ) : (
+                            <View className="h-60 border border-gray-500 bg-white mb-2">
+                              <SignatureScreen
+                                ref={signatureRef}
+                                onOK={handleSignatureOK}
+                                onEmpty={() => console.log('Empty signature')}
+                                descriptionText="Sign above"
+                                clearText="Clear"
+                                confirmText="Save"
+                                webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
+                              />
+                              <Pressable onPress={() => setIsDrawingSignature(false)} className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10">
+                                <X size={20} color="#000" />
+                              </Pressable>
+                            </View>
+                          )}
                         </View>
 
                         <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Items</Text>
+                          {renderLabel('Items', true)}
                           {orderItems.map((item, idx) => (
                             <View key={idx} className="flex-row gap-2 mb-2 items-center">
                               <View className={`flex-1 border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
@@ -710,6 +1203,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   style={{ color: isDarkMode ? '#fff' : '#000' }}
                                 >
                                   <Picker.Item label="Select Item" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
                                   {inventoryItems.map(inv => <Picker.Item key={inv.id} label={inv.item_name} value={inv.item_name} color={isDarkMode ? '#fff' : '#000'} />)}
                                 </Picker>
                               </View>
@@ -733,7 +1227,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
 
                         <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Time In Image</Text>
+                          {renderLabel('Time In Image')}
                           <Pressable onPress={() => handleImageChange('timeInFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
                             {imageFiles.timeInFile || formData.timeIn ? (
                               <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
@@ -742,7 +1236,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
 
                         <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Modem Setup Image</Text>
+                          {renderLabel('Modem Setup Image')}
                           <Pressable onPress={() => handleImageChange('modemSetupFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
                             {imageFiles.modemSetupFile || formData.modemSetupImage ? (
                               <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
@@ -751,7 +1245,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
 
                         <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Time Out Image</Text>
+                          {renderLabel('Time Out Image')}
                           <Pressable onPress={() => handleImageChange('timeOutFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
                             {imageFiles.timeOutFile || formData.timeOut ? (
                               <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
@@ -760,11 +1254,111 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
                       </>
                     )}
+
+                    {/* Failed/Reschedule Fields */}
+                    {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
+                      <>
+                        {/* Visit By/With/Other/Remarks for Reschedule/Failed */}
+                        <View className="mb-4">
+                          {renderLabel('Visit By', true)}
+                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.visitBy}
+                              onValueChange={(val) => handleInputChange('visitBy', val)}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                            >
+                              <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              {technicians.map((t, i) => (
+                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        <View className="mb-4">
+                          {renderLabel('Visit With', true)}
+                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.visitWith}
+                              onValueChange={(val) => handleInputChange('visitWith', val)}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                            >
+                              <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              {technicians.filter(t => t.name !== formData.visitBy).map((t, i) => (
+                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        <View className="mb-4">
+                          {renderLabel('Visit With Other', true)}
+                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                            <Picker
+                              selectedValue={formData.visitWithOther}
+                              onValueChange={(val) => handleInputChange('visitWithOther', val)}
+                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                              style={{ color: isDarkMode ? '#fff' : '#000' }}
+                            >
+                              <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              {technicians.filter(t => t.name !== formData.visitBy).map((t, i) => (
+                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                              ))}
+                            </Picker>
+                          </View>
+                        </View>
+
+                        {renderInput('visitRemarks', 'Visit Remarks')}
+                      </>
+                    )}
                   </>
                 )}
 
-                {renderPicker('concern', ['No Internet', 'Slow Internet', 'Intermittent Connection', 'Router Issue', 'Billing Concern', 'Others'], 'Concern')}
-                {renderInput('concernRemarks', 'Concern Remarks')}
+                {/* Concern */}
+                <View className="mb-4">
+                  {renderLabel('Concern', true)}
+                  {isTechnician ? (
+                    <TextInput
+                      className={`border rounded-lg p-3 text-base ${isDarkMode ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                      value={formData.concern}
+                      editable={false}
+                    />
+                  ) : (
+                    <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.concern}
+                        onValueChange={(val) => handleInputChange('concern', val)}
+                        dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                        {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
+                      </Picker>
+                    </View>
+                  )}
+                </View>
+
+                {formData.concern === 'Upgrade/Downgrade Plan' && (
+                  <View className="mb-4">
+                    {renderLabel('New Plan', true)}
+                    <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                      <Picker
+                        selectedValue={formData.newPlan}
+                        onValueChange={(val) => handleInputChange('newPlan', val)}
+                        dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                        style={{ color: isDarkMode ? '#fff' : '#000' }}
+                      >
+                        <Picker.Item label="Select New Plan" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                        {plans.map((p, idx) => <Picker.Item key={idx} label={p} value={p} color={isDarkMode ? '#fff' : '#000'} />)}
+                      </Picker>
+                    </View>
+                  </View>
+                )}
+
+                {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
+                {renderInput('modifiedBy', 'Modified By', false)}
                 {renderInput('supportRemarks', 'Support Remarks')}
                 {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
 
@@ -776,8 +1370,5 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     </Modal>
   );
 };
-
-// Removed styles object as we are using NativeWind classes
-const styles = StyleSheet.create({});
 
 export default ServiceOrderEditModal;

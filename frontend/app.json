@@ -37,11 +37,11 @@
       "@react-native-community/datetimepicker",
       "expo-web-browser"
     ],
+    "owner": "amperee7",
     "extra": {
       "eas": {
         "projectId": "0f2fc601-9375-4654-911a-26b1d7157a05"
       }
-    },
-    "owner": "amperee7"
+    }
   }
 }

@@ -1,6 +1,4 @@
-import apiClient from '../config/api';
-
-const API_URL = process.env.REACT_APP_API_BASE_URL || 'https://backend.atssfiber.ph/api';
+import apiClient, { API_BASE_URL as API_URL } from '../config/api';
 
 export interface CustomerDetailsUpdate {
   firstName: string;

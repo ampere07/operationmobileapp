@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../config/api';
 
 interface ApiResponse<T> {
@@ -85,7 +86,7 @@ export const getServiceOrders = async (assignedEmail?: string, page: number = 1,
       params.search = search;
     }
 
-    const authData = localStorage.getItem('authData');
+    const authData = await AsyncStorage.getItem('authData');
     if (authData) {
       try {
         const userData = JSON.parse(authData);

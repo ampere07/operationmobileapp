@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert } from 'react-native';
+import SignatureScreen from 'react-native-signature-canvas';
+import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { X, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
@@ -222,6 +224,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Signature State
+  const signatureRef = useRef<any>(null);
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -839,7 +845,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       setFormData(prev => ({ ...prev, [field]: file }));
 
       // Use the URI directly for preview
-      setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
+      setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
 
       if (errors[field]) {
         setErrors(prev => ({ ...prev, [field]: '' }));
@@ -848,8 +854,39 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       console.error(`[UPLOAD ERROR] ${field}:`, error);
       // Fallback
       setFormData(prev => ({ ...prev, [field]: file }));
-      setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
+      setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
     }
+  };
+
+  const handleSignatureOK = async (signature: string) => {
+    setIsDrawingSignature(false);
+    try {
+      const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
+      const base64Code = signature.replace('data:image/png;base64,', '');
+      await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, {
+        encoding: (ExpoFileSystem as any).EncodingType.Base64,
+      });
+
+      const file = {
+        uri: path,
+        name: `signature_${Date.now()}.png`,
+        type: 'image/png',
+        size: base64Code.length * 0.75 // Approximate size
+      };
+
+      handleImageUpload('clientSignatureImage', file);
+    } catch (e) {
+      console.error('Error handling signature:', e);
+      Alert.alert('Error', 'Failed to save signature');
+    }
+  };
+
+  const handleSignatureClear = () => {
+    if (signatureRef.current) {
+      signatureRef.current.clearSignature();
+    }
+    setFormData(prev => ({ ...prev, clientSignatureImage: null }));
+    setImagePreviews(prev => ({ ...prev, clientSignatureImage: null }));
   };
 
   const handleItemChange = (index: number, field: 'itemId' | 'quantity', value: string) => {
@@ -922,8 +959,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
       if (!formData.addressCoordinates.trim()) newErrors.addressCoordinates = 'Address Coordinates is required';
 
-      const validItems = orderItems.filter(item => item.itemId && item.quantity);
-      if (validItems.length === 0) {
+      const validItems = orderItems.filter(item => item.itemId && item.quantity && item.itemId !== 'None');
+      const hasNoneItem = orderItems.some(item => item.itemId === 'None');
+
+      if (validItems.length === 0 && !hasNoneItem) {
         newErrors.items = 'At least one item with quantity is required';
       } else {
         for (let i = 0; i < validItems.length; i++) {
@@ -982,6 +1021,51 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         { type: 'error', text: 'Please fill in all required fields before saving.' }
       ]);
       return;
+    }
+
+    // SmartOLT Validation Logic
+    if (formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && formData.modemSN.trim()) {
+      try {
+        console.log('[SMARTOLT VALIDATION] Validating Modem SN:', formData.modemSN);
+
+        // Show a smaller loading indicator or just set loading state if preferred, 
+        // but user asked for validation BEFORE the main loading modal.
+        // We will momentarily show loading just for this check if needed, 
+        // or relies on the fact that we haven't shown the main modal yet.
+        setLoading(true);
+
+        const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+          params: { sn: formData.modemSN }
+        });
+
+        if (!(smartOltResponse.data as any).success) {
+          console.log('[SMARTOLT VALIDATION] Failed:', smartOltResponse.data);
+          setLoading(false); // Stop loading on failure
+          setErrors(prev => ({
+            ...prev,
+            modemSN: (smartOltResponse.data as any).message || 'Invalid Modem SN'
+          }));
+          showMessageModal('SmartOLT Verification Failed', [
+            { type: 'error', text: (smartOltResponse.data as any).message || 'The provided Modem SN is invalid or not authorized.' }
+          ]);
+          return;
+        }
+
+        console.log('[SMARTOLT VALIDATION] Success');
+        setLoading(false); // Stop loading after success, before main save starts
+      } catch (error: any) {
+        console.error('[SMARTOLT VALIDATION] API Error:', error);
+        setLoading(false); // Stop loading on error
+        const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
+        setErrors(prev => ({
+          ...prev,
+          modemSN: errorMessage
+        }));
+        showMessageModal('Validation Error', [
+          { type: 'error', text: errorMessage }
+        ]);
+        return;
+      }
     }
 
     console.log('[SAVE VALIDATION] Form validation passed');
@@ -2317,12 +2401,73 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       error={errors.signedContractImage}
                     />
 
-                    <ImagePreview
-                      imageUrl={imagePreviews.clientSignatureImage}
-                      label="Client Signature Image"
-                      onUpload={(file) => handleImageUpload('clientSignatureImage', file)}
-                      error={errors.clientSignatureImage}
-                    />
+                    <View className="mb-4">
+                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Client Signature Image</Text>
+                      {!isDrawingSignature ? (
+                        <View>
+                          <Pressable
+                            onPress={() => setIsDrawingSignature(true)}
+                            className={`h-48 border border-dashed rounded-lg items-center justify-center mb-2 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-gray-50'} ${errors.clientSignatureImage ? 'border-red-500' : ''}`}
+                          >
+                            {imagePreviews.clientSignatureImage ? (
+                              <Image
+                                source={{ uri: imagePreviews.clientSignatureImage }}
+                                style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                              />
+                            ) : (
+                              <View className="items-center">
+                                <View
+                                  className="w-12 h-12 rounded-full items-center justify-center mb-2"
+                                  style={{ backgroundColor: (colorPalette?.primary || '#ea580c') + '20' }}
+                                >
+                                  <Camera size={24} color={colorPalette?.primary || '#ea580c'} />
+                                </View>
+                                <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Tap to Draw Signature</Text>
+                              </View>
+                            )}
+                          </Pressable>
+                          {imagePreviews.clientSignatureImage && (
+                            <View className="flex-row justify-between items-center">
+                              <Pressable
+                                onPress={() => handleImageUpload('clientSignatureImage', null)}
+                                className="flex-row items-center"
+                              >
+                                <X size={16} color="#ef4444" />
+                                <Text className="text-red-500 text-xs ml-1">Remove</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => setIsDrawingSignature(true)}
+                                className="px-3 py-1 rounded-md"
+                                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                              >
+                                <Text className="text-white text-xs">Redraw</Text>
+                              </Pressable>
+                            </View>
+                          )}
+                        </View>
+                      ) : (
+                        <View className="h-72 border border-gray-500 bg-white mb-2 overflow-hidden rounded-lg">
+                          <SignatureScreen
+                            ref={signatureRef}
+                            onOK={handleSignatureOK}
+                            onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
+                            descriptionText="Sign above"
+                            clearText="Clear"
+                            confirmText="Save"
+                            webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
+                          />
+                          <Pressable
+                            onPress={() => setIsDrawingSignature(false)}
+                            className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10 shadow-sm"
+                          >
+                            <X size={20} color="#000" />
+                          </Pressable>
+                        </View>
+                      )}
+                      {errors.clientSignatureImage && (
+                        <Text className="text-red-500 text-xs mt-1">{errors.clientSignatureImage}</Text>
+                      )}
+                    </View>
 
                     <ImagePreview
                       imageUrl={imagePreviews.speedTestImage}
@@ -2390,6 +2535,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                     style={{ elevation: 10 }}
                                   >
                                     <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                                      {"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
+                                        <Pressable
+                                          key="none-item-option"
+                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === 'None' ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                          onPress={() => {
+                                            handleItemChange(index, 'itemId', 'None');
+                                            setOpenItemIndex(null);
+                                            setItemSearch('');
+                                          }}
+                                        >
+                                          <View className="flex-row items-center justify-between">
+                                            <Text className={`text-sm ${item.itemId === 'None' ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                              None
+                                            </Text>
+                                            {item.itemId === 'None' && (
+                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                            )}
+                                          </View>
+                                        </Pressable>
+                                      )}
                                       {inventoryItems
                                         .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
                                         .map((invItem) => (
@@ -2413,13 +2578,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                             </View>
                                           </Pressable>
                                         ))}
-                                      {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
-                                        <View className="px-4 py-8 items-center">
-                                          <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                                            No results found for "{itemSearch}"
-                                          </Text>
-                                        </View>
-                                      )}
+                                      {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 &&
+                                        !"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
+                                          <View className="px-4 py-8 items-center">
+                                            <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                              No results found for "{itemSearch}"
+                                            </Text>
+                                          </View>
+                                        )}
                                     </ScrollView>
                                   </View>
                                 )}
