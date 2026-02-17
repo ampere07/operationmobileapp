@@ -3,14 +3,22 @@ import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, Device
 import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
-// import JobOrderFunnelFilter from '../components/filters/JobOrderFunnelFilter';
+import JobOrderFunnelFilter, { FilterValues } from '../components/filters/JobOrderFunnelFilter';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { getCities, City } from '../services/cityService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrder } from '../types/jobOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
+
+interface LocationItem {
+  id: string;
+  name: string;
+  count: number;
+}
+
 type DisplayMode = 'card' | 'table';
+type MobileView = 'locations' | 'orders' | 'details';
 
 const allColumns = [
   { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
@@ -95,9 +103,12 @@ const JobOrderPage: React.FC = () => {
   const [columnOrder, setColumnOrder] = useState<string[]>(allColumns.map(col => col.key));
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
   const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
+  const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [cities, setCities] = useState<City[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [mobileView, setMobileView] = useState<'orders' | 'details'>('orders');
-  // const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
+  const [mobileView, setMobileView] = useState<MobileView>('locations');
+  const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
+  const [filterValues, setFilterValues] = useState<FilterValues>({});
   const dropdownRef = useRef<View>(null);
   const filterDropdownRef = useRef<View>(null);
   const tableRef = useRef<ScrollView>(null);
@@ -106,6 +117,12 @@ const JobOrderPage: React.FC = () => {
   const sidebarStartXRef = useRef<number>(0);
   const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+
+  const handleApplyFilters = (filters: FilterValues) => {
+    setFilterValues(filters);
+    setCurrentPage(1);
+    setIsFunnelFilterOpen(false);
+  };
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 50;
@@ -230,6 +247,69 @@ const JobOrderPage: React.FC = () => {
     setIsRefreshing(false);
   };
 
+  // Fetch cities
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const citiesData = await getCities();
+        setCities(citiesData || []);
+      } catch (err) {
+        console.error('Failed to fetch cities:', err);
+      }
+    };
+
+    fetchCities();
+  }, []);
+
+  const locationItems: LocationItem[] = React.useMemo(() => {
+    const items: LocationItem[] = [
+      {
+        id: 'all',
+        name: 'All',
+        count: jobOrders.length
+      }
+    ];
+
+    const getAddress = (jo: JobOrder) => (jo.Address || jo.address || '') + ' ' + (jo.City || jo.city || '');
+
+    if (cities.length > 0) {
+      cities.forEach(city => {
+        const cityCount = jobOrders.filter(jo =>
+          getAddress(jo).toLowerCase().includes(city.name.toLowerCase())
+        ).length;
+
+        items.push({
+          id: city.name.toLowerCase(),
+          name: city.name,
+          count: cityCount
+        });
+      });
+    } else {
+      const locationSet = new Set<string>();
+
+      jobOrders.forEach(jo => {
+        const city = (jo.City || jo.city || '').trim().toLowerCase();
+        if (city) {
+          locationSet.add(city);
+        }
+      });
+
+      Array.from(locationSet).forEach(location => {
+        const cityCount = jobOrders.filter(jo =>
+          (jo.City || jo.city || '').toLowerCase() === location
+        ).length;
+
+        items.push({
+          id: location,
+          name: location.charAt(0).toUpperCase() + location.slice(1),
+          count: cityCount
+        });
+      });
+    }
+
+    return items;
+  }, [cities, jobOrders]);
+
   const getClientFullName = (jobOrder: JobOrder): string => {
     return [
       jobOrder.First_Name || jobOrder.first_name || '',
@@ -249,6 +329,11 @@ const JobOrderPage: React.FC = () => {
     return addressParts.length > 0 ? addressParts.join(', ') : '-';
   };
 
+  const handleLocationSelect = (locationId: string) => {
+    setSelectedLocation(locationId);
+    setMobileView('orders');
+  };
+
 
 
 
@@ -260,7 +345,98 @@ const JobOrderPage: React.FC = () => {
       ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesSearch;
+    const getAddress = (jo: JobOrder) => (jo.Address || jo.address || '') + ' ' + (jo.City || jo.city || '');
+    const matchesLocation = selectedLocation === 'all' ||
+      getAddress(jobOrder).toLowerCase().includes(selectedLocation.toLowerCase()) ||
+      (jobOrder.City || jobOrder.city || '').toLowerCase() === selectedLocation.toLowerCase();
+
+    if (!matchesSearch || !matchesLocation) return false;
+
+    // Apply funnel filters
+    for (const key in filterValues) {
+      const filter = filterValues[key];
+      let itemValue: any = '';
+
+      // Determine item value based on key
+      switch (key) {
+        case 'id': itemValue = jobOrder.id; break;
+        case 'application_id': itemValue = jobOrder.application_id; break;
+        case 'timestamp': itemValue = jobOrder.Timestamp || jobOrder.timestamp; break;
+        case 'date_installed': itemValue = jobOrder.Date_Installed || jobOrder.date_installed; break;
+        case 'installation_fee': itemValue = jobOrder.Installation_Fee || jobOrder.installation_fee; break;
+        case 'billing_day': itemValue = jobOrder.Billing_Day || jobOrder.billing_day; break;
+        case 'billing_status_id': itemValue = jobOrder.billing_status_id || jobOrder.Billing_Status_ID; break;
+        case 'modem_router_sn': itemValue = jobOrder.Modem_Router_SN || jobOrder.modem_router_sn; break;
+        case 'router_model': itemValue = jobOrder.Router_Model || jobOrder.router_model; break;
+        case 'group_name': itemValue = jobOrder.group_name || jobOrder.Group_Name; break;
+        case 'lcpnap': itemValue = jobOrder.LCPNAP || jobOrder.lcpnap; break;
+        case 'port': itemValue = jobOrder.PORT || jobOrder.Port || jobOrder.port; break;
+        case 'vlan': itemValue = jobOrder.VLAN || jobOrder.vlan; break;
+        case 'username': itemValue = jobOrder.Username || jobOrder.username; break;
+        case 'ip_address': itemValue = jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip; break;
+        case 'connection_type': itemValue = jobOrder.Connection_Type || jobOrder.connection_type; break;
+        case 'usage_type': itemValue = jobOrder.Usage_Type || jobOrder.usage_type; break;
+        case 'username_status': itemValue = jobOrder.username_status || jobOrder.Username_Status; break;
+        case 'visit_by': itemValue = jobOrder.Visit_By || jobOrder.visit_by; break;
+        case 'visit_with': itemValue = jobOrder.Visit_With || jobOrder.visit_with; break;
+        case 'visit_with_other': itemValue = jobOrder.Visit_With_Other || jobOrder.visit_with_other; break;
+        case 'onsite_status': itemValue = jobOrder.Onsite_Status || jobOrder.onsite_status; break;
+        case 'onsite_remarks': itemValue = jobOrder.Onsite_Remarks || jobOrder.onsite_remarks; break;
+        case 'status_remarks': itemValue = jobOrder.Status_Remarks || jobOrder.status_remarks; break;
+        case 'address_coordinates': itemValue = jobOrder.Address_Coordinates || jobOrder.address_coordinates; break;
+        case 'contract_link': itemValue = jobOrder.Contract_Link || jobOrder.contract_link; break;
+        case 'client_signature_url': itemValue = jobOrder.client_signature_url || jobOrder.Client_Signature_URL || jobOrder.client_signature_image_url || jobOrder.Client_Signature_Image_URL; break;
+        case 'setup_image_url': itemValue = jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url; break;
+        case 'speedtest_image_url': itemValue = jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image; break;
+        case 'signed_contract_image_url': itemValue = jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL; break;
+        case 'box_reading_image_url': itemValue = jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL; break;
+        case 'router_reading_image_url': itemValue = jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL; break;
+        case 'port_label_image_url': itemValue = jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL; break;
+        case 'house_front_picture_url': itemValue = jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture; break;
+        case 'created_at': itemValue = jobOrder.created_at || jobOrder.Created_At; break;
+        case 'created_by_user_email': itemValue = jobOrder.created_by_user_email || jobOrder.Created_By_User_Email; break;
+        case 'updated_at': itemValue = jobOrder.updated_at || jobOrder.Updated_At; break;
+        case 'updated_by_user_email': itemValue = jobOrder.updated_by_user_email || jobOrder.Updated_By_User_Email; break;
+        case 'assigned_email': itemValue = jobOrder.Assigned_Email || jobOrder.assigned_email; break;
+        case 'pppoe_username': itemValue = jobOrder.PPPoE_Username || jobOrder.pppoe_username; break;
+        case 'pppoe_password': itemValue = jobOrder.PPPoE_Password || jobOrder.pppoe_password; break;
+        case 'full_name': itemValue = getClientFullName(jobOrder); break;
+        case 'address': itemValue = getClientFullAddress(jobOrder); break;
+        case 'contract_template': itemValue = jobOrder.Contract_Template || jobOrder.contract_template; break;
+        case 'first_name': itemValue = jobOrder.First_Name || jobOrder.first_name; break;
+        case 'middle_initial': itemValue = jobOrder.Middle_Initial || jobOrder.middle_initial; break;
+        case 'last_name': itemValue = jobOrder.Last_Name || jobOrder.last_name; break;
+        case 'contact_number': itemValue = jobOrder.Contact_Number || jobOrder.Mobile_Number || jobOrder.contact_number || jobOrder.mobile_number; break;
+        case 'second_contact_number': itemValue = jobOrder.Second_Contact_Number || jobOrder.Secondary_Mobile_Number || jobOrder.second_contact_number || jobOrder.secondary_mobile_number; break;
+        case 'email_address': itemValue = jobOrder.Email_Address || jobOrder.Applicant_Email_Address || jobOrder.email_address || jobOrder.applicant_email_address; break;
+        case 'region': itemValue = jobOrder.Region || jobOrder.region; break;
+        case 'city': itemValue = jobOrder.City || jobOrder.city; break;
+        case 'barangay': itemValue = jobOrder.Barangay || jobOrder.barangay; break;
+        case 'location': itemValue = jobOrder.Region || jobOrder.region; break; // Approximating location as Region for now, usually it's a specific field but 'Location' was in columns
+        case 'choose_plan': itemValue = jobOrder.Choose_Plan || jobOrder.Desired_Plan || jobOrder.choose_plan || jobOrder.desired_plan; break;
+        case 'referred_by': itemValue = jobOrder.Referred_By || jobOrder.referred_by; break;
+        case 'start_timestamp': itemValue = jobOrder.StartTimeStamp || jobOrder.start_timestamp; break;
+        case 'end_timestamp': itemValue = jobOrder.EndTimeStamp || jobOrder.end_timestamp; break;
+        case 'duration': itemValue = jobOrder.Duration || jobOrder.duration; break;
+        default: itemValue = '';
+      }
+
+      if (filter.type === 'text' && filter.value) {
+        if (!String(itemValue || '').toLowerCase().includes(filter.value.toLowerCase())) {
+          return false;
+        }
+      } else if (filter.type === 'number') {
+        const numValue = parseFloat(itemValue);
+        if (filter.from !== undefined && numValue < Number(filter.from)) return false;
+        if (filter.to !== undefined && numValue > Number(filter.to)) return false;
+      } else if (filter.type === 'date') {
+        const dateValue = new Date(itemValue).getTime();
+        if (filter.from && dateValue < new Date(String(filter.from)).getTime()) return false;
+        if (filter.to && dateValue > new Date(String(filter.to)).getTime()) return false;
+      }
+    }
+
+    return true;
   });
 
   const presortedJobOrders = [...filteredJobOrders].sort((a, b) => {
@@ -399,6 +575,8 @@ const JobOrderPage: React.FC = () => {
     if (mobileView === 'details') {
       setSelectedJobOrder(null);
       setMobileView('orders');
+    } else if (mobileView === 'orders') {
+      setMobileView('locations');
     }
   };
 
@@ -741,6 +919,87 @@ const JobOrderPage: React.FC = () => {
         </View>
       )}
 
+      {mobileView === 'locations' && (
+        <View style={{
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          display: isTablet ? 'none' : 'flex'
+        }}>
+          <View style={{
+            padding: 16,
+            paddingTop: 60,
+            borderBottomWidth: 1,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }}>
+            <Text style={{
+              fontSize: 18,
+              fontWeight: '600',
+              color: isDarkMode ? '#ffffff' : '#111827'
+            }}>
+              Job Orders
+            </Text>
+          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={handleRefresh}
+                tintColor={colorPalette?.primary || '#ea580c'}
+                colors={[colorPalette?.primary || '#ea580c']}
+              />
+            }
+          >
+            {locationItems.map((location) => (
+              <Pressable
+                key={location.id}
+                onPress={() => handleLocationSelect(location.id)}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 16,
+                  borderBottomWidth: 1,
+                  backgroundColor: selectedLocation === location.id
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent',
+                  borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 12 }} />
+                  <Text style={{
+                    textTransform: 'capitalize',
+                    fontSize: 16,
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
+                  }}>{location.name}</Text>
+                </View>
+                {location.count > 0 && (
+                  <View style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}>{location.count}</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {userRole.toLowerCase() !== 'technician' && isTablet && (
         <View style={{
           width: sidebarWidth,
@@ -767,9 +1026,60 @@ const JobOrderPage: React.FC = () => {
               </Text>
             </View>
           </View>
-          <View style={{ padding: 16 }}>
-            <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
-          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={handleRefresh}
+                tintColor={colorPalette?.primary || '#ea580c'}
+                colors={[colorPalette?.primary || '#ea580c']}
+              />
+            }
+          >
+            {locationItems.map((location) => (
+              <Pressable
+                key={location.id}
+                onPress={() => setSelectedLocation(location.id)}
+                style={{
+                  width: '100%',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: selectedLocation === location.id
+                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
+                    : 'transparent'
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
+                  <Text style={{
+                    textTransform: 'capitalize',
+                    fontSize: 14,
+                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151'),
+                    fontWeight: selectedLocation === location.id ? '500' : 'normal'
+                  }}>{location.name}</Text>
+                </View>
+                {location.count > 0 && (
+                  <View style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 9999,
+                    backgroundColor: selectedLocation === location.id
+                      ? (colorPalette?.primary || '#ea580c')
+                      : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }}>
+                    <Text style={{
+                      fontSize: 12,
+                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
+                    }}>{location.count}</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -778,7 +1088,7 @@ const JobOrderPage: React.FC = () => {
         flex: 1,
         flexDirection: 'column',
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        display: mobileView === 'details' && !isTablet ? 'none' : 'flex'
+        display: (mobileView === 'details' || mobileView === 'locations') && !isTablet ? 'none' : 'flex'
       }}>
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{
@@ -836,6 +1146,19 @@ const JobOrderPage: React.FC = () => {
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => setIsFunnelFilterOpen(true)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 4,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                  }}
+                >
+                  <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#374151'} />
+                </Pressable>
 
                 <Pressable
                   onPress={handleRefresh}
@@ -1087,6 +1410,13 @@ const JobOrderPage: React.FC = () => {
       )}
 
 
+
+      <JobOrderFunnelFilter
+        isOpen={isFunnelFilterOpen}
+        onClose={() => setIsFunnelFilterOpen(false)}
+        onApplyFilters={handleApplyFilters}
+        currentFilters={filterValues}
+      />
     </View>
   );
 };

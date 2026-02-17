@@ -106,6 +106,9 @@ class ServiceOrderApiController extends Controller
                 $so->email_address = $c ? $c->email_address : null;
                 $so->house_front_picture_url = $c ? $c->house_front_picture_url : null;
                 $so->plan = $c ? $c->desired_plan : null;
+                $so->region = $c ? $c->region : null;
+                $so->city = $c ? $c->city : null;
+                $so->barangay = $c ? $c->barangay : null;
                 
                 // Technical details
                 $so->username = $td ? $td->username : null;
@@ -320,6 +323,9 @@ class ServiceOrderApiController extends Controller
                     'c.email_address',
                     'c.house_front_picture_url',
                     'c.desired_plan as plan',
+                    'c.region',
+                    'c.city',
+                    'c.barangay',
                     'td.username',
                     'td.connection_type',
                     'td.router_modem_sn',

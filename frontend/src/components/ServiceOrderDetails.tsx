@@ -50,6 +50,9 @@ interface ServiceOrderDetailsProps {
     image1Url?: string;
     image2Url?: string;
     image3Url?: string;
+    region?: string;
+    city?: string;
+    barangay?: string;
   };
   onClose: () => void;
   isMobile?: boolean;

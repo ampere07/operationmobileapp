@@ -15,6 +15,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { concernService, Concern } from '../services/concernService';
 import { getUsedPorts } from '../services/portService';
 import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
+
 import { routerModelService, RouterModel } from '../services/routerModelService';
 
 // Define UserData interface locally if not available in '../types/api'
@@ -82,7 +83,11 @@ interface ServiceOrderEditFormData {
   newVlan: string;
   routerModel: string;
   newPlan: string;
+
   newLcpnap: string;
+  region: string;
+  city: string;
+  barangay: string;
 }
 
 interface ImageFiles {
@@ -169,7 +174,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     newVlan: '',
     routerModel: '',
     newPlan: '',
-    newLcpnap: ''
+
+    newLcpnap: '',
+    region: '',
+    city: '',
+    barangay: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -371,8 +380,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       fetchTechnicalDetails();
       fetchConcerns();
     }
-
   }, [isOpen]);
+
+
+
 
   // Used Ports Effect
   useEffect(() => {
@@ -473,7 +484,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         newNap: '',
         newPort: '',
         newVlan: '',
-        routerModel: ''
+
+        routerModel: '',
+        region: serviceOrderData.region || '',
+        city: serviceOrderData.city || '',
+        barangay: serviceOrderData.barangay || ''
       }));
     }
   }, [serviceOrderData, isOpen, currentUserEmail]);
@@ -484,6 +499,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       if (field === 'newLcp' || field === 'newNap' || field === 'newLcpnap') {
         newState.newPort = '';
       }
+
       return newState;
     });
     if (errors[field]) {
@@ -1014,6 +1030,45 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 {renderInput('emailAddress', 'Email Address', false)}
                 {renderInput('plan', 'Plan', false)}
                 {renderInput('username', 'Username', false)}
+
+                <View className="mb-4">
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Region</Text>
+                  <TextInput
+                    value={formData.region}
+                    editable={false}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-300'
+                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                      }`}
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>City</Text>
+                  <TextInput
+                    value={formData.city}
+                    editable={false}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-300'
+                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                      }`}
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Barangay</Text>
+                  <TextInput
+                    value={formData.barangay}
+                    editable={false}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-300'
+                      : 'bg-gray-100 border-gray-300 text-gray-600'
+                      }`}
+                  />
+                </View>
 
                 {/* Connection Type */}
                 <View className="mb-4">

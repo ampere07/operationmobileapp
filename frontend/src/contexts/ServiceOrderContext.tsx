@@ -49,6 +49,9 @@ interface ServiceOrder {
     image2Url?: string;
     image3Url?: string;
     rawUpdatedAt?: string;
+    region?: string;
+    city?: string;
+    barangay?: string;
 }
 
 interface ServiceOrderContextType {
@@ -126,7 +129,10 @@ const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => {
         image1Url: order.image1_url || '',
         image2Url: order.image2_url || '',
         image3Url: order.image3_url || '',
-        rawUpdatedAt: order.updated_at || ''
+        rawUpdatedAt: order.updated_at || '',
+        region: order.region || '',
+        city: order.city || '',
+        barangay: order.barangay || ''
     };
 };
 
