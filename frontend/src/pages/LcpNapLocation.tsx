@@ -442,10 +442,22 @@ const LcpNapLocation: React.FC = () => {
                   }}
                   title={location.lcpnap_name}
                   description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name}`}
-                  pinColor="#22c55e"
                   onPress={() => handleLocationSelect(location)}
-                  tracksViewChanges={false}
-                />
+                >
+                  <View style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: '#22c55e',
+                    borderWidth: 1,
+                    borderColor: 'white',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 3.84,
+                    elevation: 5,
+                  }} />
+                </Marker>
               ))}
             </MapView>
 

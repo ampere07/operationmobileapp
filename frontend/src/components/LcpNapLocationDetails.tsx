@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, MapPin } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, Linking, useWindowDimensions, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { X, ExternalLink, MapPin, Navigation2 } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -88,15 +89,48 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     </View>
   );
 
-  const renderImageLink = (label: string, url: string | undefined | null) => {
+  const getImageUrl = (url: string): string => {
+    if (!url) return '';
+    if (url.includes('drive.google.com')) {
+      // Extract ID from various Google Drive URL formats
+      const match = url.match(/\/d\/(.+?)(?:\/|$)/) || url.match(/id=(.+?)(?:&|$)/);
+      if (match && match[1]) {
+        // Use Google's direct image CDN for better compatibility with React Native
+        return `https://lh3.googleusercontent.com/d/${match[1]}`;
+      }
+    }
+    return url;
+  };
+
+  const [loadingImages, setLoadingImages] = useState<{ [key: string]: boolean }>({});
+
+  const renderImageField = (label: string, url: string | undefined | null) => {
     if (!url) return null;
+    const imageUrl = getImageUrl(url);
+    const imageKey = `${label}-${url}`;
+
     return renderField(label, (
-      <View style={styles.imageLinkContainer}>
-        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1} selectable={true}>
-          {url}
-        </Text>
-        <Pressable onPress={() => Linking.openURL(url)}>
-          <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+      <View style={styles.imageContainer}>
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.image}
+          resizeMode="cover"
+          onLoadStart={() => setLoadingImages(prev => ({ ...prev, [imageKey]: true }))}
+          onLoadEnd={() => setLoadingImages(prev => ({ ...prev, [imageKey]: false }))}
+        />
+        {loadingImages[imageKey] && (
+          <View style={[StyleSheet.absoluteFill, styles.imageLoader]}>
+            <ActivityIndicator color="#ffffff" />
+          </View>
+        )}
+        <Pressable
+          onPress={() => Linking.openURL(url)}
+          style={[styles.externalLinkOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+        >
+          <View style={styles.externalLinkContent}>
+            <ExternalLink width={14} height={14} color="white" />
+            <Text style={styles.externalLinkLabel}>View Original</Text>
+          </View>
         </Pressable>
       </View>
     ));
@@ -197,11 +231,70 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
             </View>
           ))}
 
-          {renderField('Coordinates', `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`)}
+          {renderField('Coordinates', (
+            <View style={styles.coordinatesContainer}>
+              <View style={styles.miniMapWrapper}>
+                <WebView
+                  scrollEnabled={false}
+                  source={{
+                    html: `
+                      <!DOCTYPE html>
+                      <html>
+                      <head>
+                          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                          <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                          <style>
+                              body { margin: 0; padding: 0; background: ${isDarkMode ? '#1f2937' : '#f3f4f6'}; }
+                              #map { height: 100vh; width: 100vw; }
+                              .leaflet-marker-icon { border: 2px solid white; border-radius: 50%; background: #22c55e !important; width: 12px !important; height: 12px !important; margin-left: -8px !important; margin-top: -8px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+                              .leaflet-marker-shadow { display: none; }
+                          </style>
+                      </head>
+                      <body>
+                          <div id="map"></div>
+                          <script>
+                              var map = L.map('map', {
+                                  zoomControl: false,
+                                  attributionControl: false,
+                                  dragging: false,
+                                  touchZoom: false,
+                                  doubleClickZoom: false,
+                                  scrollWheelZoom: false,
+                                  boxZoom: false
+                              }).setView([${location.latitude}, ${location.longitude}], 16);
+                              
+                              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                  maxZoom: 19
+                              }).addTo(map);
 
-          {renderImageLink('Reading Image', location.reading_image_url)}
-          {renderImageLink('Image 1', location.image1_url)}
-          {renderImageLink('Image 2', location.image2_url)}
+                              var greenIcon = L.divIcon({
+                                  className: 'leaflet-marker-icon'
+                              });
+
+                              L.marker([${location.latitude}, ${location.longitude}], {icon: greenIcon}).addTo(map);
+                          </script>
+                      </body>
+                      </html>
+                    `
+                  }}
+                  style={styles.miniMap}
+                />
+              </View>
+              <View style={styles.latLongRow}>
+                <Text style={[styles.latLongLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                  Lat & Long:
+                </Text>
+                <Text style={[styles.latLongValue, { color: isDarkMode ? '#ffffff' : '#111827' }]} selectable={true}>
+                  {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                </Text>
+              </View>
+            </View>
+          ))}
+
+          {renderImageField('Reading Image', location.reading_image_url)}
+          {renderImageField('Image 1', location.image1_url)}
+          {renderImageField('Image 2', location.image2_url)}
 
           {location.modified_by && renderField('Modified By', location.modified_by)}
           {location.modified_date && renderField('Modified Date', formatDate(location.modified_date))}
@@ -288,6 +381,86 @@ const styles = StyleSheet.create({
   sessionBadgeText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  imageContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginTop: 8,
+    position: 'relative',
+    backgroundColor: '#1f2937',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  externalLinkOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  externalLinkContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  externalLinkLabel: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  imageLoader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coordinatesContainer: {
+    marginTop: 8,
+    gap: 12,
+  },
+  miniMapWrapper: {
+    height: 150,
+    width: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  miniMap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  miniMarker: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  miniMarkerInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  latLongRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  latLongLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  latLongValue: {
+    fontSize: 15,
   },
 });
 

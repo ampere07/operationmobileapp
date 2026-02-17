@@ -42,6 +42,7 @@ const ServiceOrderPage: React.FC = () => {
   const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
   const [cities, setCities] = useState<City[]>([]);
   const [userRole, setUserRole] = useState<string>('');
+  const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -116,8 +117,16 @@ const ServiceOrderPage: React.FC = () => {
       if (authData) {
         try {
           const userData = JSON.parse(authData);
-          setUserRole(userData.role || '');
+          const role = userData.role || '';
+          const roleId = userData.role_id || null;
+          setUserRole(role);
+          setUserRoleId(roleId);
           setUserEmail(userData.email || '');
+
+          if (role.toLowerCase() === 'technician' || roleId === 2) {
+            setMobileView('orders');
+            setSelectedLocation('all');
+          }
         } catch (error) {
           console.error('Error parsing auth data:', error);
         }
@@ -648,7 +657,7 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-      {mobileView === 'locations' && (
+      {mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && (
         <View style={{
           flex: 1,
           flexDirection: 'column',
@@ -727,7 +736,7 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
+      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
         <View style={{
           position: 'absolute',
           top: 0,
@@ -823,7 +832,7 @@ const ServiceOrderPage: React.FC = () => {
         flex: 1,
         flexDirection: 'column',
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        display: (mobileView === 'locations' || mobileView === 'details') && !isTablet ? 'none' : 'flex'
+        display: ((mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2) || mobileView === 'details') && !isTablet ? 'none' : 'flex'
       }}>
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{
@@ -835,7 +844,7 @@ const ServiceOrderPage: React.FC = () => {
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              {!isTablet && mobileView === 'orders' && (
+              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && (
                 <Pressable
                   onPress={handleMobileBack}
                   style={{
@@ -846,7 +855,7 @@ const ServiceOrderPage: React.FC = () => {
                   <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
                 </Pressable>
               )}
-              {userRole.toLowerCase() !== 'technician' && mobileView === 'orders' && (
+              {userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
                 <Pressable
                   onPress={() => setMobileMenuOpen(true)}
                   style={{

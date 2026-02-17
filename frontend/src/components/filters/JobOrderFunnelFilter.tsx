@@ -315,7 +315,7 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
           style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)' }}
           onPress={onClose}
         />
-        
+
         <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, maxWidth: 448, width: '100%', flexDirection: 'row' }}>
           <View style={{ width: '100%', maxWidth: 448, backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
             <View style={{ height: '100%', flexDirection: 'column' }}>
@@ -362,8 +362,8 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                       <View style={{ flexDirection: 'column', gap: 8, width: '100%' }}>
                         {groupedColumns.job_orders.map(column => {
                           const hasFilter = filterValues[column.key] && (
-                            filterValues[column.key].value || 
-                            filterValues[column.key].from !== undefined || 
+                            filterValues[column.key].value ||
+                            filterValues[column.key].from !== undefined ||
                             filterValues[column.key].to !== undefined
                           );
 
