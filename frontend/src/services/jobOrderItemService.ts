@@ -28,7 +28,7 @@ export const createJobOrderItems = async (items: JobOrderItem[]): Promise<ApiRes
 
 export const getJobOrderItems = async (jobOrderId: number): Promise<ApiResponse<JobOrderItem[]>> => {
   try {
-    const response = await apiClient.get<ApiResponse<JobOrderItem[]>>(`/job-order-items/${jobOrderId}`);
+    const response = await apiClient.get<ApiResponse<JobOrderItem[]>>(`/job-order-items?job_order_id=${jobOrderId}`);
     return response.data;
   } catch (error: any) {
     console.error('Error fetching job order items:', error);

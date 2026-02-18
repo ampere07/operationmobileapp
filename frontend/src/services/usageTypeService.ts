@@ -16,6 +16,18 @@ export interface UsageType {
 export const getAllUsageTypes = async (): Promise<ApiResponse<UsageType[]>> => {
   try {
     const response = await apiClient.get<ApiResponse<UsageType[]>>('/usage-types');
+    if (response.data && response.data.success && Array.isArray(response.data.data)) {
+      const filtered = response.data.data.filter(ut => {
+        const val = ut.usage_name || (ut as any).Usage_Name;
+        if (!val) return false;
+        const name = String(val).trim().toLowerCase();
+        return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+      });
+      return {
+        ...response.data,
+        data: filtered
+      };
+    }
     return response.data;
   } catch (error: any) {
     console.error('Error fetching usage types:', error);

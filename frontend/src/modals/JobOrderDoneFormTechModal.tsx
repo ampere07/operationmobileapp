@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -82,6 +82,14 @@ interface OrderItem {
   quantity: string;
 }
 
+const getTodayDate = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   isOpen,
   onClose,
@@ -135,7 +143,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const currentUserEmail = currentUser?.email || 'unknown@unknown.com';
 
   const [formData, setFormData] = useState<JobOrderDoneFormData>({
-    dateInstalled: '',
+    dateInstalled: getTodayDate(),
     usageType: '',
     choosePlan: '',
     connectionType: '',
@@ -559,7 +567,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           const response = await getAllUsageTypes();
 
           if (response.success && Array.isArray(response.data)) {
-            setUsageTypes(response.data);
+            const filtered = (response.data as any[]).filter(ut => {
+              const val = ut.usage_name || ut.Usage_Name || ut.usageName;
+              if (!val) return false;
+              const name = String(val).trim().toLowerCase();
+              return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+            });
+            setUsageTypes(filtered);
           } else {
             setUsageTypes([]);
           }
@@ -579,10 +593,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           const response = await getAllInventoryItems();
 
           if (response.success && Array.isArray(response.data)) {
-            // Filter only items with category_id = 1
-            const filteredItems = response.data.filter(item =>
-              item.category_id === 1 || String(item.category_id) === '1'
-            );
+            const filteredItems = response.data.filter(item => {
+              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+              return catId === 1 || String(catId) === '1';
+            });
             setInventoryItems(filteredItems);
           } else {
             setInventoryItems([]);
@@ -645,7 +659,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (isOpen) {
         try {
           const fetchedRouterModels = await routerModelService.getAllRouterModels();
-          setRouterModels(fetchedRouterModels);
+          const filtered = fetchedRouterModels.filter(rm => {
+            if (!rm.model) return false;
+            const name = String(rm.model).trim().toLowerCase();
+            return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+          });
+          setRouterModels(filtered);
         } catch (error) {
         }
       }
@@ -674,19 +693,31 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       };
 
       const formatDateForInput = (dateValue: any): string => {
-        if (!dateValue || isEmptyValue(dateValue)) return '';
+        const today = getTodayDate();
+        const isEmpty = (val: any) => {
+          if (!val) return true;
+          if (typeof val === 'string') {
+            const t = val.trim().toLowerCase();
+            return t === '' || t === 'null' || t === 'undefined' || t === '0000-00-00' || t.startsWith('0000-00-00');
+          }
+          return false;
+        };
+
+        if (isEmpty(dateValue)) return today;
 
         try {
           const date = new Date(dateValue);
-          if (isNaN(date.getTime())) return '';
+          if (isNaN(date.getTime())) return today;
 
           const year = date.getFullYear();
+          if (year < 2020) return today; // Any date before 2020 is likely invalid or default
+
           const month = String(date.getMonth() + 1).padStart(2, '0');
           const day = String(date.getDate()).padStart(2, '0');
 
           return `${year}-${month}-${day}`;
         } catch (error) {
-          return '';
+          return today;
         }
       };
 
@@ -700,10 +731,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
               const newFormData = {
                 dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
-                usageType: getValue(jobOrderData.Usage_Type || jobOrderData.usage_type, 'usageType'),
+                usageType: (jobOrderData.Usage_Type || jobOrderData.usage_type || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Usage_Type || jobOrderData.usage_type || ''),
                 choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan, 'choosePlan'),
                 connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
-                routerModel: getValue(jobOrderData.Router_Model || jobOrderData.router_model, 'routerModel'),
+                routerModel: (jobOrderData.Router_Model || jobOrderData.router_model || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Router_Model || jobOrderData.router_model || ''),
                 modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
 
                 lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
@@ -758,10 +789,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       const loadDefaultFormData = () => {
         const newFormData = {
           dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
-          usageType: getValue(jobOrderData.Usage_Type || jobOrderData.usage_type, 'usageType'),
+          usageType: (jobOrderData.Usage_Type || jobOrderData.usage_type || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Usage_Type || jobOrderData.usage_type || ''),
           choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan, 'choosePlan'),
           connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
-          routerModel: getValue(jobOrderData.Router_Model || jobOrderData.router_model, 'routerModel'),
+          routerModel: (jobOrderData.Router_Model || jobOrderData.router_model || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Router_Model || jobOrderData.router_model || ''),
           modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
 
           lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
@@ -892,13 +923,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   };
 
   const handleItemChange = (index: number, field: 'itemId' | 'quantity', value: string) => {
-    const newOrderItems = [...orderItems];
-    newOrderItems[index][field] = value;
-    setOrderItems(newOrderItems);
+    setOrderItems(prevItems => {
+      const newItems = prevItems.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      );
 
-    if (field === 'itemId' && value && index === orderItems.length - 1) {
-      setOrderItems([...newOrderItems, { itemId: '', quantity: '' }]);
-    }
+      // Auto-add new row if item selected in the last row
+      if (field === 'itemId' && value && index === prevItems.length - 1) {
+        return [...newItems, { itemId: '', quantity: '' }];
+      }
+
+      return newItems;
+    });
   };
 
   const handleRemoveItem = (index: number) => {
@@ -1030,10 +1066,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       try {
         console.log('[SMARTOLT VALIDATION] Validating Modem SN:', formData.modemSN);
 
-        // Show a smaller loading indicator or just set loading state if preferred, 
-        // but user asked for validation BEFORE the main loading modal.
-        // We will momentarily show loading just for this check if needed, 
-        // or relies on the fact that we haven't shown the main modal yet.
         setLoading(true);
 
         const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
@@ -1042,7 +1074,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
         if (!(smartOltResponse.data as any).success) {
           console.log('[SMARTOLT VALIDATION] Failed:', smartOltResponse.data);
-          setLoading(false); // Stop loading on failure
+          setLoading(false);
           setErrors(prev => ({
             ...prev,
             modemSN: (smartOltResponse.data as any).message || 'Invalid Modem SN'
@@ -1054,11 +1086,56 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
 
         console.log('[SMARTOLT VALIDATION] Success');
-        setLoading(false); // Stop loading after success, before main save starts
+        setLoading(false);
       } catch (error: any) {
         console.error('[SMARTOLT VALIDATION] API Error:', error);
-        setLoading(false); // Stop loading on error
+        setLoading(false);
         const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
+        setErrors(prev => ({
+          ...prev,
+          modemSN: errorMessage
+        }));
+        showMessageModal('Validation Error', [
+          { type: 'error', text: errorMessage }
+        ]);
+        return;
+      }
+    }
+
+    // Database Verification Logic (Job Orders & Technical Details)
+    if (formData.onsiteStatus === 'Done' && formData.modemSN.trim()) {
+      try {
+        console.log('[DATABASE VALIDATION] Checking if Modem SN exists:', formData.modemSN);
+        setLoading(true);
+
+        const currentJobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+        const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
+          params: {
+            sn: formData.modemSN,
+            exclude_id: currentJobOrderId
+          }
+        });
+
+        if (!(validationResponse.data as any).success) {
+          console.log('[DATABASE VALIDATION] Failed:', validationResponse.data);
+          setLoading(false);
+          const message = (validationResponse.data as any).message || 'Modem SN already exists in the system.';
+          setErrors(prev => ({
+            ...prev,
+            modemSN: message
+          }));
+          showMessageModal('Modem SN Already Exists', [
+            { type: 'error', text: message }
+          ]);
+          return;
+        }
+
+        console.log('[DATABASE VALIDATION] Success');
+        setLoading(false);
+      } catch (error: any) {
+        console.error('[DATABASE VALIDATION] API Error:', error);
+        setLoading(false);
+        const errorMessage = error.response?.data?.message || 'Failed to verify Modem SN existence in system.';
         setErrors(prev => ({
           ...prev,
           modemSN: errorMessage
@@ -1671,6 +1748,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               className="flex-1 p-6"
               contentContainerStyle={{ paddingBottom: 40 }}
               scrollEnabled={scrollEnabled}
+              keyboardShouldPersistTaps="handled"
             >
               <View className="space-y-4">
                 <View className="mb-4">
@@ -1684,7 +1762,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         style={{ color: isDarkMode ? '#fff' : '#000' }}
                         dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                       >
-                        <Picker.Item key="default" label="Select Plan" value="" />
+                        <Picker.Item key="default" label="Select Plan" value="" enabled={false} />
                         {formData.choosePlan && !plans.some(plan => {
                           const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
                           return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
@@ -1840,13 +1918,35 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Select Usage Type" value="" />
-                            {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                              <Picker.Item key="custom" label={formData.usageType} value={formData.usageType} />
-                            )}
-                            {usageTypes.map((usageType) => (
-                              <Picker.Item key={usageType.id || usageType.usage_name} label={usageType.usage_name} value={usageType.usage_name} />
-                            ))}
+                            <Picker.Item key="default" label="Select Usage Type" value="" enabled={false} />
+                            {(() => {
+                              if (!formData.usageType) return null;
+                              const val = String(formData.usageType);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low === '' || low.includes('undefined')) return null;
+
+                              const isExisting = usageTypes.some(ut => {
+                                const name = String(ut.usage_name || (ut as any).Usage_Name || '').trim().toLowerCase();
+                                return name === low;
+                              });
+                              if (isExisting) return null;
+
+                              return <Picker.Item key="custom" label={val} value={val} />;
+                            })()}
+                            {usageTypes
+                              .filter(ut => {
+                                const val = ut.usage_name || (ut as any).Usage_Name || (ut as any).usageName;
+                                if (!val) return false;
+                                const name = String(val).trim().toLowerCase();
+                                return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+                              })
+                              .map((usageType) => (
+                                <Picker.Item
+                                  key={usageType.id || usageType.usage_name}
+                                  label={String(usageType.usage_name || (usageType as any).Usage_Name)}
+                                  value={String(usageType.usage_name || (usageType as any).Usage_Name)}
+                                />
+                              ))}
                           </Picker>
                         </View>
                       </View>
@@ -1931,13 +2031,30 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Select Router Model" value="" />
-                            {formData.routerModel && !routerModels.some(rm => rm.model === formData.routerModel) && (
-                              <Picker.Item key="custom" label={formData.routerModel} value={formData.routerModel} />
-                            )}
-                            {routerModels.map((routerModel, index) => (
-                              <Picker.Item key={routerModel.model || index} label={routerModel.model} value={routerModel.model} />
-                            ))}
+                            <Picker.Item key="default" label="Select Router Model" value="" enabled={false} />
+                            {(() => {
+                              if (!formData.routerModel) return null;
+                              const val = String(formData.routerModel);
+                              const low = val.toLowerCase().trim();
+                              if (low === 'undefined' || low === 'null' || low === '' || low.includes('undefined')) return null;
+
+                              const isExisting = routerModels.some(rm => {
+                                const name = String(rm.model || '').trim().toLowerCase();
+                                return name === low;
+                              });
+                              if (isExisting) return null;
+
+                              return <Picker.Item key="custom" label={val} value={val} />;
+                            })()}
+                            {routerModels
+                              .filter(rm => {
+                                if (!rm || !rm.model) return false;
+                                const name = String(rm.model).trim().toLowerCase();
+                                return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+                              })
+                              .map((routerModel, index) => (
+                                <Picker.Item key={routerModel.model || index} label={routerModel.model} value={routerModel.model} />
+                              ))}
                           </Picker>
                         </View>
                       </View>
@@ -2088,7 +2205,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 style={{ elevation: 5 }}
                               >
                                 {/* Options List */}
-                                <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                                <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
                                   {lcpnaps
                                     .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
                                     .map((lcpnap) => (
@@ -2545,7 +2662,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                       }`}
                                     style={{ elevation: 10 }}
                                   >
-                                    <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+                                    <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
                                       {"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
                                         <Pressable
                                           key="none-item-option"
@@ -2577,15 +2694,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                               handleItemChange(index, 'itemId', invItem.item_name);
                                               setOpenItemIndex(null);
                                               setItemSearch('');
+                                              Keyboard.dismiss();
                                             }}
                                           >
                                             <View className="flex-row items-center justify-between">
-                                              <Text className={`text-sm ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                              <Text className={`text-sm flex-1 mr-2 ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
                                                 {invItem.item_name}
                                               </Text>
-                                              {item.itemId === invItem.item_name && (
-                                                <View className="w-2 h-2 rounded-full bg-orange-500" />
-                                              )}
+                                              <View className="flex-row items-center gap-2">
+                                                {(invItem.image_url || (invItem as any).image) && (
+                                                  <Image
+                                                    source={{ uri: convertGoogleDriveUrl(invItem.image_url || (invItem as any).image) || undefined }}
+                                                    className="w-12 h-12 rounded-lg bg-gray-100"
+                                                    resizeMode="cover"
+                                                  />
+                                                )}
+                                                {item.itemId === invItem.item_name && (
+                                                  <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                                )}
+                                              </View>
                                             </View>
                                           </Pressable>
                                         ))}

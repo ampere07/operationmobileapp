@@ -454,7 +454,12 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
           const response = await getAllUsageTypes();
 
           if (response.success && Array.isArray(response.data)) {
-            setUsageTypes(response.data);
+            const filtered = response.data.filter(ut =>
+              ut.usage_name &&
+              String(ut.usage_name).toLowerCase() !== 'undefined' &&
+              String(ut.usage_name).toLowerCase() !== 'null'
+            );
+            setUsageTypes(filtered);
           } else {
             setUsageTypes([]);
           }
@@ -1404,14 +1409,23 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
                       } ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
                       }`}>
                       <option value=""></option>
-                      {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                        <option value={formData.usageType}>{formData.usageType}</option>
-                      )}
-                      {usageTypes.map((usageType) => (
-                        <option key={usageType.id} value={usageType.usage_name}>
-                          {usageType.usage_name}
-                        </option>
-                      ))}
+                      {formData.usageType &&
+                        String(formData.usageType).toLowerCase() !== 'undefined' &&
+                        String(formData.usageType).toLowerCase() !== 'null' &&
+                        !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
+                          <option value={formData.usageType}>{formData.usageType}</option>
+                        )}
+                      {usageTypes
+                        .filter(ut =>
+                          ut.usage_name &&
+                          String(ut.usage_name).toLowerCase() !== 'undefined' &&
+                          String(ut.usage_name).toLowerCase() !== 'null'
+                        )
+                        .map((usageType) => (
+                          <option key={usageType.id} value={usageType.usage_name}>
+                            {usageType.usage_name}
+                          </option>
+                        ))}
                     </select>
                     <ChevronDown className={`absolute right-3 top-2.5 pointer-events-none ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`} size={20} />

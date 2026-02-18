@@ -606,8 +606,13 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
           console.log('Usage Type API Response:', response);
 
           if (response.success && Array.isArray(response.data)) {
-            setUsageTypes(response.data);
-            console.log('Loaded Usage Types:', response.data.length);
+            const filtered = response.data.filter(ut =>
+              ut.usage_name &&
+              String(ut.usage_name).toLowerCase() !== 'undefined' &&
+              String(ut.usage_name).toLowerCase() !== 'null'
+            );
+            setUsageTypes(filtered);
+            console.log('Loaded Usage Types:', filtered.length);
           } else {
             console.warn('Unexpected Usage Type response structure:', response);
             setUsageTypes([]);
@@ -1593,12 +1598,21 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
                         style={{ color: isDarkMode ? '#fff' : '#000' }}
                       >
                         <Picker.Item label="Select Usage Type" value="" />
-                        {formData.usageType && !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
-                          <Picker.Item label={formData.usageType} value={formData.usageType} />
-                        )}
-                        {usageTypes.map((usageType) => (
-                          <Picker.Item key={usageType.id} label={usageType.usage_name} value={usageType.usage_name} />
-                        ))}
+                        {formData.usageType &&
+                          String(formData.usageType).toLowerCase() !== 'undefined' &&
+                          String(formData.usageType).toLowerCase() !== 'null' &&
+                          !usageTypes.some(ut => ut.usage_name === formData.usageType) && (
+                            <Picker.Item key="custom" label={formData.usageType} value={formData.usageType} />
+                          )}
+                        {usageTypes
+                          .filter(ut =>
+                            ut.usage_name &&
+                            String(ut.usage_name).toLowerCase() !== 'undefined' &&
+                            String(ut.usage_name).toLowerCase() !== 'null'
+                          )
+                          .map((usageType) => (
+                            <Picker.Item key={usageType.id} label={usageType.usage_name} value={usageType.usage_name} />
+                          ))}
                       </Picker>
                     </View>
                     {errors.usageType && (

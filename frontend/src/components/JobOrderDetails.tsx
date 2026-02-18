@@ -59,6 +59,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'username',
     'ipAddress',
     'usageType',
+    'installationFee',
     'jobOrderItems',
     'dateInstalled',
     'visitBy',
@@ -124,16 +125,33 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
   useEffect(() => {
     const fetchItems = async () => {
-      const id = jobOrder.id || jobOrder.JobOrder_ID;
-      if (id) {
+      // Get the correct numeric Job Order ID
+      const rawId = jobOrder.JobOrder_ID || jobOrder.id;
+
+      // If it's an application ID (e.g. "App-123"), skip fetching
+      if (!rawId || (typeof rawId === 'string' && rawId.startsWith('App-'))) {
+        setJobOrderItems([]);
+        return;
+      }
+
+      const id = Number(rawId);
+      if (!isNaN(id)) {
         try {
-          const response = await getJobOrderItems(Number(id));
+          const response = await getJobOrderItems(id);
           if (response.success && Array.isArray(response.data)) {
             setJobOrderItems(response.data);
+          } else if (jobOrder.job_order_items && Array.isArray(jobOrder.job_order_items)) {
+            // Fallback to items already in the prop if fetch fails or returns empty
+            setJobOrderItems(jobOrder.job_order_items);
           }
         } catch (error) {
           console.error('Error fetching job order items:', error);
+          if (jobOrder.job_order_items && Array.isArray(jobOrder.job_order_items)) {
+            setJobOrderItems(jobOrder.job_order_items);
+          }
         }
+      } else if (jobOrder.job_order_items && Array.isArray(jobOrder.job_order_items)) {
+        setJobOrderItems(jobOrder.job_order_items);
       }
     };
     fetchItems();
@@ -489,6 +507,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       username: 'Username',
       ipAddress: 'IP Address',
       usageType: 'Usage Type',
+      installationFee: 'Installation Fee',
       jobOrderItems: 'Job Order Items',
       dateInstalled: 'Date Installed',
       visitBy: 'Visit By',
@@ -554,12 +573,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     username: () => <Text style={valueStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
     ipAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
     usageType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
+    installationFee: () => <Text style={valueStyle} selectable={true}>{formatPrice(jobOrder.installation_fee || jobOrder.Installation_Fee)}</Text>,
     jobOrderItems: () => (
       <View style={{ flexDirection: 'column', gap: 4 }}>
         {jobOrderItems.length > 0 ? (
           jobOrderItems.map((item, index) => (
             <Text key={index} style={valueStyle} selectable={true}>
-              {item.item_name} (Qty: {item.quantity})
+              {item.item_name || (item as any).Item_Name || (item as any).itemName} (Qty: {item.quantity || (item as any).Quantity || (item as any).qty || 0})
             </Text>
           ))
         ) : (

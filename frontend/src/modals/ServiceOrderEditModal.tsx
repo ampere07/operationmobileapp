@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search } from 'lucide-react-native';
@@ -196,6 +196,29 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [itemSearch, setItemSearch] = useState('');
+  const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
+
+  const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
+    if (!url) return null;
+
+    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+    }
+
+    const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (idMatch && idMatch[1]) {
+      return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
+    }
+
+    return url;
+  };
+
+  const isGoogleDriveUrl = (url: string | null): boolean => {
+    if (!url) return false;
+    return url.includes('drive.google.com') || url.includes('docs.google.com');
+  };
 
   // Load User Data and Theme
   useEffect(() => {
@@ -289,7 +312,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         try {
           const response = await getAllInventoryItems();
           if (response.success && Array.isArray(response.data)) {
-            setInventoryItems(response.data);
+            const filteredItems = response.data.filter(item => {
+              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+              return catId === 1 || String(catId) === '1';
+            });
+            setInventoryItems(filteredItems);
           } else {
             setInventoryItems([]);
           }
@@ -710,6 +737,56 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         }
       }
 
+      // Database Verification Logic (Job Orders & Technical Details)
+      const currentAccountNo = updatedFormData.accountNo;
+
+      // Check routerModemSN
+      if (updatedFormData.routerModemSN?.trim()) {
+        try {
+          console.log('[DATABASE VALIDATION] Checking Modem SN:', updatedFormData.routerModemSN);
+          const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
+            params: {
+              sn: updatedFormData.routerModemSN,
+              exclude_account_no: currentAccountNo
+            }
+          });
+
+          if (!(validationResponse.data as any).success) {
+            setLoading(false);
+            const message = (validationResponse.data as any).message || 'Modem SN already exists in the system.';
+            setErrors(prev => ({ ...prev, routerModemSN: message }));
+            Alert.alert('Modem SN Already Exists', message);
+            return;
+          }
+        } catch (error: any) {
+          console.error('[DATABASE VALIDATION] API Error:', error);
+          // Non-blocking but logged
+        }
+      }
+
+      // Check newRouterModemSN
+      if (updatedFormData.newRouterModemSN?.trim()) {
+        try {
+          console.log('[DATABASE VALIDATION] Checking New Modem SN:', updatedFormData.newRouterModemSN);
+          const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
+            params: {
+              sn: updatedFormData.newRouterModemSN,
+              exclude_account_no: currentAccountNo
+            }
+          });
+
+          if (!(validationResponse.data as any).success) {
+            setLoading(false);
+            const message = (validationResponse.data as any).message || 'New Modem SN already exists in the system.';
+            setErrors(prev => ({ ...prev, newRouterModemSN: message }));
+            Alert.alert('New Modem SN Already Exists', message);
+            return;
+          }
+        } catch (error: any) {
+          console.error('[DATABASE VALIDATION] API Error:', error);
+        }
+      }
+
       const serviceOrderId = serviceOrderData?.id;
       if (!serviceOrderId) throw new Error('Missing Service Order ID');
 
@@ -1004,6 +1081,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               className="flex-1 p-6"
               contentContainerStyle={{ paddingBottom: 40 }}
               scrollEnabled={scrollEnabled}
+              keyboardShouldPersistTaps="handled"
             >
               <View className="space-y-4">
 
@@ -1265,34 +1343,134 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         <View className="mb-4">
                           {renderLabel('Items', true)}
                           {orderItems.map((item, idx) => (
-                            <View key={idx} className="flex-row gap-2 mb-2 items-center">
-                              <View className={`flex-1 border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
-                                <Picker
-                                  selectedValue={item.itemId}
-                                  onValueChange={(val) => handleItemChange(idx, 'itemId', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Item" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                                  {inventoryItems.map(inv => <Picker.Item key={inv.id} label={inv.item_name} value={inv.item_name} color={isDarkMode ? '#fff' : '#000'} />)}
-                                </Picker>
+                            <View key={idx} className="z-10 mb-4">
+                              <View className="flex-row gap-2 items-start">
+                                <View className="flex-1 relative">
+                                  <Pressable
+                                    onPress={() => setOpenItemIndex(openItemIndex === idx ? null : idx)}
+                                    className={`flex-row items-center justify-between p-3 border rounded-lg ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}
+                                  >
+                                    <Text className={`text-base ${item.itemId ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`}>
+                                      {item.itemId || 'Select Item'}
+                                    </Text>
+                                    <ChevronDown size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                  </Pressable>
+
+                                  {openItemIndex === idx && (
+                                    <View
+                                      className={`absolute top-full left-0 right-0 mt-1 rounded-xl shadow-2xl border z-[999] overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-black' : 'bg-white border-gray-200 shadow-gray-400'}`}
+                                      style={{ elevation: 1000 }}
+                                    >
+                                      <View className={`px-4 py-3 border-b flex-row items-center space-x-2 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
+                                        <Search size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                        <TextInput
+                                          className={`flex-1 text-sm p-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                                          placeholder="Search items..."
+                                          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                                          value={itemSearch}
+                                          onChangeText={setItemSearch}
+                                          autoFocus
+                                        />
+                                        {itemSearch !== '' && (
+                                          <Pressable onPress={() => setItemSearch('')}>
+                                            <X size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                          </Pressable>
+                                        )}
+                                      </View>
+
+                                      <ScrollView
+                                        style={{ maxHeight: 250 }}
+                                        keyboardShouldPersistTaps="always"
+                                        nestedScrollEnabled={true}
+                                      >
+                                        <Pressable
+                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === 'None' ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                          onPress={() => {
+                                            handleItemChange(idx, 'itemId', 'None');
+                                            setOpenItemIndex(null);
+                                            setItemSearch('');
+                                            Keyboard.dismiss();
+                                          }}
+                                        >
+                                          <View className="flex-row items-center justify-between">
+                                            <Text className={`text-sm ${item.itemId === 'None' ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                              None
+                                            </Text>
+                                            {item.itemId === 'None' && (
+                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                            )}
+                                          </View>
+                                        </Pressable>
+
+                                        {inventoryItems
+                                          .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                          .map((invItem) => (
+                                            <Pressable
+                                              key={invItem.id}
+                                              className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                              onPress={() => {
+                                                handleItemChange(idx, 'itemId', invItem.item_name);
+                                                setOpenItemIndex(null);
+                                                setItemSearch('');
+                                                Keyboard.dismiss();
+                                              }}
+                                            >
+                                              <View className="flex-row items-center justify-between">
+                                                <Text className={`text-sm flex-1 mr-2 ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                                  {invItem.item_name}
+                                                </Text>
+                                                <View className="flex-row items-center gap-2">
+                                                  {(invItem.image_url || (invItem as any).image) && (
+                                                    <Image
+                                                      source={{ uri: convertGoogleDriveUrl(invItem.image_url || (invItem as any).image) || undefined }}
+                                                      className="w-12 h-12 rounded-lg bg-gray-100"
+                                                      resizeMode="cover"
+                                                    />
+                                                  )}
+                                                  {item.itemId === invItem.item_name && (
+                                                    <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                                  )}
+                                                </View>
+                                              </View>
+                                            </Pressable>
+                                          ))}
+
+                                        {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                                          <View className="px-4 py-8 items-center">
+                                            <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                              No results found
+                                            </Text>
+                                          </View>
+                                        )}
+                                      </ScrollView>
+                                    </View>
+                                  )}
+                                </View>
+
+                                <View className="w-24">
+                                  <TextInput
+                                    className={`border rounded-lg p-3 text-base ${isDarkMode ? 'border-gray-700 bg-gray-800 text-white' : 'border-gray-300 bg-white text-black'}`}
+                                    placeholder="Qty"
+                                    placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                                    value={item.quantity}
+                                    keyboardType="numeric"
+                                    onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
+                                  />
+                                </View>
+
+                                {orderItems.length > 1 && (
+                                  <Pressable
+                                    onPress={() => {
+                                      const newItems = [...orderItems];
+                                      newItems.splice(idx, 1);
+                                      setOrderItems(newItems);
+                                    }}
+                                    className="p-3"
+                                  >
+                                    <X size={20} color="#ef4444" />
+                                  </Pressable>
+                                )}
                               </View>
-                              <View className="w-20">
-                                <TextInput
-                                  className={`border rounded-lg p-3 ${isDarkMode ? 'border-gray-700 bg-gray-800 text-white' : 'border-gray-300 bg-white text-black'}`}
-                                  placeholder="Qty"
-                                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-                                  value={item.quantity}
-                                  keyboardType="numeric"
-                                  onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
-                                />
-                              </View>
-                              {orderItems.length > 1 && (
-                                <Pressable onPress={() => { const newItems = [...orderItems]; newItems.splice(idx, 1); setOrderItems(newItems); }}>
-                                  <X size={20} color="#ef4444" />
-                                </Pressable>
-                              )}
                             </View>
                           ))}
                         </View>
