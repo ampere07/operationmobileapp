@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Image, Text, ActivityIndicator } from 'react-native';
-import logo1 from '../assets/logo1.png';
+import logo1 from '../assets/splash.png';
 
 const SplashScreen: React.FC = () => {
   return (
@@ -24,7 +24,7 @@ const SplashScreen: React.FC = () => {
             resizeMode: 'contain'
           }}
         />
-        <ActivityIndicator size="large" color="#6d28d9" />
+        <ActivityIndicator size="large" color="#b12424ff" />
         <Text style={{
           color: '#1a1a1a',
           fontSize: 18,

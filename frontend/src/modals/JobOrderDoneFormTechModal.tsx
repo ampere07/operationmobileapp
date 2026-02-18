@@ -228,6 +228,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   // Signature State
   const signatureRef = useRef<any>(null);
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -860,6 +861,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const handleSignatureOK = async (signature: string) => {
     setIsDrawingSignature(false);
+    setScrollEnabled(true);
     try {
       const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
       const base64Code = signature.replace('data:image/png;base64,', '');
@@ -1665,7 +1667,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           </View>
 
           <View style={{ flex: 1 }}>
-            <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }}>
+            <ScrollView
+              className="flex-1 p-6"
+              contentContainerStyle={{ paddingBottom: 40 }}
+              scrollEnabled={scrollEnabled}
+            >
               <View className="space-y-4">
                 <View className="mb-4">
                   <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
@@ -2451,13 +2457,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             ref={signatureRef}
                             onOK={handleSignatureOK}
                             onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
+                            onBegin={() => setScrollEnabled(false)}
+                            onEnd={() => setScrollEnabled(true)}
                             descriptionText="Sign above"
                             clearText="Clear"
                             confirmText="Save"
                             webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
                           />
                           <Pressable
-                            onPress={() => setIsDrawingSignature(false)}
+                            onPress={() => {
+                              setIsDrawingSignature(false);
+                              setScrollEnabled(true);
+                            }}
                             className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10 shadow-sm"
                           >
                             <X size={20} color="#000" />

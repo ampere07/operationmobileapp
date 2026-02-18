@@ -79,6 +79,12 @@ const LcpNapLocation: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<LocationMarker | null>(null);
   const [userRole, setUserRole] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [currentDelta, setCurrentDelta] = useState(12);
+  const [pinLimit, setPinLimit] = useState<string>('50');
+  const [mapCenter, setMapCenter] = useState<{ latitude: number, longitude: number }>({
+    latitude: 12.8797,
+    longitude: 121.7740
+  });
 
   const mapRef = useRef<MapView>(null);
   const { width } = useWindowDimensions();
@@ -239,8 +245,20 @@ const LcpNapLocation: React.FC = () => {
       );
     }
 
-    return displayedMarkers;
-  }, [markers, selectedLcpNapId, lcpNapGroups, searchQuery]);
+    // Sort by distance to map center and apply limit
+    const limit = parseInt(pinLimit) || 0;
+
+    if (limit <= 0) return displayedMarkers;
+
+    return displayedMarkers
+      .map(marker => {
+        const dist = Math.pow(marker.latitude - mapCenter.latitude, 2) +
+          Math.pow(marker.longitude - mapCenter.longitude, 2);
+        return { ...marker, _dist: dist };
+      })
+      .sort((a, b) => a._dist - b._dist)
+      .slice(0, limit);
+  }, [markers, selectedLcpNapId, lcpNapGroups, searchQuery, mapCenter, pinLimit]);
 
   const handleMapReady = useCallback(() => {
     if (mapRef.current) {
@@ -351,6 +369,15 @@ const LcpNapLocation: React.FC = () => {
     );
   }, [selectedLcpNapId, colorPalette, isDarkMode, handleLcpNapSelect]);
 
+  const getPinSize = (delta: number) => {
+    if (delta < 0.005) return 20;
+    if (delta < 0.02) return 17;
+    if (delta < 0.1) return 14;
+    if (delta < 0.5) return 12;
+    if (delta < 2) return 10;
+    return 8;
+  };
+
   const markersToDisplay = getMarkersToDisplay;
 
   return (
@@ -372,15 +399,30 @@ const LcpNapLocation: React.FC = () => {
       <View style={[styles.flex1, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
         <View style={styles.flexColumnFull}>
           <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb', paddingTop: isTablet ? 16 : 60 }]}>
-            <View style={[styles.searchWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Search size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} style={styles.iconMargin} />
-              <TextInput
-                style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                placeholder="Search locations..."
-                placeholderTextColor="#9ca3af"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
+            <View style={styles.headerInputsRow}>
+              <View style={[styles.searchWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb', flex: 1 }]}>
+                <Search size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} style={styles.iconMargin} />
+                <TextInput
+                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  placeholder="Search locations..."
+                  placeholderTextColor="#9ca3af"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              <View style={[styles.limitWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <MapPin size={18} color={colorPalette?.primary || '#ea580c'} style={styles.iconMargin} />
+                <TextInput
+                  style={[styles.limitInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  placeholder="Limit"
+                  placeholderTextColor="#9ca3af"
+                  value={pinLimit}
+                  onChangeText={(val) => setPinLimit(val.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+              </View>
             </View>
           </View>
 
@@ -408,6 +450,13 @@ const LcpNapLocation: React.FC = () => {
                     longitude: coordinate.longitude
                   });
                 }
+              }}
+              onRegionChangeComplete={(region) => {
+                setCurrentDelta(region.latitudeDelta);
+                setMapCenter({
+                  latitude: region.latitude,
+                  longitude: region.longitude
+                });
               }}
               onMapReady={handleMapReady}
               customMapStyle={[
@@ -443,19 +492,20 @@ const LcpNapLocation: React.FC = () => {
                   title={location.lcpnap_name}
                   description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name}`}
                   onPress={() => handleLocationSelect(location)}
+                  anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 12,
+                    width: getPinSize(currentDelta),
+                    height: getPinSize(currentDelta),
+                    borderRadius: getPinSize(currentDelta) / 2,
                     backgroundColor: '#22c55e',
-                    borderWidth: 1,
+                    borderWidth: getPinSize(currentDelta) > 10 ? 1.5 : 0.5,
                     borderColor: 'white',
                     shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 3.84,
-                    elevation: 5,
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: getPinSize(currentDelta) > 10 ? 0.2 : 0,
+                    shadowRadius: 2,
+                    elevation: getPinSize(currentDelta) > 10 ? 3 : 0,
                   }} />
                 </Marker>
               ))}
@@ -624,6 +674,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
+  },
+  headerInputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  limitWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    width: 90,
+  },
+  limitInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
+    textAlign: 'center',
   },
   searchInput: {
     flex: 1,

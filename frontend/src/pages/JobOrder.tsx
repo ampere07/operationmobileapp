@@ -247,7 +247,7 @@ const JobOrderPage: React.FC = () => {
 
   const getClientFullAddress = (jobOrder: JobOrder): string => {
     const addressParts = [
-      jobOrder.Address || jobOrder.address,
+      jobOrder.Installation_Address || jobOrder.installation_address || jobOrder.Address || jobOrder.address,
       jobOrder.Barangay || jobOrder.barangay,
       jobOrder.City || jobOrder.city,
       jobOrder.Region || jobOrder.region

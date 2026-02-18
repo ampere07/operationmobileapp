@@ -193,6 +193,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   // Signature Drawing State
   const signatureRef = useRef<any>(null);
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -550,6 +551,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const handleSignatureOK = async (signature: string) => {
     // signature is a base64 string provided by the component
     setIsDrawingSignature(false);
+    setScrollEnabled(true);
 
     // Save base64 to a temporary file because upload expects URI
     try {
@@ -608,20 +610,22 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       newErrors.newPlan = 'New Plan is required';
     }
 
-    const validItems = orderItems.filter(item => item.itemId && item.quantity);
-    if (validItems.length === 0) {
-      newErrors.items = 'At least one item required';
-    }
+    if (formData.visitStatus === 'Done') {
+      const validItems = orderItems.filter(item => item.itemId && item.quantity);
+      if (validItems.length === 0) {
+        newErrors.items = 'At least one item required';
+      }
 
-    if (['Migrate', 'Relocate', 'Relocate Router', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory)) {
-      if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
-      if (!formData.newLcpnap.trim()) newErrors.newLcpnap = 'New LCP-NAP is required';
-      if (!formData.newPort.trim()) newErrors.newPort = 'New Port is required';
-      if (!formData.routerModel.trim()) newErrors.routerModel = 'Router Model is required';
-    }
+      if (['Migrate', 'Relocate', 'Relocate Router', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory)) {
+        if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+        if (!formData.newLcpnap.trim()) newErrors.newLcpnap = 'New LCP-NAP is required';
+        if (!formData.newPort.trim()) newErrors.newPort = 'New Port is required';
+        if (!formData.routerModel.trim()) newErrors.routerModel = 'Router Model is required';
+      }
 
-    if (formData.repairCategory === 'Replace Router') {
-      if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+      if (formData.repairCategory === 'Replace Router') {
+        if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+      }
     }
 
     setErrors(newErrors);
@@ -996,7 +1000,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
-            <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 40 }} scrollEnabled={!isDrawingSignature}>
+            <ScrollView
+              className="flex-1 p-6"
+              contentContainerStyle={{ paddingBottom: 40 }}
+              scrollEnabled={scrollEnabled}
+            >
               <View className="space-y-4">
 
                 {renderInput('accountNo', 'Account No', false)}
@@ -1233,13 +1241,21 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               <SignatureScreen
                                 ref={signatureRef}
                                 onOK={handleSignatureOK}
+                                onBegin={() => setScrollEnabled(false)}
+                                onEnd={() => setScrollEnabled(true)}
                                 onEmpty={() => console.log('Empty signature')}
                                 descriptionText="Sign above"
                                 clearText="Clear"
                                 confirmText="Save"
                                 webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
                               />
-                              <Pressable onPress={() => setIsDrawingSignature(false)} className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10">
+                              <Pressable
+                                onPress={() => {
+                                  setIsDrawingSignature(false);
+                                  setScrollEnabled(true);
+                                }}
+                                className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10"
+                              >
                                 <X size={20} color="#000" />
                               </Pressable>
                             </View>
