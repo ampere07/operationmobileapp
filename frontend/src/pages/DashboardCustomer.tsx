@@ -56,9 +56,9 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const adsScrollRef = React.useRef<ScrollView>(null);
 
     const ads = [
-        { id: 1, title: 'Payment Made Easy', desc: 'Secured Payment by Xendit', color: colorPalette?.primary || '#ef4444' },
-        { id: 2, title: 'Upgrade Now', desc: 'Boost your speed message us', color: '#3b82f6' },
-        { id: 3, title: 'dont forget to pay', desc: 'pay now', color: '#10b981' }
+        { id: 1, title: 'Summer Promo!', desc: 'Get 50% off on installation fee.', color: colorPalette?.primary || '#ef4444' },
+        { id: 2, title: 'Refer & Earn', desc: 'Earn ₱500 for every successful referral.', color: '#3b82f6' },
+        { id: 3, title: 'Upgrade Now', desc: 'Boost your speed for as low as ₱199.', color: '#10b981' }
     ];
 
     const displayAds = [ads[ads.length - 1], ...ads, ads[0]];
@@ -284,7 +284,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
         try {
             const redirectUrl = LinkingExpo.createURL('payment-success');
-            const response = await paymentService.createPayment(accountNo, paymentAmount);
+            const response = await paymentService.createPayment(accountNo, paymentAmount, redirectUrl);
 
             if (response.status === 'success' && response.payment_url) {
                 setShowPaymentVerifyModal(false);
@@ -440,37 +440,64 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                             <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>My Referrals</Text>
                         </View>
 
-                        <View
-                            style={{
-                                backgroundColor: '#ffffff',
-                                borderRadius: 20,
-                                padding: 32,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.05,
-                                shadowRadius: 12,
-                                elevation: 3,
-                                borderWidth: 1,
-                                borderColor: '#f3f4f6',
-                                minHeight: 150
-                            }}
+                        <ScrollView
+                            style={{ maxHeight: 270 }}
+                            showsVerticalScrollIndicator={false}
+                            nestedScrollEnabled={true}
+                            contentContainerStyle={{ gap: 12, paddingBottom: 8 }}
                         >
-                            <View style={{
-                                width: 64,
-                                height: 64,
-                                borderRadius: 32,
-                                backgroundColor: '#f9fafb',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: 16
-                            }}>
-                                <Users size={32} color="#94a3b8" />
-                            </View>
-                            <Text style={{ fontSize: 16, fontWeight: '600', color: '#334155', marginBottom: 4 }}>No Referrals Yet</Text>
-                            <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center' }}>Start referring friends and family to earn rewards!</Text>
-                        </View>
+                            {[
+                                { name: 'Juan Dela Cruz', status: 'Active', color: '#10b981' },
+                                { name: 'Maria Santos', status: 'Pending', color: '#f59e0b' },
+                                { name: 'Pedro Penduko', status: 'Installation', color: '#3b82f6' },
+                                { name: 'Ana Reyes', status: 'Active', color: '#10b981' },
+                                { name: 'Lito Lapid', status: 'Pending', color: '#f59e0b' }
+                            ].map((referral, index) => (
+                                <View
+                                    key={index}
+                                    style={{
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: 16,
+                                        padding: 16,
+                                        width: '100%',
+                                        flexDirection: 'row',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 2 },
+                                        shadowOpacity: 0.05,
+                                        shadowRadius: 8,
+                                        elevation: 2,
+                                        borderWidth: 1,
+                                        borderColor: '#f3f4f6'
+                                    }}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                        <View style={{
+                                            width: 40,
+                                            height: 40,
+                                            borderRadius: 20,
+                                            backgroundColor: '#f9fafb',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderWidth: 1,
+                                            borderColor: '#f1f5f9'
+                                        }}>
+                                            <User size={20} color="#64748b" />
+                                        </View>
+                                        <View>
+                                            <Text style={{ fontWeight: '600', color: '#1f2937', fontSize: 15 }}>{referral.name}</Text>
+                                            <Text style={{ fontSize: 12, color: '#6b7280' }}>Ref ID: #REF-{1024 + index}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={{
+                                        borderRadius: 20
+                                    }}>
+                                        <Text style={{ color: referral.color, fontSize: 12, fontWeight: '600' }}>{referral.status}</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
                         <View style={{ height: 2, backgroundColor: '#e2e8f0', marginVertical: 16, width: '80%', alignSelf: 'center', borderRadius: 1 }} />
                         {/* Promotional Ads Section */}
                         <View style={{ gap: 0 }}>

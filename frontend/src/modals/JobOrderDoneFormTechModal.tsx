@@ -1071,10 +1071,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setLoading(true);
 
         const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-          params: { 
-            sn: formData.modemSN,
-            account_id: jobOrderData?.account_id || jobOrderData?.Account_ID 
-          }
+          params: { sn: formData.modemSN }
         });
 
         if (!(smartOltResponse.data as any).success) {
