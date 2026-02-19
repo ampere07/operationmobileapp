@@ -1226,7 +1226,6 @@ Route::prefix('job-orders')->middleware('ensure.database.tables')->group(functio
     Route::post('/{id}/approve', [JobOrderController::class, 'approve']);
     Route::post('/{id}/create-radius-account', [JobOrderController::class, 'createRadiusAccount']);
     Route::post('/{id}/upload-images', [JobOrderController::class, 'uploadImages']);
-    Route::get('/validate-modem-sn', [JobOrderController::class, 'validateModemSN']);
     
     // Lookup table endpoints
     Route::get('/lookup/modem-router-sns', [JobOrderController::class, 'getModemRouterSNs']);

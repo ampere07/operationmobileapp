@@ -227,6 +227,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [techInputValue, setTechInputValue] = useState<string>('');
   const [lcpnapSearch, setLcpnapSearch] = useState('');
   const [itemSearch, setItemSearch] = useState('');
+  const [routerModelSearch, setRouterModelSearch] = useState('');
+  const [isRouterModelOpen, setIsRouterModelOpen] = useState(false);
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
   const [usedPorts, setUsedPorts] = useState<Set<string>>(new Set());
 
@@ -1102,50 +1104,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       }
     }
 
-    // Database Verification Logic (Job Orders & Technical Details)
-    if (formData.onsiteStatus === 'Done' && formData.modemSN.trim()) {
-      try {
-        console.log('[DATABASE VALIDATION] Checking if Modem SN exists:', formData.modemSN);
-        setLoading(true);
 
-        const currentJobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
-        const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
-          params: {
-            sn: formData.modemSN,
-            exclude_id: currentJobOrderId
-          }
-        });
-
-        if (!(validationResponse.data as any).success) {
-          console.log('[DATABASE VALIDATION] Failed:', validationResponse.data);
-          setLoading(false);
-          const message = (validationResponse.data as any).message || 'Modem SN already exists in the system.';
-          setErrors(prev => ({
-            ...prev,
-            modemSN: message
-          }));
-          showMessageModal('Modem SN Already Exists', [
-            { type: 'error', text: message }
-          ]);
-          return;
-        }
-
-        console.log('[DATABASE VALIDATION] Success');
-        setLoading(false);
-      } catch (error: any) {
-        console.error('[DATABASE VALIDATION] API Error:', error);
-        setLoading(false);
-        const errorMessage = error.response?.data?.message || 'Failed to verify Modem SN existence in system.';
-        setErrors(prev => ({
-          ...prev,
-          modemSN: errorMessage
-        }));
-        showMessageModal('Validation Error', [
-          { type: 'error', text: errorMessage }
-        ]);
-        return;
-      }
-    }
 
     console.log('[SAVE VALIDATION] Form validation passed');
 
@@ -2024,39 +1983,89 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
                         }`}>Router Model<Text className="text-red-500">*</Text></Text>
                       <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.routerModel ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                          <Picker
-                            selectedValue={formData.routerModel}
-                            onValueChange={(value) => handleInputChange('routerModel', value)}
-                            style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                          >
-                            <Picker.Item key="default" label="Select Router Model" value="" enabled={false} />
-                            {(() => {
-                              if (!formData.routerModel) return null;
-                              const val = String(formData.routerModel);
-                              const low = val.toLowerCase().trim();
-                              if (low === 'undefined' || low === 'null' || low === '' || low.includes('undefined')) return null;
-
-                              const isExisting = routerModels.some(rm => {
-                                const name = String(rm.model || '').trim().toLowerCase();
-                                return name === low;
-                              });
-                              if (isExisting) return null;
-
-                              return <Picker.Item key="custom" label={val} value={val} />;
-                            })()}
-                            {routerModels
-                              .filter(rm => {
-                                if (!rm || !rm.model) return false;
-                                const name = String(rm.model).trim().toLowerCase();
-                                return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-                              })
-                              .map((routerModel, index) => (
-                                <Picker.Item key={routerModel.model || index} label={routerModel.model} value={routerModel.model} />
-                              ))}
-                          </Picker>
+                        {/* Search Input Field */}
+                        <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+                          } ${errors.routerModel ? 'border-red-500' : ''}`}>
+                          <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                          <TextInput
+                            placeholder="Search Router Model..."
+                            value={isRouterModelOpen ? routerModelSearch : (formData.routerModel || routerModelSearch)}
+                            onChangeText={(text) => {
+                              setRouterModelSearch(text);
+                              if (!isRouterModelOpen) setIsRouterModelOpen(true);
+                            }}
+                            onFocus={() => setIsRouterModelOpen(true)}
+                            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                            className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                          />
+                          {(isRouterModelOpen || formData.routerModel) && (
+                            <Pressable
+                              onPress={() => {
+                                if (isRouterModelOpen) {
+                                  setIsRouterModelOpen(false);
+                                  setRouterModelSearch('');
+                                } else {
+                                  handleInputChange('routerModel', '');
+                                  setRouterModelSearch('');
+                                }
+                              }}
+                              className="p-1"
+                            >
+                              <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
+                          )}
+                          {!isRouterModelOpen && !formData.routerModel && (
+                            <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                          )}
                         </View>
+
+                        {/* Dropdown Menu */}
+                        {isRouterModelOpen && (
+                          <View
+                            className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                              }`}
+                            style={{ elevation: 5 }}
+                          >
+                            <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
+                              {routerModels
+                                .filter(rm => {
+                                  if (!rm || !rm.model) return false;
+                                  return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
+                                })
+                                .map((routerModel, index) => (
+                                  <Pressable
+                                    key={routerModel.model || index}
+                                    className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                                      } ${formData.routerModel === routerModel.model ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                    onPress={() => {
+                                      handleInputChange('routerModel', routerModel.model);
+                                      setRouterModelSearch('');
+                                      setIsRouterModelOpen(false);
+                                    }}
+                                  >
+                                    <View className="flex-row items-center justify-between">
+                                      <Text className={`text-sm ${formData.routerModel === routerModel.model ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                        {routerModel.model}
+                                      </Text>
+                                      {formData.routerModel === routerModel.model && (
+                                        <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                      )}
+                                    </View>
+                                  </Pressable>
+                                ))}
+                              {routerModels.filter(rm => {
+                                if (!rm || !rm.model) return false;
+                                return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
+                              }).length === 0 && (
+                                  <View className="px-4 py-8 items-center">
+                                    <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                      No results found for "{routerModelSearch}"
+                                    </Text>
+                                  </View>
+                                )}
+                            </ScrollView>
+                          </View>
+                        )}
                       </View>
                       {errors.routerModel && (
                         <View className="flex-row items-center mt-1">
@@ -2315,10 +2324,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 style={{ color: isDarkMode ? '#fff' : '#000' }}
                                 dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                               >
-                                <Picker.Item key="default" label="Select VLAN" value="" />
-                                {formData.vlan && !vlans.some(v => v.value.toString() === formData.vlan) && (
-                                  <Picker.Item key="custom" label={formData.vlan} value={formData.vlan} />
-                                )}
+                                <Picker.Item key="default" label="Select VLAN" value="" enabled={false} />
+                                {(() => {
+                                  if (!formData.vlan) return null;
+                                  const v = String(formData.vlan);
+                                  const low = v.toLowerCase().trim();
+                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
+
+                                  const isExisting = vlans.some(vlan => vlan.value.toString() === v);
+                                  if (isExisting) return null;
+
+                                  return <Picker.Item key="custom" label={v} value={v} />;
+                                })()}
                                 {vlans.map((vlan) => (
                                   <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
                                 ))}

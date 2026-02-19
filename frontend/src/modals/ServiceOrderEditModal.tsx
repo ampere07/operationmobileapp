@@ -737,56 +737,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         }
       }
 
-      // Database Verification Logic (Job Orders & Technical Details)
-      const currentAccountNo = updatedFormData.accountNo;
-
-      // Check routerModemSN
-      if (updatedFormData.routerModemSN?.trim()) {
-        try {
-          console.log('[DATABASE VALIDATION] Checking Modem SN:', updatedFormData.routerModemSN);
-          const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
-            params: {
-              sn: updatedFormData.routerModemSN,
-              exclude_account_no: currentAccountNo
-            }
-          });
-
-          if (!(validationResponse.data as any).success) {
-            setLoading(false);
-            const message = (validationResponse.data as any).message || 'Modem SN already exists in the system.';
-            setErrors(prev => ({ ...prev, routerModemSN: message }));
-            Alert.alert('Modem SN Already Exists', message);
-            return;
-          }
-        } catch (error: any) {
-          console.error('[DATABASE VALIDATION] API Error:', error);
-          // Non-blocking but logged
-        }
-      }
-
-      // Check newRouterModemSN
-      if (updatedFormData.newRouterModemSN?.trim()) {
-        try {
-          console.log('[DATABASE VALIDATION] Checking New Modem SN:', updatedFormData.newRouterModemSN);
-          const validationResponse = await apiClient.get('/job-orders/validate-modem-sn', {
-            params: {
-              sn: updatedFormData.newRouterModemSN,
-              exclude_account_no: currentAccountNo
-            }
-          });
-
-          if (!(validationResponse.data as any).success) {
-            setLoading(false);
-            const message = (validationResponse.data as any).message || 'New Modem SN already exists in the system.';
-            setErrors(prev => ({ ...prev, newRouterModemSN: message }));
-            Alert.alert('New Modem SN Already Exists', message);
-            return;
-          }
-        } catch (error: any) {
-          console.error('[DATABASE VALIDATION] API Error:', error);
-        }
-      }
-
       const serviceOrderId = serviceOrderData?.id;
       if (!serviceOrderId) throw new Error('Missing Service Order ID');
 
