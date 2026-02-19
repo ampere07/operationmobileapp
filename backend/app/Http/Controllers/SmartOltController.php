@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\SmartOlt;
+use App\Models\TechnicalDetail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -67,6 +68,22 @@ class SmartOltController extends Controller
                     }
 
                     if ($found) {
+                        // Check if the SN is already used in the technical_details table
+                        $accountId = $request->input('account_id');
+                        $query = TechnicalDetail::where('router_modem_sn', $sn);
+
+                        // If account_id is provided, exclude it from the check (to allow updating the same record)
+                        if ($accountId) {
+                            $query->where('account_id', '!=', $accountId);
+                        }
+
+                        if ($query->exists()) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'already being used'
+                            ], 200);
+                        }
+
                         return response()->json([
                             'success' => true,
                             'data' => $onuDetails,
