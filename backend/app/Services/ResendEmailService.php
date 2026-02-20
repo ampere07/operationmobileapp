@@ -21,12 +21,19 @@ class ResendEmailService
 
     public function send(array $data): array
     {
+        $fromEmail = $data['email_sender'] ?? $this->fromEmail;
+        $fromName = $data['sender_name'] ?? $this->fromName;
+
         $payload = [
-            'from' => "{$this->fromName} <{$this->fromEmail}>",
+            'from' => "{$fromName} <{$fromEmail}>",
             'to' => is_array($data['to']) ? $data['to'] : [$data['to']],
             'subject' => $data['subject'],
             'html' => $data['html']
         ];
+
+        if (!empty($data['reply_to'])) {
+            $payload['reply_to'] = $data['reply_to'];
+        }
 
         if (!empty($data['cc'])) {
             $payload['cc'] = $this->parseEmails($data['cc']);
@@ -100,3 +107,4 @@ class ResendEmailService
         ];
     }
 }
+

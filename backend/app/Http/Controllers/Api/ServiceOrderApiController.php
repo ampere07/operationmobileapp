@@ -106,9 +106,6 @@ class ServiceOrderApiController extends Controller
                 $so->email_address = $c ? $c->email_address : null;
                 $so->house_front_picture_url = $c ? $c->house_front_picture_url : null;
                 $so->plan = $c ? $c->desired_plan : null;
-                $so->region = $c ? $c->region : null;
-                $so->city = $c ? $c->city : null;
-                $so->barangay = $c ? $c->barangay : null;
                 
                 // Technical details
                 $so->username = $td ? $td->username : null;
@@ -193,13 +190,13 @@ class ServiceOrderApiController extends Controller
                 'ticket_id' => $ticketId,
                 'account_no' => $validated['account_no'],
                 'timestamp' => $timestamp,
-                'support_status' => $validated['support_status'] ?? 'Open',
+                'support_status' => $validated['support_status'] ?? 'In Progress',
                 'concern' => $validated['concern'],
                 'concern_remarks' => $validated['concern_remarks'] ?? null,
                 'priority_level' => $validated['priority_level'] ?? 'Medium',
                 'requested_by' => $validated['requested_by'] ?? null,
                 'assigned_email' => $validated['assigned_email'] ?? null,
-                'visit_status' => $validated['visit_status'] ?? 'Pending',
+                'visit_status' => $validated['visit_status'] ?? null,
                 'visit_by_user' => $validated['visit_by_user'] ?? null,
                 'visit_with' => $validated['visit_with'] ?? null,
                 'visit_remarks' => $validated['visit_remarks'] ?? null,
@@ -323,9 +320,6 @@ class ServiceOrderApiController extends Controller
                     'c.email_address',
                     'c.house_front_picture_url',
                     'c.desired_plan as plan',
-                    'c.region',
-                    'c.city',
-                    'c.barangay',
                     'td.username',
                     'td.connection_type',
                     'td.router_modem_sn',
@@ -464,6 +458,7 @@ class ServiceOrderApiController extends Controller
             $hasNewTechnicalDetails = 
                 $request->filled('new_lcp') || 
                 $request->filled('new_nap') || 
+                $request->filled('new_lcpnap') || 
                 $request->filled('new_port') || 
                 $request->filled('new_vlan') || 
                 $request->filled('new_router_modem_sn');
@@ -486,8 +481,27 @@ class ServiceOrderApiController extends Controller
                     $data['old_lcpnap'] = $technicalDetails->lcpnap;
 
                     // Prepare updates for technical_details
-                    $newLcp = $request->filled('new_lcp') ? $request->input('new_lcp') : $technicalDetails->lcp;
-                    $newNap = $request->filled('new_nap') ? $request->input('new_nap') : $technicalDetails->nap;
+                    $newLcp = $request->input('new_lcp');
+                    $newNap = $request->input('new_nap');
+                    
+                    if ($request->filled('new_lcpnap')) {
+                        $lcpnapValue = $request->input('new_lcpnap');
+                        $parts = explode(' - ', $lcpnapValue);
+                        if (count($parts) === 2) {
+                            $newLcp = $parts[0];
+                            $newNap = $parts[1];
+                        } else {
+                            $parts = explode('-', $lcpnapValue);
+                            if (count($parts) === 2) {
+                                $newLcp = $parts[0];
+                                $newNap = $parts[1];
+                            }
+                        }
+                    }
+
+                    if (!$newLcp) $newLcp = $technicalDetails->lcp;
+                    if (!$newNap) $newNap = $technicalDetails->nap;
+                    
                     $newPort = $request->filled('new_port') ? $request->input('new_port') : $technicalDetails->port;
                     $newVlan = $request->filled('new_vlan') ? $request->input('new_vlan') : $technicalDetails->vlan;
                     $newSN = $request->filled('new_router_modem_sn') ? $request->input('new_router_modem_sn') : $technicalDetails->router_modem_sn;
@@ -792,13 +806,19 @@ class ServiceOrderApiController extends Controller
                             ->select(
                                 'customers.contact_number_primary',
                                 'customers.email_address',
+                                'customers.desired_plan as plan_name',
                                 DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
                             )
                             ->first();
 
                         if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
                             $message = $smsTemplate->message_content;
-                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $message = str_replace('{{customer_name}}', $customerName, $message);
+                            $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
                             $smsService = new \App\Services\ItexmoSmsService();
                             $smsResult = $smsService->send([
@@ -819,21 +839,16 @@ class ServiceOrderApiController extends Controller
                 try {
                     $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
                     
-                    if ($emailTemplate && !empty($customerInfo->email_address)) {
-                         $body = $emailTemplate->email_body;
-                         
-                         if (!empty($body)) {
-                             $emailService = app(\App\Services\EmailQueueService::class);
-                             $emailService->queueEmail([
-                                 'account_no' => $accountNo,
-                                 'recipient_email' => $customerInfo->email_address,
-                                 'subject' => $emailTemplate->Subject_Line ?? 'Reconnection Notice', 
-                                 'body_html' => nl2br($body), 
-                                 'attachment_path' => null
-                             ]);
-                             \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
+                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                              $emailService = app(\App\Services\EmailQueueService::class);
+                              $emailData = [
+                                  'customer_name' => $customerInfo->full_name,
+                                  'account_no' => $accountNo,
+                                  'recipient_email' => $customerInfo->email_address,
+                              ];
+                              $emailService->queueFromTemplate('RECONNECT', $emailData);
+                              \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
                          }
-                    }
                 } catch (\Exception $e) {
                     \Log::error('[API SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
                 }
@@ -915,6 +930,7 @@ class ServiceOrderApiController extends Controller
                             ->select(
                                 'customers.contact_number_primary',
                                 'customers.email_address',
+                                'customers.desired_plan as plan_name',
                                 DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
                                 'billing_accounts.account_balance'
                             )
@@ -922,8 +938,12 @@ class ServiceOrderApiController extends Controller
 
                         if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
                             $message = $smsTemplate->message_content;
-                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $message = str_replace('{{customer_name}}', $customerName, $message);
                             $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
                             $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
                             $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
@@ -946,21 +966,18 @@ class ServiceOrderApiController extends Controller
                 try {
                     $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
                     
-                    if ($emailTemplate && !empty($customerInfo->email_address)) {
-                         $body = $emailTemplate->email_body;
-                         
-                         if (!empty($body)) {
-                             $emailService = app(\App\Services\EmailQueueService::class);
-                             $emailService->queueEmail([
-                                 'account_no' => $accountNo,
-                                 'recipient_email' => $customerInfo->email_address,
-                                 'subject' => $emailTemplate->Subject_Line ?? 'Disconnection Notice', 
-                                 'body_html' => nl2br($body), 
-                                 'attachment_path' => null
-                             ]);
-                             \Log::info('[API SERVICE ORDER DISCONNECT EMAIL] Email queued');
+                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                              $emailService = app(\App\Services\EmailQueueService::class);
+                              $emailData = [
+                                  'customer_name' => $customerInfo->full_name,
+                                  'account_no' => $accountNo,
+                                  'amount_due' => number_format($customerInfo->account_balance, 2),
+                                  'balance' => number_format($customerInfo->account_balance, 2),
+                                  'recipient_email' => $customerInfo->email_address,
+                              ];
+                              $emailService->queueFromTemplate('DISCONNECTED', $emailData);
+                              \Log::info('[API SERVICE ORDER DISCONNECT EMAIL] Email queued');
                          }
-                    }
                 } catch (\Exception $e) {
                     \Log::error('[API SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
                 }
@@ -1061,6 +1078,7 @@ class ServiceOrderApiController extends Controller
                             ->select(
                                 'customers.contact_number_primary',
                                 'customers.email_address',
+                                'customers.desired_plan as plan_name',
                                 DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
                                 'billing_accounts.account_balance'
                             )
@@ -1068,8 +1086,12 @@ class ServiceOrderApiController extends Controller
 
                         if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
                             $message = $smsTemplate->message_content;
-                            $message = str_replace('{{customer_name}}', $customerInfo->full_name, $message);
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $message = str_replace('{{customer_name}}', $customerName, $message);
                             $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
                             $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
                             $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
@@ -1092,21 +1114,18 @@ class ServiceOrderApiController extends Controller
                 try {
                     $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
                     
-                    if ($emailTemplate && !empty($customerInfo->email_address)) {
-                         $body = $emailTemplate->email_body;
-                         
-                         if (!empty($body)) {
-                             $emailService = app(\App\Services\EmailQueueService::class);
-                             $emailService->queueEmail([
-                                 'account_no' => $accountNo,
-                                 'recipient_email' => $customerInfo->email_address,
-                                 'subject' => $emailTemplate->Subject_Line ?? 'Disconnection Notice', 
-                                 'body_html' => nl2br($body), 
-                                 'attachment_path' => null
-                             ]);
-                             \Log::info('[API SERVICE ORDER PULLOUT EMAIL] Email queued');
+                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                              $emailService = app(\App\Services\EmailQueueService::class);
+                              $emailData = [
+                                  'customer_name' => $customerInfo->full_name,
+                                  'account_no' => $accountNo,
+                                  'amount_due' => number_format($customerInfo->account_balance, 2),
+                                  'balance' => number_format($customerInfo->account_balance, 2),
+                                  'recipient_email' => $customerInfo->email_address,
+                              ];
+                              $emailService->queueFromTemplate('DISCONNECTED', $emailData);
+                              \Log::info('[API SERVICE ORDER PULLOUT EMAIL] Email queued');
                          }
-                    }
                 } catch (\Exception $e) {
                     \Log::error('[API SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
                 }

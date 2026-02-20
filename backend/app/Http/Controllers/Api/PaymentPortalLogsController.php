@@ -81,6 +81,7 @@ class PaymentPortalLogsController extends Controller
                     'payment_url' => $record->payment_url,
                     'json_payload' => $record->json_payload,
                     'callback_payload' => $record->callback_payload,
+                    'account_balance_before' => floatval($record->account_balance_before ?? 0),
                     'updated_at' => $record->updated_at,
                     // Account details
                     'accountNo' => $record->accountNo,
@@ -162,6 +163,7 @@ class PaymentPortalLogsController extends Controller
                 'payment_url' => $record->payment_url,
                 'json_payload' => $record->json_payload,
                 'callback_payload' => $record->callback_payload,
+                'account_balance_before' => floatval($record->account_balance_before ?? 0),
                 'updated_at' => $record->updated_at,
                 // Account details
                 'accountNo' => $record->accountNo,

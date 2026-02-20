@@ -72,24 +72,25 @@ class AutoDisconnectService
             $this->writeLog("[CONFIG] Target Due Date: {$targetDate}");
             $this->writeLog("");
 
-            // Fetch overdue invoices
-            $this->writeLog("[QUERY] Searching for overdue invoices...");
-            // 1. Identify accounts that have overdue invoices
-            $overdueAccountNos = Invoice::whereIn('status', ['Unpaid', 'Partial'])
-                ->whereDate('due_date', '<=', $targetDate)
-                ->pluck('account_no')
-                ->unique();
+            // Fetch ONLY the latest invoice for each account and check if IT is overdue
+            $this->writeLog("[QUERY] Searching for latest overdue invoices...");
+            
+            // 1. Get the IDs of the absolute latest invoice for every account
+            $latestInvoiceIds = DB::table('invoices')
+                ->select(DB::raw('MAX(id) as id'))
+                ->groupBy('account_no')
+                ->pluck('id');
 
-            // 2. Fetch the absolute latest invoice for each overdue account
+            // 2. Fetch those specific latest invoices and filter by EXACT disconnection day
+            // Logic: Due Date + Offset == Today (calculated as Due Date == Today - Offset)
             $invoices = Invoice::with(['billingAccount.customer', 'billingAccount.technicalDetails'])
-                ->whereIn('account_no', $overdueAccountNos)
-                ->orderBy('due_date', 'desc')
-                ->orderBy('id', 'desc')
-                ->get()
-                ->unique('account_no');
+                ->whereIn('id', $latestInvoiceIds)
+                ->whereIn('status', ['Unpaid', 'Partial'])
+                ->whereDate('due_date', $targetDate) 
+                ->get();
 
             $totalCount = $invoices->count();
-            $this->writeLog("[RESULT] Found {$totalCount} invoice(s) with due date = {$targetDate}");
+            $this->writeLog("[RESULT] Found {$totalCount} account(s) where (Due Date: {$targetDate} + Offset: {$dcActualOffset}) matches Today");
             $this->writeLog("");
 
             if ($totalCount === 0) {
@@ -580,12 +581,13 @@ class AutoDisconnectService
         $serviceOrder->timestamp = Carbon::now();
         $serviceOrder->account_no = $billingAccount->account_no;
         $serviceOrder->date_installed = $billingAccount->date_installed;
-        $serviceOrder->full_name = $customer->full_name ?? null;
+        $serviceOrder->full_name = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ''));
         $serviceOrder->contact_number = $customer->contact_number_primary ?? null;
         $serviceOrder->email_address = $customer->email_address ?? null;
         $serviceOrder->address = $customer->complete_address ?? null;
         $serviceOrder->location = $customer->location ?? null;
-        $serviceOrder->plan = $billingAccount->plan->name ?? null;
+        $planNameRaw = $billingAccount->plan->name ?? $customer->desired_plan ?? null;
+        $serviceOrder->plan = str_replace('₱', 'P', $planNameRaw ?? '');
         $serviceOrder->provider = $technicalDetail->provider ?? null;
         $serviceOrder->username = $technicalDetail->username ?? null;
         $serviceOrder->connection_type = $technicalDetail->connection_type ?? null;
@@ -624,11 +626,15 @@ class AutoDisconnectService
             }
             $this->writeLog("    [DEBUG] triggerSMS: Target number: {$customer->contact_number_primary}");
 
+            $planNameRaw = $billingAccount->plan->name ?? $customer->desired_plan ?? 'N/A';
             $message = $this->buildSmsMessage(
                 $type, 
                 $customer->full_name, 
                 $billingAccount->account_no, 
-                ['balance' => number_format($billingAccount->account_balance, 2)]
+                [
+                    'balance' => number_format($billingAccount->account_balance, 2),
+                    'plan_name' => $planNameRaw
+                ]
             );
             $this->writeLog("    [DEBUG] triggerSMS: Message built: " . (empty($message) ? 'EMPTY' : 'OK'));
 
@@ -687,21 +693,27 @@ class AutoDisconnectService
                  return;
             }
 
-            $this->writeLog("    [DEBUG] triggerEmail: Queueing email...");
+            $this->writeLog("    [DEBUG] triggerEmail: Queueing email via template...");
             
-            $emailQueued = $this->emailQueueService->queueEmail([
+            $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ''));
+            $planNameRaw = $billingAccount->plan->name ?? $customer->desired_plan ?? 'N/A';
+            $planNameFormatted = str_replace('₱', 'P', $planNameRaw);
+
+            $emailData = [
+                'customer_name' => $customerName,
                 'account_no' => $billingAccount->account_no,
+                'amount_due' => number_format($billingAccount->account_balance, 2),
+                'balance' => number_format($billingAccount->account_balance, 2),
+                'plan_name' => $planNameFormatted,
                 'recipient_email' => $customer->email_address,
-                'subject' => $template->Subject_Line ?? 'Disconnection Notice',
-                // Convert newlines to BR tags since queueEmail typically sends HTML
-                'body_html' => nl2br($body), 
-                'attachment_path' => null
-            ]);
+            ];
+
+            $emailQueued = $this->emailQueueService->queueFromTemplate('DISCONNECTED', $emailData);
             
             if ($emailQueued) {
-                $this->writeLog("    [DEBUG] triggerEmail: Email queued successfully. ID: " . $emailQueued->id);
+                $this->writeLog("    [DEBUG] triggerEmail: Email queued successfully via template.");
             } else {
-                $this->writeLog("    [DEBUG] triggerEmail: Email failed to queue");
+                $this->writeLog("    [DEBUG] triggerEmail: Email failed to queue via template");
             }
 
         } catch (Throwable $e) {
@@ -725,8 +737,13 @@ class AutoDisconnectService
                 $message = $template->message_content;
                 
                 // Common variable replacements
-                $message = str_replace('{{customer_name}}', $name, $message);
+                $customerName = preg_replace('/\s+/', ' ', trim($name));
+                $planNameFormatted = str_replace('₱', 'P', $data['plan_name'] ?? '');
+
+                $message = str_replace('{{customer_name}}', $customerName, $message);
                 $message = str_replace('{{account_no}}', $accountNo, $message);
+                $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
                 
                 // Add balance if present in data
                 if (isset($data['balance'])) {
@@ -734,7 +751,7 @@ class AutoDisconnectService
                     $message = str_replace('{{balance}}', $data['balance'], $message);
                 }
 
-                return $message;
+                return $this->replaceGlobalVariables($message);
             }
 
             $this->writeLog("    [DEBUG] buildSmsMessage: Template type '{$type}' not found or inactive. Falling back to default.");
@@ -744,7 +761,7 @@ class AutoDisconnectService
                 case 'Disconnected':
                 case 'dcTxt':
                     $balance = $data['balance'] ?? '0.00';
-                    return "DISCONNECTION NOTICE: Dear {$name}, your account ({$accountNo}) has been disconnected due to non-payment. Outstanding balance: PHP {$balance}. Please settle immediately to restore service. Thank you!";
+                    return $this->replaceGlobalVariables("DISCONNECTION NOTICE: Dear {{customer_name}}, your account ({{account_no}}) has been disconnected due to non-payment. Outstanding balance: PHP {{balance}}. Please settle immediately to restore service. Thank you!", $name, $accountNo, $balance);
                     
                 default:
                     return '';
@@ -753,6 +770,23 @@ class AutoDisconnectService
             $this->writeLog("    [DEBUG] buildSmsMessage Error: " . $e->getMessage());
             return '';
         }
+    }
+
+    private function replaceGlobalVariables(string $message, string $name = '', string $accountNo = '', string $balance = ''): string
+    {
+        $portalUrl = 'sync.atssfiber.ph';
+        $brandName = \DB::table('form_ui')->value('brand_name') ?? 'Your ISP';
+
+        $message = str_replace('{{portal_url}}', $portalUrl, $message);
+        $message = str_replace('{{company_name}}', $brandName, $message);
+        
+        // Handle fallbacks if needed
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        if ($name) $message = str_replace('{{customer_name}}', $name, $message);
+        if ($accountNo) $message = str_replace('{{account_no}}', $accountNo, $message);
+        if ($balance) $message = str_replace('{{balance}}', $balance, $message);
+
+        return $message;
     }
 
     /**

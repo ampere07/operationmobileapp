@@ -61,7 +61,7 @@ class RelatedDataController extends Controller
 
             $logs = DB::table('payment_portal_logs')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'total_amount', 'date_time', 'status'])
+                ->select(['id', 'total_amount', 'account_balance_before', 'date_time', 'status'])
                 ->orderBy('date_time', 'desc')
                 ->orderBy('updated_at', 'desc')
                 ->get();

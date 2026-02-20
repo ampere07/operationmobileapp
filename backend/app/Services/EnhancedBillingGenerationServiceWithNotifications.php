@@ -125,11 +125,27 @@ class EnhancedBillingGenerationServiceWithNotifications
         ?StatementOfAccount $soa
     ): array {
         try {
-            dispatch(function() use ($account, $invoice, $soa) {
-                $this->notificationService->notifyBillingGenerated(
-                    $account,
-                    $invoice,
-                    $soa
+            $accountId = $account->id;
+            $invoiceId = $invoice ? $invoice->id : null;
+            $soaId = $soa ? $soa->id : null;
+
+            dispatch(function() use ($accountId, $invoiceId, $soaId) {
+                /** @var \App\Services\BillingNotificationService $notificationService */
+                $notificationService = app(\App\Services\BillingNotificationService::class);
+                
+                $accountModel = \App\Models\BillingAccount::find($accountId);
+                if (!$accountModel) {
+                    Log::warning("Queue Notification: Account not found for ID {$accountId}");
+                    return;
+                }
+
+                $invoiceModel = $invoiceId ? \App\Models\Invoice::find($invoiceId) : null;
+                $soaModel = $soaId ? \App\Models\StatementOfAccount::find($soaId) : null;
+
+                $notificationService->notifyBillingGenerated(
+                    $accountModel,
+                    $invoiceModel,
+                    $soaModel
                 );
             })->afterResponse();
             

@@ -25,7 +25,10 @@ class EmailQueueService
             'subject' => $data['subject'],
             'body_html' => $data['body_html'],
             'attachment_path' => $data['attachment_path'] ?? null,
-            'status' => 'pending'
+            'status' => 'pending',
+            'email_sender' => $data['email_sender'] ?? null,
+            'reply_to' => $data['reply_to'] ?? null,
+            'sender_name' => $data['sender_name'] ?? null
         ]);
 
         Log::info('Email queued', [
@@ -49,16 +52,20 @@ class EmailQueueService
         }
 
         $subject = $this->replacePlaceholders($template->Subject_Line, $data);
-        $bodyHtml = $this->replacePlaceholders($template->Body_HTML, $data);
+        $content = !empty($template->Body_HTML) ? $template->Body_HTML : $template->email_body;
+        $bodyHtml = $this->replacePlaceholders($content, $data);
 
         return $this->queueEmail([
             'account_no' => $data['account_no'] ?? null,
             'recipient_email' => $data['recipient_email'],
-            'cc' => $data['cc'] ?? null,
-            'bcc' => $data['bcc'] ?? null,
+            'cc' => $data['cc'] ?? $template->cc,
+            'bcc' => $data['bcc'] ?? $template->bcc,
             'subject' => $subject,
             'body_html' => $bodyHtml,
-            'attachment_path' => $data['attachment_path'] ?? null
+            'attachment_path' => $data['attachment_path'] ?? null,
+            'email_sender' => $template->email_sender,
+            'reply_to' => $template->reply_to,
+            'sender_name' => $template->sender_name
         ]);
     }
 
@@ -92,7 +99,10 @@ class EmailQueueService
                 'bcc' => $job->bcc,
                 'subject' => $job->subject,
                 'html' => $job->body_html,
-                'attachment_path' => $job->attachment_path
+                'attachment_path' => $job->attachment_path,
+                'email_sender' => $job->email_sender,
+                'reply_to' => $job->reply_to,
+                'sender_name' => $job->sender_name
             ]);
 
             if ($result['success']) {
@@ -147,7 +157,10 @@ class EmailQueueService
                 'bcc' => $job->bcc,
                 'subject' => $job->subject,
                 'html' => $job->body_html,
-                'attachment_path' => $job->attachment_path
+                'attachment_path' => $job->attachment_path,
+                'email_sender' => $job->email_sender,
+                'reply_to' => $job->reply_to,
+                'sender_name' => $job->sender_name
             ]);
 
             if ($result['success']) {
@@ -181,3 +194,4 @@ class EmailQueueService
         return $text;
     }
 }
+

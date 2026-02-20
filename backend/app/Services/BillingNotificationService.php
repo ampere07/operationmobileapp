@@ -76,7 +76,7 @@ class BillingNotificationService
                 $results['sms_sent'] = $smsResult['success'];
                 
                 if (!$smsResult['success']) {
-                    $results['errors'][] = "SMS failed: " . $smsResult['error'];
+                    $results['errors'][] = "SMS failed: " . ($smsResult['error'] ?? 'Unknown');
                 }
             } else {
                 Log::warning('Customer has no phone number', [
@@ -133,24 +133,34 @@ class BillingNotificationService
 
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
+                
+                // Use template code from config
+                $templateCode = config('billing.templates.overdue_email', 'OVERDUE_DESIGN_EMAIL');
+                
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
-                    'OVERDUE_DESIGN',
+                    $templateCode,
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
                         'google_drive_url' => $pdfResult['url'],
                         'filename' => $pdfResult['filename']
                     ])
                 );
+                
+                // If failed to find template, log it but don't crash
+                if ($emailQueued === null) {
+                    $results['errors'][] = "Email template '{$templateCode}' not found.";
+                }
+                
                 $results['email_queued'] = $emailQueued !== null;
             }
 
             if ($customer->contact_number_primary) {
-                $message = $this->buildOverdueSmsMessage($account, $invoice);
-                $smsResult = $this->smsService->send([
-                    'contact_no' => $customer->contact_number_primary,
-                    'message' => $message
-                ]);
+                $smsResult = $this->sendOverdueSms($account, $invoice);
                 $results['sms_sent'] = $smsResult['success'];
+                
+                if (!$smsResult['success']) {
+                    $results['errors'][] = "SMS failed: " . ($smsResult['error'] ?? 'Unknown');
+                }
             }
 
         } catch (\Exception $e) {
@@ -193,24 +203,33 @@ class BillingNotificationService
 
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
+                
+                // Use template code from config
+                $templateCode = config('billing.templates.dc_notice_email', 'DCNOTICE_DESIGN_EMAIL');
+                
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
-                    'DCNOTICE_DESIGN',
+                    $templateCode,
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
                         'google_drive_url' => $pdfResult['url'],
                         'filename' => $pdfResult['filename']
                     ])
                 );
+                
+                if ($emailQueued === null) {
+                    $results['errors'][] = "Email template '{$templateCode}' not found.";
+                }
+                
                 $results['email_queued'] = $emailQueued !== null;
             }
 
             if ($customer->contact_number_primary) {
-                $message = $this->buildDcNoticeSmsMessage($account, $invoice);
-                $smsResult = $this->smsService->send([
-                    'contact_no' => $customer->contact_number_primary,
-                    'message' => $message
-                ]);
+                $smsResult = $this->sendDcNoticeSms($account, $invoice);
                 $results['sms_sent'] = $smsResult['success'];
+                
+                if (!$smsResult['success']) {
+                    $results['errors'][] = "SMS failed: " . ($smsResult['error'] ?? 'Unknown');
+                }
             }
 
         } catch (\Exception $e) {
@@ -223,7 +242,6 @@ class BillingNotificationService
 
         return $results;
     }
-
     protected function queueBillingEmail(
         BillingAccount $account,
         ?Invoice $invoice,
@@ -231,43 +249,50 @@ class BillingNotificationService
         array $pdfResult
     ): bool {
         $customer = $account->customer;
-
-        $amount = $soa ? $soa->total_amount_due : $invoice->total_amount;
-        $dueDate = $soa ? $soa->due_date : $invoice->due_date;
-        $documentType = $soa ? 'Statement of Account' : 'Invoice';
-
-        // Simple plain text email body without Google Drive link
-        $emailBody = "Dear {$customer->full_name},\n\n";
-        $emailBody .= "Please find attached your {$documentType} for account {$account->account_no}.\n\n";
-        $emailBody .= "Total Amount Due: ₱" . number_format($amount, 2) . "\n";
-        $emailBody .= "Due Date: " . $dueDate->format('F d, Y') . "\n\n";
-        $emailBody .= "Thank you for your business.\n\n";
-        $emailBody .= "This is an automated email. Please do not reply.";
-
         $tempPdfPath = null;
         
         try {
-            $fileUrl = $pdfResult['url'];
-            preg_match('/\/d\/(.*?)\//', $fileUrl, $matches);
-            $fileId = $matches[1] ?? null;
+            // Determine Document Type and Template
+            $templateCode = $soa 
+                ? config('billing.templates.soa_email', 'SOA_DESIGN_EMAIL')
+                : config('billing.templates.invoice_email', 'INVOICE_DESIGN_EMAIL');
+                
+            // Prepare Data for Template
+            $emailData = $this->prepareEmailData($account, $invoice, $soa);
+            
+            // Handle PDF Attachment (if physical attachment is needed)
+            // Note: queueFromTemplate creates the body from template, but we can pass attachment connection
+            if (config('billing.notifications.include_pdf_attachment', true)) {
+                $fileUrl = $pdfResult['url'];
+                preg_match('/\/d\/(.*?)\//', $fileUrl, $matches);
+                $fileId = $matches[1] ?? null;
 
-            if ($fileId) {
-                $tempPdfPath = $this->pdfService->downloadPdfFromGoogleDrive($fileId);
+                if ($fileId) {
+                    // This creates a temp file
+                    $tempPdfPath = $this->pdfService->downloadPdfFromGoogleDrive($fileId);
+                }
             }
 
-            // Queue email directly without template
-            $emailQueued = $this->emailQueueService->queueEmail([
-                'account_no' => $account->account_no,
-                'recipient_email' => $customer->email_address,
-                'subject' => "Your {$documentType} - {$account->account_no}",
-                'body_html' => nl2br($emailBody),
-                'attachment_path' => $tempPdfPath
-            ]);
+            // Queue using Template
+            $emailQueued = $this->emailQueueService->queueFromTemplate(
+                $templateCode,
+                array_merge($emailData, [
+                    'recipient_email' => $customer->email_address,
+                    'google_drive_url' => $pdfResult['url'],
+                    'filename' => $pdfResult['filename'],
+                    'attachment_path' => $tempPdfPath // Pass the temp path if it exists
+                ])
+            );
+            
+            if ($emailQueued === null) {
+                Log::error("Email template '{$templateCode}' not found for account {$account->account_no}");
+                return false;
+            }
 
             // DO NOT delete temp file here - let email processor delete it after sending
             // The temp file will be cleaned up by the email processor
 
-            return $emailQueued !== null;
+            return true;
             
         } catch (\Exception $e) {
             Log::error('Failed to queue billing email', [
@@ -283,18 +308,183 @@ class BillingNotificationService
         }
     }
 
-    protected function sendBillingSms(
-        BillingAccount $account,
-        ?Invoice $invoice,
-        ?StatementOfAccount $soa
-    ): array {
-        $customer = $account->customer;
-        $message = $this->buildBillingSmsMessage($account, $invoice, $soa);
+    protected function sendBillingSms(BillingAccount $account, ?Invoice $invoice, ?StatementOfAccount $soa): array
+    {
+        try {
+            $customer = $account->customer;
+            
+            if ($customer && !empty($customer->contact_number_primary)) {
+                $template = DB::table('sms_templates')
+                    ->where('template_type', 'SOA')
+                    ->where('is_active', 1)
+                    ->first();
+                    
+                if ($template) {
+                    $amount = $soa ? $soa->total_amount_due : $invoice->total_amount;
+                    $dueDate = $soa ? $soa->due_date : $invoice->due_date;
+                    $paymentLink = config('app.payment_link', 'https://sync.atssfiber.ph');
+                    
+                    $message = $template->message_content;
+                    
+                    $planNameRaw = $account->plan ? $account->plan->plan_name : ($account->customer->desired_plan ?? 'N/A');
+                    $planNameFormatted = str_replace('₱', 'P', $planNameRaw);
+                    $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name));
 
-        return $this->smsService->send([
-            'contact_no' => $customer->contact_number_primary,
-            'message' => $message
-        ]);
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $account->account_no, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($amount, 2), $message);
+                    $message = str_replace('{{amount}}', number_format($amount, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($amount, 2), $message);
+                    $message = str_replace('{{due_date}}', $dueDate->format('M d, Y'), $message);
+                    $message = str_replace('{{payment_link}}', $paymentLink, $message);
+                    
+                    $soaDateStr = $soa && $soa->statement_date ? $soa->statement_date->format('M d, Y') : date('M d, Y');
+                    $message = str_replace('{{soa_date}}', $soaDateStr, $message);
+                    
+                    $message = $this->replaceGlobalVariables($message);
+                    
+                    $result = $this->smsService->send([
+                        'contact_no' => $customer->contact_number_primary,
+                        'message' => $message
+                    ]);
+                    
+                    if ($result['success']) {
+                        Log::info('Billing SMS sent', [
+                            'account_no' => $account->account_no
+                        ]);
+                        return ['success' => true];
+                    } else {
+                        Log::error('Billing SMS Failed: ' . ($result['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $result['error'] ?? 'Unknown error'];
+                    }
+                } else {
+                    Log::warning('Billing SMS Template not found or inactive');
+                    return ['success' => false, 'error' => 'Template not found'];
+                }
+            } else {
+                return ['success' => false, 'error' => 'No contact number'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to send billing SMS: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    protected function sendOverdueSms(BillingAccount $account, Invoice $invoice): array
+    {
+        try {
+            $customer = $account->customer;
+            
+            if ($customer && !empty($customer->contact_number_primary)) {
+                $template = DB::table('sms_templates')
+                    ->where('template_type', 'Overdue')
+                    ->where('is_active', 1)
+                    ->first();
+                    
+                if ($template) {
+                    $message = $template->message_content;
+                    
+                    $planNameRaw = $account->plan ? $account->plan->plan_name : ($account->customer->desired_plan ?? 'N/A');
+                    $planNameFormatted = str_replace('₱', 'P', $planNameRaw);
+                    $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name));
+
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $account->account_no, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{amount}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{due_date}}', $invoice->due_date->format('M d, Y'), $message);
+                    
+                    $message = $this->replaceGlobalVariables($message);
+                    
+                    $result = $this->smsService->send([
+                        'contact_no' => $customer->contact_number_primary,
+                        'message' => $message
+                    ]);
+                    
+                    if ($result['success']) {
+                        Log::info('Overdue SMS sent', [
+                            'account_no' => $account->account_no,
+                            'invoice_id' => $invoice->id
+                        ]);
+                        return ['success' => true];
+                    } else {
+                        Log::error('Overdue SMS Failed: ' . ($result['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $result['error'] ?? 'Unknown error'];
+                    }
+                } else {
+                    Log::warning('Overdue SMS Template not found or inactive');
+                    return ['success' => false, 'error' => 'Template not found'];
+                }
+            } else {
+                return ['success' => false, 'error' => 'No contact number'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to send overdue SMS: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    protected function sendDcNoticeSms(BillingAccount $account, Invoice $invoice): array
+    {
+        try {
+            $customer = $account->customer;
+            
+            if ($customer && !empty($customer->contact_number_primary)) {
+                $template = DB::table('sms_templates')
+                    ->where('template_type', 'DCNotice')
+                    ->where('is_active', 1)
+                    ->first();
+                    
+                if ($template) {
+                    $dcDate = $invoice->due_date->copy()->addDays(4);
+                    $message = $template->message_content;
+                    
+                    $planNameRaw = $account->plan ? $account->plan->plan_name : ($account->customer->desired_plan ?? 'N/A');
+                    $planNameFormatted = str_replace('₱', 'P', $planNameRaw);
+                    $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name));
+
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $account->account_no, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{amount}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($invoice->total_amount, 2), $message);
+                    $message = str_replace('{{dc_date}}', $dcDate->format('M d, Y'), $message);
+                    
+                    $message = $this->replaceGlobalVariables($message);
+                    
+                    $result = $this->smsService->send([
+                        'contact_no' => $customer->contact_number_primary,
+                        'message' => $message
+                    ]);
+                    
+                    if ($result['success']) {
+                        Log::info('DC Notice SMS sent', [
+                            'account_no' => $account->account_no,
+                            'invoice_id' => $invoice->id
+                        ]);
+                        return ['success' => true];
+                    } else {
+                        Log::error('DC Notice SMS Failed: ' . ($result['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $result['error'] ?? 'Unknown error'];
+                    }
+                } else {
+                    Log::warning('DC Notice SMS Template not found or inactive');
+                    return ['success' => false, 'error' => 'Template not found'];
+                }
+            } else {
+                return ['success' => false, 'error' => 'No contact number'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to send DC Notice SMS: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
     }
 
     protected function prepareEmailData(
@@ -308,24 +498,27 @@ class BillingNotificationService
         $dueDate = $invoice ? $invoice->due_date : $soa->due_date;
         $dcDate = $dueDate->copy()->addDays(4); // Default rule
 
+        $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name));
+        $planFormatted = str_replace('₱', 'P', $customer->desired_plan ?? '');
+
         // Common Data
         $data = [
-            'Full_Name' => $customer->full_name,
+            'Full_Name' => $customerName,
             'Address' => $customer->address,
             'Contact_No' => $customer->contact_number_primary,
             'Email' => $customer->email_address,
             'Account_No' => $account->account_no,
-            'Plan' => $customer->desired_plan,
+            'Plan' => $planFormatted,
             'Due_Date' => $dueDate->format('F d, Y'),
             'DC_Date' => $dcDate->format('F d, Y'),
             'Total_Due' => number_format($amount ?? 0, 2),
             'Amount_Due' => number_format($amount ?? 0, 2),
             // Legacy mapping used by some simple templates
             'account_no' => $account->account_no,
-            'customer_name' => $customer->full_name,
+            'customer_name' => $customerName,
             'total_amount' => number_format($amount ?? 0, 2),
             'due_date' => $dueDate->format('F d, Y'),
-            'plan' => $customer->desired_plan,
+            'plan' => $planFormatted,
             'contact_no' => $customer->contact_number_primary
         ];
 
@@ -352,87 +545,6 @@ class BillingNotificationService
         return $data;
     }
 
-    protected function buildBillingSmsMessage(
-        BillingAccount $account,
-        ?Invoice $invoice,
-        ?StatementOfAccount $soa
-    ): string {
-        $customer = $account->customer;
-        $accountBalance = $account->account_balance;
-        $dueDate = $soa ? $soa->due_date : $invoice->due_date;
-        $paymentLink = config('app.payment_link', 'https://pay.example.com');
-
-        $template = SMSTemplate::where('template_type', 'StatementofAccount')
-            ->where('is_active', true)
-            ->first();
-
-        if ($template) {
-            $message = $template->message_content;
-            $message = str_replace('{{customer_name}}', $customer->full_name, $message);
-            $message = str_replace('{{account_no}}', $account->account_no, $message);
-            $message = str_replace('{{amount_due}}', number_format($accountBalance, 2), $message);
-            $message = str_replace('{{due_date}}', $dueDate->format('M d, Y'), $message);
-            $message = str_replace('{{payment_link}}', $paymentLink, $message);
-            return $message;
-        }
-
-        return sprintf(
-            "Your billing statement for %s is ready. Amount Due: ₱%s. Due Date: %s. Check your email for details or pay online at %s",
-            $account->account_no,
-            number_format($accountBalance, 2),
-            $dueDate->format('M d, Y'),
-            $paymentLink
-        );
-    }
-
-    protected function buildOverdueSmsMessage(BillingAccount $account, Invoice $invoice): string
-    {
-        $template = SMSTemplate::where('template_type', 'Overdue')
-            ->where('is_active', true)
-            ->first();
-
-        if ($template) {
-            $message = $template->message_content;
-            $message = str_replace('{{customer_name}}', $account->customer->full_name, $message);
-            $message = str_replace('{{account_no}}', $account->account_no, $message);
-            $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
-            $message = str_replace('{{due_date}}', $invoice->due_date->format('M d, Y'), $message);
-            return $message;
-        }
-
-        return sprintf(
-            "OVERDUE NOTICE: Your account %s has an overdue balance of ₱%s. Original due date: %s. Please settle immediately to avoid service interruption.",
-            $account->account_no,
-            number_format($invoice->total_amount, 2),
-            $invoice->due_date->format('M d, Y')
-        );
-    }
-
-    protected function buildDcNoticeSmsMessage(BillingAccount $account, Invoice $invoice): string
-    {
-        $dcDate = $invoice->due_date->copy()->addDays(4);
-        
-        $template = SMSTemplate::where('template_type', 'DCNotice')
-            ->where('is_active', true)
-            ->first();
-
-        if ($template) {
-            $message = $template->message_content;
-            $message = str_replace('{{customer_name}}', $account->customer->full_name, $message);
-            $message = str_replace('{{account_no}}', $account->account_no, $message);
-            $message = str_replace('{{amount_due}}', number_format($invoice->total_amount, 2), $message);
-            $message = str_replace('{{dc_date}}', $dcDate->format('M d, Y'), $message);
-            return $message;
-        }
-
-        return sprintf(
-            "DISCONNECTION NOTICE: Your account %s will be disconnected on %s. Outstanding balance: ₱%s. Pay now to avoid service interruption.",
-            $account->account_no,
-            $dcDate->format('M d, Y'),
-            number_format($invoice->total_amount, 2)
-        );
-    }
-
     protected function updateSoaPdfLink(StatementOfAccount $soa, string $url): void
     {
         try {
@@ -443,6 +555,16 @@ class BillingNotificationService
                 'error' => $e->getMessage()
             ]);
         }
+    }
+    private function replaceGlobalVariables(string $message): string
+    {
+        $portalUrl = 'sync.atssfiber.ph';
+        $brandName = \DB::table('form_ui')->value('brand_name') ?? 'Your ISP';
+
+        $message = str_replace('{{portal_url}}', $portalUrl, $message);
+        $message = str_replace('{{company_name}}', $brandName, $message);
+
+        return $message;
     }
 }
 

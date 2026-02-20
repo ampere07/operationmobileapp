@@ -26,6 +26,8 @@ class Transaction extends Model
         'image_url',
         'created_by_user',
         'updated_by_user',
+        'approved_by',
+        'account_balance_before',
     ];
 
     protected $casts = [
@@ -41,7 +43,7 @@ class Transaction extends Model
 
     public function processor()
     {
-        return $this->belongsTo(User::class, 'processed_by_user', 'id');
+        return $this->belongsTo(User::class, 'processed_by_user', 'email_address');
     }
 
     public function getProcessedByUserAttribute($value)

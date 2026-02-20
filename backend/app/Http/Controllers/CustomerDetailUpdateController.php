@@ -137,7 +137,8 @@ class CustomerDetailUpdateController extends Controller
     {
         try {
             $validated = $request->validate([
-                'billingStatus' => 'nullable'
+                'billingStatus' => 'nullable',
+                'billingDay' => 'nullable|integer|min:1|max:31'
             ]);
 
             DB::beginTransaction();
@@ -168,10 +169,16 @@ class CustomerDetailUpdateController extends Controller
                 }
             }
 
-            $billingAccount->update([
+            $updateData = [
                 'billing_status_id' => $billingStatusId,
                 'updated_by' => $request->user()->id ?? 1,
-            ]);
+            ];
+
+            if ($request->has('billingDay')) {
+                $updateData['billing_day'] = $validated['billingDay'];
+            }
+
+            $billingAccount->update($updateData);
 
             DB::commit();
 
