@@ -1,0 +1,10 @@
+# Ignore backend
+backend/
+
+# Ignore node_modules in the root (if any)
+node_modules/
+
+# Ignore other unnecessary files
+.git/
+.idea/
+.vscode/

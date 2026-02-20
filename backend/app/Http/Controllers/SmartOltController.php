@@ -8,9 +8,94 @@ use App\Models\SmartOlt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+use App\Models\TechnicalDetail;
+
 class SmartOltController extends Controller
 {
+    public function index()
+    {
+        try {
+            $configs = SmartOlt::all();
+            return response()->json([
+                'success' => true,
+                'data' => $configs
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching configs: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function store(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'sub_domain' => 'required|string',
+                'token' => 'required|string'
+            ]);
+
+            $config = SmartOlt::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SmartOLT configuration created successfully',
+                'data' => $config
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating config: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $config = SmartOlt::findOrFail($id);
+
+            $validated = $request->validate([
+                'sub_domain' => 'required|string',
+                'token' => 'required|string'
+            ]);
+
+            $config->update($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SmartOLT configuration updated successfully',
+                'data' => $config
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating config: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        try {
+            $config = SmartOlt::findOrFail($id);
+            $config->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'SmartOLT configuration deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting config: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function validateOnuSn(Request $request)
+
     {
         try {
             Log::info('Validating ONU SN Request:', $request->all());
@@ -67,6 +152,16 @@ class SmartOltController extends Controller
                     }
 
                     if ($found) {
+                        // Check if SN is already in use in technical_details
+                        $exists = TechnicalDetail::where('router_modem_sn', $sn)->exists();
+
+                        if ($exists) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'already exist'
+                            ]);
+                        }
+
                         return response()->json([
                             'success' => true,
                             'data' => $onuDetails,

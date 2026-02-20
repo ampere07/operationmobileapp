@@ -1,4 +1,10 @@
-/node_modules
+/node_modules/
+/vendor/
+backend/vendor/
+frontend/node_modules/
+.expo/
+dist/
+web-build/
 
 # Google Drive Service Account Credentials
 google-service-account.json
@@ -8,3 +14,4 @@ backend/storage/app/google-service-account.json
 .env
 .env.backup
 .env.production
+.env.local

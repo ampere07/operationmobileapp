@@ -94,9 +94,9 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
                 ]);
                 setColorPalette(palette);
 
-                // Filter users with role_id 1 or 2
+                // Filter users except role_id 3 (customer)
                 const filteredUsers = (usersRes.data || []).filter(
-                    (u: any) => u.role_id === 1 || u.role_id === 2
+                    (u: any) => u.role_id !== 3
                 );
                 setUsers(filteredUsers);
             } catch (err) {
@@ -401,6 +401,8 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
                         className="flex-1 p-6"
                         contentContainerStyle={{ paddingBottom: 40 }}
                         showsVerticalScrollIndicator={false}
+                        scrollEnabled={!showRequestedByDropdown && !showRequestedWithDropdown && !showRequestedWith10Dropdown}
+                        keyboardShouldPersistTaps="handled"
                     >
                         {/* Date */}
                         <View className="mb-4">
