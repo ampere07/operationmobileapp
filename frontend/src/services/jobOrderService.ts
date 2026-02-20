@@ -57,6 +57,9 @@ export const getJobOrders = async (
         if (userData.role) {
           params.user_role = userData.role;
         }
+        if (userData.email) {
+          params.user_email = userData.email;
+        }
       } catch (err) {
         console.error('Failed to parse authData:', err);
       }

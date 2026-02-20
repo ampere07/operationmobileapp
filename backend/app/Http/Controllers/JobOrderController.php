@@ -61,6 +61,25 @@ class JobOrderController extends Controller
                 ]);
             }
 
+            if ($request->has('user_role') && strtolower($request->query('user_role')) === 'agent') {
+                $userEmail = $request->query('user_email');
+                if ($userEmail) {
+                    $user = \App\Models\User::where('email_address', $userEmail)->first();
+                    if ($user) {
+                        $agentName = trim($user->first_name . ' ' . ($user->middle_initial ? $user->middle_initial . ' ' : '') . $user->last_name);
+                        
+                        $query->whereHas('application', function ($appQuery) use ($agentName) {
+                            $appQuery->where('referred_by', $agentName);
+                        });
+                        
+                        \Log::info('Filtering job orders for agent role', [
+                            'agent_name' => $agentName,
+                            'agent_email' => $userEmail
+                        ]);
+                    }
+                }
+            }
+
             // Apply search filter
             if ($search) {
                 $query->where(function ($q) use ($search) {

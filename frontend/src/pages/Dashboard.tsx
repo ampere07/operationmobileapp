@@ -99,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     // Use the initialized user data if available
                     if (user.role === 'customer') {
                         setActiveSection('customer-dashboard');
-                    } else if (user.role === 'technician') {
+                    } else if (user.role === 'technician' || user.role?.toLowerCase() === 'agent' || String(user.role_id) === '4') {
                         setActiveSection('job-order');
                     } else if (user.role?.toLowerCase() === 'inventorystaff' || String(user.role_id) === '5') {
                         setActiveSection('inventory');

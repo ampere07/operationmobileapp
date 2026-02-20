@@ -41,8 +41,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
 
   const menuItems: MenuItem[] = [
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
-    { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician'] },
-    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] },
+    { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },
+    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },
     { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'] },
     // Inventory specific items
     { id: 'inventory', label: 'Inventory', icon: Package, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },
@@ -51,7 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'customer-bills', label: 'Bills', icon: ReceiptText, allowedRoles: ['customer'] },
     { id: 'customer-support', label: 'Support', icon: LifeBuoy, allowedRoles: ['customer'] },
-    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator', 'inventorystaff'], allowedRoleIds: [5, '5'] },
+    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator', 'inventorystaff', 'agent'], allowedRoleIds: [5, '5', 4, '4'] },
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {

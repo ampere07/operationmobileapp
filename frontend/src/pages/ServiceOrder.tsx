@@ -123,7 +123,7 @@ const ServiceOrderPage: React.FC = () => {
           setUserRoleId(roleId);
           setUserEmail(userData.email || '');
 
-          if (role.toLowerCase() === 'technician' || roleId === 2) {
+          if (role.toLowerCase() === 'technician' || roleId === 2 || role.toLowerCase() === 'agent' || roleId === 4) {
             setMobileView('orders');
             setSelectedLocation('all');
           }
@@ -226,7 +226,7 @@ const ServiceOrderPage: React.FC = () => {
       } catch (e) { }
     };
 
-    const isTechnician = numericRoleId === 2 || userRoleString === 'technician';
+    const isTechnician = numericRoleId === 2 || userRoleString === 'technician' || numericRoleId === 4 || userRoleString === 'agent';
 
     let filtered = serviceOrders.filter(serviceOrder => {
       // 1. Technician 7-Day Filter for 'Resolved' tickets
@@ -576,7 +576,7 @@ const ServiceOrderPage: React.FC = () => {
       overflow: 'hidden',
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
     }}>
-      {userRole.toLowerCase() !== 'technician' && isTablet && (
+      {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
         <View style={{
           width: sidebarWidth,
           borderRightWidth: 1,
@@ -657,7 +657,7 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-      {mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && (
+      {mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
         <View style={{
           flex: 1,
           flexDirection: 'column',
@@ -736,7 +736,7 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
+      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
         <View style={{
           position: 'absolute',
           top: 0,
@@ -832,7 +832,7 @@ const ServiceOrderPage: React.FC = () => {
         flex: 1,
         flexDirection: 'column',
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        display: ((mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2) || mobileView === 'details') && !isTablet ? 'none' : 'flex'
+        display: ((mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4) || mobileView === 'details') && !isTablet ? 'none' : 'flex'
       }}>
         <View style={{ flexDirection: 'column', height: '100%' }}>
           <View style={{
@@ -844,7 +844,7 @@ const ServiceOrderPage: React.FC = () => {
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && (
+              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
                 <Pressable
                   onPress={handleMobileBack}
                   style={{
@@ -855,7 +855,7 @@ const ServiceOrderPage: React.FC = () => {
                   <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
                 </Pressable>
               )}
-              {userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
+              {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
                 <Pressable
                   onPress={() => setMobileMenuOpen(true)}
                   style={{

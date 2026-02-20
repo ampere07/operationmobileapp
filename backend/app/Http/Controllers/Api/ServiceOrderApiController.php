@@ -41,6 +41,29 @@ class ServiceOrderApiController extends Controller
                 $query->where('so.support_status', $request->input('support_status'));
             }
 
+            $userRole = strtolower($request->query('user_role', ''));
+            $userEmail = $request->query('user_email', '');
+
+            if ($userRole === 'agent' && $userEmail) {
+                $user = DB::table('users')->where('email_address', $userEmail)->first();
+                if ($user) {
+                    $agentName = trim($user->first_name . ' ' . ($user->middle_initial ? $user->middle_initial . ' ' : '') . $user->last_name);
+                    
+                    $query->whereExists(function ($q) use ($agentName) {
+                        $q->select(DB::raw(1))
+                          ->from('billing_accounts')
+                          ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                          ->whereColumn('billing_accounts.account_no', 'so.account_no')
+                          ->where('customers.referred_by', $agentName);
+                    });
+
+                    \Log::info('Filtering service orders for agent role', [
+                        'agent_name' => $agentName,
+                        'agent_email' => $userEmail
+                    ]);
+                }
+            }
+
             // Handle Search
             if ($search) {
                 // Only join when strictly necessary for search

@@ -778,7 +778,7 @@ const JobOrderPage: React.FC = () => {
     }}>
 
 
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
+      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
         <View style={{
           position: 'absolute',
           top: 0,
@@ -834,7 +834,7 @@ const JobOrderPage: React.FC = () => {
         </View>
       )}
 
-      {userRole.toLowerCase() !== 'technician' && isTablet && (
+      {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
         <View style={{
           width: sidebarWidth,
           borderRightWidth: 1,
@@ -883,7 +883,7 @@ const JobOrderPage: React.FC = () => {
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
           }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && (
+              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
                 <Pressable
                   onPress={handleMobileBack}
                   style={{
@@ -894,7 +894,7 @@ const JobOrderPage: React.FC = () => {
                   <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
                 </Pressable>
               )}
-              {userRole.toLowerCase() !== 'technician' && userRoleId !== 2 && mobileView === 'orders' && (
+              {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
                 <Pressable
                   onPress={() => setMobileMenuOpen(true)}
                   style={{
