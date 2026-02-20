@@ -259,6 +259,13 @@ Route::prefix('transactions')->group(function () {
     Route::get('/{id}', [RelatedDataController::class, 'getTransactionById']);
 });
 
+// Inventory Related Data Routes
+Route::get('/inventory-stock-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getInventoryLogsByItem']);
+Route::get('/borrowed-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getBorrowedLogsByItem']);
+Route::get('/defective-logs/by-item/{itemId}', [InventoryRelatedDataController::class, 'getDefectiveLogsByItem']);
+Route::get('/job-orders/by-item/{itemId}', [InventoryRelatedDataController::class, 'getJobOrdersByItem']);
+Route::get('/service-orders/by-item/{itemId}', [InventoryRelatedDataController::class, 'getServiceOrdersByItem']);
+
 // Installment Management Routes (Enhanced)
 Route::prefix('installments')->group(function () {
     Route::get('/', function(Request $request) {

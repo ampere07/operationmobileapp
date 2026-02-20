@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon } from 'lucide-react-native';
+import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -10,6 +10,7 @@ interface SidebarProps {
   isCollapsed?: boolean;
   userRole: string;
   userEmail?: string;
+  roleId?: number | string;
 }
 
 interface MenuItem {
@@ -17,9 +18,10 @@ interface MenuItem {
   label: string;
   icon: React.ElementType;
   allowedRoles?: string[];
+  allowedRoleIds?: (number | string)[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userRole }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userRole, roleId }) => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   useEffect(() => {
@@ -42,18 +44,27 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician'] },
     { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] },
     { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'] },
+    // Inventory specific items
+    { id: 'inventory', label: 'Inventory', icon: Package, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },
+    { id: 'inventory-category-list', label: 'Categories', icon: List, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },
     // Customer specific items
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'customer-bills', label: 'Bills', icon: ReceiptText, allowedRoles: ['customer'] },
     { id: 'customer-support', label: 'Support', icon: LifeBuoy, allowedRoles: ['customer'] },
-    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator'] },
+    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator', 'inventorystaff'], allowedRoleIds: [5, '5'] },
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {
     const normalizedUserRole = userRole ? userRole.toLowerCase().trim() : '';
+    const currentRoleId = roleId ? String(roleId) : '';
+
     return items.filter(item => {
-      if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
-      return item.allowedRoles.some(role => role.toLowerCase().trim() === normalizedUserRole);
+      if ((!item.allowedRoles || item.allowedRoles.length === 0) && (!item.allowedRoleIds || item.allowedRoleIds.length === 0)) return true;
+
+      const roleMatched = item.allowedRoles?.some(role => role.toLowerCase().trim() === normalizedUserRole);
+      const roleIdMatched = item.allowedRoleIds?.some(id => String(id) === currentRoleId);
+
+      return roleMatched || roleIdMatched;
     });
   };
 

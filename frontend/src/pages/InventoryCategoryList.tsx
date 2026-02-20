@@ -1,22 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Eye, Edit, Trash2 } from 'lucide-react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Dimensions,
+  RefreshControl,
+} from 'react-native';
+import { Search, Plus, Edit, Trash2 } from 'lucide-react-native';
 import AddInventoryCategoryModal from '../modals/AddInventoryCategoryModal';
-import { 
-  getInventoryCategories, 
-  createInventoryCategory, 
+import {
+  createInventoryCategory,
+  updateInventoryCategory,
   deleteInventoryCategory,
-  InventoryCategory 
 } from '../services/inventoryCategoryService';
+import EditInventoryCategoryModal from '../modals/EditInventoryCategoryModal';
+import { useInventoryContext, InventoryCategory } from '../contexts/InventoryContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 const InventoryCategoryList: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const isDarkMode = false;
+  const { dbCategories: categories, isLoading: contextLoading, refreshInventory } = useInventoryContext();
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [categoryEditing, setCategoryEditing] = useState<InventoryCategory | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+
+  const { width } = Dimensions.get('window');
+  const isTablet = width >= 768;
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -27,39 +45,17 @@ const InventoryCategoryList: React.FC = () => {
         console.error('Failed to fetch color palette:', err);
       }
     };
-    
+
     fetchColorPalette();
   }, []);
 
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme !== 'light');
-    });
 
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    const theme = localStorage.getItem('theme');
-    setIsDarkMode(theme !== 'light');
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
 
   const fetchCategories = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const data = await getInventoryCategories();
-      setCategories(data);
-      
+      await refreshInventory();
     } catch (error) {
       console.error('Error fetching inventory categories:', error);
       setError('Failed to fetch inventory categories');
@@ -68,7 +64,15 @@ const InventoryCategoryList: React.FC = () => {
     }
   };
 
-  const filteredCategories = categories.filter(category =>
+  const handleRefresh = async () => {
+    try {
+      await refreshInventory();
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    }
+  };
+
+  const filteredCategories = categories.filter((category) =>
     category.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -78,31 +82,62 @@ const InventoryCategoryList: React.FC = () => {
   };
 
   const handleEdit = (category: InventoryCategory) => {
-    // Implement edit functionality
-    console.log('Edit category:', category);
+    setCategoryEditing(category);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateCategory = async (id: number, categoryData: { name: string; modified_by?: string }) => {
+    try {
+      setLoading(true);
+      await updateInventoryCategory(id, categoryData);
+      await refreshInventory();
+      console.log('Category updated');
+    } catch (error) {
+      console.error('Error updating category:', error);
+      Alert.alert('Error', 'Failed to update category. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (category: InventoryCategory) => {
-    if (window.confirm(`Are you sure you want to delete the category "${category.name}"?`)) {
-      try {
-        await deleteInventoryCategory(category.id);
-        setCategories(prev => prev.filter(c => c.id !== category.id));
-        console.log('Category deleted:', category);
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        alert('Failed to delete category. Please try again.');
-      }
-    }
+    Alert.alert(
+      'Confirm Delete',
+      `Are you sure you want to delete the category "${category.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await deleteInventoryCategory(category.id);
+              await refreshInventory();
+              console.log('Category deleted:', category);
+            } catch (error) {
+              console.error('Error deleting category:', error);
+              Alert.alert('Error', 'Failed to delete category. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddCategory = async (categoryData: { name: string; modified_by?: string }) => {
     try {
-      const newCategory = await createInventoryCategory(categoryData);
-      setCategories(prev => [newCategory, ...prev]);
-      console.log('Category added:', newCategory);
+      setLoading(true);
+      await createInventoryCategory(categoryData);
+      await refreshInventory();
+      console.log('Category added');
     } catch (error) {
       console.error('Error adding category:', error);
-      alert('Failed to add category. Please try again.');
+      Alert.alert('Error', 'Failed to add category. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -116,224 +151,261 @@ const InventoryCategoryList: React.FC = () => {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: true
+        hour12: true,
       });
     } catch {
       return 'N/A';
     }
   };
 
-  if (loading) {
+  const primaryColor = colorPalette?.primary || '#ea580c';
+
+  if (categories.length === 0 && contextLoading) {
     return (
-      <div className={`h-full flex items-center justify-center ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
-          <div className={`text-lg ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Loading categories...</div>
-        </div>
-      </div>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+        }}
+      >
+        <ActivityIndicator size="large" color="#ea580c" style={{ marginBottom: 16 }} />
+        <Text style={{ fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>
+          Loading categories...
+        </Text>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <div className={`h-full flex items-center justify-center ${
-        isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-        <div className="text-center">
-          <div className={`text-lg mb-2 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Error Loading Categories</div>
-          <div className={`mb-4 ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>{error}</div>
-          <button 
-            onClick={fetchCategories}
-            className="text-white px-4 py-2 rounded transition-colors"
-            style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
-            }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      </div>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 18,
+            marginBottom: 8,
+            color: isDarkMode ? '#ffffff' : '#111827',
+          }}
+        >
+          Error Loading Categories
+        </Text>
+        <Text
+          style={{
+            marginBottom: 16,
+            color: isDarkMode ? '#9ca3af' : '#4b5563',
+          }}
+        >
+          {error}
+        </Text>
+        <TouchableOpacity
+          onPress={fetchCategories}
+          style={{
+            backgroundColor: primaryColor,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: '#ffffff' }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
   return (
-    <div className={`h-full flex flex-col ${
-      isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-    }`}>
-      {/* Header */}
-      <div className={`px-6 py-4 border-b flex-shrink-0 ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <h1 className={`text-2xl font-bold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>Inventory Category List</h1>
-          <div className="flex items-center space-x-4">
-            <button className={isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-            </button>
-            <button className="text-gray-400 hover:text-white">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+      }}
+    >
       {/* Search and Add Section */}
-      <div className={`px-6 py-4 border-b flex-shrink-0 ${
-        isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search Inventory Category List"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full rounded pl-10 pr-4 py-2 border focus:outline-none ${
-                isDarkMode 
-                  ? 'bg-gray-800 text-white border-gray-600' 
-                  : 'bg-gray-100 text-gray-900 border-gray-300'
-              }`}
-              onFocus={(e) => {
-                if (colorPalette?.primary) {
-                  e.currentTarget.style.borderColor = colorPalette.primary;
-                  e.currentTarget.style.boxShadow = `0 0 0 1px ${colorPalette.primary}`;
-                }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
-            <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`} />
-          </div>
-          <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="text-white px-4 py-2 rounded text-sm flex items-center space-x-2 transition-colors ml-4"
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: isTablet ? 16 : 60,
+          paddingBottom: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
+          <Search
+            size={16}
+            color={isDarkMode ? '#9ca3af' : '#6b7280'}
+            style={{ position: 'absolute', left: 10, zIndex: 1 }}
+          />
+          <TextInput
+            placeholder="Search Inventory Category List"
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            value={searchQuery}
+            onChangeText={(text) => setSearchQuery(text)}
             style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
+              width: '100%',
+              borderRadius: 6,
+              paddingLeft: 36,
+              paddingRight: 16,
+              paddingVertical: 8,
+              borderWidth: 1,
+              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+              color: isDarkMode ? '#ffffff' : '#111827',
+              borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
             }}
-            onMouseEnter={(e) => {
-              if (colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-          >
-            <Plus size={16} />
-            <span>Add</span>
-          </button>
-        </div>
-      </div>
+          />
+        </View>
+        <TouchableOpacity
+          onPress={() => setIsAddModalOpen(true)}
+          style={{
+            backgroundColor: primaryColor,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 6,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <Plus size={16} color="#ffffff" />
+          <Text style={{ color: '#ffffff', fontSize: 14 }}>Add</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Categories List */}
-      <div className="flex-1 overflow-y-auto">
+      <ScrollView
+        style={{ flex: 1 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={handleRefresh}
+            tintColor={primaryColor}
+            colors={[primaryColor]}
+          />
+        }
+      >
         {filteredCategories.length > 0 ? (
-          <div className="divide-y divide-gray-700">
-            {filteredCategories.map((category) => (
-              <div
-                key={category.id}
-                className={`px-6 py-4 flex items-center justify-between transition-colors group ${
-                  isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex-1">
-                  <div className={`font-medium text-lg ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
+          filteredCategories.map((category) => (
+            <Pressable
+              key={category.id}
+              style={({ pressed }) => ({
+                minHeight: 150,
+                borderBottomWidth: 1.5,
+                borderBottomColor: '#f1f5f9',
+                backgroundColor: pressed ? '#f8fafc' : '#ffffff',
+              })}
+            >
+              <View style={{
+                paddingHorizontal: 20,
+                paddingVertical: 30,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flex: 1,
+              }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    style={{
+                      fontWeight: '600',
+                      fontSize: 18,
+                      color: '#111827',
+                      marginBottom: 4,
+                    }}
+                  >
                     {category.name}
-                  </div>
+                  </Text>
                   {(category.modified_date || category.updated_at) && (
-                    <div className={`text-sm mt-1 ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                      {formatDateTime(category.modified_date || category.updated_at || '')}
-                    </div>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: '#64748b',
+                        fontWeight: '500',
+                      }}
+                    >
+                      Modified: {formatDateTime(category.modified_date || category.updated_at || '')}
+                    </Text>
                   )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleView(category)}
-                    className={`p-2 rounded transition-colors ${
-                      isDarkMode ? 'text-gray-400 hover:text-blue-400' : 'text-gray-600 hover:text-blue-600'
-                    }`}
-                    title="View"
+                </View>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginLeft: 16,
+                  flexShrink: 0
+                }}>
+                  <TouchableOpacity
+                    onPress={() => handleEdit(category)}
+                    style={{ padding: 10, borderRadius: 8 }}
                   >
-                    <Eye size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleEdit(category)}
-                    className={`p-2 rounded transition-colors ${
-                      isDarkMode ? 'text-gray-400 hover:text-green-400' : 'text-gray-600 hover:text-green-600'
-                    }`}
-                    title="Edit"
+                    <Edit size={24} color="#4b5563" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDelete(category)}
+                    style={{ padding: 10, borderRadius: 8 }}
                   >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(category)}
-                    className={`p-2 rounded transition-colors ${
-                      isDarkMode ? 'text-gray-400 hover:text-red-400' : 'text-gray-600 hover:text-red-600'
-                    }`}
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                    <Trash2 size={24} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={{
+                height: 1.5,
+                backgroundColor: '#cbd5e1',
+                width: '100%',
+              }} />
+            </Pressable>
+          ))
         ) : (
-          <div className={`p-12 text-center ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            <div className="text-lg mb-2">No categories found</div>
-            <div className="text-sm">
-              {categories.length === 0 
-                ? 'Start by adding some inventory categories' 
-                : 'Try adjusting your search filter'
-              }
-            </div>
-          </div>
+          <View style={{ padding: 48, alignItems: 'center' }}>
+            <Text
+              style={{
+                fontSize: 18,
+                marginBottom: 8,
+                color: isDarkMode ? '#9ca3af' : '#4b5563',
+              }}
+            >
+              No categories found
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: isDarkMode ? '#9ca3af' : '#4b5563',
+                textAlign: 'center',
+              }}
+            >
+              {categories.length === 0
+                ? 'Start by adding some inventory categories'
+                : 'Try adjusting your search filter'}
+            </Text>
+          </View>
         )}
-      </div>
+      </ScrollView>
 
       <AddInventoryCategoryModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSave={handleAddCategory}
       />
-    </div>
+
+      <EditInventoryCategoryModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setCategoryEditing(null);
+        }}
+        onSave={handleUpdateCategory}
+        category={categoryEditing}
+      />
+    </View>
   );
 };
 

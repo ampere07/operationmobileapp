@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApplicationProvider } from '../contexts/ApplicationContext';
 // import { ApplicationVisitProvider } from '../contexts/ApplicationVisitContext';
 import { JobOrderProvider } from '../contexts/JobOrderContext';
+import { InventoryProvider } from '../contexts/InventoryContext';
 import { ServiceOrderProvider } from '../contexts/ServiceOrderContext';
 // import DCNotice from './DCNotice';
 // import Discounts from './Discounts';
@@ -42,12 +43,12 @@ import ServiceOrder from './ServiceOrder';
 // import RouterModelList from './RouterModelList';
 // import LcpList from './LcpList';
 // import NapList from './NapList';
-// import Inventory from './Inventory';
+import Inventory from './Inventory';
 // import ExpensesLog from './ExpensesLog';
 // import Logs from './Logs';
 // import SOA from './SOA';
 // import Invoice from './Invoice';
-// import InventoryCategoryList from './InventoryCategoryList';
+import InventoryCategoryList from './InventoryCategoryList';
 // import SOAGeneration from './SOAGeneration';
 // import UsageTypeList from './UsageTypeList';
 // import Ports from './Ports';
@@ -100,6 +101,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                         setActiveSection('customer-dashboard');
                     } else if (user.role === 'technician') {
                         setActiveSection('job-order');
+                    } else if (user.role?.toLowerCase() === 'inventorystaff' || String(user.role_id) === '5') {
+                        setActiveSection('inventory');
                     }
 
                     if (user.role === 'customer' || String(user.role_id) === '3') {
@@ -241,10 +244,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             //     return <Ports />;
             // case 'status-remarks-list':
             //     return <StatusRemarksList />;
-            // case 'inventory':
-            //     return <Inventory />;
-            // case 'inventory-category-list':
-            //     return <InventoryCategoryList />;
+            case 'inventory':
+                return <Inventory />;
+            case 'inventory-category-list':
+                return <InventoryCategoryList />;
             // case 'expenses-log':
             //     return <ExpensesLog />;
             // case 'logs':
@@ -259,6 +262,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             default:
                 if (userData && String(userData.role_id) === '3') {
                     return <DashboardCustomer onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
+                }
+                if (userData && (userData.role?.toLowerCase() === 'inventorystaff' || String(userData.role_id) === '5')) {
+                    return <Inventory />;
                 }
                 return <DashboardContent />;
         }
@@ -321,35 +327,38 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 {/* <ApplicationVisitProvider> */}
                 <JobOrderProvider>
                     <ServiceOrderProvider>
-                        <View style={{
-                            height: '100%',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                            backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-                        }}>
-                            {/* Main Content Area */}
+                        <InventoryProvider>
                             <View style={{
-                                flex: 1,
+                                height: '100%',
+                                flexDirection: 'column',
                                 overflow: 'hidden',
                                 backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
                             }}>
-                                <View style={{ height: '100%', overflow: 'scroll' }}>
-                                    {renderContent()}
+                                {/* Main Content Area */}
+                                <View style={{
+                                    flex: 1,
+                                    overflow: 'hidden',
+                                    backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+                                }}>
+                                    <View style={{ height: '100%', overflow: 'scroll' }}>
+                                        {renderContent()}
+                                    </View>
                                 </View>
-                            </View>
 
-                            {/* Bottom Navigation Bar */}
-                            {showSidebar && (
-                                <View style={{ flexShrink: 0 }}>
-                                    <Sidebar
-                                        activeSection={activeSection}
-                                        onSectionChange={handleSectionChange}
-                                        userRole={userData?.role || ''}
-                                        userEmail={userData?.email || ''}
-                                    />
-                                </View>
-                            )}
-                        </View>
+                                {/* Bottom Navigation Bar */}
+                                {showSidebar && (
+                                    <View style={{ flexShrink: 0 }}>
+                                        <Sidebar
+                                            activeSection={activeSection}
+                                            onSectionChange={handleSectionChange}
+                                            userRole={userData?.role || ''}
+                                            userEmail={userData?.email || ''}
+                                            roleId={userData?.role_id}
+                                        />
+                                    </View>
+                                )}
+                            </View>
+                        </InventoryProvider>
                     </ServiceOrderProvider>
                 </JobOrderProvider>
             </CustomerDataProvider>

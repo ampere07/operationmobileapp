@@ -467,7 +467,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       const normalizePort = (rawPort: any) => {
         if (!rawPort) return '';
         const portNum = String(rawPort).toUpperCase().replace(/[^\d]/g, '');
-        return portNum ? `p${portNum.padStart(2, '0')}` : '';
+        return portNum ? `P${portNum.padStart(2, '0')}` : '';
       };
 
       setFormData(prev => ({

@@ -2286,7 +2286,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                   return <Picker.Item label={p} value={p} />;
                                 })()}
                                 {Array.from({ length: portTotal }, (_, i) => {
-                                  const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+                                  const portVal = `P${(i + 1).toString().padStart(2, '0')}`;
 
                                   // Hide port if it is used
                                   if (usedPorts.has(portVal)) {

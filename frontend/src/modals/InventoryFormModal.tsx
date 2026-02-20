@@ -1,5 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { X, Minus, Plus, Camera, Calendar, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Modal,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Pressable,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { Minus, Plus, Camera, Calendar } from 'lucide-react-native';
 import { API_BASE_URL } from '../config/api';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -7,7 +20,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 interface InventoryFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (formData: InventoryFormData) => void;
+  onSave: (formData: InventoryFormData) => Promise<void>;
   editData?: InventoryFormData | null;
   initialCategory?: string;
 }
@@ -31,9 +44,9 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
   onClose,
   onSave,
   editData,
-  initialCategory = ''
+  initialCategory = '',
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false;
   const [formData, setFormData] = useState<InventoryFormData>({
     itemName: '',
     itemDescription: '',
@@ -45,7 +58,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     userEmail: 'ravenampere0123@gmail.com',
     category: '',
     totalStockAvailable: 0,
-    totalStockIn: 0
+    totalStockIn: 0,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -54,26 +67,11 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
   const [categories, setCategories] = useState<string[]>([]);
   const [activeImageSize, setActiveImageSize] = useState<ImageSizeSetting | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -114,7 +112,6 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
         }
       }
     };
-    
     fetchImageSizeSettings();
   }, [isOpen]);
 
@@ -131,7 +128,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
         userEmail: editData.userEmail || 'ravenampere0123@gmail.com',
         category: editData.category || '',
         totalStockAvailable: editData.totalStockAvailable || 0,
-        totalStockIn: editData.totalStockIn || 0
+        totalStockIn: editData.totalStockIn || 0,
       });
     } else {
       setFormData({
@@ -145,46 +142,57 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
         userEmail: 'ravenampere0123@gmail.com',
         category: initialCategory,
         totalStockAvailable: 0,
-        totalStockIn: 0
+        totalStockIn: 0,
       });
     }
     setErrors({});
+    setSelectedImageName(null);
   }, [editData, initialCategory]);
 
-  if (!isOpen) return null;
-
-  const handleInputChange = (field: keyof InventoryFormData, value: string | number | File | null) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleInputChange = (
+    field: keyof InventoryFormData,
+    value: string | number | File | null
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
 
-  const handleQuantityChange = (field: 'quantityAlert' | 'totalStockAvailable' | 'totalStockIn', increment: boolean) => {
-    setFormData(prev => ({
+  const handleQuantityChange = (
+    field: 'quantityAlert' | 'totalStockAvailable' | 'totalStockIn',
+    increment: boolean
+  ) => {
+    setFormData((prev) => ({
       ...prev,
-      [field]: increment ? prev[field] + 1 : Math.max(0, prev[field] - 1)
+      [field]: increment ? prev[field] + 1 : Math.max(0, prev[field] - 1),
     }));
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        let processedFile = file;
-        
-        if (activeImageSize && activeImageSize.image_size_value < 100) {
-          try {
-            processedFile = await resizeImage(file, activeImageSize.image_size_value);
-          } catch (resizeError) {
-            processedFile = file;
-          }
-        }
-        
-        handleInputChange('image', processedFile);
-      } catch (error) {
-        handleInputChange('image', file);
+  const handleImageUpload = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission required', 'Media library access is required to select an image.');
+        return;
       }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: activeImageSize && activeImageSize.image_size_value < 100
+          ? activeImageSize.image_size_value / 100
+          : 1,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setSelectedImageName(asset.fileName || asset.uri.split('/').pop() || 'image');
+        // Keep business logic compatible — store uri as a placeholder in image field
+        handleInputChange('image', asset.uri as unknown as File);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
     }
   };
 
@@ -205,23 +213,23 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
 
     setLoading(true);
     setLoadingPercentage(0);
-    
-    const progressInterval = setInterval(() => {
-      setLoadingPercentage(prev => {
+
+    progressIntervalRef.current = setInterval(() => {
+      setLoadingPercentage((prev) => {
         if (prev >= 99) return 99;
         if (prev >= 90) return prev + 1;
         if (prev >= 70) return prev + 2;
         return prev + 5;
       });
     }, 300);
-    
+
     try {
       await onSave(formData);
-      clearInterval(progressInterval);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       setLoadingPercentage(100);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
-      clearInterval(progressInterval);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       console.error('Error saving inventory item:', error);
     } finally {
       setLoading(false);
@@ -234,313 +242,425 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     onClose();
   };
 
+  const primaryColor = colorPalette?.primary || '#ea580c';
+
+  const labelStyle = {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    marginBottom: 8,
+    color: isDarkMode ? '#d1d5db' : '#374151',
+  };
+
+  const inputStyle = (hasError?: boolean) => ({
+    width: '100%' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 6,
+    borderColor: hasError ? '#ef4444' : isDarkMode ? '#374151' : '#d1d5db',
+    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+    color: isDarkMode ? '#ffffff' : '#111827',
+  });
+
   return (
-    <>
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={handleCancel}>
+      {/* Loading Overlay */}
       {loading && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[10000] flex items-center justify-center">
-          <div className={`rounded-lg p-8 flex flex-col items-center space-y-6 min-w-[320px] ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Loader2 className="w-20 h-20 text-orange-500 animate-spin" />
-            <div className="text-center">
-              <p className={`text-4xl font-bold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>{loadingPercentage}%</p>
-            </div>
-          </div>
-        </div>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 12,
+              padding: 32,
+              alignItems: 'center',
+              gap: 24,
+              minWidth: 280,
+              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            }}
+          >
+            <ActivityIndicator size="large" color="#f97316" />
+            <Text
+              style={{
+                fontSize: 36,
+                fontWeight: '700',
+                color: isDarkMode ? '#ffffff' : '#111827',
+              }}
+            >
+              {loadingPercentage}%
+            </Text>
+          </View>
+        </View>
       )}
-      
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-        <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${
-          isDarkMode ? 'bg-gray-900' : 'bg-white'
-        }`}>
-          <div className={`px-6 py-4 flex items-center justify-between border-b ${
-            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-          }`}>
-            <h2 className={`text-xl font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+
+      {/* Overlay */}
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'flex-end',
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* Panel */}
+        <View
+          style={{
+            height: '100%',
+            width: '100%',
+            maxWidth: 672,
+            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            shadowColor: '#000',
+            shadowOpacity: 0.4,
+            shadowRadius: 20,
+            elevation: 10,
+            flexDirection: 'column',
+          }}
+        >
+          {/* Header */}
+          <View
+            style={{
+              paddingHorizontal: 24,
+              paddingVertical: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottomWidth: 1,
+              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: '600',
+                color: isDarkMode ? '#ffffff' : '#111827',
+              }}
+            >
               {editData ? 'Edit Inventory Item' : 'Add Inventory Item'}
-            </h2>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleCancel}
-                className={`px-4 py-2 rounded text-sm transition-colors ${
-                  isDarkMode 
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className="px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm flex items-center"
+            </Text>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TouchableOpacity
+                onPress={handleCancel}
                 style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent && !loading) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 6,
+                  backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
                 }}
               >
-                {loading ? 'Saving...' : (editData ? 'Update' : 'Save')}
-              </button>
-              <button
-                onClick={onClose}
-                className={`transition-colors ${
-                  isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <X size={24} />
-              </button>
-            </div>
-          </div>
+                <Text style={{ fontSize: 14, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Item Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
+              <TouchableOpacity
+                onPress={handleSave}
+                disabled={loading}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 6,
+                  backgroundColor: primaryColor,
+                  opacity: loading ? 0.5 : 1,
+                }}
+              >
+                <Text style={{ fontSize: 14, color: '#ffffff' }}>
+                  {loading ? 'Saving...' : editData ? 'Update' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Form Body */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, gap: 16 }}>
+            {/* Item Name */}
+            <View>
+              <Text style={labelStyle}>
+                Item Name<Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <TextInput
                 value={formData.itemName}
-                onChange={(e) => handleInputChange('itemName', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.itemName ? 'border-red-500' : ''}`}
+                onChangeText={(val) => handleInputChange('itemName', val)}
                 placeholder="Enter item name"
+                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                style={inputStyle(!!errors.itemName)}
               />
-              {errors.itemName && <p className="text-red-500 text-xs mt-1">{errors.itemName}</p>}
-            </div>
+              {errors.itemName ? (
+                <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+                  {errors.itemName}
+                </Text>
+              ) : null}
+            </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Item Description<span className="text-red-500">*</span>
-              </label>
-              <textarea
+            {/* Item Description */}
+            <View>
+              <Text style={labelStyle}>
+                Item Description<Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <TextInput
                 value={formData.itemDescription}
-                onChange={(e) => handleInputChange('itemDescription', e.target.value)}
-                rows={3}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 resize-none ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.itemDescription ? 'border-red-500' : ''}`}
+                onChangeText={(val) => handleInputChange('itemDescription', val)}
                 placeholder="Enter item description"
+                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                multiline
+                numberOfLines={3}
+                style={[inputStyle(!!errors.itemDescription), { height: 80, textAlignVertical: 'top' }]}
               />
-              {errors.itemDescription && <p className="text-red-500 text-xs mt-1">{errors.itemDescription}</p>}
-            </div>
+              {errors.itemDescription ? (
+                <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+                  {errors.itemDescription}
+                </Text>
+              ) : null}
+            </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Quantity Alert<span className="text-red-500">*</span>
-              </label>
-              <div className={`flex items-center border rounded ${
-                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-              }`}>
-                <input
-                  type="number"
-                  value={formData.quantityAlert}
-                  onChange={(e) => handleInputChange('quantityAlert', parseInt(e.target.value) || 0)}
-                  className={`flex-1 px-3 py-2 bg-transparent focus:outline-none ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}
-                  min="0"
-                />
-                <div className="flex">
-                  <button
-                    type="button"
-                    onClick={() => handleQuantityChange('quantityAlert', false)}
-                    className={`px-3 py-2 border-l transition-colors ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuantityChange('quantityAlert', true)}
-                    className={`px-3 py-2 border-l transition-colors ${
-                      isDarkMode 
-                        ? 'text-gray-400 hover:text-white border-gray-700' 
-                        : 'text-gray-600 hover:text-gray-900 border-gray-300'
-                    }`}
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Image
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                />
-                <div className={`w-full h-24 border-2 border-dashed rounded flex items-center justify-center transition-colors ${
-                  isDarkMode 
-                    ? 'bg-gray-800 border-gray-700 hover:border-gray-600' 
-                    : 'bg-gray-50 border-gray-300 hover:border-gray-400'
-                }`}>
-                  <Camera className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} size={24} />
-                </div>
-                {formData.image && (
-                  <p className={`text-xs mt-2 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Selected: {formData.image.name}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified By
-              </label>
-              <div className={`px-3 py-2 border rounded ${
-                isDarkMode 
-                  ? 'bg-gray-900 border-gray-700 text-gray-400' 
-                  : 'bg-gray-100 border-gray-300 text-gray-600'
-              }`}>
-                {formData.modifiedBy}
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified Date<span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="datetime-local"
-                  value={formData.modifiedDate}
-                  onChange={(e) => handleInputChange('modifiedDate', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                    isDarkMode 
-                      ? 'bg-gray-800 text-white border-gray-700' 
-                      : 'bg-white text-gray-900 border-gray-300'
-                  } ${errors.modifiedDate ? 'border-red-500' : ''}`}
-                />
-                <Calendar className={`absolute right-3 top-2.5 ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`} size={20} />
-              </div>
-              {errors.modifiedDate && <p className="text-red-500 text-xs mt-1">{errors.modifiedDate}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                User Email<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={formData.userEmail}
-                onChange={(e) => handleInputChange('userEmail', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                } ${errors.userEmail ? 'border-red-500' : ''}`}
-                placeholder="Enter user email"
-              />
-              {errors.userEmail && <p className="text-red-500 text-xs mt-1">{errors.userEmail}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Category
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) => handleInputChange('category', e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
+            {/* Quantity Alert */}
+            <View>
+              <Text style={labelStyle}>
+                Quantity Alert<Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  overflow: 'hidden',
+                }}
               >
-                <option value="">Select category</option>
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </div>
+                <TextInput
+                  value={String(formData.quantityAlert)}
+                  onChangeText={(val) => handleInputChange('quantityAlert', parseInt(val) || 0)}
+                  keyboardType="numeric"
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={() => handleQuantityChange('quantityAlert', false)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderLeftWidth: 1,
+                    borderLeftColor: isDarkMode ? '#374151' : '#d1d5db',
+                  }}
+                >
+                  <Minus size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleQuantityChange('quantityAlert', true)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderLeftWidth: 1,
+                    borderLeftColor: isDarkMode ? '#374151' : '#d1d5db',
+                  }}
+                >
+                  <Plus size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Total Stock Available
-              </label>
-              <input
-                type="number"
-                value={formData.totalStockAvailable}
-                onChange={(e) => handleInputChange('totalStockAvailable', parseInt(e.target.value) || 0)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-                min="0"
-                placeholder="0"
-              />
-            </div>
+            {/* Image */}
+            <View>
+              <Text style={labelStyle}>Image</Text>
+              <TouchableOpacity
+                onPress={handleImageUpload}
+                style={{
+                  width: '100%',
+                  height: 96,
+                  borderWidth: 2,
+                  borderStyle: 'dashed',
+                  borderRadius: 6,
+                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Camera size={24} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+              </TouchableOpacity>
+              {selectedImageName && (
+                <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                  Selected: {selectedImageName}
+                </Text>
+              )}
+            </View>
 
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Total Stock IN
-              </label>
-              <input
-                type="number"
-                value={formData.totalStockIn}
-                onChange={(e) => handleInputChange('totalStockIn', parseInt(e.target.value) || 0)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode 
-                    ? 'bg-gray-800 text-white border-gray-700' 
-                    : 'bg-white text-gray-900 border-gray-300'
-                }`}
-                min="0"
-                placeholder="0"
+            {/* Modified By */}
+            <View>
+              <Text style={labelStyle}>Modified By</Text>
+              <View
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderWidth: 1,
+                  borderRadius: 6,
+                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                  backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
+                }}
+              >
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                  {formData.modifiedBy}
+                </Text>
+              </View>
+            </View>
+
+            {/* Modified Date */}
+            <View>
+              <Text style={labelStyle}>
+                Modified Date<Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <View style={{ position: 'relative', justifyContent: 'center' }}>
+                <TextInput
+                  value={formData.modifiedDate}
+                  onChangeText={(val) => handleInputChange('modifiedDate', val)}
+                  placeholder="YYYY-MM-DDTHH:MM"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={[inputStyle(!!errors.modifiedDate), { paddingRight: 44 }]}
+                />
+                <Calendar
+                  size={20}
+                  color={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  style={{ position: 'absolute', right: 12 }}
+                />
+              </View>
+              {errors.modifiedDate ? (
+                <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+                  {errors.modifiedDate}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* User Email */}
+            <View>
+              <Text style={labelStyle}>
+                User Email<Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <TextInput
+                value={formData.userEmail}
+                onChangeText={(val) => handleInputChange('userEmail', val)}
+                placeholder="Enter user email"
+                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={inputStyle(!!errors.userEmail)}
               />
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
+              {errors.userEmail ? (
+                <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+                  {errors.userEmail}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Category */}
+            <View>
+              <Text style={labelStyle}>Category</Text>
+              <TouchableOpacity
+                onPress={() => setShowCategoryDropdown((prev) => !prev)}
+                style={{
+                  ...inputStyle(),
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text style={{ color: formData.category ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af') }}>
+                  {formData.category || 'Select category'}
+                </Text>
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>▾</Text>
+              </TouchableOpacity>
+
+              {showCategoryDropdown && (
+                <View
+                  style={{
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    marginTop: 4,
+                    maxHeight: 200,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <ScrollView nestedScrollEnabled>
+                    <Pressable
+                      onPress={() => {
+                        handleInputChange('category', '');
+                        setShowCategoryDropdown(false);
+                      }}
+                      style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+                    >
+                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                        Select category
+                      </Text>
+                    </Pressable>
+                    {categories.map((category) => (
+                      <Pressable
+                        key={category}
+                        onPress={() => {
+                          handleInputChange('category', category);
+                          setShowCategoryDropdown(false);
+                        }}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 12,
+                          paddingVertical: 10,
+                          backgroundColor: pressed
+                            ? isDarkMode ? '#374151' : '#f3f4f6'
+                            : 'transparent',
+                        })}
+                      >
+                        <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+                          {category}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            {/* Total Stock Available */}
+            <View>
+              <Text style={labelStyle}>Total Stock Available</Text>
+              <TextInput
+                value={String(formData.totalStockAvailable)}
+                onChangeText={(val) => handleInputChange('totalStockAvailable', parseInt(val) || 0)}
+                placeholder="0"
+                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                keyboardType="numeric"
+                style={inputStyle()}
+              />
+            </View>
+
+            {/* Total Stock IN */}
+            <View>
+              <Text style={labelStyle}>Total Stock IN</Text>
+              <TextInput
+                value={String(formData.totalStockIn)}
+                onChangeText={(val) => handleInputChange('totalStockIn', parseInt(val) || 0)}
+                placeholder="0"
+                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                keyboardType="numeric"
+                style={inputStyle()}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

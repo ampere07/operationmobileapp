@@ -1,34 +1,51 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calendar, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Modal,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { X, Calendar, Loader2 } from 'lucide-react-native';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 interface AddInventoryCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (categoryData: { name: string; modified_by?: string }) => void;
+  onSave: (categoryData: { name: string; modified_by?: string }) => Promise<void>;
 }
 
 const AddInventoryCategoryModal: React.FC<AddInventoryCategoryModalProps> = ({
   isOpen,
   onClose,
-  onSave
+  onSave,
 }) => {
+  // Enforce light theme
+  const isDarkMode = false;
   const [categoryName, setCategoryName] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [modifiedBy] = useState('ravenampere0123@gmail.com');
   const [modifiedDate, setModifiedDate] = useState('');
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+  const [modal, setModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -43,239 +60,205 @@ const AddInventoryCategoryModal: React.FC<AddInventoryCategoryModalProps> = ({
   }, []);
 
   useEffect(() => {
-    const now = new Date();
-    const formatted = now.toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
-    setModifiedDate(formatted);
-  }, []);
-
-  useEffect(() => {
-    if (loading) {
+    if (isOpen) {
+      setModal((prev) => ({ ...prev, isOpen: false }));
+      setLoading(false);
       setLoadingProgress(0);
-      const interval = setInterval(() => {
-        setLoadingProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(interval);
-            return prev;
-          }
-          return prev + Math.random() * 15;
-        });
-      }, 200);
+      setCategoryName('');
+      setErrors({});
 
-      return () => clearInterval(interval);
+      const now = new Date();
+      setModifiedDate(now.toLocaleString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }));
     }
-  }, [loading]);
+  }, [isOpen]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-
     if (!categoryName.trim()) {
       newErrors.categoryName = 'Category name is required';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSave = async () => {
-    const isValid = validateForm();
-    
-    if (!isValid) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
-    
-    try {
-      console.log('Creating new inventory category:', categoryName);
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      onSave({ 
-        name: categoryName.trim(),
-        modified_by: modifiedBy
+    setLoadingProgress(0);
+
+    progressIntervalRef.current = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 99) return 99;
+        if (prev >= 90) return prev + 1;
+        return prev + 5;
       });
-      
+    }, 100);
+
+    try {
+      const authData = await AsyncStorage.getItem('authData');
+      const user = authData ? JSON.parse(authData) : null;
+
+      await onSave({
+        name: categoryName.trim(),
+        modified_by: user?.email || 'ravenampere0123@gmail.com',
+      });
+
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       setLoadingProgress(100);
-      
-      setTimeout(() => {
-        setLoading(false);
-        handleClose();
-      }, 500);
+
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Success',
+        message: 'Inventory category created successfully!',
+        onConfirm: () => {
+          setModal((prev) => ({ ...prev, isOpen: false }));
+          onClose();
+        },
+      });
     } catch (error: any) {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       console.error('Error creating inventory category:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to create inventory category. Please try again.';
-      alert(`Error: ${errorMessage}`);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: error.message || 'Failed to create inventory category.',
+      });
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleClose = () => {
-    if (loading) return;
-    
-    setCategoryName('');
-    setErrors({});
-    setLoadingProgress(0);
-    onClose();
-  };
-
-  if (!isOpen) return null;
+  const primaryColor = colorPalette?.primary || '#ea580c';
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-        <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 overflow-hidden flex flex-col ${
-          isDarkMode ? 'bg-gray-900' : 'bg-white'
-        }`}>
-          <div className={`px-6 py-4 flex items-center justify-between ${
-            isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-          }`}>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleClose}
-                disabled={loading}
-                className={`transition-colors disabled:cursor-not-allowed ${
-                  isDarkMode
-                    ? 'text-gray-400 hover:text-white disabled:text-gray-600'
-                    : 'text-gray-600 hover:text-gray-900 disabled:text-gray-400'
-                }`}
-              >
-                <X size={24} />
-              </button>
-              <h2 className={`text-xl font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Inventory Category Form</h2>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleClose}
-                disabled={loading}
-                className={`px-6 py-2 border rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isDarkMode
-                    ? 'border-red-600 text-red-600 hover:bg-red-600 hover:text-white'
-                    : 'border-red-500 text-red-500 hover:bg-red-500 hover:text-white'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className="px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm flex items-center"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent && !loading) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
-                }}
-              >
-                {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Save
-              </button>
-            </div>
-          </div>
+    <Modal
+      visible={isOpen}
+      transparent={true}
+      animationType="slide"
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 bg-black/50 justify-end">
+        {/* Loading Modal */}
+        <Modal visible={loading} transparent={true} animationType="fade">
+          <View className="flex-1 bg-black/70 items-center justify-center">
+            <View className="bg-white rounded-xl p-8 items-center space-y-6 min-w-[320px]">
+              <ActivityIndicator size="large" color={primaryColor} />
+              <View>
+                <Text className="text-4xl font-bold text-gray-900">
+                  {Math.round(loadingProgress)}%
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
-          <div className="flex-1 overflow-y-auto p-8 space-y-6">
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Category Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
+        {/* Result Modal */}
+        <Modal visible={modal.isOpen} transparent={true} animationType="fade">
+          <View className="flex-1 bg-black/75 items-center justify-center p-4">
+            <View className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80%] overflow-hidden">
+              <View className="px-6 py-4 border-b border-gray-200 flex-row items-center justify-between">
+                <Text className="text-lg font-semibold text-gray-900">{modal.title}</Text>
+                <TouchableOpacity onPress={() => setModal((prev) => ({ ...prev, isOpen: false }))}>
+                  <X size={20} color="#4B5563" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView className="px-6 py-4">
+                <View className="space-y-3">
+                  <View className={`flex-row items-center gap-3 p-3 rounded-lg border ${modal.type === 'success' ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'
+                    }`}>
+                    <Text className={`text-sm flex-1 ${modal.type === 'success' ? 'text-green-800' : 'text-red-800'
+                      }`}>
+                      {modal.message}
+                    </Text>
+                  </View>
+                </View>
+              </ScrollView>
+              <View className="px-6 py-4 border-t border-gray-200 flex-row justify-end">
+                <TouchableOpacity
+                  onPress={modal.onConfirm || (() => setModal((prev) => ({ ...prev, isOpen: false })))}
+                  className="px-6 py-2 rounded-lg"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  <Text className="text-white font-medium text-center">OK</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Main Panel */}
+        <View className="h-[70%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col bg-gray-50">
+          <View className="px-6 py-4 flex-row items-center justify-between border-b bg-gray-100 border-gray-200">
+            <Text className="text-xl font-semibold text-gray-900">Add Category</Text>
+            <View className="flex-row items-center space-x-3 gap-2">
+              <TouchableOpacity
+                onPress={onClose}
+                className="px-4 py-[8px] border rounded-lg"
+                style={{ borderColor: primaryColor }}
+              >
+                <Text style={{ color: primaryColor }} className="text-sm font-medium">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSave}
+                disabled={loading}
+                className="px-6 py-[8px] rounded-lg"
+                style={{ backgroundColor: loading ? '#9ca3af' : primaryColor }}
+              >
+                <Text className="text-white text-sm font-medium">Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView className="flex-1 p-6" showsVerticalScrollIndicator={false}>
+            {/* Category Name */}
+            <View className="mb-6">
+              <Text className="text-sm font-medium mb-2 text-gray-700">
+                Category Name<Text className="text-red-500">*</Text>
+              </Text>
+              <TextInput
                 value={categoryName}
-                onChange={(e) => {
-                  setCategoryName(e.target.value);
-                  if (errors.categoryName) {
-                    setErrors(prev => ({ ...prev, categoryName: '' }));
-                  }
+                onChangeText={(text) => {
+                  setCategoryName(text);
+                  if (errors.categoryName) setErrors({});
                 }}
-                placeholder=""
-                disabled={loading}
-                className={`w-full px-4 py-3 border rounded focus:outline-none focus:border-red-500 disabled:cursor-not-allowed ${
-                  errors.categoryName ? 'border-red-500' : isDarkMode ? 'border-gray-700' : 'border-gray-300'
-                } ${
-                  isDarkMode
-                    ? 'bg-gray-900 text-white disabled:bg-gray-800'
-                    : 'bg-white text-gray-900 disabled:bg-gray-100'
-                }`}
-                autoFocus
-              />
-              {errors.categoryName && <p className="text-red-500 text-xs mt-1">{errors.categoryName}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified By
-              </label>
-              <div className={`inline-block px-4 py-2 border rounded-full text-sm ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-gray-100 border-gray-300 text-gray-900'
-              }`}>
-                {modifiedBy}
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Modified Date
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={modifiedDate}
-                  readOnly
-                  className={`w-full px-4 py-3 border rounded focus:outline-none cursor-default ${
-                    isDarkMode
-                      ? 'bg-gray-900 border-gray-700 text-gray-400'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                placeholder="Enter category name"
+                placeholderTextColor="#9ca3af"
+                className={`w-full px-4 py-[12px] border rounded-lg bg-white text-gray-900 ${errors.categoryName ? 'border-red-500' : 'border-gray-300'
                   }`}
-                />
-                <Calendar className={`absolute right-4 top-3.5 ${
-                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                }`} size={20} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+              />
+              {errors.categoryName && (
+                <Text className="text-red-500 text-xs mt-1">{errors.categoryName}</Text>
+              )}
+            </View>
 
-      {loading && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className={`rounded-lg p-12 flex flex-col items-center gap-6 ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Loader2 
-              className="h-16 w-16 animate-spin" 
-              style={{
-                color: colorPalette?.primary || '#ea580c'
-              }}
-            />
-            <p className={`font-bold text-4xl ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{Math.round(loadingProgress)}%</p>
-          </div>
-        </div>
-      )}
-    </>
+            {/* Modified Date */}
+            <View className="mb-6">
+              <Text className="text-sm font-medium mb-2 text-gray-700">Modified Date</Text>
+              <View className="relative justify-center">
+                <TextInput
+                  value={modifiedDate}
+                  editable={false}
+                  className="w-full pl-4 pr-11 py-[12px] border rounded-lg bg-gray-100 border-gray-300 text-gray-500"
+                />
+                <Calendar size={18} color="#9ca3af" style={{ position: 'absolute', right: 16 }} />
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

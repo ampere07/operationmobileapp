@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getServiceOrders, createServiceOrder } from '../services/serviceOrderService';
+import * as WebBrowser from 'expo-web-browser';
 
 interface SupportRequest {
   id: string;
@@ -283,8 +284,20 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     }
   };
 
-  const handleRequestPlanUpdate = () => {
-    Linking.openURL('https://forms.gle/your-plan-update-form');
+  const handleRequestPlanUpdate = async () => {
+    const webUrl = 'https://www.facebook.com/atssfiber2022';
+    const fbAppUrl = `fb://facewebmodal/f?href=${webUrl}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(fbAppUrl);
+      if (canOpen) {
+        await Linking.openURL(fbAppUrl);
+      } else {
+        await WebBrowser.openBrowserAsync(webUrl);
+      }
+    } catch (error) {
+      await WebBrowser.openBrowserAsync(webUrl);
+    }
   };
 
   return (
