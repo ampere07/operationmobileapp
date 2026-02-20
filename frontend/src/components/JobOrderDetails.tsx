@@ -453,6 +453,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     const onsiteStatus = (jobOrder.Onsite_Status || '').toLowerCase();
     const billingStatus = (jobOrder.billing_status || jobOrder.Billing_Status || '').toLowerCase();
     const isAdministrator = userRole === 'administrator';
+    const isAgent = userRole === 'agent' || userRoleId === 4;
+
+    if (isAgent) return false;
 
     return onsiteStatus === 'done' && billingStatus !== 'done' && isAdministrator;
   };
@@ -651,11 +654,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          {userRole !== 'technician' && (
-            <Pressable style={{ padding: 4, borderRadius: 2, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}>
-              <ExternalLink width={16} height={16} color={isDarkMode ? '#ffffff' : '#111827'} />
-            </Pressable>
-          )}
           {shouldShowApproveButton() && (
             <Pressable
               style={{ backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' }}
@@ -665,7 +663,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
               <Text style={{ color: '#ffffff' }}>Approve</Text>
             </Pressable>
           )}
-          {!(jobOrder.Onsite_Status && jobOrder.Onsite_Status.toLowerCase() === 'done') && (
+          {!(jobOrder.Onsite_Status && jobOrder.Onsite_Status.toLowerCase() === 'done') && userRole !== 'agent' && userRoleId !== 4 && (
             <Pressable
               style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
               onPress={handleDoneClick}
@@ -684,7 +682,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         </View>
       </View>
 
-      {userRole !== 'technician' && (
+      {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && (
         <View style={{ paddingVertical: 12, borderBottomWidth: 1, backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
             <Pressable

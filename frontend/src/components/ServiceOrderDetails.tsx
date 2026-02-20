@@ -65,6 +65,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
+  const [userRoleId, setUserRoleId] = useState<number | null>(null);
 
   const FIELD_VISIBILITY_KEY = 'serviceOrderDetailsFieldVisibility';
   const FIELD_ORDER_KEY = 'serviceOrderDetailsFieldOrder';
@@ -130,6 +132,17 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       const savedOrder = await AsyncStorage.getItem(FIELD_ORDER_KEY);
       if (savedOrder) {
         setFieldOrder(JSON.parse(savedOrder));
+      }
+
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const userData = JSON.parse(authData);
+          setUserRole(userData.role?.toLowerCase() || '');
+          setUserRoleId(Number(userData.role_id));
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
       }
     };
     loadSettings();
@@ -437,20 +450,24 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable
-            style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
-            onPress={handleEditClick}
-          >
-            <Edit width={16} height={16} color="#ffffff" style={{ marginRight: 4 }} />
-            <Text style={styles.headerButtonText}>Edit</Text>
-          </Pressable>
+          {userRole !== 'agent' && userRoleId !== 4 && (
+            <>
+              <Pressable
+                style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+                onPress={handleEditClick}
+              >
+                <Edit width={16} height={16} color="#ffffff" style={{ marginRight: 4 }} />
+                <Text style={styles.headerButtonText}>Edit</Text>
+              </Pressable>
 
-          <Pressable
-            onPress={() => setShowFieldSettings(!showFieldSettings)}
-            style={styles.settingsButton}
-          >
-            <Settings width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-          </Pressable>
+              <Pressable
+                onPress={() => setShowFieldSettings(!showFieldSettings)}
+                style={styles.settingsButton}
+              >
+                <Settings width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+              </Pressable>
+            </>
+          )}
 
           <Pressable onPress={onClose}>
             <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />

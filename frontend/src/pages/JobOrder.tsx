@@ -929,19 +929,21 @@ const JobOrderPage: React.FC = () => {
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable
-                  onPress={() => setIsFunnelFilterOpen(true)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 4,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
-                  }}
-                >
-                  <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#374151'} />
-                </Pressable>
+                {userRole.toLowerCase() !== 'agent' && userRoleId !== 4 && (
+                  <Pressable
+                    onPress={() => setIsFunnelFilterOpen(true)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }}
+                  >
+                    <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#374151'} />
+                  </Pressable>
+                )}
 
                 <Pressable
                   onPress={handleRefresh}
