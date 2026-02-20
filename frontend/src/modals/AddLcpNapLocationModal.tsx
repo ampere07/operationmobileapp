@@ -3,6 +3,8 @@ import { View, Text, Pressable, TextInput, ScrollView, Modal, Alert, ActivityInd
 import { X, Camera, MapPin, ChevronDown, CheckCircle, AlertCircle, Loader2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import MapView, { Marker, MapPressEvent } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { getRegions, getCities, City } from '../services/cityService';
 import { barangayService, Barangay } from '../services/barangayService';
 import { locationDetailService, LocationDetail } from '../services/locationDetailService';
@@ -101,6 +103,13 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   const [allBarangays, setAllBarangays] = useState<Barangay[]>([]);
   const [allLocations, setAllLocations] = useState<LocationDetail[]>([]);
   const [showCoordinatesMap, setShowCoordinatesMap] = useState<boolean>(false);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 14.466580,
+    longitude: 121.201807,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
+  const [markerCoord, setMarkerCoord] = useState<{ latitude: number, longitude: number } | null>(null);
   const [activeImageSize, setActiveImageSize] = useState<ImageSizeSetting | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
@@ -446,8 +455,63 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
   const filteredBarangays = getFilteredBarangays();
   const filteredLocations = getFilteredLocations();
 
-  const handleToggleMap = () => {
+  const handleToggleMap = async () => {
+    if (!showCoordinatesMap) {
+      if (formData.coordinates) {
+        const parts = formData.coordinates.split(',').map(p => p.trim());
+        if (parts.length === 2) {
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const newRegion = {
+              latitude: lat,
+              longitude: lng,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            };
+            setMapRegion(newRegion);
+            setMarkerCoord({ latitude: lat, longitude: lng });
+            setShowCoordinatesMap(true);
+            return;
+          }
+        }
+      }
+
+      // If no coordinates or invalid, try to get current location
+      setLoading(true);
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const currentLocation = await Location.getCurrentPositionAsync({});
+          const newRegion = {
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          };
+          setMapRegion(newRegion);
+          setMarkerCoord({ latitude: currentLocation.coords.latitude, longitude: currentLocation.coords.longitude });
+          setFormData(prev => ({
+            ...prev,
+            coordinates: `${currentLocation.coords.latitude.toFixed(6)}, ${currentLocation.coords.longitude.toFixed(6)}`
+          }));
+        }
+      } catch (error) {
+        console.error('Error getting current location:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
     setShowCoordinatesMap(!showCoordinatesMap);
+  };
+
+  const handleMapPress = (e: MapPressEvent) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setMarkerCoord({ latitude, longitude });
+    setFormData(prev => ({
+      ...prev,
+      coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+    }));
   };
 
   const ImageUploadField: React.FC<{
@@ -780,11 +844,18 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
 
                 {showCoordinatesMap && (
                   <View style={{ marginTop: 12, borderWidth: 1, borderRadius: 4, overflow: 'hidden', borderColor: isDarkMode ? '#374151' : '#d1d5db' }}>
-                    <View style={{ width: '100%', height: 400, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Map Not Available on Mobile</Text>
-                    </View>
+                    <MapView
+                      style={{ width: '100%', height: 400 }}
+                      region={mapRegion}
+                      onRegionChangeComplete={setMapRegion}
+                      onPress={handleMapPress}
+                    >
+                      {markerCoord && (
+                        <Marker coordinate={markerCoord} />
+                      )}
+                    </MapView>
                     <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderTopColor: isDarkMode ? '#374151' : '#d1d5db' }}>
-                      <Text style={{ fontSize: 12, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Click on the map to set coordinates</Text>
+                      <Text style={{ fontSize: 12, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap on the map to set location coordinates</Text>
                     </View>
                   </View>
                 )}

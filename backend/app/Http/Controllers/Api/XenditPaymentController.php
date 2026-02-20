@@ -273,7 +273,9 @@ class XenditPaymentController extends Controller
 
             if ($isPaid) {
                 $newStatus = 'QUEUED';
-            } elseif (in_array($status, ['EXPIRED', 'FAILED', 'PAYMENT_FAILED'])) {
+            } elseif ($status === 'EXPIRED') {
+                $newStatus = 'EXPIRED';
+            } elseif (in_array($status, ['FAILED', 'PAYMENT_FAILED'])) {
                 $newStatus = 'FAILED';
             }
 
@@ -325,11 +327,17 @@ class XenditPaymentController extends Controller
                 ], 400);
             }
 
-            // Check for pending payments within the last 5 minutes
+            // Cleanup old pending payments (older than 24 hours) to 'EXPIRED'
+            DB::table('pending_payments')
+                ->where('status', 'PENDING')
+                ->where('payment_date', '<', now()->subHours(24))
+                ->update(['status' => 'EXPIRED', 'updated_at' => now()]);
+
+            // Check for pending payments within the last 24 hours (matching Xendit invoice duration)
             $pendingPayment = DB::table('pending_payments')
                 ->where('account_no', $accountNo)
                 ->where('status', 'PENDING')
-                ->where('payment_date', '>', now()->subMinutes(5))
+                ->where('payment_date', '>', now()->subHours(24))
                 ->orderBy('payment_date', 'desc')
                 ->first();
 
