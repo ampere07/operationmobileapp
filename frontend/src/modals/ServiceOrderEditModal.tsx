@@ -712,7 +712,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         }
 
         // Validate New Router Modem SN if provided
-        if (updatedFormData.newRouterModemSN?.trim()) {
+        const isNewModemSnVisible = updatedFormData.visitStatus === 'Done' &&
+          (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router');
+
+        if (isNewModemSnVisible && updatedFormData.newRouterModemSN?.trim()) {
           try {
             console.log('[SMARTOLT VALIDATION] Validating New Modem SN:', updatedFormData.newRouterModemSN);
             const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {

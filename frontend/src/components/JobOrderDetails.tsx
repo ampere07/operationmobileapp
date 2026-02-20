@@ -59,8 +59,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'username',
     'ipAddress',
     'usageType',
-    'installationFee',
-    'jobOrderItems',
+    'installation_fee',
+    'itemsUsed',
     'dateInstalled',
     'visitBy',
     'visitWith',
@@ -507,8 +507,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       username: 'Username',
       ipAddress: 'IP Address',
       usageType: 'Usage Type',
-      installationFee: 'Installation Fee',
-      jobOrderItems: 'Job Order Items',
+      installation_fee: 'Installation Fee',
+      itemsUsed: 'Item Used',
       dateInstalled: 'Date Installed',
       visitBy: 'Visit By',
       visitWith: 'Visit With',
@@ -573,8 +573,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     username: () => <Text style={valueStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
     ipAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
     usageType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
-    installationFee: () => <Text style={valueStyle} selectable={true}>{formatPrice(jobOrder.installation_fee || jobOrder.Installation_Fee)}</Text>,
-    jobOrderItems: () => (
+    installation_fee: () => <Text style={valueStyle} selectable={true}>{formatPrice(jobOrder.installation_fee || jobOrder.Installation_Fee)}</Text>,
+    itemsUsed: () => (
       <View style={{ flexDirection: 'column', gap: 4 }}>
         {jobOrderItems.length > 0 ? (
           jobOrderItems.map((item, index) => (

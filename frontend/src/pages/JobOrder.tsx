@@ -17,7 +17,7 @@ const allColumns = [
   { key: 'billingStatusId', label: 'Billing Status ID', width: 'min-w-32' },
   { key: 'onsiteStatus', label: 'Onsite Status', width: 'min-w-32' },
   { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-36' },
-  { key: 'installationFee', label: 'Installation Fee', width: 'min-w-32' },
+  { key: 'installation_fee', label: 'Installation Fee', width: 'min-w-32' },
   { key: 'billingDay', label: 'Billing Day', width: 'min-w-28' },
   { key: 'modemRouterSN', label: 'Modem/Router SN', width: 'min-w-36' },
   { key: 'routerModel', label: 'Router Model', width: 'min-w-32' },
@@ -374,7 +374,7 @@ const JobOrderPage: React.FC = () => {
         case 'billingStatusId': return jo.billing_status_id || jo.Billing_Status_ID || '';
         case 'onsiteStatus': return jo.Onsite_Status || jo.onsite_status || '';
         case 'dateInstalled': return jo.Date_Installed || jo.date_installed || '';
-        case 'installationFee': return jo.Installation_Fee || jo.installation_fee || 0;
+        case 'installation_fee': return jo.Installation_Fee || jo.installation_fee || 0;
         case 'billingDay': return jo.Billing_Day ?? jo.billing_day ?? 0;
         case 'modemRouterSN': return jo.Modem_Router_SN || jo.modem_router_sn || '';
         case 'routerModel': return jo.Router_Model || jo.router_model || '';
@@ -609,7 +609,7 @@ const JobOrderPage: React.FC = () => {
         return formatDate(jobOrder.Timestamp || jobOrder.timestamp);
       case 'dateInstalled':
         return formatDate(jobOrder.Date_Installed || jobOrder.date_installed);
-      case 'installationFee':
+      case 'installation_fee':
         return formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee);
       case 'billingDay':
         const billingDay = jobOrder.Billing_Day ?? jobOrder.billing_day;
@@ -1052,7 +1052,7 @@ const JobOrderPage: React.FC = () => {
                               fontSize: 12,
                               color: isDarkMode ? '#9ca3af' : '#4b5563'
                             }}>
-                              {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
+                              {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)} | Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
                             </Text>
                           </View>
                           <View style={{
