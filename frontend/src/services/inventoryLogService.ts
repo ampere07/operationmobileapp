@@ -14,6 +14,7 @@ export interface InventoryLog {
     account_no?: string;
     sn?: string;
     item_quantity: number;
+    log_type: string;
     requested_by?: string;
     requested_with?: string;
     requested_with_10?: string;

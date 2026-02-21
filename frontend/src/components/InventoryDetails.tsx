@@ -8,6 +8,7 @@ import {
   Modal,
   Pressable,
   Image,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -130,6 +131,8 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
     defectiveLogs: false,
   });
   const [isExpanded, setIsExpanded] = useState(false);
+  const { width } = Dimensions.get('window');
+  const isTablet = width >= 768;
   const [showLogsModal, setShowLogsModal] = useState(false);
 
   // Related data counts
@@ -440,6 +443,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
           style={{
             paddingHorizontal: 24,
             paddingVertical: 8,
+            paddingTop: isTablet ? 8 : 60,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
@@ -651,6 +655,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             alignItems: 'center',
             paddingHorizontal: 16,
             paddingVertical: 8,
+            paddingTop: isTablet ? 8 : 60,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
             borderBottomWidth: isDarkMode ? 0 : 1,
             borderBottomColor: borderColor,

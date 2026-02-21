@@ -77,6 +77,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
         item_name: selectedItem?.item_name || '',
         item_description: selectedItem?.item_description || '',
         item_quantity: 1,
+        log_type: 'Stock In',
         requested_by: 'None',
         requested_with: 'None',
         requested_with_10: 'None',
@@ -429,6 +430,51 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
                                 value={formData.item_name}
                                 className="w-full px-4 py-[10px] border rounded-lg bg-gray-100 border-gray-300 text-gray-600 opacity-75 font-medium"
                             />
+                        </View>
+
+                        {/* Log Type */}
+                        <View className="mb-4">
+                            <Text className="text-sm font-medium mb-2 text-gray-700">
+                                Log Type<Text className="text-red-500">*</Text>
+                            </Text>
+                            <View className="flex-row gap-2 bg-gray-200 p-1 rounded-lg">
+                                {(['Stock In', 'Stock Out'] as const).map((type) => {
+                                    const isActive = formData.log_type === type;
+                                    return (
+                                        <TouchableOpacity
+                                            key={type}
+                                            onPress={() =>
+                                                setFormData((prev) => ({ ...prev, log_type: type }))
+                                            }
+                                            className="flex-1 py-[10px] rounded-md items-center justify-center shadow-sm"
+                                            style={{
+                                                backgroundColor: isActive ? primaryColor : 'transparent',
+                                            }}
+                                        >
+                                            <View className="flex-row items-center gap-[6px]">
+                                                {type === 'Stock In' && (
+                                                    <Plus
+                                                        size={16}
+                                                        color={isActive ? '#ffffff' : '#4B5563'}
+                                                    />
+                                                )}
+                                                {type === 'Stock Out' && (
+                                                    <Minus
+                                                        size={16}
+                                                        color={isActive ? '#ffffff' : '#4B5563'}
+                                                    />
+                                                )}
+                                                <Text
+                                                    className={`text-[13px] font-semibold ${isActive ? 'text-white' : 'text-gray-600'
+                                                        }`}
+                                                >
+                                                    {type}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
                         </View>
 
                         {/* Item Quantity */}

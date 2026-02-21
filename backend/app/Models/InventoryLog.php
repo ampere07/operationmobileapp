@@ -27,6 +27,7 @@ class InventoryLog extends Model
         'account_no',
         'sn',
         'item_quantity',
+        'log_type',
         'requested_by',
         'requested_with',
         'requested_with_10',
@@ -41,6 +42,7 @@ class InventoryLog extends Model
     protected $casts = [
         'date' => 'datetime',
         'item_quantity' => 'integer',
+        'log_type' => 'string',
         'modified_date' => 'datetime',
     ];
 

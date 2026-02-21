@@ -85,9 +85,7 @@ interface ServiceOrderEditFormData {
   newPlan: string;
 
   newLcpnap: string;
-  region: string;
-  city: string;
-  barangay: string;
+  fullAddress: string;
 }
 
 interface ImageFiles {
@@ -176,9 +174,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     newPlan: '',
 
     newLcpnap: '',
-    region: '',
-    city: '',
-    barangay: ''
+    fullAddress: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -514,9 +510,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         newVlan: '',
 
         routerModel: '',
-        region: serviceOrderData.region || '',
-        city: serviceOrderData.city || '',
-        barangay: serviceOrderData.barangay || ''
+        fullAddress: serviceOrderData.fullAddress || serviceOrderData.full_address || ''
       }));
     }
   }, [serviceOrderData, isOpen, currentUserEmail]);
@@ -686,31 +680,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     try {
       // SmartOLT Validation Logic
       if (updatedFormData.connectionType === 'Fiber') {
-        // Validate Router Modem SN if provided
-        if (updatedFormData.routerModemSN?.trim()) {
-          try {
-            console.log('[SMARTOLT VALIDATION] Validating Modem SN:', updatedFormData.routerModemSN);
-            const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-              params: { sn: updatedFormData.routerModemSN }
-            });
-
-            if (!(smartOltResponse.data as any).success) {
-              setLoading(false);
-              const errorMessage = (smartOltResponse.data as any).message || 'Invalid Modem SN';
-              setErrors(prev => ({ ...prev, routerModemSN: errorMessage }));
-              Alert.alert('SmartOLT Verification Failed', errorMessage);
-              return;
-            }
-          } catch (error: any) {
-            console.error('[SMARTOLT VALIDATION] API Error:', error);
-            setLoading(false);
-            const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
-            setErrors(prev => ({ ...prev, routerModemSN: errorMessage }));
-            Alert.alert('Validation Error', errorMessage);
-            return;
-          }
-        }
-
         // Validate New Router Modem SN if provided
         const isNewModemSnVisible = updatedFormData.visitStatus === 'Done' &&
           (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router');
@@ -1071,36 +1040,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 {renderInput('username', 'Username', false)}
 
                 <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Region</Text>
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Full Address</Text>
                   <TextInput
-                    value={formData.region}
+                    value={formData.fullAddress}
                     editable={false}
-                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
-                  />
-                </View>
-
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>City</Text>
-                  <TextInput
-                    value={formData.city}
-                    editable={false}
-                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
-                  />
-                </View>
-
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Barangay</Text>
-                  <TextInput
-                    value={formData.barangay}
-                    editable={false}
+                    multiline={true}
+                    numberOfLines={2}
                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
                     className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
                       ? 'bg-gray-700 border-gray-600 text-gray-300'
@@ -1218,6 +1163,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                             >
                               <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
                               {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWithOther).map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
@@ -1236,6 +1182,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                             >
                               <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                              <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
                               {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWith).map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}

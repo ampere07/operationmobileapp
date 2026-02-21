@@ -52,6 +52,7 @@ class InventoryLogApiController extends Controller
             $validator = Validator::make($request->all(), [
                 'item_id' => 'required|exists:inventory_items,id',
                 'item_quantity' => 'required|integer',
+                'log_type' => 'required|string|in:Stock In,Stock Out',
                 'requested_by' => 'nullable|string',
                 'requested_with' => 'nullable|string',
                 'requested_with_10' => 'nullable|string',
@@ -81,6 +82,7 @@ class InventoryLogApiController extends Controller
             $log->item_description = Str::limit($item->item_description, 192, ''); // Truncate to 192 chars without '...' suffix
             $log->item_id = $item->id;
             $log->item_quantity = $request->item_quantity;
+            $log->log_type = $request->log_type;
             $log->requested_by = $request->requested_by;
             $log->requested_with = $request->requested_with;
             $log->requested_with_10 = $request->requested_with_10;
@@ -94,8 +96,11 @@ class InventoryLogApiController extends Controller
             $log->save();
 
             // Update item total quantity
-            // item_quantity column(inveontory_logs) + total_quantity column (inventory_items)
-            $item->total_quantity = ($item->total_quantity ?? 0) + $request->item_quantity;
+            if ($request->log_type === 'Stock Out') {
+                $item->total_quantity = ($item->total_quantity ?? 0) - $request->item_quantity;
+            } else {
+                $item->total_quantity = ($item->total_quantity ?? 0) + $request->item_quantity;
+            }
             $item->save();
 
             DB::commit();
