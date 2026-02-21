@@ -44,6 +44,7 @@ const ServiceOrderPage: React.FC = () => {
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [userFullName, setUserFullName] = useState<string>('');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
@@ -122,6 +123,7 @@ const ServiceOrderPage: React.FC = () => {
           setUserRole(role);
           setUserRoleId(roleId);
           setUserEmail(userData.email || '');
+          setUserFullName(userData.full_name || '');
 
           if (role.toLowerCase() === 'technician' || roleId === 2 || role.toLowerCase() === 'agent' || roleId === 4) {
             setMobileView('orders');
@@ -261,7 +263,20 @@ const ServiceOrderPage: React.FC = () => {
         serviceOrder.fullAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (serviceOrder.concern && serviceOrder.concern.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      return matchesLocation && matchesSearch;
+      if (!matchesLocation || !matchesSearch) return false;
+
+      // Role-based filtering: Agents (role_id 4) only see their own referrals
+      if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+        const referredBy = (serviceOrder.referredBy || '').toLowerCase();
+        // Only match if referredBy contains user's full name or email
+        const matchesAgent =
+          (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+          (userEmail && referredBy.includes(userEmail.toLowerCase()));
+
+        if (!matchesAgent) return false;
+      }
+
+      return true;
     });
 
 

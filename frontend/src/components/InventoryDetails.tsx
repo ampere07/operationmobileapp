@@ -48,6 +48,10 @@ interface InventoryLog {
   itemQuantity: number;
   requestedBy: string;
   requestedWith: string;
+  log_type?: string;
+  item_quantity?: number;
+  requested_by?: string;
+  requested_with?: string;
 }
 
 interface BorrowedLog {
@@ -577,7 +581,9 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                       })}
                     >
                       <View>
-                        <Text style={{ fontWeight: '500', color: valueColor }}>Log Entry #{log.id}</Text>
+                        <Text style={{ fontWeight: '500', color: valueColor }}>
+                          Log Entry #{log.id} {log.log_type ? `(${log.log_type})` : ''}
+                        </Text>
                         <Text style={{ fontSize: 14, color: labelColor, marginTop: 2 }}>
                           {formatDate(log.date)}
                         </Text>
@@ -806,7 +812,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                           backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
                         }}
                       >
-                        {['Date', 'Qty', 'Req. By', 'Req. With'].map((col) => (
+                        {['Date', 'Type', 'Qty', 'Req. By', 'Req. With'].map((col) => (
                           <View key={col} style={{ flex: 1, alignItems: 'center' }}>
                             <Text style={{ fontSize: 12, fontWeight: '500', color: labelColor }}>
                               {col}
@@ -830,13 +836,16 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                             <Text style={{ fontSize: 12, color: valueColor }}>{formatDate(log.date)}</Text>
                           </View>
                           <View style={{ flex: 1, alignItems: 'center' }}>
-                            <Text style={{ fontSize: 12, color: valueColor }}>{log.itemQuantity}</Text>
+                            <Text style={{ fontSize: 12, color: valueColor }}>{log.log_type || ''}</Text>
                           </View>
                           <View style={{ flex: 1, alignItems: 'center' }}>
-                            <Text style={{ fontSize: 12, color: valueColor }}>{log.requestedBy}</Text>
+                            <Text style={{ fontSize: 12, color: valueColor }}>{log.itemQuantity || log.item_quantity}</Text>
                           </View>
                           <View style={{ flex: 1, alignItems: 'center' }}>
-                            <Text style={{ fontSize: 12, color: valueColor }}>{log.requestedWith}</Text>
+                            <Text style={{ fontSize: 12, color: valueColor }}>{log.requestedBy || log.requested_by}</Text>
+                          </View>
+                          <View style={{ flex: 1, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 12, color: valueColor }}>{log.requestedWith || log.requested_with}</Text>
                           </View>
                         </View>
                       ))}

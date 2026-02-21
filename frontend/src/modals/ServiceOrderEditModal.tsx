@@ -191,7 +191,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
 
@@ -613,39 +612,64 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.accountNo.trim()) newErrors.accountNo = 'Account No is required';
-    if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
-    if (!formData.contactNumber.trim()) newErrors.contactNumber = 'Contact Number is required';
+    // Only validate fields if they are both visible and editable.
+    // Read-only fields (accountNo, fullName, etc.) are removed from validation
+    // to prevent blocking the user if the backend data is missing or incomplete.
 
-    if (!formData.emailAddress.trim()) {
-      newErrors.emailAddress = 'Email Address is required';
+    if (!formData.supportStatus) {
+      newErrors.supportStatus = 'Support Status is required';
     }
 
-    if (!formData.plan.trim()) newErrors.plan = 'Plan is required';
-    if (!formData.username.trim()) newErrors.username = 'Username is required';
-    if (!formData.connectionType.trim()) newErrors.connectionType = 'Connection Type is required';
-    if (!formData.supportStatus.trim()) newErrors.supportStatus = 'Support Status is required';
-    if (!formData.concern.trim()) newErrors.concern = 'Concern is required';
+    if (!formData.concern) {
+      newErrors.concern = 'Concern is required';
+    }
 
-    if (formData.concern === 'Upgrade/Downgrade Plan' && !formData.newPlan.trim()) {
+    if (formData.concern === 'Upgrade/Downgrade Plan' && !formData.newPlan) {
       newErrors.newPlan = 'New Plan is required';
     }
 
-    if (formData.visitStatus === 'Done') {
-      const validItems = orderItems.filter(item => item.itemId && item.quantity);
-      if (validItems.length === 0) {
-        newErrors.items = 'At least one item required';
+    // Only validate visit-related fields if supportStatus is 'For Visit'
+    if (formData.supportStatus === 'For Visit') {
+      if (!formData.assignedEmail) {
+        newErrors.assignedEmail = 'Assigned Email is required';
       }
 
-      if (['Migrate', 'Relocate', 'Relocate Router', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory)) {
-        if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
-        if (!formData.newLcpnap.trim()) newErrors.newLcpnap = 'New LCP-NAP is required';
-        if (!formData.newPort.trim()) newErrors.newPort = 'New Port is required';
-        if (!formData.routerModel.trim()) newErrors.routerModel = 'Router Model is required';
-      }
+      // Logic matches conditional rendering in the ScrollView
+      if (formData.visitStatus === 'Done') {
+        const validItems = orderItems.filter(item => item.itemId && item.quantity);
+        if (validItems.length === 0) {
+          newErrors.items = 'At least one item required';
+        }
 
-      if (formData.repairCategory === 'Replace Router') {
-        if (!formData.newRouterModemSN.trim()) newErrors.newRouterModemSN = 'New Router Modem SN is required';
+        if (!formData.visitBy) {
+          newErrors.visitBy = 'Visit By is required';
+        }
+
+        // Technical fields for specific relocation categories
+        const relocationCategories = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'];
+        if (relocationCategories.includes(formData.repairCategory)) {
+          if (formData.repairCategory === 'Migrate' && !formData.newRouterModemSN) {
+            newErrors.newRouterModemSN = 'New Router Modem SN is required';
+          }
+          if (!formData.newLcpnap) newErrors.newLcpnap = 'New LCP-NAP is required';
+          if (!formData.newPort) newErrors.newPort = 'New Port is required';
+          if (!formData.routerModel) newErrors.routerModel = 'Router Model is required';
+        }
+
+        if (formData.repairCategory === 'Replace Router' && !formData.newRouterModemSN) {
+          newErrors.newRouterModemSN = 'New Router Modem SN is required';
+        }
+      } else if (formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') {
+        if (!formData.visitBy) {
+          newErrors.visitBy = 'Visit By is required';
+        }
+        // These are specifically marked as required in the UI for Failure/Reschedule scenarios
+        if (!formData.visitWith) {
+          newErrors.visitWith = 'Visit With is required';
+        }
+        if (!formData.visitWithOther) {
+          newErrors.visitWithOther = 'Visit With Other is required';
+        }
       }
     }
 
@@ -929,7 +953,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const renderNewPortPicker = () => {
     // Generate ports based on totalPorts
     const ports = Array.from({ length: totalPorts }, (_, i) => {
-      const portVal = `p${(i + 1).toString().padStart(2, '0')}`;
+      const portVal = `P${(i + 1).toString().padStart(2, '0')}`;
       return portVal;
     });
 
@@ -945,8 +969,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           >
             <Picker.Item label="Select Port" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
             {ports.map((port) => {
-              const isUsed = usedPorts.includes(port);
-              const isSelected = formData.newPort === port;
+              const isUsed = usedPorts.some(up => up.toUpperCase() === port.toUpperCase());
+              const isSelected = formData.newPort.toUpperCase() === port.toUpperCase();
               if (isUsed && !isSelected) return null; // Hide used ports unless selected
               return <Picker.Item key={port} label={port} value={port} color={isDarkMode ? '#fff' : '#000'} />;
             })}
@@ -1008,30 +1032,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               <View className="space-y-4">
 
                 {renderInput('accountNo', 'Account No', false)}
-
-                {/* Date Installed */}
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Date Installed<Text className="text-red-500">*</Text></Text>
-                  <Pressable
-                    onPress={() => setShowDatePicker(true)}
-                    className={`border rounded-lg p-3 ${errors.dateInstalled ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
-                  >
-                    <Text style={{ color: formData.dateInstalled ? (isDarkMode ? '#fff' : '#000') : (isDarkMode ? '#9ca3af' : '#6b7280') }}>
-                      {formData.dateInstalled ? formData.dateInstalled : 'Select Date'}
-                    </Text>
-                  </Pressable>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={formData.dateInstalled ? new Date(formData.dateInstalled) : new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={(e, date) => {
-                        setShowDatePicker(false);
-                        if (date) handleInputChange('dateInstalled', date.toISOString().split('T')[0]);
-                      }}
-                    />
-                  )}
-                </View>
+                {renderInput('dateInstalled', 'Date Installed', false)}
 
                 {renderInput('fullName', 'Full Name', false)}
                 {renderInput('contactNumber', 'Contact Number', false)}

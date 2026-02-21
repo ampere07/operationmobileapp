@@ -62,6 +62,7 @@ export interface ServiceOrderData {
   region?: string;
   city?: string;
   barangay?: string;
+  referred_by?: string;
 }
 
 export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderData>) => {

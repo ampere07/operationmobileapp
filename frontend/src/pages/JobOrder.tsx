@@ -188,6 +188,7 @@ const JobOrderPage: React.FC = () => {
 
   const [userEmail, setUserEmail] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [userFullName, setUserFullName] = useState<string>('');
 
   useEffect(() => {
     const checkDarkMode = async () => {
@@ -207,6 +208,7 @@ const JobOrderPage: React.FC = () => {
           setUserRole(userData.role || '');
           setUserEmail(userData.email || '');
           setUserRoleId(userData.role_id || null);
+          setUserFullName(userData.full_name || '');
         } catch (error) {
         }
       }
@@ -268,6 +270,17 @@ const JobOrderPage: React.FC = () => {
       ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
+
+    // Role-based filtering: Agents (role_id 4) only see their own referrals
+    if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+      const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
+      // Only match if referredBy contains user's full name or email
+      const matchesAgent =
+        (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+        (userEmail && referredBy.includes(userEmail.toLowerCase()));
+
+      if (!matchesAgent) return false;
+    }
 
     // Apply funnel filters
     for (const key in filterValues) {

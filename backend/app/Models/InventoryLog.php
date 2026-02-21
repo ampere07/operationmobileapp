@@ -22,12 +22,12 @@ class InventoryLog extends Model
     protected $fillable = [
         'id',
         'date',
+        'log_type',
         'item_name',
         'item_description',
         'account_no',
         'sn',
         'item_quantity',
-        'log_type',
         'requested_by',
         'requested_with',
         'requested_with_10',
@@ -42,7 +42,6 @@ class InventoryLog extends Model
     protected $casts = [
         'date' => 'datetime',
         'item_quantity' => 'integer',
-        'log_type' => 'string',
         'modified_date' => 'datetime',
     ];
 

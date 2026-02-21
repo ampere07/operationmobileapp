@@ -49,15 +49,11 @@ class ServiceOrderApiController extends Controller
                 if ($user) {
                     $agentName = trim($user->first_name . ' ' . ($user->middle_initial ? $user->middle_initial . ' ' : '') . $user->last_name);
                     
-                    $query->whereExists(function ($q) use ($agentName) {
-                        $q->select(DB::raw(1))
-                          ->from('billing_accounts')
-                          ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                          ->whereColumn('billing_accounts.account_no', 'so.account_no')
-                          ->where('customers.referred_by', $agentName);
+                    $query->where(function($q) use ($agentName) {
+                        $q->where('so.referred_by', 'LIKE', '%' . $agentName . '%');
                     });
 
-                    \Log::info('Filtering service orders for agent role', [
+                    \Log::info('Filtering service orders for agent role using referred_by column', [
                         'agent_name' => $agentName,
                         'agent_email' => $userEmail
                     ]);
@@ -264,7 +260,7 @@ class ServiceOrderApiController extends Controller
                     Log::info('Triggering auto-reconnect for NEW Service Order with Reconnect concern', [
                         'account_no' => $validated['account_no']
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id);
                 }
             }
             
@@ -650,7 +646,7 @@ class ServiceOrderApiController extends Controller
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
                         'account_no' => $serviceOrder->account_no
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id);
                 }
             }
 
@@ -758,7 +754,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptReconnection($billingAccount): string
+    private function attemptReconnection($billingAccount, $serviceOrderId = null): string
     {
         try {
             // Reload billing account
@@ -814,6 +810,37 @@ class ServiceOrderApiController extends Controller
 
             if ($result['status'] === 'success') {
                 \Log::info('[API SERVICE ORDER RECONNECT SUCCESS] Reconnection completed successfully');
+
+                // Create Reconnection Log
+                try {
+                    $planId = null;
+                    if ($plan) {
+                        $planId = DB::table('plans')->where('plan_name', $plan)->value('id');
+                        if (!$planId) {
+                            $planId = DB::table('plans')->where('name', $plan)->value('id');
+                        }
+                    }
+
+                    $reconnectionFee = 0;
+                    if ($serviceOrderId) {
+                        $reconnectionFee = DB::table('service_orders')->where('id', $serviceOrderId)->value('service_charge') ?? 0;
+                    }
+
+                    DB::table('reconnection_logs')->insert([
+                        'account_id' => $billingAccount->id,
+                        'username' => $username,
+                        'plan_id' => $planId,
+                        'reconnection_fee' => $reconnectionFee,
+                        'remarks' => 'Service Order Auto-Reconnect',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                        'created_by_user_id' => Auth::id(),
+                        'updated_by_user_id' => Auth::id(),
+                    ]);
+                    \Log::info('[API SERVICE ORDER RECONNECT LOG] Log created successfully');
+                } catch (\Exception $e) {
+                    \Log::error('[API SERVICE ORDER RECONNECT LOG EXCEPTION] ' . $e->getMessage());
+                }
 
                 // Send SMS Notification
                 try {
@@ -938,6 +965,22 @@ class ServiceOrderApiController extends Controller
                 $billingAccount->save();
                 
                 \Log::info('[API SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
+
+                // Create Disconnected Log
+                try {
+                    DB::table('disconnected_logs')->insert([
+                        'account_id' => $billingAccount->id,
+                        'username' => $username,
+                        'remarks' => 'Service Order Auto-Disconnect',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                        'created_by_user_id' => Auth::id(),
+                        'updated_by_user_id' => Auth::id(),
+                    ]);
+                    \Log::info('[API SERVICE ORDER DISCONNECT LOG] Log created successfully');
+                } catch (\Exception $e) {
+                    \Log::error('[API SERVICE ORDER DISCONNECT LOG EXCEPTION] ' . $e->getMessage());
+                }
 
                 // Send SMS Notification
                 try {
