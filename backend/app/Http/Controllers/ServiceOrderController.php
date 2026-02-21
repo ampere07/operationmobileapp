@@ -879,9 +879,13 @@ class ServiceOrderController extends Controller
                 try {
                     $planId = null;
                     if ($plan) {
-                        $planId = DB::table('plans')->where('plan_name', $plan)->value('id');
+                        $cleanPlan = $plan;
+                        if (strpos($plan, ' - ') !== false) {
+                            $cleanPlan = explode(' - ', $plan)[0];
+                        }
+                        $planId = DB::table('plans')->where('plan_name', $cleanPlan)->value('id');
                         if (!$planId) {
-                            $planId = DB::table('plans')->where('name', $plan)->value('id');
+                            $planId = DB::table('plans')->where('name', $cleanPlan)->value('id');
                         }
                     }
 

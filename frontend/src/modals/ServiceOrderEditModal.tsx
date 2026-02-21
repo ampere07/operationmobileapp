@@ -116,7 +116,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [lcpnaps, setLcpnaps] = useState<LCPNAP[]>([]);
   const [vlans, setVlans] = useState<string[]>([]);
   const [concerns, setConcerns] = useState<Concern[]>([]);
-  const [plans, setPlans] = useState<string[]>([]);
+  const [plans, setPlans] = useState<Array<{ name: string; price: string | number }>>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [routerModels, setRouterModels] = useState<RouterModel[]>([]);
 
@@ -378,7 +378,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         // Plans
         const planResponse = await apiClient.get<{ success: boolean; data: any[] }>('/plans');
         if (planResponse.data.success && Array.isArray(planResponse.data.data)) {
-          setPlans(planResponse.data.data.map((p: any) => p.plan_name || p.name).filter(Boolean));
+          setPlans(planResponse.data.data.map((p: any) => ({
+            name: p.plan_name || p.name || '',
+            price: p.price || 0
+          })).filter(p => p.name));
         }
 
         if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data)) {
@@ -1501,7 +1504,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         style={{ color: isDarkMode ? '#fff' : '#000' }}
                       >
                         <Picker.Item label="Select New Plan" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                        {plans.map((p, idx) => <Picker.Item key={idx} label={p} value={p} color={isDarkMode ? '#fff' : '#000'} />)}
+                        {plans.map((p, idx) => {
+                          const formattedPrice = parseFloat(p.price.toString());
+                          const displayValue = `${p.name} - ${formattedPrice}`;
+                          return <Picker.Item key={idx} label={displayValue} value={displayValue} color={isDarkMode ? '#fff' : '#000'} />;
+                        })}
                       </Picker>
                     </View>
                   </View>
