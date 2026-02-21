@@ -1,15 +1,15 @@
 {
   "expo": {
     "name": "ATSS",
-    "slug": "frontend",
+    "slug": "atss",
     "scheme": "atss-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./src/assets/applogo.png",
+    "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./src/assets/applogo.png",
+      "image": "./assets/applogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,8 +17,10 @@
       "supportsTablet": true
     },
     "android": {
+      "name": "ATSS",
+      "icon": "./assets/applogo.png",
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/applogo.png",
+        "foregroundImage": "./assets/applogo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
