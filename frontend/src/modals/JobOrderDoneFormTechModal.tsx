@@ -1063,12 +1063,52 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    // SmartOLT Validation Logic
+    // Duplicate SN Check (Technical Details)
     if (formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && formData.modemSN.trim()) {
+      try {
+        setLoading(true);
+        // Check if SN exists in other Job Orders
+        const duplicateResponse = await apiClient.get('/job-orders', {
+          params: {
+            search: formData.modemSN,
+            limit: 50 // Check enough records
+          }
+        });
+
+        if (duplicateResponse.data && duplicateResponse.data.success && Array.isArray(duplicateResponse.data.data)) {
+          const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+          const isDuplicate = duplicateResponse.data.data.some((jo: any) => {
+            const joId = jo.id || jo.JobOrder_ID;
+            // Check potential SN fields from API response
+            const joSN = jo.modem_sn || jo.Modem_SN || jo.modem_router_sn;
+            // Compare SNs (case-insensitive) and ensure it's not the current job order
+            return String(joId) !== String(currentId) &&
+              String(joSN || '').trim().toLowerCase() === formData.modemSN.trim().toLowerCase();
+          });
+
+          if (isDuplicate) {
+            setLoading(false);
+            const errorMessage = 'this sn already exist';
+            setErrors(prev => ({
+              ...prev,
+              modemSN: errorMessage
+            }));
+            showMessageModal('Validation Error', [
+              { type: 'error', text: errorMessage }
+            ]);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error checking duplicate SN:', error);
+        // We continue validation even if duplicate check fails (fail open or closed? let's fail open but log)
+      }
+
+      // SmartOLT Validation Logic
       try {
         console.log('[SMARTOLT VALIDATION] Validating Modem SN:', formData.modemSN);
 
-        setLoading(true);
+        // setLoading(true); // Already loading from duplicate check
 
         const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
           params: { sn: formData.modemSN }
@@ -1077,12 +1117,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         if (!(smartOltResponse.data as any).success) {
           console.log('[SMARTOLT VALIDATION] Failed:', smartOltResponse.data);
           setLoading(false);
+          const backendMsg = (smartOltResponse.data as any).message || 'sn not exist';
           setErrors(prev => ({
             ...prev,
-            modemSN: (smartOltResponse.data as any).message || 'Invalid Modem SN'
+            modemSN: backendMsg
           }));
           showMessageModal('SmartOLT Verification Failed', [
-            { type: 'error', text: (smartOltResponse.data as any).message || 'The provided Modem SN is invalid or not authorized.' }
+            { type: 'error', text: backendMsg }
           ]);
           return;
         }
@@ -1327,6 +1368,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         type: 'success',
         text: 'Job order updated successfully'
       });
+
+      // Clear saved draft
+      if (jobOrderId) {
+        try {
+          await AsyncStorage.removeItem(`jobOrderDraft_${jobOrderId}`);
+          await AsyncStorage.removeItem(`jobOrderItemsDraft_${jobOrderId}`);
+        } catch (e) {
+          console.error('Error clearing draft:', e);
+        }
+      }
 
       // RADIUS/PPPoE Login - Execute AFTER LCPNAP/Port are saved
       if (updatedFormData.onsiteStatus === 'Done') {
@@ -1585,7 +1636,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       statusBarTranslucent={true}
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-black/50 justify-end">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1 bg-black/50 justify-end"
+      >
         <Modal
           visible={showLoadingModal}
           transparent={true}
@@ -2988,7 +3042,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             </ScrollView>
           </View>
         </View >
-      </View >
+      </KeyboardAvoidingView >
     </Modal >
   );
 };

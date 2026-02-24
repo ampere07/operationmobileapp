@@ -863,7 +863,9 @@ class ServiceOrderController extends Controller
                 'accountNumber' => $accountNo,
                 'username' => $username,
                 'plan' => $plan,
-                'updatedBy' => 'Service Order Auto-Reconnect'
+                'updatedBy' => Auth::user()->email_address ?? 'Service Order Auto-Reconnect',
+                'serviceOrderId' => $serviceOrderId,
+                'remarks' => 'Service Order Auto-Reconnect'
             ];
 
             // Step 6: Call ManualRadiusOperationsService reconnectUser
@@ -874,41 +876,6 @@ class ServiceOrderController extends Controller
 
             if ($result['status'] === 'success') {
                 \Log::info('[SERVICE ORDER RECONNECT SUCCESS] Reconnection completed successfully');
-
-                // Create Reconnection Log
-                try {
-                    $planId = null;
-                    if ($plan) {
-                        $cleanPlan = $plan;
-                        if (strpos($plan, ' - ') !== false) {
-                            $cleanPlan = explode(' - ', $plan)[0];
-                        }
-                        $planId = DB::table('plans')->where('plan_name', $cleanPlan)->value('id');
-                        if (!$planId) {
-                            $planId = DB::table('plans')->where('name', $cleanPlan)->value('id');
-                        }
-                    }
-
-                    $reconnectionFee = 0;
-                    if ($serviceOrderId) {
-                        $reconnectionFee = DB::table('service_orders')->where('id', $serviceOrderId)->value('service_charge') ?? 0;
-                    }
-
-                    DB::table('reconnection_logs')->insert([
-                        'account_id' => $billingAccount->id,
-                        'username' => $username,
-                        'plan_id' => $planId,
-                        'reconnection_fee' => $reconnectionFee,
-                        'remarks' => 'Service Order Auto-Reconnect',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                        'created_by_user_id' => Auth::id(),
-                        'updated_by_user_id' => Auth::id(),
-                    ]);
-                    \Log::info('[SERVICE ORDER RECONNECT LOG] Log created successfully');
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER RECONNECT LOG EXCEPTION] ' . $e->getMessage());
-                }
 
                 // Send SMS Notification
                 try {
@@ -1197,6 +1164,16 @@ class ServiceOrderController extends Controller
                     ]);
 
                 \Log::info('[SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
+
+                // Clear port in job_orders table using account_id (referencing billing_accounts id)
+                DB::table('job_orders')
+                    ->where('account_id', $billingAccount->id)
+                    ->update([
+                        'port' => null,
+                        'updated_at' => now()
+                    ]);
+                
+                \Log::info('[SERVICE ORDER PULLOUT DB] Cleared port in job_orders for Account ID: ' . $billingAccount->id);
 
                 // Send SMS Notification
                 try {

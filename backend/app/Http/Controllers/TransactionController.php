@@ -755,7 +755,8 @@ class TransactionController extends Controller
                 'accountNumber' => $accountNo,
                 'username' => $username,
                 'plan' => $plan,
-                'updatedBy' => 'Transaction Approval Auto-Reconnect'
+                'updatedBy' => Auth::user()->email_address ?? 'Transaction Approval Auto-Reconnect',
+                'remarks' => 'Transaction Approval Auto-Reconnect'
             ];
 
             // Step 6: Call ManualRadiusOperationsService reconnectUser

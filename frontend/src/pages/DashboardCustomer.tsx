@@ -539,13 +539,11 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 statusBarTranslucent={true}
                 onRequestClose={handleCloseVerifyModal}
             >
-                <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' }}
+                >
                     <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCloseVerifyModal} />
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={{ flex: 1, justifyContent: 'flex-end' }}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-                    >
                         <Animated.View
                             style={{
                                 transform: [{ translateY: pan.y }],
@@ -649,8 +647,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 <View style={{ height: 24 }} />
                             </ScrollView>
                         </Animated.View>
-                    </KeyboardAvoidingView>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             <Modal

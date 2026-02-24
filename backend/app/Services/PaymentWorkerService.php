@@ -435,7 +435,8 @@ class PaymentWorkerService
                 'accountNumber' => $accountNo,
                 'username' => $username,
                 'plan' => $plan,
-                'updatedBy' => 'Payment Worker Auto-Reconnect'
+                'updatedBy' => 'Payment Worker Auto-Reconnect',
+                'remarks' => 'Payment Worker Auto-Reconnect'
             ];
 
             // Step 6: Call ManualRadiusOperationsService reconnectUser

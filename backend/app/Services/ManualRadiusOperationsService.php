@@ -111,6 +111,61 @@ class ManualRadiusOperationsService
                 $updatedBy
             );
 
+            // Global Reconnection Logging
+            try {
+                $billingAccount = null;
+                if (!empty($accountNo)) {
+                    $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
+                }
+
+                if (!$billingAccount && !empty($username)) {
+                    $techDetail = DB::table('technical_details')->where('username', $username)->first();
+                    if ($techDetail) {
+                        $billingAccount = DB::table('billing_accounts')->where('id', $techDetail->account_id)->first();
+                    }
+                }
+
+                if ($billingAccount) {
+                    $planId = null;
+                    if ($rawPlan) {
+                        $cleanPlanForId = $rawPlan;
+                        if (strpos($rawPlan, ' - ') !== false) {
+                            $cleanPlanForId = explode(' - ', $rawPlan)[0];
+                        }
+                        $planId = DB::table('plans')->where('plan_name', $cleanPlanForId)->value('id');
+                        if (!$planId) {
+                            $planId = DB::table('plans')->where('name', $cleanPlanForId)->value('id');
+                        }
+                    }
+
+                    $reconnectionFee = $params['reconnectionFee'] ?? 0;
+                    $remarks = $params['remarks'] ?? 'Auto-Reconnect via RADIUS Service';
+                    
+                    // Extra check: if it's a Service Order, try to get fee
+                    if ($reconnectionFee == 0 && isset($params['serviceOrderId'])) {
+                        $reconnectionFee = DB::table('service_orders')->where('id', $params['serviceOrderId'])->value('service_charge') ?? 0;
+                    }
+
+                    DB::table('reconnection_logs')->insert([
+                        'account_id' => $billingAccount->id,
+                        'username' => $username,
+                        'plan_id' => $planId,
+                        'reconnection_fee' => $reconnectionFee,
+                        'remarks' => $remarks,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                        'created_by_user' => $updatedBy,
+                        'updated_by_user' => $updatedBy,
+                    ]);
+                    
+                    $this->writeLog("[DB] Reconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
+                } else {
+                    $this->writeLog("[WARNING] Could not find billing account for reconnection log (Account: $accountNo, User: $username)");
+                }
+            } catch (Throwable $dbEx) {
+                $this->writeLog("[DB ERROR] Failed to create reconnection log: " . $dbEx->getMessage());
+            }
+
             $this->writeLog("[SUCCESS] User reconnected successfully");
             $this->writeLog("=== RECONNECT USER END ===");
 

@@ -78,35 +78,27 @@ class RadiusReconnectionService
             $cleanPlan = $planParts[0];
             $this->writeLog("Raw Plan: '$rawPlan' -> Clean Plan: '$cleanPlan'");
 
-            // Perform RADIUS operations
-            $result = $this->radiusOps(
-                $radiusEndpoints,
-                $username,
-                $cleanPlan,
-                'Active',
-                false // isDisconnectAction
-            );
+            // Perform reconnection using the global ManualRadiusOperationsService
+            $manualRadiusService = new ManualRadiusOperationsService();
+            $params = [
+                'accountNumber' => $accountNo,
+                'username' => $username,
+                'plan' => $rawPlan,
+                'updatedBy' => 'System Auto-Reconnect',
+                'remarks' => 'Auto-reconnect via RadiusReconnectionService'
+            ];
 
-            if ($result['success']) {
+            $result = $manualRadiusService->reconnectUser($params);
+
+            if ($result['status'] === 'success') {
                 // Update billing account status
                 DB::table('billing_accounts')
                     ->where('account_no', $accountNo)
                     ->update([
-                        'billing_status' => 'Active',
-                        'updated_at' => now()
+                        'billing_status_id' => 1, // Active
+                        'updated_at' => now(),
+                        'updated_by_user' => 'System'
                     ]);
-
-                // Log reconnection
-                DB::table('reconnection_logs')->insert([
-                    'account_id' => $account->account_id,
-                    'username' => $username,
-                    'plan_id' => null,
-                    'reconnection_fee' => 0.00,
-                    'remarks' => 'Auto-reconnect after payment - Plan: ' . $cleanPlan,
-                    'created_at' => now(),
-                    'created_by_user_id' => null,
-                    'updated_at' => now()
-                ]);
 
                 $this->writeLog("[SUCCESS] Reconnection completed for $username");
                 $this->writeLog("=== RECONNECTION ATTEMPT END ===");

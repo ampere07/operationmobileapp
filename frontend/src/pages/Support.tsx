@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle, Plus, X } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
@@ -285,17 +285,21 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   };
 
   const handleRequestPlanUpdate = async () => {
-    const webUrl = 'https://www.facebook.com/atssfiber2022';
-    const fbAppUrl = `fb://facewebmodal/f?href=${webUrl}`;
+    const webUrl = 'https://m.me/atssfiber2022';
+    const messengerAppUrl = 'fb-messenger://user-thread/'; // This will open Messenger app
 
     try {
-      const canOpen = await Linking.canOpenURL(fbAppUrl);
-      if (canOpen) {
-        await Linking.openURL(fbAppUrl);
+      // Try to open Messenger app first
+      const canOpenMessenger = await Linking.canOpenURL(messengerAppUrl);
+      if (canOpenMessenger) {
+        // Open Messenger app with the specific page
+        await Linking.openURL(webUrl);
       } else {
+        // Fallback to web browser
         await WebBrowser.openBrowserAsync(webUrl);
       }
     } catch (error) {
+      // Fallback to web browser if anything fails
       await WebBrowser.openBrowserAsync(webUrl);
     }
   };
@@ -511,11 +515,14 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         animationType="slide"
         onRequestClose={() => setShowNewRequestModal(false)}
       >
-        <View style={{
-          flex: 1,
-          backgroundColor: 'transparent',
-          justifyContent: 'flex-end'
-        }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{
+            flex: 1,
+            backgroundColor: 'transparent',
+            justifyContent: 'flex-end'
+          }}
+        >
           <Animated.View
             style={{
               backgroundColor: isDarkMode ? '#111827' : '#ffffff',
@@ -706,7 +713,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
               </Pressable>
             </ScrollView>
           </Animated.View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Confirm Modal */}

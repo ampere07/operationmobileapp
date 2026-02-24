@@ -101,6 +101,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   onSave,
   serviceOrderData
 }) => {
+  const serviceOrderId = serviceOrderData?.id;
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
@@ -255,7 +256,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     const fetchServiceOrderItems = async () => {
       if (isOpen && serviceOrderData) {
-        const serviceOrderId = serviceOrderData.id;
         if (serviceOrderId) {
           try {
             const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
@@ -416,7 +416,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     const fetchUsedPortsFunc = async () => {
       if (isOpen && formData.newLcpnap) {
         try {
-          const serviceOrderId = serviceOrderData?.id;
 
           // Also fetch total ports for this LCP-NAP
           const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
@@ -516,6 +515,71 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       }));
     }
   }, [serviceOrderData, isOpen, currentUserEmail]);
+
+  // Save draft to AsyncStorage whenever formData changes
+  useEffect(() => {
+    const saveDraft = async () => {
+      if (isOpen && serviceOrderData) {
+        if (serviceOrderId) {
+          try {
+            await AsyncStorage.setItem(`serviceOrderDraft_${serviceOrderId}`, JSON.stringify(formData));
+          } catch (error) {
+            console.error('Failed to save draft:', error);
+          }
+        }
+      }
+    };
+    saveDraft();
+  }, [formData, isOpen, serviceOrderData]);
+
+  // Save order items draft
+  useEffect(() => {
+    const saveOrderItemsDraft = async () => {
+      if (isOpen && serviceOrderData) {
+        if (serviceOrderId) {
+          try {
+            await AsyncStorage.setItem(`serviceOrderItemsDraft_${serviceOrderId}`, JSON.stringify(orderItems));
+          } catch (error) {
+            console.error('Failed to save order items draft:', error);
+          }
+        }
+      }
+    };
+    saveOrderItemsDraft();
+  }, [orderItems, isOpen, serviceOrderData]);
+
+  // Load draft on open
+  useEffect(() => {
+    const loadDraft = async () => {
+      if (isOpen && serviceOrderData) {
+        if (serviceOrderId) {
+          try {
+            const savedDraft = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
+            const savedItemsDraft = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
+
+            if (savedDraft) {
+              const parsedDraft = JSON.parse(savedDraft);
+              setFormData(prev => ({
+                ...prev,
+                ...parsedDraft
+              }));
+            }
+
+            if (savedItemsDraft) {
+              setOrderItems(JSON.parse(savedItemsDraft));
+            }
+          } catch (error) {
+            console.error('Failed to load draft:', error);
+          }
+        }
+      }
+    };
+    // Timer to run after initial DB load
+    const timer = setTimeout(() => {
+      loadDraft();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [isOpen, serviceOrderData]);
 
   const handleInputChange = (field: keyof ServiceOrderEditFormData, value: string) => {
     setFormData(prev => {
@@ -736,8 +800,15 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         }
       }
 
-      const serviceOrderId = serviceOrderData?.id;
-      if (!serviceOrderId) throw new Error('Missing Service Order ID');
+      // Clear drafts
+      if (serviceOrderId) {
+        try {
+          await AsyncStorage.removeItem(`serviceOrderDraft_${serviceOrderId}`);
+          await AsyncStorage.removeItem(`serviceOrderItemsDraft_${serviceOrderId}`);
+        } catch (e) {
+          console.error('Error clearing draft:', e);
+        }
+      }
 
       // Upload Images
       const uploadedUrls: any = {};
@@ -819,7 +890,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         } catch (e) { }
 
         const newItems: ServiceOrderItem[] = validItems.map(i => ({
-          service_order_id: parseInt(serviceOrderId),
+          service_order_id: parseInt(String(serviceOrderId)),
           item_name: i.itemId,
           quantity: parseInt(i.quantity) || 1
         }));
@@ -850,7 +921,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
       // Pullout Messages
       if (response.data.pullout_status === 'success') {
-        successMessage += '\n\nRADIUS account disabled for pullout.';
+        successMessage += '\n\nRADIUS account disabled for pullout and port cleared.';
       }
 
       onSave(updatedFormData);
@@ -993,7 +1064,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       statusBarTranslucent={true}
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-black/50 justify-end">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1 bg-black/50 justify-end"
+      >
         <View className={`h-[95%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
 
           {/* Header */}
@@ -1022,8 +1096,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             </View>
           </View>
 
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          <View
             style={{ flex: 1 }}
           >
             <ScrollView
@@ -1521,9 +1594,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
               </View>
             </ScrollView>
-          </KeyboardAvoidingView>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

@@ -1025,7 +1025,11 @@ const ServiceOrderPage: React.FC = () => {
                             marginLeft: 16,
                             flexShrink: 0
                           }}>
-                            <StatusText status={serviceOrder.supportStatus} type="support" />
+                            {/* Conditionally show visitStatus for technicians (role_id 2), otherwise supportStatus */}
+                            <StatusText 
+                              status={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? serviceOrder.visitStatus : serviceOrder.supportStatus} 
+                              type={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? 'visit' : 'support'} 
+                            />
                           </View>
                         </View>
                       </Pressable>
