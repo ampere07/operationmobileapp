@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
-import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle, Plus, X } from 'lucide-react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { getServiceOrders, createServiceOrder } from '../services/serviceOrderService';
+import { createServiceOrder } from '../services/serviceOrderService';
+import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import * as WebBrowser from 'expo-web-browser';
 
 interface SupportRequest {
@@ -29,22 +30,23 @@ interface SupportProps {
 const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+  const { customerDetail, serviceOrders: requests, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
+  const userAccountNo = customerDetail?.billingAccount?.accountNo || '';
   const [isDarkMode, setIsDarkMode] = useState<boolean>(forceLightMode ? false : true);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
   const [details, setDetails] = useState<string>('');
-  const [requests, setRequests] = useState<SupportRequest[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const [remainingRequests, setRemainingRequests] = useState<number>(5);
   const [cooldownTime, setCooldownTime] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [userAccountNo, setUserAccountNo] = useState<string>('');
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showLoadingModal, setShowLoadingModal] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const ITEMS_PER_PAGE = 5;
+  const [currentPage, setCurrentPage] = useState(0);
 
   const concernOptions = [
     'No Internet',
@@ -120,18 +122,10 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       if (authData) {
         try {
           const user = JSON.parse(authData);
-          console.log('[Support] User auth data:', user);
-          const accountNo = user.account_no || user.username || '';
-          const email = user.email || '';
-          console.log('[Support] Using account identifier:', accountNo);
-          console.log('[Support] Using email:', email);
-          setUserAccountNo(accountNo);
-          setUserEmail(email);
+          setUserEmail(user.email || '');
         } catch (error) {
           console.error('Error parsing auth data:', error);
         }
-      } else {
-        console.error('[Support] No auth data found');
       }
     };
     loadAuthData();
@@ -150,78 +144,16 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     fetchColorPalette();
   }, []);
 
-  useEffect(() => {
-    if (userAccountNo) {
-      fetchServiceOrders();
-    }
-  }, [userAccountNo]);
-
-  const fetchServiceOrders = async () => {
-    if (!userAccountNo) {
-      console.log('[Support] No account number available, skipping fetch');
-      setIsLoading(false);
-      setRequests([]);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      console.log('[Support] Fetching service orders for account:', userAccountNo);
-
-      const response = await getServiceOrders();
-      console.log('[Support] Service orders response:', response);
-
-      if (response.success && response.data) {
-        console.log('[Support] Total service orders:', response.data.length);
-
-        const filteredOrders = response.data
-          .filter(order => {
-            const matches = order.account_no === userAccountNo ||
-              order.username === userAccountNo;
-            if (matches) {
-              console.log('[Support] Matched order:', order);
-            }
-            return matches;
-          })
-          .map(order => ({
-            id: order.id,
-            date: order.created_at ? new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
-            requestId: order.ticket_id,
-            issue: order.concern || '',
-            issueDetails: order.concern_remarks || '',
-            status: order.support_status || 'Pending',
-            statusNote: order.support_remarks || '',
-            assignedEmail: order.assigned_email || '',
-            visitNote: order.visit_remarks || '',
-            visitInfo: {
-              status: order.visit_status || 'Pending'
-            }
-          }));
-
-        console.log('[Support] Filtered orders count:', filteredOrders.length);
-        setRequests(filteredOrders);
-      } else {
-        console.error('[Support] Invalid response:', response);
-        setRequests([]);
-      }
-    } catch (error) {
-      console.error('[Support] Failed to fetch service orders:', error);
-      setRequests([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchServiceOrders();
+      await silentRefresh();
     } catch (error) {
       console.error('Refresh failed:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [userAccountNo]);
+  }, [silentRefresh]);
 
   const handleSubmit = async () => {
     if (!details.trim()) {
@@ -242,6 +174,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       return;
     }
 
+    setShowNewRequestModal(false);
     setShowConfirmModal(true);
   };
 
@@ -252,7 +185,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     try {
       const newServiceOrder = {
         account_no: userAccountNo,
-        username: userAccountNo,
         concern: selectedConcern,
         concern_remarks: details,
         created_by_user: userEmail,
@@ -268,7 +200,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       if (response.success) {
         setShowLoadingModal(false);
         setShowSuccessModal(true);
-        await fetchServiceOrders();
+        await silentRefresh();
         setDetails('');
         setRemainingRequests(remainingRequests - 1);
       } else {
@@ -304,6 +236,41 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     }
   };
 
+  const paginatedRequests = useMemo(() => {
+    const start = currentPage * ITEMS_PER_PAGE;
+    return requests.slice(start, start + ITEMS_PER_PAGE);
+  }, [requests, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(requests.length / ITEMS_PER_PAGE));
+
+  const renderPagination = useCallback(() => {
+    if (requests.length <= ITEMS_PER_PAGE) return null;
+    const primary = colorPalette?.primary || '#ef4444';
+    const isPrevDisabled = currentPage === 0;
+    const isNextDisabled = currentPage >= totalPages - 1;
+    return (
+      <View style={s.paginationRow}>
+        <Pressable
+          onPress={() => setCurrentPage(Math.max(0, currentPage - 1))}
+          disabled={isPrevDisabled}
+          style={[s.paginationBtn, isPrevDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+        >
+          <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primary} />
+          <Text style={[s.paginationText, { color: isPrevDisabled ? '#9ca3af' : primary }]}>Previous</Text>
+        </Pressable>
+        <Text style={s.pageIndicator}>{currentPage + 1} / {totalPages}</Text>
+        <Pressable
+          onPress={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+          disabled={isNextDisabled}
+          style={[s.paginationBtn, isNextDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+        >
+          <Text style={[s.paginationText, { color: isNextDisabled ? '#9ca3af' : primary }]}>Next</Text>
+          <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primary} />
+        </Pressable>
+      </View>
+    );
+  }, [colorPalette, currentPage, totalPages, requests.length]);
+
   return (
     <View style={{
       flex: 1,
@@ -336,7 +303,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             marginBottom: 24,
             textAlign: 'center'
           }}>Support</Text>
-          {isLoading ? (
+          {contextLoading && requests.length === 0 ? (
             <View style={{
               paddingVertical: 48,
               alignItems: 'center',
@@ -364,101 +331,47 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             </View>
           ) : (
             <>
-              {requests.map((request) => (
+              {paginatedRequests.map((request) => (
                 <View
                   key={request.id}
-                  style={{
+                  style={[s.card, {
                     backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    borderRadius: 12,
-                    padding: 12,
-                    marginBottom: 12,
-                    width: '100%',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 5,
-                    elevation: 3,
                     borderWidth: isDarkMode ? 1 : 0,
-                    borderColor: '#374151',
-                  }}
+                  }]}
                 >
                   {/* Header Row */}
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={{
-                        fontSize: 14,
-                        fontWeight: 'bold',
-                        color: isDarkMode ? '#ffffff' : '#111827'
-                      }}>#{request.requestId}</Text>
-                      <View style={{
-                        backgroundColor: (colorPalette?.primary || '#ef4444') + '15',
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
-                        borderRadius: 4,
-                      }}>
-                        <Text style={{
-                          fontSize: 10,
-                          fontWeight: 'bold',
-                          color: colorPalette?.primary || '#ef4444',
-                        }}>{request.date}</Text>
+                  <View style={s.cardHeaderRow}>
+                    <View style={s.cardHeaderLeft}>
+                      <Text style={[s.ticketId, { color: isDarkMode ? '#ffffff' : '#111827' }]}>#{request.requestId}</Text>
+                      <View style={[s.dateBadge, { backgroundColor: (colorPalette?.primary || '#ef4444') + '15' }]}>
+                        <Text style={[s.dateText, { color: colorPalette?.primary || '#ef4444' }]}>{request.date}</Text>
                       </View>
                     </View>
-                    <View style={{
-                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 4,
-                    }}>
-                      <Text style={{
-                        color: isDarkMode ? '#d1d5db' : '#374151',
-                        fontSize: 11,
-                        fontWeight: '600'
-                      }}>{request.status}</Text>
+                    <View style={[s.statusBadge, { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6' }]}>
+                      <Text style={[s.statusText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>{request.status}</Text>
                     </View>
                   </View>
 
-                  {/* Issue Section - More compact */}
-                  <View style={{ marginBottom: 10 }}>
-                    <Text style={{
-                      fontSize: 13,
-                      fontWeight: '700',
-                      color: isDarkMode ? '#d1d5db' : '#374151',
-                      marginBottom: 2
-                    }}>{request.issue}</Text>
-                    <Text style={{
-                      fontSize: 12,
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                      lineHeight: 16
-                    }} numberOfLines={2}>{request.issueDetails}</Text>
+                  {/* Issue Section */}
+                  <View style={s.issueSection}>
+                    <Text style={[s.issueTitle, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>{request.issue}</Text>
+                    <Text style={[s.issueDetails, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]} numberOfLines={2}>{request.issueDetails}</Text>
                   </View>
 
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={s.cardFooterRow}>
+                    <View style={s.visitRow}>
                       <CheckCircle size={14} color={request.visitInfo.status === 'Done' ? '#10b981' : '#9ca3af'} />
-                      <Text style={{ fontSize: 11, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                      <Text style={[s.visitText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
                         Visit: {request.visitInfo.status}
                       </Text>
                     </View>
-                    <Pressable
-                      style={{
-                        paddingVertical: 6,
-                        paddingHorizontal: 12,
-                        borderRadius: 6,
-                        borderWidth: 1,
-                        borderColor: (colorPalette?.primary || '#3b82f6') + '80',
-                      }}
-                    >
-                      <Text style={{
-                        fontSize: 12,
-                        fontWeight: '600',
-                        color: colorPalette?.primary || '#3b82f6'
-                      }}>
-                        Details
-                      </Text>
+                    <Pressable style={[s.detailsBtn, { borderColor: (colorPalette?.primary || '#3b82f6') + '80' }]}>
+                      <Text style={[s.detailsBtnText, { color: colorPalette?.primary || '#3b82f6' }]}>Details</Text>
                     </Pressable>
                   </View>
                 </View>
               ))}
+              {renderPagination()}
 
               {requests.length === 0 && (
                 <View style={{
@@ -631,10 +544,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
               </View>
 
               <Pressable
-                onPress={() => {
-                  handleSubmit();
-                  setShowNewRequestModal(false);
-                }}
+                onPress={handleSubmit}
                 disabled={isSubmitting || remainingRequests <= 0}
                 style={{
                   width: '100%',
@@ -946,5 +856,33 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     </View>
   );
 };
+
+const s = StyleSheet.create({
+  card: {
+    borderRadius: 12, padding: 12, marginBottom: 12, width: '100%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 3,
+    borderColor: '#374151',
+  },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ticketId: { fontSize: 14, fontWeight: 'bold' },
+  dateBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  dateText: { fontSize: 10, fontWeight: 'bold' },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: '600' },
+  issueSection: { marginBottom: 10 },
+  issueTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  issueDetails: { fontSize: 12, lineHeight: 16 },
+  cardFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  visitRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  visitText: { fontSize: 11 },
+  detailsBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, borderWidth: 1 },
+  detailsBtnText: { fontSize: 12, fontWeight: '600' },
+  paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 20, paddingBottom: 8, gap: 16 },
+  paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
+  paginationText: { fontSize: 13, fontWeight: '600' },
+  pageIndicator: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+});
 
 export default Support;

@@ -1,14 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated, StyleSheet } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
-import { Download, FileText, CreditCard, Clock, Activity, CheckCircle, AlertCircle, File } from 'lucide-react-native';
+import { Download, FileText, CreditCard, Clock, Activity, CheckCircle, AlertCircle, File, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { soaService } from '../services/soaService';
-import { invoiceService } from '../services/invoiceService';
-import { paymentPortalLogsService } from '../services/paymentPortalLogsService';
-import { transactionService } from '../services/transactionService';
-import { getCustomerDetail } from '../services/customerDetailService';
 import { paymentService, PendingPayment } from '../services/paymentService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -60,6 +55,11 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    const ITEMS_PER_PAGE = 4;
+    const [soaPage, setSoaPage] = useState(0);
+    const [invoicePage, setInvoicePage] = useState(0);
+    const [paymentPage, setPaymentPage] = useState(0);
 
     const pan = React.useRef(new Animated.ValueXY()).current;
 
@@ -214,7 +214,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     }, [silentRefresh]);
 
     if (contextLoading && !customerDetail) return (
-        <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
+        <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#111827" />
         </View>
     );
@@ -236,304 +236,236 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         return `₱${isNegative ? '-' : ''}${formatted}`;
     };
 
+    const paginatedSoa = useMemo(() => {
+        const start = soaPage * ITEMS_PER_PAGE;
+        return soaRecords.slice(start, start + ITEMS_PER_PAGE);
+    }, [soaRecords, soaPage]);
+
+    const paginatedInvoices = useMemo(() => {
+        const start = invoicePage * ITEMS_PER_PAGE;
+        return invoiceRecords.slice(start, start + ITEMS_PER_PAGE);
+    }, [invoiceRecords, invoicePage]);
+
+    const paginatedPayments = useMemo(() => {
+        const start = paymentPage * ITEMS_PER_PAGE;
+        return paymentRecords.slice(start, start + ITEMS_PER_PAGE);
+    }, [paymentRecords, paymentPage]);
+
+    const soaTotalPages = Math.max(1, Math.ceil(soaRecords.length / ITEMS_PER_PAGE));
+    const invoiceTotalPages = Math.max(1, Math.ceil(invoiceRecords.length / ITEMS_PER_PAGE));
+    const paymentTotalPages = Math.max(1, Math.ceil(paymentRecords.length / ITEMS_PER_PAGE));
+
+    const renderPagination = useCallback((currentPage: number, totalPages: number, setPage: (p: number) => void, totalItems: number) => {
+        if (totalItems <= ITEMS_PER_PAGE) return null;
+        const primary = colorPalette?.primary || '#ef4444';
+        const isPrevDisabled = currentPage === 0;
+        const isNextDisabled = currentPage >= totalPages - 1;
+        return (
+            <View style={styles.paginationRow}>
+                <Pressable
+                    onPress={() => setPage(Math.max(0, currentPage - 1))}
+                    disabled={isPrevDisabled}
+                    style={[styles.paginationBtn, isPrevDisabled ? styles.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+                >
+                    <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primary} />
+                    <Text style={[styles.paginationText, { color: isPrevDisabled ? '#9ca3af' : primary }]}>Previous</Text>
+                </Pressable>
+
+                <Text style={styles.pageIndicator}>
+                    {currentPage + 1} / {totalPages}
+                </Text>
+
+                <Pressable
+                    onPress={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
+                    disabled={isNextDisabled}
+                    style={[styles.paginationBtn, isNextDisabled ? styles.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+                >
+                    <Text style={[styles.paginationText, { color: isNextDisabled ? '#9ca3af' : primary }]}>Next</Text>
+                    <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primary} />
+                </Pressable>
+            </View>
+        );
+    }, [colorPalette]);
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: !isMobile ? 16 : 60, paddingBottom: 100 }}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={[colorPalette?.primary || '#ef4444']}
-                        tintColor={colorPalette?.primary || '#ef4444'}
-                        progressViewOffset={80}
-                    />
-                }
-            >
-
-
-                <View style={{
-                    paddingHorizontal: isMobile ? 16 : 24,
-                }}>
-                    <View style={{ flexDirection: 'row', width: '100%', justifyContent: 'center', gap: 4 }}>
+        <View style={styles.container}>
+                <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? 60 : 16 }}>
+                    <View style={styles.tabRow}>
                         <Pressable
                             onPress={() => setActiveTab('soa')}
-                            style={{
-                                flex: 1,
-                                paddingTop: 14,
-                                paddingBottom: 14,
-                                paddingHorizontal: 4,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 8,
-                                backgroundColor: activeTab === 'soa' ? '#ffffff' : 'transparent',
-                                borderTopLeftRadius: 12,
-                                borderTopRightRadius: 12,
-                                shadowColor: activeTab === 'soa' ? '#000' : 'transparent',
-                                shadowOffset: { width: 0, height: -2 },
-                                shadowOpacity: activeTab === 'soa' ? 0.08 : 0,
-                                shadowRadius: 4,
-                                elevation: activeTab === 'soa' ? 4 : 0,
-                                position: 'relative'
-                            }}
+                            style={[styles.tabBase, activeTab === 'soa' ? styles.tabActive : styles.tabInactive]}
                         >
                             <FileText width={16} height={16} color={activeTab === 'soa' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: activeTab === 'soa' ? '#111827' : '#9ca3af' }}>SOA</Text>
+                            <Text style={[styles.tabText, activeTab === 'soa' ? styles.tabTextActive : styles.tabTextInactive]}>SOA</Text>
                             {activeTab === 'soa' && (
-                                <View style={{
-                                    position: 'absolute',
-                                    bottom: 0,
-                                    width: '70%',
-                                    height: 3,
-                                    backgroundColor: colorPalette?.primary || '#ef4444',
-                                    borderRadius: 3
-                                }} />
+                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
                             )}
                         </Pressable>
                         <Pressable
                             onPress={() => setActiveTab('invoices')}
-                            style={{
-                                flex: 1,
-                                paddingTop: 14,
-                                paddingBottom: 14,
-                                paddingHorizontal: 4,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 8,
-                                backgroundColor: activeTab === 'invoices' ? '#ffffff' : 'transparent',
-                                borderTopLeftRadius: 12,
-                                borderTopRightRadius: 12,
-                                shadowColor: activeTab === 'invoices' ? '#000' : 'transparent',
-                                shadowOffset: { width: 0, height: -2 },
-                                shadowOpacity: activeTab === 'invoices' ? 0.08 : 0,
-                                shadowRadius: 4,
-                                elevation: activeTab === 'invoices' ? 4 : 0,
-                                position: 'relative'
-                            }}
+                            style={[styles.tabBase, activeTab === 'invoices' ? styles.tabActive : styles.tabInactive]}
                         >
                             <File width={16} height={16} color={activeTab === 'invoices' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: activeTab === 'invoices' ? '#111827' : '#9ca3af' }}>Invoices</Text>
+                            <Text style={[styles.tabText, activeTab === 'invoices' ? styles.tabTextActive : styles.tabTextInactive]}>Invoices</Text>
                             {activeTab === 'invoices' && (
-                                <View style={{
-                                    position: 'absolute',
-                                    bottom: 0,
-                                    width: '70%',
-                                    height: 3,
-                                    backgroundColor: colorPalette?.primary || '#ef4444',
-                                    borderRadius: 3
-                                }} />
+                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
                             )}
                         </Pressable>
                         <Pressable
                             onPress={() => setActiveTab('payments')}
-                            style={{
-                                flex: 1,
-                                paddingTop: 14,
-                                paddingBottom: 14,
-                                paddingHorizontal: 4,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 8,
-                                backgroundColor: activeTab === 'payments' ? '#ffffff' : 'transparent',
-                                borderTopLeftRadius: 12,
-                                borderTopRightRadius: 12,
-                                shadowColor: activeTab === 'payments' ? '#000' : 'transparent',
-                                shadowOffset: { width: 0, height: -2 },
-                                shadowOpacity: activeTab === 'payments' ? 0.08 : 0,
-                                shadowRadius: 4,
-                                elevation: activeTab === 'payments' ? 4 : 0,
-                                position: 'relative'
-                            }}
+                            style={[styles.tabBase, activeTab === 'payments' ? styles.tabActive : styles.tabInactive]}
                         >
                             <Clock width={16} height={16} color={activeTab === 'payments' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: activeTab === 'payments' ? '#111827' : '#9ca3af' }}>History</Text>
+                            <Text style={[styles.tabText, activeTab === 'payments' ? styles.tabTextActive : styles.tabTextInactive]}>History</Text>
                             {activeTab === 'payments' && (
-                                <View style={{
-                                    position: 'absolute',
-                                    bottom: 0,
-                                    width: '70%',
-                                    height: 3,
-                                    backgroundColor: colorPalette?.primary || '#ef4444',
-                                    borderRadius: 3
-                                }} />
+                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
                             )}
                         </Pressable>
                     </View>
                 </View>
 
-                <View style={{
-                    minHeight: 700,
-                    paddingHorizontal: isMobile ? 16 : 24,
-                    paddingTop: 16,
-                    backgroundColor: '#ffffff',
-                    borderBottomLeftRadius: 16,
-                    borderBottomRightRadius: 16,
-                }}>
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    style={styles.contentScroll}
+                    contentContainerStyle={styles.contentContainer}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colorPalette?.primary || '#ef4444']}
+                            tintColor={colorPalette?.primary || '#ef4444'}
+                        />
+                    }
+                >
                     {activeTab === 'soa' && (
-                        <View style={{ gap: 16 }}>
+                        <View style={styles.listGap}>
                             {soaRecords.length === 0 ? (
-                                <View style={{ padding: 48, alignItems: 'center' }}>
+                                <View style={styles.emptyContainer}>
                                     <FileText size={48} color="#d1d5db" />
-                                    <Text style={{ color: '#6b7280', marginTop: 16, fontSize: 16 }}>No statements found.</Text>
+                                    <Text style={styles.emptyText}>No statements found.</Text>
                                 </View>
                             ) : (
-                                soaRecords.map((record) => (
-                                    <View key={record.id} style={{
-                                        padding: 16,
-                                        borderRadius: 16,
-                                        backgroundColor: '#ffffff',
-                                        gap: 12
-                                    }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Statement Date</Text>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 }}>{formatDate(record.statement_date)}</Text>
+                                <>
+                                    {paginatedSoa.map((record) => (
+                                        <View key={record.id} style={styles.card}>
+                                            <View style={styles.cardRow}>
+                                                <View>
+                                                    <Text style={styles.labelText}>Statement Date</Text>
+                                                    <Text style={styles.valueText}>{formatDate(record.statement_date)}</Text>
+                                                </View>
+                                                <View style={styles.alignEnd}>
+                                                    <Text style={styles.labelText}>Ref No.</Text>
+                                                    <Text style={styles.valueText}>#{record.id}</Text>
+                                                </View>
                                             </View>
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Ref No.</Text>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 }}>#{record.id}</Text>
+                                            <View style={styles.divider} />
+                                            <View style={styles.cardRow}>
+                                                <View>
+                                                    <Text style={styles.labelText}>Amount Due</Text>
+                                                    <Text style={[styles.amountText, { color: colorPalette?.primary || '#ef4444' }]}>{formatCurrency(record.total_amount_due || 0)}</Text>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => handleDownloadPDF(record.print_link)}
+                                                    disabled={!record.print_link}
+                                                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' } : styles.pdfBtnDisabled]}
+                                                >
+                                                    <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
+                                                    <Text style={[styles.pdfText, { color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }]}>PDF</Text>
+                                                </Pressable>
                                             </View>
                                         </View>
-                                        <View style={{ height: 1, backgroundColor: '#f1f5f9' }} />
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Amount Due</Text>
-                                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: colorPalette?.primary || '#ef4444', marginTop: 2 }}>{formatCurrency(record.total_amount_due || 0)}</Text>
-                                            </View>
-                                            <Pressable
-                                                onPress={() => handleDownloadPDF(record.print_link)}
-                                                disabled={!record.print_link}
-                                                style={{
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    gap: 6,
-                                                    paddingHorizontal: 12,
-                                                    paddingVertical: 8,
-                                                    backgroundColor: record.print_link ? (colorPalette?.primary || '#ef4444') + '15' : '#f9fafb',
-                                                    borderRadius: 12,
-                                                    borderWidth: 1,
-                                                    borderColor: record.print_link ? (colorPalette?.primary || '#ef4444') + '30' : '#f1f5f9',
-                                                    opacity: record.print_link ? 1 : 0.5
-                                                }}
-                                            >
-                                                <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }}>PDF</Text>
-                                            </Pressable>
-                                        </View>
-                                    </View>
-                                ))
+                                    ))}
+                                    {renderPagination(soaPage, soaTotalPages, setSoaPage, soaRecords.length)}
+                                </>
                             )}
                         </View>
                     )}
 
                     {activeTab === 'invoices' && (
-                        <View style={{ gap: 16 }}>
+                        <View style={styles.listGap}>
                             {invoiceRecords.length === 0 ? (
-                                <View style={{ padding: 48, alignItems: 'center' }}>
+                                <View style={styles.emptyContainer}>
                                     <File size={48} color="#d1d5db" />
-                                    <Text style={{ color: '#6b7280', marginTop: 16, fontSize: 16 }}>No invoices found.</Text>
+                                    <Text style={styles.emptyText}>No invoices found.</Text>
                                 </View>
                             ) : (
-                                invoiceRecords.map((record) => (
-                                    <View key={record.id} style={{
-                                        padding: 16,
-                                        borderRadius: 16,
-                                        backgroundColor: '#ffffff',
-                                        gap: 12
-                                    }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Invoice Date</Text>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 }}>{formatDate(record.invoice_date)}</Text>
+                                <>
+                                    {paginatedInvoices.map((record) => (
+                                        <View key={record.id} style={styles.card}>
+                                            <View style={styles.cardRow}>
+                                                <View>
+                                                    <Text style={styles.labelText}>Invoice Date</Text>
+                                                    <Text style={styles.valueText}>{formatDate(record.invoice_date)}</Text>
+                                                </View>
+                                                <View style={styles.alignEnd}>
+                                                    <Text style={styles.labelText}>Ref No.</Text>
+                                                    <Text style={styles.valueText}>#{record.id}</Text>
+                                                </View>
                                             </View>
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Ref No.</Text>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 }}>#{record.id}</Text>
+                                            <View style={styles.divider} />
+                                            <View style={styles.cardRow}>
+                                                <View>
+                                                    <Text style={styles.labelText}>Balance</Text>
+                                                    <Text style={[styles.amountText, { color: '#111827' }]}>{formatCurrency(record.invoice_balance || 0)}</Text>
+                                                </View>
+                                                <Pressable
+                                                    onPress={() => handleDownloadPDF(record.print_link)}
+                                                    disabled={!record.print_link}
+                                                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' } : styles.pdfBtnDisabled]}
+                                                >
+                                                    <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
+                                                    <Text style={[styles.pdfText, { color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }]}>PDF</Text>
+                                                </Pressable>
                                             </View>
                                         </View>
-                                        <View style={{ height: 1, backgroundColor: '#f1f5f9' }} />
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Balance</Text>
-                                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 2 }}>{formatCurrency(record.invoice_balance || 0)}</Text>
-                                            </View>
-                                            <Pressable
-                                                onPress={() => handleDownloadPDF(record.print_link)}
-                                                disabled={!record.print_link}
-                                                style={{
-                                                    flexDirection: 'row',
-                                                    alignItems: 'center',
-                                                    gap: 6,
-                                                    paddingHorizontal: 12,
-                                                    paddingVertical: 8,
-                                                    backgroundColor: record.print_link ? (colorPalette?.primary || '#ef4444') + '15' : '#f9fafb',
-                                                    borderRadius: 12,
-                                                    borderWidth: 1,
-                                                    borderColor: record.print_link ? (colorPalette?.primary || '#ef4444') + '30' : '#f1f5f9',
-                                                    opacity: record.print_link ? 1 : 0.5
-                                                }}
-                                            >
-                                                <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                                                <Text style={{ fontSize: 13, fontWeight: 'bold', color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }}>PDF</Text>
-                                            </Pressable>
-                                        </View>
-                                    </View>
-                                ))
+                                    ))}
+                                    {renderPagination(invoicePage, invoiceTotalPages, setInvoicePage, invoiceRecords.length)}
+                                </>
                             )}
                         </View>
                     )}
 
                     {activeTab === 'payments' && (
-                        <View style={{ gap: 16 }}>
+                        <View style={styles.listGap}>
                             {paymentRecords.length === 0 ? (
-                                <View style={{ padding: 48, alignItems: 'center' }}>
+                                <View style={styles.emptyContainer}>
                                     <Clock size={48} color="#d1d5db" />
-                                    <Text style={{ color: '#6b7280', marginTop: 16, fontSize: 16 }}>No payment history found.</Text>
+                                    <Text style={styles.emptyText}>No payment history found.</Text>
                                 </View>
                             ) : (
-                                paymentRecords.map((record) => (
-                                    <View key={record.id} style={{
-                                        padding: 16,
-                                        borderRadius: 16,
-                                        backgroundColor: '#ffffff',
-                                        gap: 12
-                                    }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Date</Text>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 }}>{formatDate(record.date)}</Text>
+                                <>
+                                    {paginatedPayments.map((record) => (
+                                        <View key={record.id} style={styles.card}>
+                                            <View style={styles.cardRow}>
+                                                <View>
+                                                    <Text style={styles.labelText}>Date</Text>
+                                                    <Text style={styles.valueText}>{formatDate(record.date)}</Text>
+                                                </View>
+                                                <View style={styles.statusBadge}>
+                                                    <Text style={[styles.statusText, { color: (record.status === 'Completed' || record.status === 'PAID') ? '#15803d' : '#374151' }]}>
+                                                        {(record.status || 'Posted').toUpperCase()}
+                                                    </Text>
+                                                </View>
                                             </View>
-                                            <View style={{
-                                                borderRadius: 20
-                                            }}>
-                                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: (record.status === 'Completed' || record.status === 'PAID') ? '#15803d' : '#374151' }}>
-                                                    {(record.status || 'Posted').toUpperCase()}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <View style={{ height: 1, backgroundColor: '#f1f5f9' }} />
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View style={{ flex: 1, marginRight: 16 }}>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Ref: {record.source}</Text>
-                                                <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: 13, fontFamily: 'monospace', color: '#64748b', marginTop: 2 }}>{record.reference}</Text>
-                                            </View>
-                                            <View style={{ alignItems: 'flex-end' }}>
-                                                <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Amount</Text>
-                                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 }}>+{formatCurrency(record.amount)}</Text>
+                                            <View style={styles.divider} />
+                                            <View style={styles.cardRow}>
+                                                <View style={styles.refContainer}>
+                                                    <Text style={styles.labelText}>Ref: {record.source}</Text>
+                                                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.refText}>{record.reference}</Text>
+                                                </View>
+                                                <View style={styles.alignEnd}>
+                                                    <Text style={styles.labelText}>Amount</Text>
+                                                    <Text style={styles.paymentAmount}>+{formatCurrency(record.amount)}</Text>
+                                                </View>
                                             </View>
                                         </View>
-                                    </View>
-                                ))
+                                    ))}
+                                    {renderPagination(paymentPage, paymentTotalPages, setPaymentPage, paymentRecords.length)}
+                                </>
                             )}
                         </View>
                     )}
-                </View>
-            </ScrollView>
+                </ScrollView>
 
             <Modal
                 visible={showPaymentVerifyModal}
@@ -542,80 +474,62 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 statusBarTranslucent={true}
                 onRequestClose={handleCloseVerifyModal}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCloseVerifyModal} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={handleCloseVerifyModal} />
                     <Animated.View
                         {...panResponder.panHandlers}
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 30,
-                            borderTopRightRadius: 30,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                            elevation: 20
-                        }}
+                        style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}
                     >
-                        <View style={{ paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' }}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 }} />
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Confirm Payment</Text>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalHandle} />
+                            <Text style={styles.modalTitle}>Confirm Payment</Text>
                         </View>
-                        <ScrollView contentContainerStyle={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#f9fafb', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Account Name</Text>
-                                    <Text style={{ fontWeight: '600', color: '#111827', fontSize: 14 }}>{displayName}</Text>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <View style={styles.verifyBox}>
+                                <View style={styles.verifyRowMb}>
+                                    <Text style={styles.verifyLabel}>Account Name</Text>
+                                    <Text style={styles.verifyValue}>{displayName}</Text>
                                 </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Account Balance</Text>
-                                    <Text style={{ fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a', fontSize: 14 }}>
+                                <View style={styles.verifyRow}>
+                                    <Text style={styles.verifyLabel}>Account Balance</Text>
+                                    <Text style={[styles.verifyValue, { fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a' }]}>
                                         {formatCurrency(balance)}
                                     </Text>
                                 </View>
                             </View>
 
                             {errorMessage && (
-                                <View style={{ backgroundColor: '#fef2f2', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fee2e2' }}>
-                                    <Text style={{ color: '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
+                                <View style={styles.errorBox}>
+                                    <Text style={styles.errorText}>{errorMessage}</Text>
                                 </View>
                             )}
 
-                            <View style={{ marginBottom: 32 }}>
-                                <Text style={{ fontWeight: '600', marginBottom: 10, color: '#374151', fontSize: 15 }}>Payment Amount</Text>
+                            <View style={styles.inputWrap}>
+                                <Text style={styles.inputLabel}>Payment Amount</Text>
                                 <TextInput
                                     keyboardType="decimal-pad"
                                     value={paymentAmount.toString()}
                                     onChangeText={(val) => setPaymentAmount(parseFloat(val) || 0)}
                                     placeholder="0.00"
-                                    style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' }}
+                                    style={styles.inputField}
                                 />
                             </View>
 
                             <Pressable
                                 onPress={handleProceedToCheckout}
                                 disabled={isPaymentProcessing || paymentAmount < 1}
-                                style={{
-                                    paddingVertical: 16,
-                                    borderRadius: 16,
+                                style={[styles.primaryBtn, {
                                     backgroundColor: colorPalette?.primary || '#ef4444',
                                     opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.6 : 1,
-                                    alignItems: 'center',
                                     shadowColor: colorPalette?.primary || '#ef4444',
-                                    shadowOffset: { width: 0, height: 4 },
-                                    shadowOpacity: 0.3,
-                                    shadowRadius: 8,
-                                    elevation: 5
-                                }}
+                                    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5
+                                }]}
                             >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>
+                                <Text style={styles.primaryBtnText}>
                                     {isPaymentProcessing ? 'Processing...' : 'Proceed to Payment'}
                                 </Text>
                             </Pressable>
-                            <View style={{ height: 40 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -629,60 +543,39 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 statusBarTranslucent={true}
                 onRequestClose={handleCancelPaymentLink}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCancelPaymentLink} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={handleCancelPaymentLink} />
                     <Animated.View
                         {...panResponder.panHandlers}
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 30,
-                            borderTopRightRadius: 30,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                            elevation: 20
-                        }}
+                        style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}
                     >
-                        <View style={{ paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' }}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 }} />
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Payment Link Created!</Text>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalHandle} />
+                            <Text style={styles.modalTitle}>Payment Link Created!</Text>
                         </View>
-                        <ScrollView contentContainerStyle={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#f0fdf4', padding: 20, borderRadius: 16, marginBottom: 24, alignItems: 'center' }}>
-                                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <View style={styles.successBox}>
+                                <View style={styles.successCircleSm}>
                                     <CheckCircle size={32} color="#16a34a" />
                                 </View>
-                                <Text style={{ color: '#166534', fontWeight: '700', fontSize: 16, marginBottom: 4 }}>Ready to Pay</Text>
-                                <Text style={{ color: '#166534', opacity: 0.8, fontSize: 14 }}>{paymentLinkData?.referenceNo}</Text>
+                                <Text style={styles.successTitle}>Ready to Pay</Text>
+                                <Text style={styles.successRef}>{paymentLinkData?.referenceNo}</Text>
                             </View>
 
-                            <View style={{ marginBottom: 32 }}>
-                                <Text style={{ textAlign: 'center', color: '#4b5563', fontSize: 15, lineHeight: 22 }}>
-                                    Your payment link for <Text style={{ fontWeight: '700', color: '#111827' }}>{formatCurrency(paymentLinkData?.amount || 0)}</Text> is ready. Click below to open the payment portal.
+                            <View style={styles.paymentDescWrap}>
+                                <Text style={styles.paymentDesc}>
+                                    Your payment link for <Text style={styles.paymentDescBold}>{formatCurrency(paymentLinkData?.amount || 0)}</Text> is ready. Click below to open the payment portal.
                                 </Text>
                             </View>
 
-                            <Pressable
-                                onPress={handleOpenPaymentLink}
-                                style={{
-                                    paddingVertical: 16,
-                                    borderRadius: 16,
-                                    backgroundColor: '#16a34a',
-                                    alignItems: 'center',
-                                    marginBottom: 16
-                                }}
-                            >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Open Payment Portal</Text>
+                            <Pressable onPress={handleOpenPaymentLink} style={styles.openPortalBtn}>
+                                <Text style={styles.primaryBtnText}>Open Payment Portal</Text>
                             </Pressable>
 
                             <Pressable onPress={handleCancelPaymentLink}>
-                                <Text style={{ color: '#6b7280', fontSize: 15, textAlign: 'center', fontWeight: '500' }}>Maybe Later</Text>
+                                <Text style={styles.maybeLaterText}>Maybe Later</Text>
                             </Pressable>
-                            <View style={{ height: 40 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -696,57 +589,42 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 statusBarTranslucent={true}
                 onRequestClose={handleCancelPendingPayment}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCancelPendingPayment} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={handleCancelPendingPayment} />
                     <Animated.View
                         {...panResponder.panHandlers}
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 30,
-                            borderTopRightRadius: 30,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                            elevation: 20
-                        }}
+                        style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}
                     >
-                        <View style={{ paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' }}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 }} />
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Pending Payment Found</Text>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalHandle} />
+                            <Text style={styles.modalTitle}>Pending Payment Found</Text>
                         </View>
-                        <ScrollView contentContainerStyle={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#fffbeb', padding: 20, borderRadius: 16, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#f59e0b' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: '#92400e', fontSize: 14 }}>Amount</Text>
-                                    <Text style={{ fontWeight: 'bold', color: '#92400e', fontSize: 16 }}>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <View style={styles.pendingBox}>
+                                <View style={styles.verifyRow}>
+                                    <Text style={styles.pendingLabel}>Amount</Text>
+                                    <Text style={styles.pendingAmount}>
                                         {formatCurrency(pendingPayment?.amount || 0)}
                                     </Text>
                                 </View>
                             </View>
 
-                            <Text style={{ color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15, lineHeight: 22 }}>
+                            <Text style={styles.pendingDesc}>
                                 You have an active payment session. Would you like to resume it now?
                             </Text>
 
-                            <View style={{ gap: 12 }}>
+                            <View style={styles.pendingBtns}>
                                 <Pressable
                                     onPress={handleResumePendingPayment}
-                                    style={{ paddingVertical: 16, borderRadius: 16, backgroundColor: colorPalette?.primary || '#0f172a', alignItems: 'center' }}
+                                    style={[styles.resumeBtn, { backgroundColor: colorPalette?.primary || '#0f172a' }]}
                                 >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Resume Payment</Text>
+                                    <Text style={styles.primaryBtnText}>Resume Payment</Text>
                                 </Pressable>
-                                <Pressable
-                                    onPress={handleCancelPendingPayment}
-                                    style={{ paddingVertical: 16, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' }}
-                                >
-                                    <Text style={{ color: '#4b5563', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
+                                <Pressable onPress={handleCancelPendingPayment} style={styles.cancelBtn}>
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </Pressable>
                             </View>
-                            <View style={{ height: 40 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -760,42 +638,30 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 statusBarTranslucent={true}
                 onRequestClose={() => setShowSuccessModal(false)}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setShowSuccessModal(false)} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={() => setShowSuccessModal(false)} />
                     <Animated.View
                         {...panResponder.panHandlers}
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 30,
-                            borderTopRightRadius: 30,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                            elevation: 20
-                        }}
+                        style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}
                     >
-                        <View style={{ paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' }}>
-                            <View style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 }} />
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Payment Successful!</Text>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalHandle} />
+                            <Text style={styles.modalTitle}>Payment Successful!</Text>
                         </View>
-                        <ScrollView contentContainerStyle={{ padding: 24, alignItems: 'center' }}>
-                            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+                        <ScrollView contentContainerStyle={styles.modalContentCenter}>
+                            <View style={styles.successCircleLg}>
                                 <CheckCircle size={48} color="#16a34a" />
                             </View>
-                            <Text style={{ fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
+                            <Text style={styles.successDesc}>
                                 Thank you! Your payment has been processed successfully. Your balance will be updated shortly.
                             </Text>
                             <Pressable
                                 onPress={() => setShowSuccessModal(false)}
-                                style={{ backgroundColor: colorPalette?.primary || '#ef4444', paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' }}
+                                style={[styles.successBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
                             >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Great!</Text>
+                                <Text style={styles.primaryBtnText}>Great!</Text>
                             </Pressable>
-                            <View style={{ height: 40 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -804,5 +670,92 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         </View>
     );
 };
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#f9fafb' },
+    loadingContainer: { padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
+    tabRow: { flexDirection: 'row', width: '100%', justifyContent: 'center', gap: 4 },
+    tabBase: {
+        flex: 1, paddingTop: 14, paddingBottom: 14, paddingHorizontal: 4,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative',
+    },
+    tabActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 4 },
+    tabInactive: { backgroundColor: 'transparent', shadowColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+    tabText: { fontSize: 13, fontWeight: 'bold' },
+    tabTextActive: { color: '#111827' },
+    tabTextInactive: { color: '#9ca3af' },
+    tabIndicator: { position: 'absolute', bottom: 0, width: '70%', height: 3, borderRadius: 3 },
+    contentScroll: { flex: 1, backgroundColor: '#ffffff' },
+    contentContainer: { padding: 16, paddingBottom: 100 },
+    listGap: { gap: 16 },
+    emptyContainer: { padding: 48, alignItems: 'center' },
+    emptyText: { color: '#6b7280', marginTop: 16, fontSize: 16 },
+    card: { padding: 16, borderRadius: 16, backgroundColor: '#ffffff', gap: 12 },
+    cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    divider: { height: 1, backgroundColor: '#f1f5f9' },
+    labelText: { fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' },
+    valueText: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
+    amountText: { fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+    alignEnd: { alignItems: 'flex-end' },
+    pdfBtnBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
+    pdfBtnDisabled: { backgroundColor: '#f9fafb', borderColor: '#f1f5f9', opacity: 0.5 },
+    pdfText: { fontSize: 13, fontWeight: 'bold' },
+    statusBadge: { borderRadius: 20 },
+    statusText: { fontSize: 11, fontWeight: 'bold' },
+    refContainer: { flex: 1, marginRight: 16 },
+    refText: { fontSize: 13, fontFamily: 'monospace', color: '#64748b', marginTop: 2 },
+    paymentAmount: { fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 },
+    paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 20, paddingBottom: 8, gap: 16 },
+    paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+    paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
+    paginationText: { fontSize: 13, fontWeight: '600' },
+    pageIndicator: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    modalSheet: {
+        backgroundColor: '#ffffff', borderTopLeftRadius: 30, borderTopRightRadius: 30,
+        width: '100%', maxHeight: '90%',
+        shadowColor: '#000', shadowOffset: { width: 0, height: -15 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 20,
+    },
+    modalHeader: { paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' },
+    modalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 },
+    modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+    modalContent: { padding: 24 },
+    modalContentCenter: { padding: 24, alignItems: 'center' },
+    verifyBox: { backgroundColor: '#f9fafb', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' },
+    verifyRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    verifyRowMb: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+    verifyLabel: { color: '#6b7280', fontSize: 14 },
+    verifyValue: { fontWeight: '600', color: '#111827', fontSize: 14 },
+    errorBox: { backgroundColor: '#fef2f2', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fee2e2' },
+    errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center' },
+    inputLabel: { fontWeight: '600', marginBottom: 10, color: '#374151', fontSize: 15 },
+    inputField: { width: '100%', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' },
+    inputWrap: { marginBottom: 32 },
+    primaryBtn: { paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+    primaryBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
+    spacer: { height: 40 },
+    successCircleLg: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    successCircleSm: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+    successBox: { backgroundColor: '#f0fdf4', padding: 20, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
+    successTitle: { color: '#166534', fontWeight: '700', fontSize: 16, marginBottom: 4 },
+    successRef: { color: '#166534', opacity: 0.8, fontSize: 14 },
+    paymentDescWrap: { marginBottom: 32 },
+    paymentDesc: { textAlign: 'center', color: '#4b5563', fontSize: 15, lineHeight: 22 },
+    paymentDescBold: { fontWeight: '700', color: '#111827' },
+    openPortalBtn: { paddingVertical: 16, borderRadius: 16, backgroundColor: '#16a34a', alignItems: 'center', marginBottom: 16 },
+    maybeLaterText: { color: '#6b7280', fontSize: 15, textAlign: 'center', fontWeight: '500' },
+    pendingBox: { backgroundColor: '#fffbeb', padding: 20, borderRadius: 16, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#f59e0b' },
+    pendingLabel: { color: '#92400e', fontSize: 14 },
+    pendingAmount: { fontWeight: 'bold', color: '#92400e', fontSize: 16 },
+    pendingDesc: { color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15, lineHeight: 22 },
+    pendingBtns: { gap: 12 },
+    resumeBtn: { paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
+    cancelBtn: { paddingVertical: 16, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' },
+    cancelBtnText: { color: '#4b5563', fontWeight: 'bold', fontSize: 16 },
+    successDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 22 },
+    successBtn: { paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' },
+});
 
 export default Bills;

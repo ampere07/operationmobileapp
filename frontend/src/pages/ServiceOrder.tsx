@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, RefreshControl, StyleSheet } from 'react-native';
 import { FileText, Search, Circle, X, ListFilter, ArrowUp, ArrowDown, Menu, RefreshCw, ArrowLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
@@ -72,7 +72,7 @@ const ServiceOrderPage: React.FC = () => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 50;
+  const itemsPerPage = 10;
 
   const formatDate = (dateStr?: string): string => {
     if (!dateStr) return 'Not scheduled';
@@ -381,7 +381,7 @@ const ServiceOrderPage: React.FC = () => {
   const isTablet = width >= 768;
 
   const StatusText = ({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
-    if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
+    if (!status) return <Text style={so.statusDash}>Unknown</Text>;
 
     let textColor = '';
 
@@ -428,7 +428,7 @@ const ServiceOrderPage: React.FC = () => {
     }
 
     return (
-      <Text style={{ color: textColor, fontWeight: 'bold', textTransform: 'uppercase' }}>
+      <Text style={[so.statusLabel, { color: textColor }]}>
         {status === 'in-progress' ? 'In Progress' : status}
       </Text>
     );
@@ -585,85 +585,47 @@ const ServiceOrderPage: React.FC = () => {
   };
 
   return (
-    <View style={{
-      height: '100%',
+    <View style={[so.container, {
       flexDirection: isTablet ? 'row' : 'column',
-      overflow: 'hidden',
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-    }}>
+    }]}>
       {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
-        <View style={{
+        <View style={[so.sidebar, {
           width: sidebarWidth,
-          borderRightWidth: 1,
-          flexShrink: 0,
-          flexDirection: 'column',
-          position: 'relative',
           backgroundColor: isDarkMode ? '#111827' : '#ffffff',
           borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-        }}>
-          <View style={{
-            padding: 16,
-            borderBottomWidth: 1,
-            flexShrink: 0,
-            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>Service Orders</Text>
+        }]}>
+          <View style={[so.sidebarHeader, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+            <View style={so.sidebarTitleRow}>
+              <Text style={[so.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Service Orders</Text>
             </View>
           </View>
           <ScrollView
-            style={{ flex: 1 }}
+            style={so.flex1}
             refreshControl={
-              <RefreshControl
-                refreshing={isLoading}
-                onRefresh={handleRefresh}
-                tintColor={colorPalette?.primary || '#ea580c'}
-                colors={[colorPalette?.primary || '#ea580c']}
-              />
+              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
             }
           >
             {locationItems.map((location) => (
               <Pressable
                 key={location.id}
                 onPress={() => setSelectedLocation(location.id)}
-                style={{
-                  width: '100%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  backgroundColor: selectedLocation === location.id
-                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                    : 'transparent'
-                }}
+                style={[so.locationItem, {
+                  backgroundColor: selectedLocation === location.id ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)') : 'transparent'
+                }]}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 8 }} />
-                  <Text style={{
-                    textTransform: 'capitalize',
-                    fontSize: 14,
+                <View style={so.locationRow}>
+                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={so.mr8} />
+                  <Text style={[so.locationName, {
                     color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151'),
                     fontWeight: selectedLocation === location.id ? '500' : 'normal'
-                  }}>{location.name}</Text>
+                  }]}>{location.name}</Text>
                 </View>
                 {location.count > 0 && (
-                  <View style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 9999,
-                    backgroundColor: selectedLocation === location.id
-                      ? (colorPalette?.primary || '#ea580c')
-                      : (isDarkMode ? '#374151' : '#e5e7eb')
-                  }}>
-                    <Text style={{
-                      fontSize: 12,
-                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
-                    }}>{location.count}</Text>
+                  <View style={[so.badge, {
+                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }]}>
+                    <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151') }]}>{location.count}</Text>
                   </View>
                 )}
               </Pressable>
@@ -673,76 +635,42 @@ const ServiceOrderPage: React.FC = () => {
       )}
 
       {mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-        <View style={{
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
+        <View style={[so.mobileLocations, {
           backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
           display: isTablet ? 'none' : 'flex'
-        }}>
-          <View style={{
-            padding: 16,
-            paddingTop: 60,
-            borderBottomWidth: 1,
+        }]}>
+          <View style={[so.mobileLocHeader, {
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: '600',
-              color: isDarkMode ? '#ffffff' : '#111827'
-            }}>Service Orders</Text>
+          }]}>
+            <Text style={[so.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Service Orders</Text>
           </View>
           <ScrollView
-            style={{ flex: 1 }}
+            style={so.flex1}
             refreshControl={
-              <RefreshControl
-                refreshing={isLoading}
-                onRefresh={handleRefresh}
-                tintColor={colorPalette?.primary || '#ea580c'}
-                colors={[colorPalette?.primary || '#ea580c']}
-              />
+              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
             }
           >
             {locationItems.map((location) => (
               <Pressable
                 key={location.id}
                 onPress={() => handleLocationSelect(location.id)}
-                style={{
-                  width: '100%',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 16,
-                  paddingVertical: 16,
-                  borderBottomWidth: 1,
-                  backgroundColor: selectedLocation === location.id
-                    ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)')
-                    : 'transparent',
+                style={[so.mobileLocationItem, {
+                  backgroundColor: selectedLocation === location.id ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)') : 'transparent',
                   borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                }}
+                }]}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={{ marginRight: 12 }} />
-                  <Text style={{
-                    textTransform: 'capitalize',
-                    fontSize: 16,
+                <View style={so.locationRow}>
+                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')} style={so.mr12} />
+                  <Text style={[so.mobileLocationName, {
                     color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : (isDarkMode ? '#d1d5db' : '#374151')
-                  }}>{location.name}</Text>
+                  }]}>{location.name}</Text>
                 </View>
                 {location.count > 0 && (
-                  <View style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 9999,
-                    backgroundColor: selectedLocation === location.id
-                      ? (colorPalette?.primary || '#ea580c')
-                      : (isDarkMode ? '#374151' : '#e5e7eb')
-                  }}>
-                    <Text style={{
-                      fontSize: 14,
-                      color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151')
-                    }}>{location.count}</Text>
+                  <View style={[so.badgeLg, {
+                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#e5e7eb')
+                  }]}>
+                    <Text style={[so.badgeLgText, { color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151') }]}>{location.count}</Text>
                   </View>
                 )}
               </Pressable>
@@ -752,87 +680,31 @@ const ServiceOrderPage: React.FC = () => {
       )}
 
       {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 50
-        }}>
-          <Pressable
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)'
-            }}
-            onPress={() => setMobileMenuOpen(false)}
-          />
-          <View style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 256,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            flexDirection: 'column'
-          }}>
-            <View style={{
-              padding: 16,
-              borderBottomWidth: 1,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>Filters</Text>
+        <View style={so.mobileOverlay}>
+          <Pressable style={so.mobileBackdrop} onPress={() => setMobileMenuOpen(false)} />
+          <View style={[so.mobileSidebar, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
+            <View style={[so.mobileSidebarHeader, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[so.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Filters</Text>
               <Pressable onPress={() => setMobileMenuOpen(false)}>
                 <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
               </Pressable>
             </View>
-            <ScrollView style={{ flex: 1 }}>
+            <ScrollView style={so.flex1}>
               {locationItems.map((location) => (
                 <Pressable
                   key={location.id}
                   onPress={() => handleLocationSelect(location.id)}
-                  style={{
-                    width: '100%',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    backgroundColor: selectedLocation === location.id
-                      ? 'rgba(249, 115, 22, 0.2)'
-                      : 'transparent'
-                  }}
+                  style={[so.locationItem, {
+                    backgroundColor: selectedLocation === location.id ? 'rgba(249, 115, 22, 0.2)' : 'transparent'
+                  }]}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <FileText size={16} color={selectedLocation === location.id ? '#fb923c' : '#d1d5db'} style={{ marginRight: 8 }} />
-                    <Text style={{
-                      textTransform: 'capitalize',
-                      fontSize: 14,
-                      color: selectedLocation === location.id ? '#fb923c' : '#d1d5db'
-                    }}>{location.name}</Text>
+                  <View style={so.locationRow}>
+                    <FileText size={16} color={selectedLocation === location.id ? '#fb923c' : '#d1d5db'} style={so.mr8} />
+                    <Text style={[so.locationName, { color: selectedLocation === location.id ? '#fb923c' : '#d1d5db' }]}>{location.name}</Text>
                   </View>
                   {location.count > 0 && (
-                    <View style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 9999,
-                      backgroundColor: selectedLocation === location.id ? '#ea580c' : '#374151'
-                    }}>
-                      <Text style={{
-                        fontSize: 12,
-                        color: selectedLocation === location.id ? 'white' : '#d1d5db'
-                      }}>{location.count}</Text>
+                    <View style={[so.badge, { backgroundColor: selectedLocation === location.id ? '#ea580c' : '#374151' }]}>
+                      <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : '#d1d5db' }]}>{location.count}</Text>
                     </View>
                   )}
                 </Pressable>
@@ -842,81 +714,47 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-      <View style={{
-        overflow: 'hidden',
-        flex: 1,
-        flexDirection: 'column',
+      <View style={[so.mainContent, {
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
         display: ((mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4) || mobileView === 'details') && !isTablet ? 'none' : 'flex'
-      }}>
-        <View style={{ flexDirection: 'column', height: '100%' }}>
-          <View style={{
-            padding: 16,
-            paddingTop: 60,
-            borderBottomWidth: 1,
-            flexShrink: 0,
+      }]}>
+        <View style={so.mainInner}>
+          <View style={[so.toolbar, {
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          }]}>
+            <View style={so.toolbarRow}>
               {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-                <Pressable
-                  onPress={handleMobileBack}
-                  style={{
-                    padding: 8,
-                    borderRadius: 4,
-                  }}
-                >
+                <Pressable onPress={handleMobileBack} style={so.iconBtn}>
                   <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
                 </Pressable>
               )}
               {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-                <Pressable
-                  onPress={() => setMobileMenuOpen(true)}
-                  style={{
-                    backgroundColor: '#374151',
-                    padding: 8,
-                    borderRadius: 4
-                  }}
-                >
+                <Pressable onPress={() => setMobileMenuOpen(true)} style={so.menuBtn}>
                   <Menu size={20} color="white" />
                 </Pressable>
               )}
-              <View style={{ position: 'relative', flex: 1 }}>
+              <View style={so.searchWrap}>
                 <TextInput
                   placeholder="Search service orders..."
                   placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  style={{
-                    width: '100%',
-                    borderRadius: 4,
-                    paddingLeft: 40,
-                    paddingRight: 16,
-                    paddingVertical: 8,
+                  style={[so.searchInput, {
                     backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
                     color: isDarkMode ? '#ffffff' : '#111827',
-                    borderWidth: 1,
                     borderColor: isDarkMode ? '#374151' : '#d1d5db'
-                  }}
+                  }]}
                 />
-                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                <View style={so.searchIcon}>
                   <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-
+              <View style={so.actionsRow}>
                 <Pressable
                   onPress={handleRefresh}
                   disabled={isLoading}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 4,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
-                  }}
+                  style={[so.actionBtn, { backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c') }]}
                 >
                   <RefreshCw size={20} color="white" />
                 </Pressable>
@@ -924,62 +762,26 @@ const ServiceOrderPage: React.FC = () => {
             </View>
           </View>
 
-          <View style={{ flex: 1, overflow: 'hidden', flexDirection: 'column' }}>
+          <View style={so.listArea}>
             <ScrollView
-              style={{ flex: 1 }}
+              style={so.flex1}
               refreshControl={
-                <RefreshControl
-                  refreshing={isLoading}
-                  onRefresh={handleRefresh}
-                  tintColor={colorPalette?.primary || '#ea580c'}
-                  colors={[colorPalette?.primary || '#ea580c']}
-                />
+                <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
               }
             >
               {isLoading ? (
-                <View style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
-                  <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                    <View style={{
-                      height: 16,
-                      width: '33%',
-                      borderRadius: 4,
-                      marginBottom: 16,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
-                    <View style={{
-                      height: 16,
-                      width: '50%',
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
+                <View style={so.loadingWrap}>
+                  <View style={so.skeletonCol}>
+                    <View style={[so.skeletonBar1, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
+                    <View style={[so.skeletonBar2, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
                   </View>
-                  <Text style={{
-                    marginTop: 16,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>Loading service orders...</Text>
+                  <Text style={[so.loadingText, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>Loading service orders...</Text>
                 </View>
               ) : error ? (
-                <View style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
+                <View style={so.loadingWrap}>
                   <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
-                  <Pressable
-                    onPress={handleRefresh}
-                    style={{
-                      marginTop: 16,
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#9ca3af'
-                    }}
-                  >
-                    <Text style={{ color: 'white' }}>Retry</Text>
+                  <Pressable onPress={handleRefresh} style={[so.retryBtn, { backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }]}>
+                    <Text style={so.retryText}>Retry</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -989,43 +791,19 @@ const ServiceOrderPage: React.FC = () => {
                       <Pressable
                         key={serviceOrder.id}
                         onPress={() => !isTablet ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
-                        style={{
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          borderBottomWidth: 1,
+                        style={[so.cardRow, {
                           backgroundColor: selectedServiceOrder?.id === serviceOrder.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
                           borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                        }}
+                        }]}
                       >
-                        <View style={{
-                          flexDirection: 'row',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between'
-                        }}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={{
-                              fontWeight: '500',
-                              fontSize: 14,
-                              marginBottom: 4,
-                              color: isDarkMode ? '#ffffff' : '#111827'
-                            }}>
-                              {serviceOrder.fullName}
-                            </Text>
-                            <Text style={{
-                              fontSize: 12,
-                              color: isDarkMode ? '#9ca3af' : '#4b5563'
-                            }}>
+                        <View style={so.cardInner}>
+                          <View style={so.cardLeft}>
+                            <Text style={[so.cardName, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{serviceOrder.fullName}</Text>
+                            <Text style={[so.cardSub, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
                               {serviceOrder.timestamp} | {serviceOrder.fullAddress}
                             </Text>
                           </View>
-                          <View style={{
-                            flexDirection: 'column',
-                            alignItems: 'flex-end',
-                            gap: 4,
-                            marginLeft: 16,
-                            flexShrink: 0
-                          }}>
-                            {/* Conditionally show visitStatus for technicians (role_id 2), otherwise supportStatus */}
+                          <View style={so.cardRight}>
                             <StatusText 
                               status={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? serviceOrder.visitStatus : serviceOrder.supportStatus} 
                               type={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? 'visit' : 'support'} 
@@ -1036,89 +814,48 @@ const ServiceOrderPage: React.FC = () => {
                     ))}
                   </View>
                 ) : (
-                  <View style={{
-                    alignItems: 'center',
-                    paddingVertical: 48
-                  }}>
-                    <Text style={{
-                      color: isDarkMode ? '#9ca3af' : '#4b5563'
-                    }}>No service orders found matching your filters</Text>
+                  <View style={so.emptyWrap}>
+                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>No service orders found matching your filters</Text>
                   </View>
                 )
               )}
             </ScrollView>
 
             {!isLoading && filteredServiceOrders.length > 0 && totalPages > 1 && (
-              <View style={{
-                borderTopWidth: 1,
-                padding: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+              <View style={[so.paginationBar, {
                 backgroundColor: isDarkMode ? '#111827' : '#ffffff',
                 borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }}>
+              }]}>
                 <View>
-                  <Text style={{
-                    fontSize: 14,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>
-                    Showing <Text style={{ fontWeight: '500' }}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={{ fontWeight: '500' }}>{Math.min(currentPage * itemsPerPage, filteredServiceOrders.length)}</Text> of <Text style={{ fontWeight: '500' }}>{filteredServiceOrders.length}</Text> results
+                  <Text style={[so.paginationInfo, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
+                    Showing <Text style={so.bold500}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={so.bold500}>{Math.min(currentPage * itemsPerPage, filteredServiceOrders.length)}</Text> of <Text style={so.bold500}>{filteredServiceOrders.length}</Text> results
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={so.paginationBtns}>
                   <Pressable
                     onPress={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 4,
-                      backgroundColor: currentPage === 1
-                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
-                        : (isDarkMode ? '#374151' : '#ffffff'),
-                      borderWidth: currentPage === 1 ? 0 : 1,
-                      borderColor: '#d1d5db'
-                    }}
+                    style={[so.pageBtn, {
+                      backgroundColor: currentPage === 1 ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
+                      borderWidth: currentPage === 1 ? 0 : 1, borderColor: '#d1d5db'
+                    }]}
                   >
-                    <Text style={{
-                      fontSize: 14,
-                      color: currentPage === 1
-                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
-                        : (isDarkMode ? '#ffffff' : '#374151')
-                    }}>Previous</Text>
+                    <Text style={[so.pageBtnText, { color: currentPage === 1 ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151') }]}>Previous</Text>
                   </Pressable>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{
-                      paddingHorizontal: 8,
-                      fontSize: 14,
-                      color: isDarkMode ? '#ffffff' : '#111827'
-                    }}>
-                      Page {currentPage} of {totalPages}
-                    </Text>
+                  <View style={so.pageIndicatorWrap}>
+                    <Text style={[so.pageIndicator, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Page {currentPage} of {totalPages}</Text>
                   </View>
 
                   <Pressable
                     onPress={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 4,
-                      backgroundColor: currentPage === totalPages
-                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
-                        : (isDarkMode ? '#374151' : '#ffffff'),
-                      borderWidth: currentPage === totalPages ? 0 : 1,
-                      borderColor: '#d1d5db'
-                    }}
+                    style={[so.pageBtn, {
+                      backgroundColor: currentPage === totalPages ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
+                      borderWidth: currentPage === totalPages ? 0 : 1, borderColor: '#d1d5db'
+                    }]}
                   >
-                    <Text style={{
-                      fontSize: 14,
-                      color: currentPage === totalPages
-                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
-                        : (isDarkMode ? '#ffffff' : '#374151')
-                    }}>Next</Text>
+                    <Text style={[so.pageBtnText, { color: currentPage === totalPages ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151') }]}>Next</Text>
                   </Pressable>
                 </View>
               </View>
@@ -1128,13 +865,10 @@ const ServiceOrderPage: React.FC = () => {
       </View>
 
       {selectedServiceOrder && mobileView === 'details' && (
-        <View style={{
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
+        <View style={[so.mobileDetail, {
           backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
           display: isTablet ? 'none' : 'flex'
-        }}>
+        }]}>
           <ServiceOrderDetails
             serviceOrder={selectedServiceOrder}
             onClose={handleMobileBack}
@@ -1144,11 +878,7 @@ const ServiceOrderPage: React.FC = () => {
       )}
 
       {selectedServiceOrder && mobileView !== 'details' && (
-        <View style={{
-          flexShrink: 0,
-          overflow: 'hidden',
-          display: isTablet ? 'flex' : 'none'
-        }}>
+        <View style={[so.tabletDetail, { display: isTablet ? 'flex' : 'none' }]}>
           <ServiceOrderDetails
             serviceOrder={selectedServiceOrder}
             onClose={() => setSelectedServiceOrder(null)}
@@ -1157,9 +887,83 @@ const ServiceOrderPage: React.FC = () => {
         </View>
       )}
 
-
     </View>
   );
 };
+
+const so = StyleSheet.create({
+  container: { height: '100%', overflow: 'hidden' },
+  // Sidebar
+  sidebar: { borderRightWidth: 1, flexShrink: 0, flexDirection: 'column', position: 'relative' },
+  sidebarHeader: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
+  sidebarTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  sidebarTitle: { fontSize: 18, fontWeight: '600' },
+  flex1: { flex: 1 },
+  // Location items
+  locationItem: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  locationRow: { flexDirection: 'row', alignItems: 'center' },
+  locationName: { textTransform: 'capitalize', fontSize: 14 },
+  mr8: { marginRight: 8 },
+  mr12: { marginRight: 12 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9999 },
+  badgeText: { fontSize: 12 },
+  badgeLg: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 9999 },
+  badgeLgText: { fontSize: 14 },
+  // Mobile locations
+  mobileLocations: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
+  mobileLocHeader: { padding: 16, paddingTop: 60, borderBottomWidth: 1 },
+  mobileLocationItem: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1 },
+  mobileLocationName: { textTransform: 'capitalize', fontSize: 16 },
+  // Mobile overlay
+  mobileOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
+  mobileBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  mobileSidebar: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 256, flexDirection: 'column' },
+  mobileSidebarHeader: { padding: 16, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Main content
+  mainContent: { overflow: 'hidden', flex: 1, flexDirection: 'column' },
+  mainInner: { flexDirection: 'column', height: '100%' },
+  // Toolbar
+  toolbar: { padding: 16, paddingTop: 60, borderBottomWidth: 1, flexShrink: 0 },
+  toolbarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBtn: { padding: 8, borderRadius: 4 },
+  menuBtn: { backgroundColor: '#374151', padding: 8, borderRadius: 4 },
+  searchWrap: { position: 'relative', flex: 1 },
+  searchInput: { width: '100%', borderRadius: 4, paddingLeft: 40, paddingRight: 16, paddingVertical: 8, borderWidth: 1 },
+  searchIcon: { position: 'absolute', left: 12, top: 10 },
+  actionsRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
+  // List area
+  listArea: { flex: 1, overflow: 'hidden', flexDirection: 'column' },
+  loadingWrap: { paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' },
+  skeletonCol: { flexDirection: 'column', alignItems: 'center' },
+  skeletonBar1: { height: 16, width: '33%', borderRadius: 4, marginBottom: 16 },
+  skeletonBar2: { height: 16, width: '50%', borderRadius: 4 },
+  loadingText: { marginTop: 16 },
+  retryBtn: { marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
+  retryText: { color: 'white' },
+  // Cards
+  cardRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  cardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardLeft: { flex: 1, minWidth: 0 },
+  cardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
+  cardSub: { fontSize: 12 },
+  cardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
+  // Pagination
+  paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  paginationInfo: { fontSize: 14 },
+  bold500: { fontWeight: '500' },
+  paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtnText: { fontSize: 14 },
+  pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
+  // Detail panels
+  mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
+  tabletDetail: { flexShrink: 0, overflow: 'hidden' },
+  // StatusText
+  statusDash: { color: '#9ca3af' },
+  statusLabel: { fontWeight: 'bold', textTransform: 'uppercase' },
+});
 
 export default ServiceOrderPage;

@@ -168,7 +168,8 @@ export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ chil
             if (authData) {
                 try {
                     const userData = JSON.parse(authData);
-                    if (userData.role && userData.role.toLowerCase() === 'technician' && userData.email) {
+                    const isTechnician = userData.role_id === 2 || (userData.role && userData.role.toLowerCase() === 'technician');
+                    if (isTechnician && userData.email) {
                         assignedEmail = userData.email;
                     }
                 } catch (err) {

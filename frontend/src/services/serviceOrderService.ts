@@ -75,9 +75,9 @@ export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderD
   }
 };
 
-export const getServiceOrders = async (assignedEmail?: string, page: number = 1, limit: number = 50, search: string = '') => {
+export const getServiceOrders = async (assignedEmail?: string, page: number = 1, limit: number = 50, search: string = '', accountNo?: string) => {
   try {
-    const params: { assigned_email?: string; user_role?: string; user_email?: string; page: number; limit: number; search?: string } = {
+    const params: { assigned_email?: string; user_role?: string; user_email?: string; page: number; limit: number; search?: string; account_no?: string } = {
       page,
       limit
     };
@@ -88,6 +88,10 @@ export const getServiceOrders = async (assignedEmail?: string, page: number = 1,
 
     if (search) {
       params.search = search;
+    }
+
+    if (accountNo) {
+      params.account_no = accountNo;
     }
 
     const authData = await AsyncStorage.getItem('authData');

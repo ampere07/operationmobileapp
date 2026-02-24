@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1638,22 +1638,21 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 bg-black/50 justify-end"
+        style={styles.modalOverlay}
       >
         <Modal
           visible={showLoadingModal}
           transparent={true}
           animationType="fade"
         >
-          <View className="flex-1 bg-black/70 items-center justify-center">
-            <View className={`rounded-xl p-8 items-center space-y-6 min-w-[320px] ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-              <Loader2
-                size={80}
+          <View style={styles.loadingModalOverlay}>
+            <View style={[styles.loadingModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <ActivityIndicator
+                size="large"
                 color={colorPalette?.primary || '#ea580c'}
-                className="animate-spin"
               />
               <View>
-                <Text className={`text-4xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{loadingPercentage}%</Text>
+                <Text style={[styles.loadingPercentage, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{loadingPercentage}%</Text>
               </View>
             </View>
           </View>
@@ -1664,45 +1663,52 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           transparent={true}
           animationType="fade"
         >
-          <View className="flex-1 bg-black/75 items-center justify-center p-4">
-            <View className={`rounded-xl shadow-xl max-w-2xl w-full max-h-[80%] overflow-hidden ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-              <View className={`px-6 py-4 border-b flex-row items-center justify-between ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{modalContent.title}</Text>
+          <View style={styles.messageModalOverlay}>
+            <View style={[styles.messageModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.messageModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.messageModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{modalContent.title}</Text>
                 <Pressable
                   onPress={() => setShowModal(false)}
-                  className="p-1"
+                  style={styles.messageModalClose}
                 >
                   <X size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                 </Pressable>
               </View>
-              <ScrollView className="px-6 py-4">
-                <View className="space-y-3">
+              <ScrollView style={styles.messageList}>
+                <View>
                   {modalContent.messages.map((message, index) => (
                     <View
                       key={index}
-                      className={`flex-row items-start gap-3 p-3 rounded-lg border ${message.type === 'success'
-                        ? (isDarkMode ? 'bg-green-900/30 border-green-700' : 'bg-green-100 border-green-300')
-                        : message.type === 'warning'
-                          ? (isDarkMode ? 'bg-yellow-900/30 border-yellow-700' : 'bg-yellow-100 border-yellow-300')
-                          : (isDarkMode ? 'bg-red-900/30 border-red-700' : 'bg-red-100 border-red-300')
-                        }`}
+                      style={[styles.messageItem, {
+                        backgroundColor: message.type === 'success'
+                          ? (isDarkMode ? 'rgba(20, 83, 45, 0.3)' : '#dcfce7')
+                          : message.type === 'warning'
+                            ? (isDarkMode ? 'rgba(113, 63, 18, 0.3)' : '#fef9c3')
+                            : (isDarkMode ? 'rgba(127, 29, 29, 0.3)' : '#fee2e2'),
+                        borderColor: message.type === 'success'
+                          ? (isDarkMode ? '#15803d' : '#86efac')
+                          : message.type === 'warning'
+                            ? (isDarkMode ? '#a16207' : '#fde047')
+                            : (isDarkMode ? '#b91c1c' : '#fca5a5')
+                      }]}
                     >
                       {message.type === 'success' && (
-                        <CheckCircle className="text-green-500 mt-0.5" size={20} />
+                        <CheckCircle color="#22c55e" size={20} style={{ marginTop: 2 }} />
                       )}
                       {message.type === 'warning' && (
-                        <AlertCircle className="text-yellow-500 mt-0.5" size={20} />
+                        <AlertCircle color="#eab308" size={20} style={{ marginTop: 2 }} />
                       )}
                       {message.type === 'error' && (
-                        <XCircle className="text-red-500 mt-0.5" size={20} />
+                        <XCircle color="#ef4444" size={20} style={{ marginTop: 2 }} />
                       )}
                       <Text
-                        className={`text-sm flex-1 ${message.type === 'success'
-                          ? (isDarkMode ? 'text-green-200' : 'text-green-800')
-                          : message.type === 'warning'
-                            ? (isDarkMode ? 'text-yellow-200' : 'text-yellow-800')
-                            : (isDarkMode ? 'text-red-200' : 'text-red-800')
-                          }`}
+                        style={[styles.messageText, {
+                          color: message.type === 'success'
+                            ? (isDarkMode ? '#bbf7d0' : '#166534')
+                            : message.type === 'warning'
+                              ? (isDarkMode ? '#fef08a' : '#854d0e')
+                              : (isDarkMode ? '#fecaca' : '#991b1b')
+                        }]}
                       >
                         {message.text}
                       </Text>
@@ -1710,65 +1716,66 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   ))}
                 </View>
               </ScrollView>
-              <View className={`px-6 py-4 border-t flex-row justify-end ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+              <View style={[styles.messageModalFooter, { borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
                 <Pressable
                   onPress={() => setShowModal(false)}
-                  className="px-6 py-2 rounded-lg"
-                  style={{
+                  style={[styles.messageModalButton, {
                     backgroundColor: colorPalette?.primary || '#ea580c'
-                  }}
+                  }]}
                 >
-                  <Text className="text-white font-medium text-center">Close</Text>
+                  <Text style={styles.messageModalButtonText}>Close</Text>
                 </Pressable>
               </View>
             </View>
           </View>
         </Modal>
 
-        <View className={`h-[90%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-          }`}>
-          <View className={`px-6 py-4 flex-row items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            }`}>
-            <View className="flex-row items-center space-x-3">
-              <Text className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{fullName}</Text>
+        <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
+          <View style={[styles.header, {
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{fullName}</Text>
             </View>
-            <View className="flex-row items-center space-x-3 gap-2">
+            <View style={styles.headerActions}>
               <Pressable
                 onPress={onClose}
-                className="px-4 py-2 border rounded-lg"
-                style={{
+                style={[styles.cancelButton, {
                   borderColor: colorPalette?.primary || '#ea580c',
-                }}
+                }]}
               >
-                <Text style={{ color: colorPalette?.primary || '#ea580c' }} className="text-sm font-medium">Cancel</Text>
+                <Text style={[styles.cancelButtonText, { color: colorPalette?.primary || '#ea580c' }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
                 disabled={loading}
-                className="px-6 py-2 rounded-lg"
-                style={{
+                style={[styles.submitButton, {
                   backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
-                }}
+                }]}
               >
-                <Text className="text-white text-sm font-medium">{loading ? 'Submitting...' : 'Submit'}</Text>
+                <Text style={styles.submitButtonText}>{loading ? 'Submitting...' : 'Submit'}</Text>
               </Pressable>
             </View>
           </View>
 
-          <View style={{ flex: 1 }}>
+          <View style={styles.contentContainer}>
             <ScrollView
-              className="flex-1 p-6"
-              contentContainerStyle={{ paddingBottom: 40 }}
+              style={styles.contentContainer}
+              contentContainerStyle={styles.scrollViewContent}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps="handled"
             >
-              <View className="space-y-4">
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Choose Plan<Text className="text-red-500">*</Text></Text>
-                  <View className="relative">
-                    <View className={`border rounded-lg overflow-hidden ${errors.choosePlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <View style={styles.inputGroup}>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                    Choose Plan<Text style={styles.required}>*</Text>
+                  </Text>
+                  <View>
+                    <View style={[styles.pickerContainer, {
+                      borderColor: errors.choosePlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                    }]}>
                       <Picker
                         selectedValue={formData.choosePlan}
                         onValueChange={(value) => handleInputChange('choosePlan', value)}
@@ -1792,26 +1799,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     </View>
                   </View>
                   {errors.choosePlan && (
-                    <View className="flex-row items-center mt-1">
-                      <View
-                        className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >
-                        <Text className="text-white text-[10px] font-bold">!</Text>
+                    <View style={styles.errorContainer}>
+                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                        <Text style={styles.errorIconText}>!</Text>
                       </View>
-                      <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.choosePlan}</Text>
+                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.choosePlan}</Text>
                     </View>
                   )}
                 </View>
 
-
-
-
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Onsite Status<Text className="text-red-500">*</Text></Text>
-                  <View className="relative">
-                    <View className={`border rounded-lg overflow-hidden ${errors.onsiteStatus ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                    Onsite Status<Text style={styles.required}>*</Text>
+                  </Text>
+                  <View>
+                    <View style={[styles.pickerContainer, {
+                      borderColor: errors.onsiteStatus ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                    }]}>
                       <Picker
                         selectedValue={formData.onsiteStatus}
                         onValueChange={(value) => handleInputChange('onsiteStatus', value)}
@@ -1826,74 +1831,78 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     </View>
                   </View>
                   {errors.onsiteStatus && (
-                    <View className="flex-row items-center mt-1">
-                      <View
-                        className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                        style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                      >
-                        <Text className="text-white text-[10px] font-bold">!</Text>
+                    <View style={styles.errorContainer}>
+                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                        <Text style={styles.errorIconText}>!</Text>
                       </View>
-                      <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.onsiteStatus}</Text>
+                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteStatus}</Text>
                     </View>
                   )}
                 </View>
 
-
-
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Region</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Region</Text>
                   <TextInput
                     value={formData.region}
                     editable={false}
                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
+                    style={[styles.textInput, {
+                      opacity: 0.75,
+                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                      borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                      color: isDarkMode ? '#d1d5db' : '#4b5563'
+                    }]}
                   />
                 </View>
 
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>City</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>City</Text>
                   <TextInput
                     value={formData.city}
                     editable={false}
                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
+                    style={[styles.textInput, {
+                      opacity: 0.75,
+                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                      borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                      color: isDarkMode ? '#d1d5db' : '#4b5563'
+                    }]}
                   />
                 </View>
 
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>Barangay</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Barangay</Text>
                   <TextInput
                     value={formData.barangay}
                     editable={false}
                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
+                    style={[styles.textInput, {
+                      opacity: 0.75,
+                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                      borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+                      color: isDarkMode ? '#d1d5db' : '#4b5563'
+                    }]}
                   />
                 </View>
 
 
                 {formData.onsiteStatus === 'Done' && (
                   <>
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Date Installed<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Date Installed<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
                         <Pressable
                           onPress={() => setShowDatePicker(true)}
-                          className={`w-full px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} ${errors.dateInstalled ? 'border-red-500' : ''}`}
+                          style={[styles.datePickerButton, {
+                            borderColor: errors.dateInstalled ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}
                         >
-                          <Text className={`${formData.dateInstalled ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-500' : 'text-gray-400')}`}>
+                          <Text style={{
+                            color: formData.dateInstalled ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af')
+                          }}>
                             {formData.dateInstalled || 'Select Date'}
                           </Text>
                         </Pressable>
@@ -1908,23 +1917,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         )}
                       </View>
                       {errors.dateInstalled && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Usage Type<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.usageType ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Usage Type<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.usageType ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.usageType}
                             onValueChange={(value) => handleInputChange('usageType', value)}
@@ -1964,82 +1974,91 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.usageType && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Connection Type<Text className="text-red-500">*</Text></Text>
-                      <View className="flex-row gap-2">
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Connection Type<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View style={styles.connectionTypeContainer}>
                         <Pressable
                           onPress={() => handleInputChange('connectionType', 'Antenna')}
-                          className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Antenna'
-                            ? 'text-white'
-                            : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
-                            }`}
-                          style={formData.connectionType === 'Antenna' ? {
-                            backgroundColor: colorPalette?.primary || '#ea580c',
-                            borderColor: colorPalette?.accent || '#dc2626'
-                          } : {}}
+                          style={[styles.connectionTypeButton, {
+                            backgroundColor: formData.connectionType === 'Antenna'
+                              ? (colorPalette?.primary || '#ea580c')
+                              : (isDarkMode ? '#1f2937' : '#f3f4f6'),
+                            borderColor: formData.connectionType === 'Antenna'
+                              ? (colorPalette?.accent || '#dc2626')
+                              : (isDarkMode ? '#374151' : '#d1d5db')
+                          }]}
                         >
-                          <Text className={`font-medium ${formData.connectionType === 'Antenna' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Antenna</Text>
+                          <Text style={[styles.connectionTypeText, {
+                            color: formData.connectionType === 'Antenna'
+                              ? '#ffffff'
+                              : (isDarkMode ? '#d1d5db' : '#374151')
+                          }]}>Antenna</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => handleInputChange('connectionType', 'Fiber')}
-                          className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Fiber'
-                            ? 'text-white'
-                            : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
-                            }`}
-                          style={formData.connectionType === 'Fiber' ? {
-                            backgroundColor: colorPalette?.primary || '#ea580c',
-                            borderColor: colorPalette?.accent || '#dc2626'
-                          } : {}}
+                          style={[styles.connectionTypeButton, {
+                            backgroundColor: formData.connectionType === 'Fiber'
+                              ? (colorPalette?.primary || '#ea580c')
+                              : (isDarkMode ? '#1f2937' : '#f3f4f6'),
+                            borderColor: formData.connectionType === 'Fiber'
+                              ? (colorPalette?.accent || '#dc2626')
+                              : (isDarkMode ? '#374151' : '#d1d5db')
+                          }]}
                         >
-                          <Text className={`font-medium ${formData.connectionType === 'Fiber' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Fiber</Text>
+                          <Text style={[styles.connectionTypeText, {
+                            color: formData.connectionType === 'Fiber'
+                              ? '#ffffff'
+                              : (isDarkMode ? '#d1d5db' : '#374151')
+                          }]}>Fiber</Text>
                         </Pressable>
                         <Pressable
                           onPress={() => handleInputChange('connectionType', 'Local')}
-                          className={`flex-1 py-3 px-4 rounded-lg border items-center justify-center ${formData.connectionType === 'Local'
-                            ? 'text-white'
-                            : (isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300')
-                            }`}
-                          style={formData.connectionType === 'Local' ? {
-                            backgroundColor: colorPalette?.primary || '#ea580c',
-                            borderColor: colorPalette?.accent || '#dc2626'
-                          } : {}}
+                          style={[styles.connectionTypeButton, {
+                            backgroundColor: formData.connectionType === 'Local'
+                              ? (colorPalette?.primary || '#ea580c')
+                              : (isDarkMode ? '#1f2937' : '#f3f4f6'),
+                            borderColor: formData.connectionType === 'Local'
+                              ? (colorPalette?.accent || '#dc2626')
+                              : (isDarkMode ? '#374151' : '#d1d5db')
+                          }]}
                         >
-                          <Text className={`font-medium ${formData.connectionType === 'Local' ? 'text-white' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}>Local</Text>
+                          <Text style={[styles.connectionTypeText, {
+                            color: formData.connectionType === 'Local'
+                              ? '#ffffff'
+                              : (isDarkMode ? '#d1d5db' : '#374151')
+                          }]}>Local</Text>
                         </Pressable>
                       </View>
                       {errors.connectionType && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Router Model<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        {/* Search Input Field */}
-                        <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                          } ${errors.routerModel ? 'border-red-500' : ''}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Router Model<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View style={{ zIndex: isRouterModelOpen ? 100 : 1 }}>
+                        <View style={[styles.searchContainer, {
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                          borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                        }]}>
                           <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                           <TextInput
                             placeholder="Search Router Model..."
@@ -2050,7 +2069,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             }}
                             onFocus={() => setIsRouterModelOpen(true)}
                             placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                            className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                            style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                           />
                           {(isRouterModelOpen || formData.routerModel) && (
                             <Pressable
@@ -2063,7 +2082,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                   setRouterModelSearch('');
                                 }
                               }}
-                              className="p-1"
+                              style={{ padding: 4 }}
                             >
                               <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                             </Pressable>
@@ -2073,14 +2092,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           )}
                         </View>
 
-                        {/* Dropdown Menu */}
                         {isRouterModelOpen && (
-                          <View
-                            className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                              }`}
-                            style={{ elevation: 5 }}
-                          >
-                            <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
+                          <View style={[styles.dropdown, {
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                          }]}>
+                            <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
                               {routerModels
                                 .filter(rm => {
                                   if (!rm || !rm.model) return false;
@@ -2089,20 +2106,29 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 .map((routerModel, index) => (
                                   <Pressable
                                     key={routerModel.model || index}
-                                    className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                      } ${formData.routerModel === routerModel.model ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                    style={[styles.dropdownItem, {
+                                      borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                      backgroundColor: formData.routerModel === routerModel.model
+                                        ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
+                                        : 'transparent'
+                                    }]}
                                     onPress={() => {
                                       handleInputChange('routerModel', routerModel.model);
                                       setRouterModelSearch('');
                                       setIsRouterModelOpen(false);
                                     }}
                                   >
-                                    <View className="flex-row items-center justify-between">
-                                      <Text className={`text-sm ${formData.routerModel === routerModel.model ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                    <View style={styles.dropdownItemContent}>
+                                      <Text style={[styles.dropdownItemText, {
+                                        color: formData.routerModel === routerModel.model
+                                          ? (colorPalette?.primary || '#f97316')
+                                          : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                        fontWeight: formData.routerModel === routerModel.model ? '500' : 'normal'
+                                      }]}>
                                         {routerModel.model}
                                       </Text>
                                       {formData.routerModel === routerModel.model && (
-                                        <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                        <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                       )}
                                     </View>
                                   </Pressable>
@@ -2111,8 +2137,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 if (!rm || !rm.model) return false;
                                 return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
                               }).length === 0 && (
-                                  <View className="px-4 py-8 items-center">
-                                    <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                  <View style={styles.emptyDropdown}>
+                                    <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                       No results found for "{routerModelSearch}"
                                     </Text>
                                   </View>
@@ -2122,45 +2148,44 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         )}
                       </View>
                       {errors.routerModel && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Modem SN<Text className="text-red-500">*</Text></Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Modem SN<Text style={styles.required}>*</Text>
+                      </Text>
                       <TextInput
                         value={formData.modemSN}
                         onChangeText={(text) => handleInputChange('modemSN', text)}
                         placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.modemSN ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                        style={[styles.textInput, {
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                          color: isDarkMode ? '#ffffff' : '#111827',
+                          borderColor: errors.modemSN ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                        }]}
                       />
                       {errors.modemSN && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.modemSN}</Text>
                         </View>
                       )}
                     </View>
 
                     {usernamePattern && usernamePattern.sequence.some(item => item.type === 'tech_input') && (
-                      <View className="mb-4">
-                        <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>PPPoE Username<Text className="text-red-500">*</Text></Text>
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                          PPPoE Username<Text style={styles.required}>*</Text>
+                        </Text>
                         <TextInput
                           value={techInputValue}
                           onChangeText={(text) => {
@@ -2171,62 +2196,65 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           }}
                           placeholder="Enter PPPoE username"
                           placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                          className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                            } ${errors.techInput ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                          style={[styles.textInput, {
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                            color: isDarkMode ? '#ffffff' : '#111827',
+                            borderColor: errors.techInput ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                          }]}
                         />
                         {errors.techInput && (
-                          <View className="flex-row items-center mt-1">
-                            <View
-                              className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                            >
-                              <Text className="text-white text-[10px] font-bold">!</Text>
+                          <View style={styles.errorContainer}>
+                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                              <Text style={styles.errorIconText}>!</Text>
                             </View>
-                            <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.techInput}</Text>
+                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.techInput}</Text>
                           </View>
                         )}
                         {!techInputValue.trim() && !errors.techInput && (
-                          <Text className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}>This will be used as the PPPoE username</Text>
+                          <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                            This will be used as the PPPoE username
+                          </Text>
                         )}
                       </View>
                     )}
 
                     {formData.connectionType === 'Antenna' && (
-                      <View className="mb-4">
-                        <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>IP<Text className="text-red-500">*</Text></Text>
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                          IP<Text style={styles.required}>*</Text>
+                        </Text>
                         <TextInput
                           value={formData.ip}
                           onChangeText={(text) => handleInputChange('ip', text)}
                           placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                          className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                            } ${errors.ip ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
+                          style={[styles.textInput, {
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                            color: isDarkMode ? '#ffffff' : '#111827',
+                            borderColor: errors.ip ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                          }]}
                         />
                         {errors.ip && (
-                          <View className="flex-row items-center mt-1">
-                            <View
-                              className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                              style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                            >
-                              <Text className="text-white text-[10px] font-bold">!</Text>
+                          <View style={styles.errorContainer}>
+                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                              <Text style={styles.errorIconText}>!</Text>
                             </View>
-                            <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
                           </View>
                         )}
                       </View>
                     )}
 
                     {formData.connectionType === 'Fiber' && (
-                      <View className="mb-4">
-                        <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            LCP-NAP<Text className="text-red-500">*</Text>
+                      <View style={styles.inputGroup}>
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            LCP-NAP<Text style={styles.required}>*</Text>
                           </Text>
-                          <View className="relative">
-                            {/* Search Input Field */}
-                            <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                              } ${errors.lcpnap ? 'border-red-500' : ''}`}>
+                          <View style={{ zIndex: isLcpnapOpen ? 100 : 1 }}>
+                            <View style={[styles.searchContainer, {
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                              borderColor: errors.lcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                            }]}>
                               <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                               <TextInput
                                 placeholder="Search LCP-NAP..."
@@ -2237,7 +2265,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 }}
                                 onFocus={() => setIsLcpnapOpen(true)}
                                 placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                                style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                               />
                               {(isLcpnapOpen || formData.lcpnap) && (
                                 <Pressable
@@ -2250,7 +2278,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                       setLcpnapSearch('');
                                     }
                                   }}
-                                  className="p-1"
+                                  style={{ padding: 4 }}
                                 >
                                   <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                                 </Pressable>
@@ -2260,41 +2288,47 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               )}
                             </View>
 
-                            {/* Dropdown Menu */}
                             {isLcpnapOpen && (
-                              <View
-                                className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                                  }`}
-                                style={{ elevation: 5 }}
-                              >
-                                {/* Options List */}
-                                <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
+                              <View style={[styles.dropdown, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                              }]}>
+                                <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
                                   {lcpnaps
                                     .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
                                     .map((lcpnap) => (
                                       <Pressable
                                         key={lcpnap.id}
-                                        className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                          } ${formData.lcpnap === lcpnap.lcpnap_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                        style={[styles.dropdownItem, {
+                                          borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                          backgroundColor: formData.lcpnap === lcpnap.lcpnap_name
+                                            ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
+                                            : 'transparent'
+                                        }]}
                                         onPress={() => {
                                           handleInputChange('lcpnap', lcpnap.lcpnap_name);
                                           setLcpnapSearch('');
                                           setIsLcpnapOpen(false);
                                         }}
                                       >
-                                        <View className="flex-row items-center justify-between">
-                                          <Text className={`text-sm ${formData.lcpnap === lcpnap.lcpnap_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                        <View style={styles.dropdownItemContent}>
+                                          <Text style={[styles.dropdownItemText, {
+                                            color: formData.lcpnap === lcpnap.lcpnap_name
+                                              ? (colorPalette?.primary || '#f97316')
+                                              : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                            fontWeight: formData.lcpnap === lcpnap.lcpnap_name ? '500' : 'normal'
+                                          }]}>
                                             {lcpnap.lcpnap_name}
                                           </Text>
                                           {formData.lcpnap === lcpnap.lcpnap_name && (
-                                            <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                            <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                           )}
                                         </View>
                                       </Pressable>
                                     ))}
                                   {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
-                                    <View className="px-4 py-8 items-center">
-                                      <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    <View style={styles.emptyDropdown}>
+                                      <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                         No results found for "{lcpnapSearch}"
                                       </Text>
                                     </View>
@@ -2304,23 +2338,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             )}
                           </View>
                           {errors.lcpnap && (
-                            <View className="flex-row items-center mt-1">
-                              <View
-                                className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                              >
-                                <Text className="text-white text-[10px] font-bold">!</Text>
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.lcpnap}</Text>
                             </View>
                           )}
                         </View>
 
-                        <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>PORT<Text className="text-red-500">*</Text></Text>
-                          <View className="relative">
-                            <View className={`border rounded-lg overflow-hidden ${errors.port ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            PORT<Text style={styles.required}>*</Text>
+                          </Text>
+                          <View>
+                            <View style={[styles.pickerContainer, {
+                              borderColor: errors.port ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
                               <Picker
                                 selectedValue={formData.port}
                                 onValueChange={(value) => handleInputChange('port', value)}
@@ -2342,7 +2377,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 {Array.from({ length: portTotal }, (_, i) => {
                                   const portVal = `P${(i + 1).toString().padStart(2, '0')}`;
 
-                                  // Hide port if it is used
                                   if (usedPorts.has(portVal)) {
                                     return null;
                                   }
@@ -2355,23 +2389,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             </View>
                           </View>
                           {errors.port && (
-                            <View className="flex-row items-center mt-1">
-                              <View
-                                className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                              >
-                                <Text className="text-white text-[10px] font-bold">!</Text>
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.port}</Text>
                             </View>
                           )}
                         </View>
 
-                        <View className="mb-4">
-                          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>VLAN<Text className="text-red-500">*</Text></Text>
-                          <View className="relative">
-                            <View className={`border rounded-lg overflow-hidden ${errors.vlan ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            VLAN<Text style={styles.required}>*</Text>
+                          </Text>
+                          <View>
+                            <View style={[styles.pickerContainer, {
+                              borderColor: errors.vlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
                               <Picker
                                 selectedValue={formData.vlan}
                                 onValueChange={(value) => handleInputChange('vlan', value)}
@@ -2397,25 +2432,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             </View>
                           </View>
                           {errors.vlan && (
-                            <View className="flex-row items-center mt-1">
-                              <View
-                                className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                              >
-                                <Text className="text-white text-[10px] font-bold">!</Text>
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.vlan}</Text>
                             </View>
                           )}
                         </View>
                       </View>
                     )}
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit By<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit By<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_by}
                             onValueChange={(value) => handleInputChange('visit_by', value)}
@@ -2438,23 +2474,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.visit_by && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_by}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_by}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit With<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit With<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_with}
                             onValueChange={(value) => handleInputChange('visit_with', value)}
@@ -2479,23 +2516,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.visit_with && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_with}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit With(Other)<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit With(Other)<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_with_other}
                             onValueChange={(value) => handleInputChange('visit_with_other', value)}
@@ -2520,40 +2558,37 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.visit_with_other && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.visit_with_other}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with_other}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Onsite Remarks<Text className="text-red-500">*</Text></Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Onsite Remarks<Text style={styles.required}>*</Text>
+                      </Text>
                       <TextInput
                         value={formData.onsiteRemarks}
                         onChangeText={(text) => handleInputChange('onsiteRemarks', text)}
                         multiline={true}
                         numberOfLines={4}
                         placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                        style={{ textAlignVertical: 'top' }}
+                        style={[styles.textInput, styles.textArea, {
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                          color: isDarkMode ? '#ffffff' : '#111827',
+                          borderColor: errors.onsiteRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                        }]}
                       />
                       {errors.onsiteRemarks && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.onsiteRemarks}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteRemarks}</Text>
                         </View>
                       )}
                     </View>
@@ -2595,13 +2630,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       error={errors.signedContractImage}
                     />
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Client Signature Image</Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature Image</Text>
                       {!isDrawingSignature ? (
                         <View>
                           <Pressable
                             onPress={() => setIsDrawingSignature(true)}
-                            className={`h-48 border border-dashed rounded-lg items-center justify-center mb-2 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-gray-50'} ${errors.clientSignatureImage ? 'border-red-500' : ''}`}
+                            style={[styles.signatureContainer, {
+                              borderColor: errors.clientSignatureImage ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                            }]}
                           >
                             {imagePreviews.clientSignatureImage ? (
                               <Image
@@ -2609,38 +2647,34 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
                               />
                             ) : (
-                              <View className="items-center">
-                                <View
-                                  className="w-12 h-12 rounded-full items-center justify-center mb-2"
-                                  style={{ backgroundColor: (colorPalette?.primary || '#ea580c') + '20' }}
-                                >
+                              <View style={styles.signaturePlaceholder}>
+                                <View style={[styles.signatureIconCircle, { backgroundColor: (colorPalette?.primary || '#ea580c') + '20' }]}>
                                   <Camera size={24} color={colorPalette?.primary || '#ea580c'} />
                                 </View>
-                                <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Tap to Draw Signature</Text>
+                                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap to Draw Signature</Text>
                               </View>
                             )}
                           </Pressable>
                           {imagePreviews.clientSignatureImage && (
-                            <View className="flex-row justify-between items-center">
+                            <View style={styles.signatureActions}>
                               <Pressable
                                 onPress={() => handleImageUpload('clientSignatureImage', null)}
-                                className="flex-row items-center"
+                                style={styles.removeButton}
                               >
                                 <X size={16} color="#ef4444" />
-                                <Text className="text-red-500 text-xs ml-1">Remove</Text>
+                                <Text style={styles.removeButtonText}>Remove</Text>
                               </Pressable>
                               <Pressable
                                 onPress={() => setIsDrawingSignature(true)}
-                                className="px-3 py-1 rounded-md"
-                                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                                style={[styles.redrawButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
                               >
-                                <Text className="text-white text-xs">Redraw</Text>
+                                <Text style={styles.redrawButtonText}>Redraw</Text>
                               </Pressable>
                             </View>
                           )}
                         </View>
                       ) : (
-                        <View className="h-72 border border-gray-500 bg-white mb-2 overflow-hidden rounded-lg">
+                        <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}>
                           <SignatureScreen
                             ref={signatureRef}
                             onOK={handleSignatureOK}
@@ -2657,14 +2691,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               setIsDrawingSignature(false);
                               setScrollEnabled(true);
                             }}
-                            className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10 shadow-sm"
+                            style={styles.signatureCloseButton}
                           >
                             <X size={20} color="#000" />
                           </Pressable>
                         </View>
                       )}
                       {errors.clientSignatureImage && (
-                        <Text className="text-red-500 text-xs mt-1">{errors.clientSignatureImage}</Text>
+                        <Text style={[styles.errorText, { color: '#ef4444', marginTop: 4 }]}>{errors.clientSignatureImage}</Text>
                       )}
                     </View>
 
@@ -2675,21 +2709,23 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       error={errors.speedTestImage}
                     />
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Items<Text className="text-red-500">*</Text></Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Items<Text style={styles.required}>*</Text>
+                      </Text>
                       {orderItems.map((item, index) => (
                         <View
                           key={index}
-                          className="mb-4"
-                          style={{ zIndex: openItemIndex === index ? 1000 : 1 }}
+                          style={[styles.itemRow, { zIndex: openItemIndex === index ? 1000 : 1 }]}
                         >
-                          <View className="flex-row items-start gap-2">
-                            <View className="flex-1">
-                              <View className="relative">
+                          <View style={styles.itemRowContent}>
+                            <View style={styles.itemSearchContainer}>
+                              <View style={{ zIndex: openItemIndex === index ? 1000 : 1 }}>
                                 {/* Search Input Field for Item */}
-                                <View className={`flex-row items-center px-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
-                                  } ${errors[`item_${index}`] ? 'border-red-500' : ''}`}>
+                                <View style={[styles.searchContainer, {
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                  borderColor: errors[`item_${index}`] ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                                }]}>
                                   <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                                   <TextInput
                                     placeholder={`Select Item ${index + 1}`}
@@ -2703,7 +2739,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                       setItemSearch('');
                                     }}
                                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                    className={`flex-1 px-3 py-3 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                                   />
                                   {(openItemIndex === index || item.itemId) && (
                                     <Pressable
@@ -2716,7 +2752,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                           setItemSearch('');
                                         }
                                       }}
-                                      className="p-1"
+                                      style={{ padding: 4 }}
                                     >
                                       <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                                     </Pressable>
@@ -2728,28 +2764,38 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                                 {/* Dropdown Menu for Item */}
                                 {openItemIndex === index && (
-                                  <View
-                                    className={`absolute left-0 right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border overflow-hidden flex-col ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                                      }`}
-                                    style={{ elevation: 10 }}
-                                  >
-                                    <ScrollView className="max-h-60" nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
+                                  <View style={[styles.dropdown, {
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    borderColor: isDarkMode ? '#374151' : '#e5e7eb',
+                                    elevation: 10
+                                  }]}>
+                                    <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
                                       {"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
                                         <Pressable
                                           key="none-item-option"
-                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === 'None' ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                          style={[styles.dropdownItem, {
+                                            borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                            backgroundColor: item.itemId === 'None'
+                                              ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
+                                              : 'transparent'
+                                          }]}
                                           onPress={() => {
                                             handleItemChange(index, 'itemId', 'None');
                                             setOpenItemIndex(null);
                                             setItemSearch('');
                                           }}
                                         >
-                                          <View className="flex-row items-center justify-between">
-                                            <Text className={`text-sm ${item.itemId === 'None' ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                          <View style={styles.dropdownItemContent}>
+                                            <Text style={[styles.dropdownItemText, {
+                                              color: item.itemId === 'None'
+                                                ? (colorPalette?.primary || '#f97316')
+                                                : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                              fontWeight: item.itemId === 'None' ? '500' : 'normal'
+                                            }]}>
                                               None
                                             </Text>
                                             {item.itemId === 'None' && (
-                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                              <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                             )}
                                           </View>
                                         </Pressable>
@@ -2759,8 +2805,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                         .map((invItem) => (
                                           <Pressable
                                             key={invItem.id}
-                                            className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                                              } ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                            style={[styles.dropdownItem, {
+                                              borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                              backgroundColor: item.itemId === invItem.item_name
+                                                ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
+                                                : 'transparent'
+                                            }]}
                                             onPress={() => {
                                               handleItemChange(index, 'itemId', invItem.item_name);
                                               setOpenItemIndex(null);
@@ -2768,20 +2818,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                               Keyboard.dismiss();
                                             }}
                                           >
-                                            <View className="flex-row items-center justify-between">
-                                              <Text className={`text-sm flex-1 mr-2 ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                            <View style={styles.dropdownItemContent}>
+                                              <Text style={[styles.dropdownItemText, {
+                                                flex: 1,
+                                                marginRight: 8,
+                                                color: item.itemId === invItem.item_name
+                                                  ? (colorPalette?.primary || '#f97316')
+                                                  : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                                fontWeight: item.itemId === invItem.item_name ? '500' : 'normal'
+                                              }]}>
                                                 {invItem.item_name}
                                               </Text>
-                                              <View className="flex-row items-center gap-2">
+                                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                                 {(invItem.image_url || (invItem as any).image) && (
                                                   <Image
                                                     source={{ uri: convertGoogleDriveUrl(invItem.image_url || (invItem as any).image) || undefined }}
-                                                    className="w-12 h-12 rounded-lg bg-gray-100"
-                                                    resizeMode="cover"
+                                                    style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
                                                   />
                                                 )}
                                                 {item.itemId === invItem.item_name && (
-                                                  <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                                  <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                                 )}
                                               </View>
                                             </View>
@@ -2789,8 +2845,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                         ))}
                                       {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 &&
                                         !"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
-                                          <View className="px-4 py-8 items-center">
-                                            <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                          <View style={styles.emptyDropdown}>
+                                            <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                               No results found for "{itemSearch}"
                                             </Text>
                                           </View>
@@ -2800,23 +2856,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 )}
                               </View>
                               {errors[`item_${index}`] && (
-                                <Text className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`item_${index}`]}</Text>
+                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c', marginTop: 4 }]}>{errors[`item_${index}`]}</Text>
                               )}
                             </View>
 
                             {item.itemId && (
-                              <View className="w-24">
+                              <View style={styles.itemQtyContainer}>
                                 <TextInput
                                   keyboardType="numeric"
                                   value={item.quantity.toString()}
                                   onChangeText={(text) => handleItemChange(index, 'quantity', text)}
                                   placeholder="Qty"
                                   placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                  className={`px-3 py-3 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300'
-                                    }`}
+                                  style={[styles.textInput, {
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    color: isDarkMode ? '#ffffff' : '#111827',
+                                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                                  }]}
                                 />
                                 {errors[`quantity_${index}`] && (
-                                  <Text className="text-xs mt-1" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors[`quantity_${index}`]}</Text>
+                                  <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c', marginTop: 4 }]}>{errors[`quantity_${index}`]}</Text>
                                 )}
                               </View>
                             )}
@@ -2824,7 +2883,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             {orderItems.length > 1 && (
                               <Pressable
                                 onPress={() => handleRemoveItem(index)}
-                                className="p-3 items-center justify-center"
+                                style={styles.removeItemButton}
                               >
                                 <X size={20} color={isDarkMode ? '#F87171' : '#EF4444'} />
                               </Pressable>
@@ -2833,14 +2892,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       ))}
                       {errors.items && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>{errors.items}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.items}</Text>
                         </View>
                       )}
                     </View>
@@ -2852,17 +2908,22 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       label="Address Coordinates"
                       required={true}
                       error={errors.addressCoordinates}
+                      style={styles.inputGroup}
                     />
                   </>
                 )}
 
                 {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
-                  <View className="space-y-4">
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit By<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_by ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit By<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_by}
                             onValueChange={(value) => handleInputChange('visit_by', value)}
@@ -2885,23 +2946,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.visit_by && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_by}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit With<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_with ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit With<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_with}
                             onValueChange={(value) => handleInputChange('visit_with', value)}
@@ -2926,31 +2988,32 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.visit_with && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Visit With(Other)<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.visit_with_other ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Visit With(Other)<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.visit_with_other}
                             onValueChange={(value) => handleInputChange('visit_with_other', value)}
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                             dropdownIconColor={isDarkMode ? '#fff' : '#000'}
                           >
-                            <Picker.Item key="default" label="Visit With(Other)" value="" enabled={false} />
-                            <Picker.Item key="none" label="None" value="None" />
+                            <Picker.Item label="Visit With(Other)" value="" enabled={false} />
+                            <Picker.Item label="None" value="None" />
                             {(() => {
                               if (!formData.visit_with_other) return null;
                               const val = String(formData.visit_with_other);
@@ -2958,58 +3021,59 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
                               if (val === 'None' || val === '') return null;
                               if (technicians.some(t => t.name === val)) return null;
-                              return <Picker.Item key="custom" label={val} value={val} />;
+                              return <Picker.Item label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
-                              <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
+                            {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
+                              <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
                         </View>
                       </View>
                       {errors.visit_with_other && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with_other}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Onsite Remarks<Text className="text-red-500">*</Text></Text>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Onsite Remarks<Text style={styles.required}>*</Text>
+                      </Text>
                       <TextInput
                         value={formData.onsiteRemarks}
                         onChangeText={(text) => handleInputChange('onsiteRemarks', text)}
                         multiline={true}
                         numberOfLines={4}
                         placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                        className={`w-full px-3 py-2 border rounded-lg ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-                          } ${errors.onsiteRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')}`}
-                        style={{ textAlignVertical: 'top' }}
+                        style={[styles.textInput, styles.textArea, {
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                          color: isDarkMode ? '#ffffff' : '#111827',
+                          borderColor: errors.onsiteRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                        }]}
                       />
                       {errors.onsiteRemarks && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteRemarks}</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="mb-4">
-                      <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}>Status Remarks<Text className="text-red-500">*</Text></Text>
-                      <View className="relative">
-                        <View className={`border rounded-lg overflow-hidden ${errors.statusRemarks ? 'border-red-500' : (isDarkMode ? 'border-gray-700' : 'border-gray-300')} ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <View style={styles.inputGroup}>
+                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                        Status Remarks<Text style={styles.required}>*</Text>
+                      </Text>
+                      <View>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.statusRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
                           <Picker
                             selectedValue={formData.statusRemarks}
                             onValueChange={(value) => handleInputChange('statusRemarks', value)}
@@ -3025,14 +3089,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         </View>
                       </View>
                       {errors.statusRemarks && (
-                        <View className="flex-row items-center mt-1">
-                          <View
-                            className="flex items-center justify-center w-4 h-4 rounded-full mr-2"
-                            style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
-                          >
-                            <Text className="text-white text-[10px] font-bold">!</Text>
+                        <View style={styles.errorContainer}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text className="text-xs" style={{ color: colorPalette?.primary || '#ea580c' }}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.statusRemarks}</Text>
                         </View>
                       )}
                     </View>
@@ -3046,5 +3107,353 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     </Modal >
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    height: '90%',
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  submitButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#ef4444',
+  },
+  inputContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  textInput: {
+    width: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  textArea: {
+    textAlignVertical: 'top',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  datePickerButton: {
+    width: '100%',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  errorIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  errorIconText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  errorText: {
+    fontSize: 12,
+  },
+  connectionTypeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  connectionTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectionTypeText: {
+    fontWeight: '500',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+  },
+  dropdown: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '100%',
+    marginTop: 4,
+    zIndex: 50,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+    elevation: 5,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+  },
+  dropdownItemSelectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f97316',
+  },
+  emptyDropdown: {
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyDropdownText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  signatureContainer: {
+    height: 192,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signaturePlaceholder: {
+    alignItems: 'center',
+  },
+  signatureIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signatureActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  removeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  removeButtonText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  redrawButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  redrawButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  signatureCanvasContainer: {
+    height: 288,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    marginBottom: 8,
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  signatureCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 9999,
+    zIndex: 10,
+    elevation: 2,
+  },
+  itemRow: {
+    marginBottom: 16,
+  },
+  itemRowContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  itemSearchContainer: {
+    flex: 1,
+  },
+  itemQtyContainer: {
+    width: 96,
+  },
+  removeItemButton: {
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingModalContent: {
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 320,
+  },
+  loadingPercentage: {
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  messageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  messageModalContent: {
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 672,
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  messageModalHeader: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  messageModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  messageModalClose: {
+    padding: 4,
+  },
+  messageList: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  messageItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  messageText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  messageModalFooter: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  messageModalButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  messageModalButtonText: {
+    color: '#ffffff',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+});
 
 export default JobOrderDoneFormTechModal;

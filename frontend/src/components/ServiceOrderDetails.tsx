@@ -4,6 +4,7 @@ import { X, ExternalLink, Edit, Settings } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 
 interface ServiceOrderDetailsProps {
   serviceOrder: {
@@ -61,6 +62,7 @@ interface ServiceOrderDetailsProps {
 const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder, onClose, isMobile: propIsMobile = false }) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
+  const { silentRefresh } = useServiceOrderContext();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -179,6 +181,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const handleSaveEdit = (formData: any) => {
     console.log('Service order updated:', formData);
     setIsEditModalOpen(false);
+    silentRefresh();
   };
 
   const getFieldLabel = (fieldKey: string): string => {
@@ -284,17 +287,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     }
   };
 
-  const valueStyle = {
-    color: isDarkMode ? '#ffffff' : '#111827',
-    fontSize: 16,
-  };
+  const dynamicValueColor = isDarkMode ? '#ffffff' : '#111827';
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
         {(typeof content === 'string' || typeof content === 'number') ? (
-          <Text style={valueStyle} selectable={true}>
+          <Text style={[styles.valueText, { color: dynamicValueColor }]} selectable={true}>
             {(content !== null && content !== undefined && content !== '') ? content : '-'}
           </Text>
         ) : (
@@ -307,7 +307,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const renderImageLink = (label: string, url: string | undefined | null) => {
     return renderField(label, (
       <View style={styles.imageLinkContainer}>
-        <Text style={[styles.imageLinkText, valueStyle]} numberOfLines={1} selectable={true}>
+        <Text style={[styles.imageLinkText, styles.valueText, { color: dynamicValueColor }]} numberOfLines={1} selectable={true}>
           {url || 'No image available'}
         </Text>
         {url && (
@@ -329,7 +329,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Timestamp', serviceOrder.timestamp);
       case 'accountNumber':
         return renderField('Account Details', (
-          <Text style={{ color: '#ef4444', fontSize: 16 }} selectable={true}>
+          <Text style={styles.accountDetailsText} selectable={true}>
             {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
           </Text>
         ));
@@ -367,7 +367,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Concern Remarks', serviceOrder.concernRemarks);
       case 'visitStatus':
         return renderField('Visit Status', (
-          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.visitStatus, 'visit') }} selectable={true}>
+          <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.visitStatus, 'visit') }]} selectable={true}>
             {serviceOrder.visitStatus || '-'}
           </Text>
         ));
@@ -391,7 +391,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         return renderField('Support Remarks', serviceOrder.supportRemarks);
       case 'supportStatus':
         return renderField('Support Status', (
-          <Text style={{ fontWeight: '600', textTransform: 'uppercase', color: getStatusColor(serviceOrder.supportStatus, 'support') }} selectable={true}>
+          <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.supportStatus, 'support') }]} selectable={true}>
             {serviceOrder.supportStatus || '-'}
           </Text>
         ));
@@ -456,7 +456,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
                 style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
                 onPress={handleEditClick}
               >
-                <Edit width={16} height={16} color="#ffffff" style={{ marginRight: 4 }} />
+                <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />
                 <Text style={styles.headerButtonText}>Edit</Text>
               </Pressable>
 
@@ -512,11 +512,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
                   <Pressable onPress={selectAllFields}>
                     <Text style={styles.modalActionText}>Show All</Text>
                   </Pressable>
-                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                  <Text style={[styles.separatorText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>|</Text>
                   <Pressable onPress={deselectAllFields}>
                     <Text style={styles.modalActionText}>Hide All</Text>
                   </Pressable>
-                  <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>|</Text>
+                  <Text style={[styles.separatorText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>|</Text>
                   <Pressable onPress={resetFieldSettings}>
                     <Text style={styles.modalActionText}>Reset</Text>
                   </Pressable>
@@ -696,6 +696,23 @@ const styles = StyleSheet.create({
   },
   modalItemText: {
     fontSize: 14,
+  },
+  valueText: {
+    fontSize: 16,
+  },
+  accountDetailsText: {
+    color: '#ef4444',
+    fontSize: 16,
+  },
+  statusText: {
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  separatorText: {
+    marginHorizontal: 4,
+  },
+  headerButtonIcon: {
+    marginRight: 4,
   },
 });
 

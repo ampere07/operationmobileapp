@@ -1038,6 +1038,7 @@ Route::post('/login', function (Request $request) {
                 'email' => $user->email_address,
                 'full_name' => $fullName,
                 'role' => $primaryRole,
+                'role_id' => $user->role_id,
             ]
         ];
         

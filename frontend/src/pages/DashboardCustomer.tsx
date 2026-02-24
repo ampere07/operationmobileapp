@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
 import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
-import { transactionService } from '../services/transactionService';
-import { paymentPortalLogsService } from '../services/paymentPortalLogsService';
 import { paymentService, PendingPayment } from '../services/paymentService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -236,17 +233,17 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         };
     });
 
-    if (contextLoading && !customerDetail) return (
-        <View style={{ padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', minHeight: '100%' }}>
-            <ActivityIndicator size="large" color="#111827" />
-        </View>
-    );
-
-    const formatCurrency = (amount: number) => {
+    const formatCurrency = useCallback((amount: number) => {
         const isNegative = amount < 0;
         const formatted = Math.abs(amount).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
         return `₱${isNegative ? '-' : ''}${formatted}`;
-    };
+    }, []);
+
+    if (contextLoading && !customerDetail) return (
+        <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#111827" />
+        </View>
+    );
 
     const getStatusStyle = (status: string) => {
         switch (status) {
@@ -379,7 +376,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#f9fafb', position: 'relative' }}>
+        <View style={styles.container}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingTop: !isMobile ? 16 : 60, paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: 24 }}
@@ -395,37 +392,27 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
             >
 
 
-                <View style={{ gap: 32 }}>
-                    <View style={{
-                        borderRadius: 24,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 8 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 16,
-                        elevation: 8,
-                        backgroundColor: '#ffffff'
-                    }}>
+                <View style={styles.contentGap}>
+                    <View style={styles.balanceCard}>
                         <LinearGradient
                             colors={[colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={{ borderRadius: 24, padding: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}
+                            style={styles.gradientInner}
                         >
-                            {/* Left Side */}
-                            <View style={{ flex: 1, justifyContent: 'center' }}>
-                                <Text style={{ color: '#e5e7eb', fontSize: 16, marginBottom: 8 }}>Total Amount</Text>
-                                <Text style={{ fontSize: isMobile ? 32 : 40, fontWeight: 'bold', color: '#ffffff' }}>
+                            <View style={styles.balanceLeft}>
+                                <Text style={styles.balanceLabel}>Total Amount</Text>
+                                <Text style={[styles.balanceAmountText, { fontSize: isMobile ? 32 : 40 }]}>
                                     {formatCurrency(balance)}
                                 </Text>
                             </View>
 
-                            {/* Right Side */}
-                            <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 16 }}>
-                                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                                    <Text style={{ color: '#e5e7eb', fontSize: 12 }}>
-                                        Reference: <Text style={{ color: '#ffffff', fontWeight: '500' }}>{accountNo}</Text>
+                            <View style={styles.balanceRight}>
+                                <View style={styles.balanceInfoRight}>
+                                    <Text style={styles.infoText}>
+                                        Reference: <Text style={styles.infoValue}>{accountNo}</Text>
                                     </Text>
-                                    <Text style={{ color: '#e5e7eb', fontSize: 12 }}>
+                                    <Text style={styles.infoText}>
                                         Due Date: <Text style={{ color: '#ffffff' }}>{dueDateString}</Text>
                                     </Text>
                                 </View>
@@ -433,17 +420,10 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 <Pressable
                                     onPress={handlePayNow}
                                     disabled={isPaymentProcessing}
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: '#ffffff',
-                                        paddingHorizontal: 32,
-                                        paddingVertical: 10,
-                                        borderRadius: 12,
-                                        opacity: isPaymentProcessing ? 0.5 : 1
-                                    }}
+                                    style={[styles.payBtn, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
                                 >
-                                    <View style={{ alignItems: 'center' }}>
-                                        <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
+                                    <View style={styles.payBtnInner}>
+                                        <Text style={styles.payBtnText}>
                                             {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
                                         </Text>
                                     </View>
@@ -456,26 +436,26 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
 
                     {/* My Referrals Section */}
-                    <View style={{ gap: 16 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={styles.sectionGap}>
+                        <View style={styles.sectionHeader}>
                             <Users size={20} color={colorPalette?.primary || '#ef4444'} />
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>My Referrals</Text>
+                            <Text style={styles.sectionTitle}>My Referrals</Text>
                         </View>
 
                         <ScrollView
-                            style={{ maxHeight: 270 }}
+                            style={styles.referralScroll}
                             showsVerticalScrollIndicator={false}
                             nestedScrollEnabled={true}
-                            contentContainerStyle={{ gap: 12, paddingBottom: 8 }}
+                            contentContainerStyle={styles.referralContent}
                         >
-                            <View style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}>
-                                <Text style={{ color: '#6b7280', fontSize: 14 }}>No referrals</Text>
+                            <View style={styles.emptyReferrals}>
+                                <Text style={styles.emptyReferralsText}>No referrals</Text>
                             </View>
                         </ScrollView>
-                        <View style={{ height: 2, backgroundColor: '#e2e8f0', marginVertical: 16, width: '80%', alignSelf: 'center', borderRadius: 1 }} />
+                        <View style={styles.divider} />
                         {/* Promotional Ads Section */}
-                        <View style={{ gap: 0 }}>
-                            <View style={{ position: 'relative' }}>
+                        <View style={styles.adsWrapper}>
+                            <View style={styles.adsInner}>
                                 <ScrollView
                                     ref={adsScrollRef}
                                     horizontal
@@ -493,34 +473,21 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                     {displayAds.map((ad, idx) => (
                                         <View
                                             key={`${ad.id}-${idx}`}
-                                            style={{
-                                                width: width - (isMobile ? 32 : 48),
-                                                height: 120,
-                                                backgroundColor: ad.color,
-                                                borderRadius: 20,
-                                                padding: 24,
-                                                justifyContent: 'center',
-                                            }}
+                                            style={[styles.adCard, { width: width - (isMobile ? 32 : 48), backgroundColor: ad.color }]}
                                         >
-                                            <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: 'bold' }}>{ad.title}</Text>
-                                            <Text style={{ color: '#ffffff', opacity: 0.9, marginTop: 4 }}>{ad.desc}</Text>
+                                            <Text style={styles.adTitle}>{ad.title}</Text>
+                                            <Text style={styles.adDesc}>{ad.desc}</Text>
                                         </View>
                                     ))}
                                 </ScrollView>
 
-                                {/* Pagination Dots */}
-                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+                                <View style={styles.dotsRow}>
                                     {ads.map((_, i) => {
                                         const actualActiveIndex = (currentAdPos - 1 + ads.length) % ads.length;
                                         return (
                                             <View
                                                 key={i}
-                                                style={{
-                                                    width: 8,
-                                                    height: 8,
-                                                    borderRadius: 4,
-                                                    backgroundColor: actualActiveIndex === i ? '#111827' : '#d1d5db'
-                                                }}
+                                                style={[styles.dotBase, { backgroundColor: actualActiveIndex === i ? '#111827' : '#d1d5db' }]}
                                             />
                                         );
                                     })}
@@ -541,62 +508,39 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
             >
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={{ flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' }}
+                    style={styles.kav}
                 >
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCloseVerifyModal} />
-                        <Animated.View
-                            style={{
-                                transform: [{ translateY: pan.y }],
-                                backgroundColor: '#ffffff',
-                                borderTopLeftRadius: 40,
-                                borderTopRightRadius: 40,
-                                width: '100%',
-                                maxHeight: '90%',
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: -15 },
-                                shadowOpacity: 1.0,
-                                shadowRadius: 40,
-                                elevation: 30
-                            }}
-                        >
-                            <View
-                                {...panResponder.panHandlers}
-                                style={{ paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: 'transparent' }}
-                            >
-                                <Pressable
-                                    onPress={handleCloseVerifyModal}
-                                    style={{ width: '100%', alignItems: 'center', paddingVertical: 8 }}
-                                >
-                                    <View style={{ width: '20%', height: 3, backgroundColor: '#d1d5db', borderRadius: 2, marginBottom: 8 }} />
+                    <Pressable style={styles.modalBackdrop} onPress={handleCloseVerifyModal} />
+                        <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
+                            <View {...panResponder.panHandlers} style={styles.modalHeader}>
+                                <Pressable onPress={handleCloseVerifyModal} style={styles.modalHandleBtn}>
+                                    <View style={styles.modalHandle} />
                                 </Pressable>
-                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>Confirm Payment</Text>
+                                <Text style={styles.modalTitle}>Confirm Payment</Text>
                             </View>
 
-                            <ScrollView
-                                contentContainerStyle={{ padding: 24 }}
-                                keyboardShouldPersistTaps="handled"
-                            >
-                                <View style={{ backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                                        <Text style={{ color: '#6b7280', fontSize: 14 }}>Account Name</Text>
-                                        <Text style={{ fontWeight: '600', color: '#111827', fontSize: 14 }}>{displayName}</Text>
+                            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+                                <View style={styles.verifyBox}>
+                                    <View style={styles.verifyRowMb}>
+                                        <Text style={styles.verifyLabel}>Account Name</Text>
+                                        <Text style={styles.verifyValue}>{displayName}</Text>
                                     </View>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                        <Text style={{ color: '#6b7280', fontSize: 14 }}>Current Balance</Text>
-                                        <Text style={{ fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a', fontSize: 14 }}>
+                                    <View style={styles.verifyRow}>
+                                        <Text style={styles.verifyLabel}>Current Balance</Text>
+                                        <Text style={[styles.verifyValue, { fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a' }]}>
                                             {formatCurrency(balance)}
                                         </Text>
                                     </View>
                                 </View>
 
                                 {errorMessage && (
-                                    <View style={{ backgroundColor: (colorPalette?.primary || '#ef4444') + '15', padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1, borderColor: (colorPalette?.primary || '#ef4444') + '30' }}>
-                                        <Text style={{ color: colorPalette?.primary || '#ef4444', fontSize: 14, textAlign: 'center' }}>{errorMessage}</Text>
+                                    <View style={[styles.errorBox, { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' }]}>
+                                        <Text style={[styles.errorText, { color: colorPalette?.primary || '#ef4444' }]}>{errorMessage}</Text>
                                     </View>
                                 )}
 
-                                <View style={{ marginBottom: 32 }}>
-                                    <Text style={{ fontWeight: '500', marginBottom: 8, color: '#374151', fontSize: 14 }}>Payment Amount</Text>
+                                <View style={styles.inputWrap}>
+                                    <Text style={styles.inputLabel}>Payment Amount</Text>
                                     <TextInput
                                         keyboardType="decimal-pad"
                                         value={paymentAmount !== undefined && paymentAmount !== null ? paymentAmount.toString() : ''}
@@ -613,15 +557,11 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                             }
                                         }}
                                         placeholder="0.00"
-                                        style={{ width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' }}
+                                        style={styles.inputField}
                                     />
-                                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
-                                        <Text style={{ fontSize: 12, color: '#6b7280' }}>
-                                            {balance > 0 ? (
-                                                `Outstanding: ${formatCurrency(balance)}`
-                                            ) : (
-                                                'Minimum: ₱1.00'
-                                            )}
+                                    <View style={styles.inputHint}>
+                                        <Text style={styles.inputHintText}>
+                                            {balance > 0 ? `Outstanding: ${formatCurrency(balance)}` : 'Minimum: ₱1.00'}
                                         </Text>
                                     </View>
                                 </View>
@@ -629,22 +569,17 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 <Pressable
                                     onPress={handleProceedToCheckout}
                                     disabled={isPaymentProcessing || paymentAmount < 1 || (balance > 0 && paymentAmount < balance)}
-                                    style={{
-                                        paddingVertical: 12,
-                                        borderRadius: 50,
+                                    style={[styles.primaryBtn, {
                                         backgroundColor: colorPalette?.primary || '#ef4444',
                                         opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1,
-                                        width: '50%',
-                                        alignSelf: 'center',
-                                        alignItems: 'center'
-                                    }}
+                                    }]}
                                 >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>
+                                    <Text style={styles.primaryBtnText}>
                                         {isPaymentProcessing ? 'Processing...' : 'Pay'}
                                     </Text>
                                 </Pressable>
 
-                                <View style={{ height: 24 }} />
+                                <View style={styles.spacer} />
                             </ScrollView>
                         </Animated.View>
                 </KeyboardAvoidingView>
@@ -657,80 +592,45 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 statusBarTranslucent={true}
                 onRequestClose={handleCancelPaymentLink}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCancelPaymentLink} />
-                    <Animated.View
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 40,
-                            borderTopRightRadius: 40,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 1.0,
-                            shadowRadius: 40,
-                            elevation: 30
-                        }}
-                    >
-                        {/* Header */}
-                        <View
-                            {...panResponder.panHandlers}
-                            style={{ paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: 'transparent' }}
-                        >
-                            <Pressable
-                                onPress={handleCancelPaymentLink}
-                                style={{ width: '100%', alignItems: 'center', paddingVertical: 8 }}
-                            >
-                                <View style={{ width: '20%', height: 3, backgroundColor: '#d1d5db', borderRadius: 2, marginBottom: 8 }} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={handleCancelPaymentLink} />
+                    <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
+                        <View {...panResponder.panHandlers} style={styles.modalHeader}>
+                            <Pressable onPress={handleCancelPaymentLink} style={styles.modalHandleBtn}>
+                                <View style={styles.modalHandle} />
                             </Pressable>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>Payment Link Created!</Text>
+                            <Text style={styles.modalTitle}>Payment Link Created!</Text>
                         </View>
 
-                        {/* Content */}
-                        <ScrollView contentContainerStyle={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Reference No.</Text>
-                                    <View style={{ flex: 1, alignItems: 'flex-end', marginLeft: 16 }}>
-                                        <Text style={{ fontWeight: '600', color: '#111827', fontSize: 14, textAlign: 'right' }}>{paymentLinkData?.referenceNo}</Text>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <View style={styles.verifyBox}>
+                                <View style={styles.verifyRowMb}>
+                                    <Text style={styles.verifyLabel}>Reference No.</Text>
+                                    <View style={styles.refRow}>
+                                        <Text style={[styles.verifyValue, { textAlign: 'right' }]}>{paymentLinkData?.referenceNo}</Text>
                                     </View>
                                 </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: '#6b7280', fontSize: 14 }}>Payment Amount</Text>
-                                    <Text style={{ fontWeight: 'bold', color: colorPalette?.primary || '#ef4444', fontSize: 14 }}>
+                                <View style={styles.verifyRow}>
+                                    <Text style={styles.verifyLabel}>Payment Amount</Text>
+                                    <Text style={[styles.verifyValue, { fontWeight: 'bold', color: colorPalette?.primary || '#ef4444' }]}>
                                         {formatCurrency(paymentLinkData?.amount || 0)}
                                     </Text>
                                 </View>
                             </View>
 
-                            <Text style={{ color: '#4b5563', marginBottom: 24, textAlign: 'center', fontSize: 15 }}>
+                            <Text style={styles.linkDesc}>
                                 Please click the button below to complete your payment.
                             </Text>
 
-                            <Pressable
-                                onPress={handleOpenPaymentLink}
-                                style={{
-                                    paddingVertical: 12,
-                                    borderRadius: 50,
-                                    backgroundColor: '#16a34a',
-                                    width: '60%',
-                                    alignSelf: 'center',
-                                    alignItems: 'center',
-                                    marginBottom: 16
-                                }}
-                            >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>
-                                    Open Payment Portal
-                                </Text>
+                            <Pressable onPress={handleOpenPaymentLink} style={styles.openPortalBtn}>
+                                <Text style={styles.primaryBtnText}>Open Payment Portal</Text>
                             </Pressable>
 
                             <Pressable onPress={handleCancelPaymentLink}>
-                                <Text style={{ color: '#6b7280', textDecorationLine: 'underline', fontSize: 14, textAlign: 'center' }}>Close</Text>
+                                <Text style={styles.closeText}>Close</Text>
                             </Pressable>
 
-                            <View style={{ height: 24 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -743,79 +643,43 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 statusBarTranslucent={true}
                 onRequestClose={handleCancelPendingPayment}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={handleCancelPendingPayment} />
-                    <Animated.View
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 40,
-                            borderTopRightRadius: 40,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 1.0,
-                            shadowRadius: 40,
-                            elevation: 30
-                        }}
-                    >
-                        {/* Header */}
-                        <View
-                            {...panResponder.panHandlers}
-                            style={{ paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: 'transparent' }}
-                        >
-                            <Pressable
-                                onPress={handleCancelPendingPayment}
-                                style={{ width: '100%', alignItems: 'center', paddingVertical: 8 }}
-                            >
-                                <View style={{ width: '20%', height: 3, backgroundColor: '#d1d5db', borderRadius: 2, marginBottom: 8 }} />
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.modalBackdrop} onPress={handleCancelPendingPayment} />
+                    <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
+                        <View {...panResponder.panHandlers} style={styles.modalHeader}>
+                            <Pressable onPress={handleCancelPendingPayment} style={styles.modalHandleBtn}>
+                                <View style={styles.modalHandle} />
                             </Pressable>
-                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#111827' }}>Pending Payment Found</Text>
+                            <Text style={styles.modalTitle}>Pending Payment Found</Text>
                         </View>
 
-                        {/* Content */}
-                        <ScrollView contentContainerStyle={{ padding: 24 }}>
-                            <View style={{ backgroundColor: '#fef3c7', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fde68a' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: '#92400e', fontSize: 14 }}>Amount Due</Text>
-                                    <Text style={{ fontWeight: 'bold', color: '#92400e', fontSize: 14 }}>
+                        <ScrollView contentContainerStyle={styles.modalContent}>
+                            <View style={styles.pendingBox}>
+                                <View style={styles.verifyRow}>
+                                    <Text style={styles.pendingLabel}>Amount Due</Text>
+                                    <Text style={styles.pendingAmount}>
                                         {formatCurrency(pendingPayment?.amount || 0)}
                                     </Text>
                                 </View>
                             </View>
 
-                            <Text style={{ color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15 }}>
+                            <Text style={styles.pendingDesc}>
                                 You have a pending payment session. Would you like to resume it?
                             </Text>
 
-                            <View style={{ gap: 12 }}>
+                            <View style={styles.pendingBtns}>
                                 <Pressable
                                     onPress={handleResumePendingPayment}
-                                    style={{
-                                        paddingVertical: 12,
-                                        borderRadius: 50,
-                                        backgroundColor: colorPalette?.primary || '#0f172a',
-                                        alignItems: 'center'
-                                    }}
+                                    style={[styles.resumeBtn, { backgroundColor: colorPalette?.primary || '#0f172a' }]}
                                 >
-                                    <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Resume Payment</Text>
+                                    <Text style={styles.primaryBtnText}>Resume Payment</Text>
                                 </Pressable>
-
-                                <Pressable
-                                    onPress={handleCancelPendingPayment}
-                                    style={{
-                                        paddingVertical: 12,
-                                        borderRadius: 50,
-                                        backgroundColor: '#f3f4f6',
-                                        alignItems: 'center'
-                                    }}
-                                >
-                                    <Text style={{ color: '#111827', fontWeight: 'bold', fontSize: 16 }}>Cancel</Text>
+                                <Pressable onPress={handleCancelPendingPayment} style={styles.cancelBtn}>
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </Pressable>
                             </View>
 
-                            <View style={{ height: 24 }} />
+                            <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -829,50 +693,111 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 statusBarTranslucent={true}
                 onRequestClose={() => setShowSuccessModal(false)}
             >
-                <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                    <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setShowSuccessModal(false)} />
-                    <Animated.View
-                        style={{
-                            transform: [{ translateY: pan.y }],
-                            backgroundColor: '#ffffff',
-                            borderTopLeftRadius: 30,
-                            borderTopRightRadius: 30,
-                            width: '100%',
-                            maxHeight: '90%',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: -15 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                            elevation: 20
-                        }}
-                    >
-                        <View
-                            {...panResponder.panHandlers}
-                            style={{ paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center', backgroundColor: 'transparent' }}
-                        >
-                            <View style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 }} />
-                            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Payment Successful!</Text>
+                <View style={styles.modalOverlayDark}>
+                    <Pressable style={styles.modalBackdrop} onPress={() => setShowSuccessModal(false)} />
+                    <Animated.View style={[styles.modalSheet30, { transform: [{ translateY: pan.y }] }]}>
+                        <View {...panResponder.panHandlers} style={styles.modalHeader}>
+                            <View style={styles.modalHandleSm} />
+                            <Text style={[styles.modalTitle, { fontWeight: '700' }]}>Payment Successful!</Text>
                         </View>
-                        <ScrollView contentContainerStyle={{ padding: 24, alignItems: 'center' }}>
-                            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+                        <ScrollView contentContainerStyle={styles.modalContentCenter}>
+                            <View style={styles.successCircle}>
                                 <CheckCircle size={48} color="#16a34a" />
                             </View>
-                            <Text style={{ fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 22 }}>
+                            <Text style={styles.successDesc}>
                                 Thank you! Your payment has been processed successfully. Your balance will be updated shortly.
                             </Text>
                             <Pressable
                                 onPress={() => setShowSuccessModal(false)}
-                                style={{ backgroundColor: colorPalette?.primary || '#ef4444', paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' }}
+                                style={[styles.successBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
                             >
-                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 16 }}>Great!</Text>
+                                <Text style={styles.primaryBtnText}>Great!</Text>
                             </Pressable>
-                            <View style={{ height: 40 }} />
+                            <View style={styles.spacerLg} />
                         </ScrollView>
                     </Animated.View>
                 </View>
             </Modal>
-        </View >
+        </View>
     );
 };
+
+const styles = StyleSheet.create({
+    loadingContainer: { padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
+    container: { flex: 1, backgroundColor: '#f9fafb', position: 'relative' },
+    contentGap: { gap: 32 },
+    balanceCard: { borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 8, backgroundColor: '#ffffff' },
+    gradientInner: { borderRadius: 24, padding: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' },
+    balanceLeft: { flex: 1, justifyContent: 'center' },
+    balanceLabel: { color: '#e5e7eb', fontSize: 16, marginBottom: 8 },
+    balanceAmountText: { fontWeight: 'bold', color: '#ffffff' },
+    balanceRight: { alignItems: 'flex-end', justifyContent: 'center', gap: 16 },
+    balanceInfoRight: { alignItems: 'flex-end', gap: 4 },
+    infoText: { color: '#e5e7eb', fontSize: 12 },
+    infoValue: { color: '#ffffff', fontWeight: '500' },
+    payBtn: { borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 32, paddingVertical: 10, borderRadius: 12 },
+    payBtnInner: { alignItems: 'center' },
+    payBtnText: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center' },
+    sectionGap: { gap: 16 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+    referralScroll: { maxHeight: 270 },
+    referralContent: { gap: 12, paddingBottom: 8 },
+    emptyReferrals: { padding: 24, alignItems: 'center', justifyContent: 'center' },
+    emptyReferralsText: { color: '#6b7280', fontSize: 14 },
+    divider: { height: 2, backgroundColor: '#e2e8f0', marginVertical: 16, width: '80%', alignSelf: 'center', borderRadius: 1 },
+    adsWrapper: { gap: 0 },
+    adsInner: { position: 'relative' },
+    adCard: { height: 120, borderRadius: 20, padding: 24, justifyContent: 'center' },
+    adTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+    adDesc: { color: '#ffffff', opacity: 0.9, marginTop: 4 },
+    dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 12 },
+    dotBase: { width: 8, height: 8, borderRadius: 4 },
+    // Modal styles
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
+    modalOverlayDark: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    modalSheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 40, borderTopRightRadius: 40, width: '100%', maxHeight: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: -15 }, shadowOpacity: 1.0, shadowRadius: 40, elevation: 30 },
+    modalSheet30: { backgroundColor: '#ffffff', borderTopLeftRadius: 30, borderTopRightRadius: 30, width: '100%', maxHeight: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: -15 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 20 },
+    modalHeader: { paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center', backgroundColor: 'transparent' },
+    modalHandleBtn: { width: '100%', alignItems: 'center', paddingVertical: 8 },
+    modalHandle: { width: '20%', height: 3, backgroundColor: '#d1d5db', borderRadius: 2, marginBottom: 8 },
+    modalHandleSm: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+    modalContent: { padding: 24 },
+    modalContentCenter: { padding: 24, alignItems: 'center' },
+    verifyBox: { backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' },
+    verifyRowMb: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+    verifyRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    verifyLabel: { color: '#6b7280', fontSize: 14 },
+    verifyValue: { fontWeight: '600', color: '#111827', fontSize: 14 },
+    errorBox: { padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1 },
+    errorText: { fontSize: 14, textAlign: 'center' },
+    inputWrap: { marginBottom: 32 },
+    inputLabel: { fontWeight: '500', marginBottom: 8, color: '#374151', fontSize: 14 },
+    inputField: { width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' },
+    inputHint: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
+    inputHintText: { fontSize: 12, color: '#6b7280' },
+    primaryBtn: { paddingVertical: 12, borderRadius: 50, width: '50%', alignSelf: 'center', alignItems: 'center' },
+    primaryBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
+    spacer: { height: 24 },
+    spacerLg: { height: 40 },
+    refRow: { flex: 1, alignItems: 'flex-end', marginLeft: 16 },
+    linkDesc: { color: '#4b5563', marginBottom: 24, textAlign: 'center', fontSize: 15 },
+    openPortalBtn: { paddingVertical: 12, borderRadius: 50, backgroundColor: '#16a34a', width: '60%', alignSelf: 'center', alignItems: 'center', marginBottom: 16 },
+    closeText: { color: '#6b7280', textDecorationLine: 'underline', fontSize: 14, textAlign: 'center' },
+    pendingBox: { backgroundColor: '#fef3c7', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fde68a' },
+    pendingLabel: { color: '#92400e', fontSize: 14 },
+    pendingAmount: { fontWeight: 'bold', color: '#92400e', fontSize: 14 },
+    pendingDesc: { color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15 },
+    pendingBtns: { gap: 12 },
+    resumeBtn: { paddingVertical: 12, borderRadius: 50, alignItems: 'center' },
+    cancelBtn: { paddingVertical: 12, borderRadius: 50, backgroundColor: '#f3f4f6', alignItems: 'center' },
+    cancelBtnText: { color: '#111827', fontWeight: 'bold', fontSize: 16 },
+    successCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    successDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 22 },
+    successBtn: { paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' },
+    kav: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
+});
 
 export default DashboardCustomer;

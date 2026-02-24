@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet } from 'react-native';
 import { X, ExternalLink, Edit } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
@@ -14,10 +14,12 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
 import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
+import { useJobOrderContext } from '../contexts/JobOrderContext';
 
 const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false }) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
+  const { silentRefresh } = useJobOrderContext();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [loading, setLoading] = useState(false);
@@ -339,6 +341,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       setSuccessMessage('Job Order updated successfully!');
       setShowSuccessModal(true);
       setIsDoneModalOpen(false);
+      silentRefresh();
     } catch (err: any) {
       setError(`Failed to update job order: ${err.message}`);
       console.error('Update error:', err);
@@ -398,6 +401,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       setSuccessMessage('Job Order updated successfully!');
       setShowSuccessModal(true);
       setIsEditModalOpen(false);
+      silentRefresh();
     } catch (err: any) {
       setError(`Failed to update job order: ${err.message}`);
       console.error('Update error:', err);
@@ -477,6 +481,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
       setSuccessMessage(`Status updated to ${newStatus}`);
       setShowSuccessModal(true);
+      silentRefresh();
     } catch (err: any) {
       setError(`Failed to update status: ${err.message}`);
       console.error('Status update error:', err);
@@ -533,15 +538,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
 
 
-  const linkStyle = { marginLeft: 8 };
-  const valueStyle = {
-    color: isDarkMode ? '#ffffff' : '#111827',
-    fontSize: 16,
-  };
+  const dynamicValueColor = isDarkMode ? '#ffffff' : '#111827';
 
   const renderImageLink = (url: string | undefined | null) => (
-    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Text style={{ flex: 1, marginRight: 8, ...valueStyle }} numberOfLines={1} selectable={true}>
+    <View style={st.imageLinkRow}>
+      <Text style={[st.imageLinkText, { color: dynamicValueColor }]} numberOfLines={1} selectable={true}>
         {url || 'No image available'}
       </Text>
       {url && (
@@ -552,56 +553,58 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     </View>
   );
 
+  const valStyle = [st.valueText, { color: dynamicValueColor }];
+
   const fieldRenderers: Record<string, () => React.ReactNode> = {
-    timestamp: () => <Text style={valueStyle} selectable={true}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
-    jobOrderNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
-    referredBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
-    fullName: () => <Text style={valueStyle} selectable={true}>{getClientFullName()}</Text>,
-    contactNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}</Text>,
-    secondContactNumber: () => <Text style={valueStyle} selectable={true}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
-    emailAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
-    fullAddress: () => <Text style={valueStyle} selectable={true}>{getClientFullAddress()}</Text>,
-    billingStatus: () => <Text style={valueStyle} selectable={true}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
-    billingDay: () => <Text style={valueStyle} selectable={true}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
-    choosePlan: () => <Text style={valueStyle} selectable={true}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
-    statusRemarks: () => <Text style={valueStyle} selectable={true}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>,
-    remarks: () => <Text style={valueStyle} selectable={true}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>,
-    installationLandmark: () => <Text style={valueStyle} selectable={true}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>,
-    connectionType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
-    modemRouterSn: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
-    routerModel: () => <Text style={valueStyle} selectable={true}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
-    lcpnap: () => <Text style={valueStyle} selectable={true}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
-    port: () => <Text style={valueStyle} selectable={true}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
-    vlan: () => <Text style={valueStyle} selectable={true}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
-    username: () => <Text style={valueStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
-    ipAddress: () => <Text style={valueStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
-    usageType: () => <Text style={valueStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
-    installation_fee: () => <Text style={valueStyle} selectable={true}>{formatPrice(jobOrder.installation_fee || jobOrder.Installation_Fee)}</Text>,
+    timestamp: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
+    jobOrderNumber: () => <Text style={valStyle} selectable={true}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
+    referredBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
+    fullName: () => <Text style={valStyle} selectable={true}>{getClientFullName()}</Text>,
+    contactNumber: () => <Text style={valStyle} selectable={true}>{jobOrder.Contact_Number || jobOrder.mobile_number || (applicationData?.mobile_number) || 'Not provided'}</Text>,
+    secondContactNumber: () => <Text style={valStyle} selectable={true}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
+    emailAddress: () => <Text style={valStyle} selectable={true}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
+    fullAddress: () => <Text style={valStyle} selectable={true}>{getClientFullAddress()}</Text>,
+    billingStatus: () => <Text style={valStyle} selectable={true}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
+    billingDay: () => <Text style={valStyle} selectable={true}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
+    choosePlan: () => <Text style={valStyle} selectable={true}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
+    statusRemarks: () => <Text style={valStyle} selectable={true}>{jobOrder.Status_Remarks || jobOrder.status_remarks || 'No remarks'}</Text>,
+    remarks: () => <Text style={valStyle} selectable={true}>{jobOrder.Remarks || jobOrder.onsite_remarks || 'No remarks'}</Text>,
+    installationLandmark: () => <Text style={valStyle} selectable={true}>{jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || (applicationData?.landmark) || 'Not provided'}</Text>,
+    connectionType: () => <Text style={valStyle} selectable={true}>{jobOrder.Connection_Type || jobOrder.connection_type || 'Not specified'}</Text>,
+    modemRouterSn: () => <Text style={valStyle} selectable={true}>{jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn || 'Not specified'}</Text>,
+    routerModel: () => <Text style={valStyle} selectable={true}>{jobOrder.Router_Model || jobOrder.router_model || 'Not specified'}</Text>,
+    lcpnap: () => <Text style={valStyle} selectable={true}>{jobOrder.LCPNAP || jobOrder.lcpnap || 'Not specified'}</Text>,
+    port: () => <Text style={valStyle} selectable={true}>{jobOrder.PORT || jobOrder.Port || jobOrder.port || 'Not specified'}</Text>,
+    vlan: () => <Text style={valStyle} selectable={true}>{jobOrder.VLAN || jobOrder.vlan || 'Not specified'}</Text>,
+    username: () => <Text style={valStyle} selectable={true}>{jobOrder.Username || jobOrder.username || jobOrder.pppoe_username || 'Not provided'}</Text>,
+    ipAddress: () => <Text style={valStyle} selectable={true}>{jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip || 'Not specified'}</Text>,
+    usageType: () => <Text style={valStyle} selectable={true}>{jobOrder.Usage_Type || jobOrder.usage_type || 'Not specified'}</Text>,
+    installation_fee: () => <Text style={valStyle} selectable={true}>{formatPrice(jobOrder.installation_fee || jobOrder.Installation_Fee)}</Text>,
     itemsUsed: () => (
-      <View style={{ flexDirection: 'column', gap: 4 }}>
+      <View style={st.itemsCol}>
         {jobOrderItems.length > 0 ? (
           jobOrderItems.map((item, index) => (
-            <Text key={index} style={valueStyle} selectable={true}>
+            <Text key={index} style={valStyle} selectable={true}>
               {item.item_name || (item as any).Item_Name || (item as any).itemName} (Qty: {item.quantity || (item as any).Quantity || (item as any).qty || 0})
             </Text>
           ))
         ) : (
-          <Text style={valueStyle} selectable={true}>No items recorded</Text>
+          <Text style={valStyle} selectable={true}>No items recorded</Text>
         )}
       </View>
     ),
-    dateInstalled: () => <Text style={valueStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
-    visitBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
-    visitWith: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
-    visitWithOther: () => <Text style={valueStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
+    dateInstalled: () => <Text style={valStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
+    visitBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
+    visitWith: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
+    visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
     onsiteStatus: () => (
-      <Text style={{ textTransform: 'capitalize', color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }} selectable={true}>
+      <Text style={[st.statusCapitalize, { color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }]} selectable={true}>
         {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
       </Text>
     ),
-    modifiedBy: () => <Text style={valueStyle} selectable={true}>{jobOrder.Modified_By || 'System'}</Text>,
-    modifiedDate: () => <Text style={valueStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
-    assignedEmail: () => <Text style={valueStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
+    modifiedBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Modified_By || 'System'}</Text>,
+    modifiedDate: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
+    assignedEmail: () => <Text style={valStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
     setupImage: () => renderImageLink(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url),
     speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image),
     signedContractImage: () => renderImageLink(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL),
@@ -612,33 +615,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   };
 
   const renderFieldContent = (fieldKey: string) => {
-
-
     const renderer = fieldRenderers[fieldKey];
     if (!renderer) return null;
 
-    const baseFieldStyle = {
-      flexDirection: 'column' as const,
-      borderBottomWidth: 1,
-      paddingVertical: 4,
-      paddingHorizontal: 16,
-      borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-      alignItems: 'flex-start' as const,
-      gap: 2
-    };
-    const labelStyle = {
-      fontSize: 14,
-      color: isDarkMode ? '#9ca3af' : '#6b7280',
-      fontWeight: '500' as const
-    };
-    const valueContainerStyle = {
-      width: '100%' as import('react-native').DimensionValue,
-    };
-
     return (
-      <View style={baseFieldStyle}>
-        <Text style={labelStyle}>{getFieldLabel(fieldKey)}</Text>
-        <View style={valueContainerStyle}>
+      <View style={[st.fieldRow, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
+        <Text style={[st.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
+        <View style={st.fieldValueWrap}>
           {renderer()}
         </View>
       </View>
@@ -646,35 +629,36 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   };
 
   return (
-    <View style={{ height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%', borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb', borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db' }}>
-      <View style={{ padding: 12, paddingTop: isMobile ? 60 : 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <Text style={{ fontWeight: '500', maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: isDarkMode ? '#ffffff' : '#111827' }} numberOfLines={1}>{getClientFullName()}</Text>
-          {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#fb923c' : '#ea580c' }}>Loading...</Text>}
+    <View style={[st.container, {
+      borderLeftWidth: !isMobile ? 1 : 0,
+      backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+      borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db'
+    }]}>
+      <View style={[st.header, {
+        paddingTop: isMobile ? 60 : 12,
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+      }]}>
+        <View style={st.headerLeft}>
+          <Text style={[st.headerName, { maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
+          {loading && <Text style={[st.loadingLabel, { color: isDarkMode ? '#fb923c' : '#ea580c' }]}>Loading...</Text>}
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={st.headerActions}>
           {shouldShowApproveButton() && (
-            <Pressable
-              style={{ backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' }}
-              onPress={handleApproveClick}
-              disabled={loading}
-            >
-              <Text style={{ color: '#ffffff' }}>Approve</Text>
+            <Pressable style={st.approveBtn} onPress={handleApproveClick} disabled={loading}>
+              <Text style={st.whiteTxt}>Approve</Text>
             </Pressable>
           )}
           {!(jobOrder.Onsite_Status && jobOrder.Onsite_Status.toLowerCase() === 'done') && userRole !== 'agent' && userRoleId !== 4 && (
             <Pressable
-              style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+              style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
               onPress={handleDoneClick}
               disabled={loading}
             >
-              <Text style={{ color: '#ffffff', fontSize: isMobile ? 14 : 16, fontWeight: '500' }}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
-
+              <Text style={[st.actionBtnText, { fontSize: isMobile ? 14 : 16 }]}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
             </Pressable>
           )}
-
-
 
           <Pressable onPress={onClose}>
             <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
@@ -683,30 +667,32 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       </View>
 
       {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && (
-        <View style={{ paddingVertical: 12, borderBottomWidth: 1, backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
-            <Pressable
-              onPress={handleEditClick}
-              disabled={loading}
-              style={{ flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 }}
-            >
-              <View style={{ padding: 8, borderRadius: 9999, backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c') }}>
+        <View style={[st.editBar, {
+          backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
+          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        }]}>
+          <View style={st.editBarInner}>
+            <Pressable onPress={handleEditClick} disabled={loading} style={st.editBtnWrap}>
+              <View style={[st.editIconCircle, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c') }]}>
                 <Edit width={18} height={18} color="#ffffff" />
               </View>
-              <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Edit</Text>
+              <Text style={[st.editLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Edit</Text>
             </Pressable>
           </View>
         </View>
       )}
 
       {error && (
-        <View style={{ padding: 12, margin: 12, borderRadius: 4, backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2', borderWidth: 1, borderColor: isDarkMode ? '#991b1b' : '#fca5a5' }}>
+        <View style={[st.errorBox, {
+          backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
+          borderColor: isDarkMode ? '#991b1b' : '#fca5a5'
+        }]}>
           <Text style={{ color: isDarkMode ? '#fca5a5' : '#991b1b' }}>{error}</Text>
         </View>
       )}
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={{ width: '100%', minHeight: '100%', paddingVertical: 8, paddingHorizontal: 0, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+      <ScrollView style={st.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={st.scrollContent}>
+        <View style={[st.fieldsContainer, { backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }]}>
           <View>
             {defaultFields.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
@@ -757,5 +743,35 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     </View>
   );
 };
+
+const st = StyleSheet.create({
+  container: { height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%' },
+  header: { padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  headerName: { fontWeight: '500' },
+  loadingLabel: { marginLeft: 12, fontSize: 14 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  approveBtn: { backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },
+  whiteTxt: { color: '#ffffff' },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },
+  actionBtnText: { color: '#ffffff', fontWeight: '500' },
+  editBar: { paddingVertical: 12, borderBottomWidth: 1 },
+  editBarInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  editBtnWrap: { flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 },
+  editIconCircle: { padding: 8, borderRadius: 9999 },
+  editLabel: { fontSize: 12, marginTop: 4 },
+  errorBox: { padding: 12, margin: 12, borderRadius: 4, borderWidth: 1 },
+  flex1: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  fieldsContainer: { width: '100%', minHeight: '100%', paddingVertical: 8, paddingHorizontal: 0 },
+  fieldRow: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 16, alignItems: 'flex-start', gap: 2 },
+  fieldLabel: { fontSize: 14, fontWeight: '500' },
+  fieldValueWrap: { width: '100%' },
+  valueText: { fontSize: 16 },
+  statusCapitalize: { textTransform: 'capitalize' },
+  itemsCol: { flexDirection: 'column', gap: 4 },
+  imageLinkRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  imageLinkText: { flex: 1, marginRight: 8, fontSize: 16 },
+});
 
 export default JobOrderDetails;

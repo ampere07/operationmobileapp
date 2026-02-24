@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet } from 'react-native';
 import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
@@ -115,7 +115,7 @@ const JobOrderPage: React.FC = () => {
   };
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 50;
+  const itemsPerPage = 10;
 
 
 
@@ -444,7 +444,7 @@ const JobOrderPage: React.FC = () => {
   const isTablet = width >= 768;
 
   const StatusText = ({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
-    if (!status) return <Text style={{ color: '#9ca3af' }}>-</Text>;
+    if (!status) return <Text style={jo.statusDash}>-</Text>;
 
     let textColor = '';
 
@@ -495,7 +495,7 @@ const JobOrderPage: React.FC = () => {
     }
 
     return (
-      <Text style={{ color: textColor, fontWeight: 'bold', textTransform: 'uppercase' }}>
+      <Text style={[jo.statusLabel, { color: textColor }]}>
         {status === 'inprogress' ? 'In Progress' : status}
       </Text>
     );
@@ -783,64 +783,23 @@ const JobOrderPage: React.FC = () => {
   };
 
   return (
-    <View style={{
-      height: '100%',
+    <View style={[jo.container, {
       flexDirection: isTablet ? 'row' : 'column',
-      overflow: 'hidden',
       backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-    }}>
+    }]}>
 
 
       {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 50
-        }}>
-          <Pressable
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)'
-            }}
-            onPress={() => setMobileMenuOpen(false)}
-          />
-          <View style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 256,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            flexDirection: 'column'
-          }}>
-            <View style={{
-              padding: 16,
-              paddingTop: 60,
-              borderBottomWidth: 1,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>
-                Filters
-              </Text>
+        <View style={jo.mobileOverlay}>
+          <Pressable style={jo.mobileBackdrop} onPress={() => setMobileMenuOpen(false)} />
+          <View style={[jo.mobileSidebar, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
+            <View style={[jo.mobileSidebarHeader, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[jo.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Filters</Text>
               <Pressable onPress={() => setMobileMenuOpen(false)}>
                 <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
               </Pressable>
             </View>
-            <View style={{ padding: 16 }}>
+            <View style={jo.pad16}>
               <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
             </View>
           </View>
@@ -848,111 +807,64 @@ const JobOrderPage: React.FC = () => {
       )}
 
       {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
-        <View style={{
+        <View style={[jo.sidebar, {
           width: sidebarWidth,
-          borderRightWidth: 1,
-          flexShrink: 0,
-          flexDirection: 'column',
-          position: 'relative',
           backgroundColor: isDarkMode ? '#111827' : '#ffffff',
           borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-        }}>
-          <View style={{
-            padding: 16,
-            borderBottomWidth: 1,
-            flexShrink: 0,
-            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }}>
-                Job Orders
-              </Text>
+        }]}>
+          <View style={[jo.sidebarHeaderBox, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+            <View style={jo.sidebarTitleRow}>
+              <Text style={[jo.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Job Orders</Text>
             </View>
           </View>
-          <View style={{ padding: 16 }}>
+          <View style={jo.pad16}>
             <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
           </View>
         </View>
       )}
 
-      <View style={{
-        overflow: 'hidden',
-        flex: 1,
-        flexDirection: 'column',
+      <View style={[jo.mainContent, {
         backgroundColor: isDarkMode ? '#111827' : '#ffffff',
         display: mobileView === 'details' && !isTablet ? 'none' : 'flex'
-      }}>
-        <View style={{ flexDirection: 'column', height: '100%' }}>
-          <View style={{
-            padding: 16,
+      }]}>
+        <View style={jo.mainInner}>
+          <View style={[jo.toolbar, {
             paddingTop: isTablet ? 16 : 60,
-            borderBottomWidth: 1,
-            flexShrink: 0,
             backgroundColor: isDarkMode ? '#111827' : '#ffffff',
             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          }]}>
+            <View style={jo.toolbarRow}>
               {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-                <Pressable
-                  onPress={handleMobileBack}
-                  style={{
-                    padding: 8,
-                    borderRadius: 4,
-                  }}
-                >
+                <Pressable onPress={handleMobileBack} style={jo.iconBtn}>
                   <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
                 </Pressable>
               )}
               {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-                <Pressable
-                  onPress={() => setMobileMenuOpen(true)}
-                  style={{
-                    backgroundColor: '#374151',
-                    padding: 8,
-                    borderRadius: 4
-                  }}
-                >
+                <Pressable onPress={() => setMobileMenuOpen(true)} style={jo.menuBtn}>
                   <Menu size={20} color="white" />
                 </Pressable>
               )}
-              <View style={{ position: 'relative', flex: 1 }}>
+              <View style={jo.searchWrap}>
                 <TextInput
                   placeholder="Search job orders..."
                   placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  style={{
-                    width: '100%',
-                    borderRadius: 4,
-                    paddingLeft: 40,
-                    paddingRight: 16,
-                    paddingVertical: 8,
+                  style={[jo.searchInput, {
                     backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
                     color: isDarkMode ? '#ffffff' : '#111827',
-                    borderWidth: 1,
                     borderColor: isDarkMode ? '#374151' : '#d1d5db'
-                  }}
+                  }]}
                 />
-                <View style={{ position: 'absolute', left: 12, top: 10 }}>
+                <View style={jo.searchIcon}>
                   <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={jo.actionsRow}>
                 {userRole.toLowerCase() !== 'agent' && userRoleId !== 4 && (
                   <Pressable
                     onPress={() => setIsFunnelFilterOpen(true)}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 4,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: isDarkMode ? '#374151' : '#e5e7eb'
-                    }}
+                    style={[jo.actionBtn, { backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }]}
                   >
                     <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#374151'} />
                   </Pressable>
@@ -961,14 +873,7 @@ const JobOrderPage: React.FC = () => {
                 <Pressable
                   onPress={handleRefresh}
                   disabled={isRefreshing}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 4,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c')
-                  }}
+                  style={[jo.actionBtn, { backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c') }]}
                 >
                   <RefreshCw size={20} color="white" />
                 </Pressable>
@@ -976,9 +881,9 @@ const JobOrderPage: React.FC = () => {
             </View>
           </View>
 
-          <View style={{ flex: 1, overflow: 'hidden', flexDirection: 'column' }}>
+          <View style={jo.listArea}>
             <ScrollView
-              style={{ flex: 1 }}
+              style={jo.flex1}
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -989,49 +894,21 @@ const JobOrderPage: React.FC = () => {
               }
             >
               {isLoading ? (
-                <View style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
-                  <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                    <View style={{
-                      height: 16,
-                      width: '33%',
-                      borderRadius: 4,
-                      marginBottom: 16,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
-                    <View style={{
-                      height: 16,
-                      width: '50%',
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                    }} />
+                <View style={jo.loadingWrap}>
+                  <View style={jo.skeletonCol}>
+                    <View style={[jo.skeletonBar1, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
+                    <View style={[jo.skeletonBar2, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
                   </View>
-                  <Text style={{
-                    marginTop: 16,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>Loading job orders...</Text>
+                  <Text style={[jo.loadingText, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>Loading job orders...</Text>
                 </View>
               ) : error ? (
-                <View style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 48,
-                  alignItems: 'center'
-                }}>
+                <View style={jo.loadingWrap}>
                   <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
                   <Pressable
                     onPress={() => Alert.alert('Retry', 'Reload the application')}
-                    style={{
-                      marginTop: 16,
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                      borderRadius: 4,
-                      backgroundColor: isDarkMode ? '#374151' : '#9ca3af'
-                    }}
+                    style={[jo.retryBtn, { backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }]}
                   >
-                    <Text style={{ color: 'white' }}>Retry</Text>
+                    <Text style={jo.retryText}>Retry</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -1041,42 +918,21 @@ const JobOrderPage: React.FC = () => {
                       <Pressable
                         key={jobOrder.id}
                         onPress={() => !isTablet ? handleMobileRowClick(jobOrder) : handleRowClick(jobOrder)}
-                        style={{
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          borderBottomWidth: 1,
+                        style={[jo.cardRow, {
                           backgroundColor: selectedJobOrder?.id === jobOrder.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
                           borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                        }}
+                        }]}
                       >
-                        <View style={{
-                          flexDirection: 'row',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between'
-                        }}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={{
-                              fontWeight: '500',
-                              fontSize: 14,
-                              marginBottom: 4,
-                              color: isDarkMode ? '#ffffff' : '#111827'
-                            }}>
+                        <View style={jo.cardInner}>
+                          <View style={jo.cardLeft}>
+                            <Text style={[jo.cardName, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
                               {getClientFullName(jobOrder)}
                             </Text>
-                            <Text style={{
-                              fontSize: 12,
-                              color: isDarkMode ? '#9ca3af' : '#4b5563'
-                            }}>
+                            <Text style={[jo.cardSub, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
                               {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)} | Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
                             </Text>
                           </View>
-                          <View style={{
-                            flexDirection: 'column',
-                            alignItems: 'flex-end',
-                            gap: 4,
-                            marginLeft: 16,
-                            flexShrink: 0
-                          }}>
+                          <View style={jo.cardRight}>
                             <StatusText status={jobOrder.Onsite_Status || jobOrder.onsite_status} type="onsite" />
                           </View>
                         </View>
@@ -1084,65 +940,40 @@ const JobOrderPage: React.FC = () => {
                     ))}
                   </View>
                 ) : (
-                  <View style={{
-                    alignItems: 'center',
-                    paddingVertical: 48
-                  }}>
-                    <Text style={{
-                      color: isDarkMode ? '#9ca3af' : '#4b5563'
-                    }}>No job orders found matching your filters</Text>
+                  <View style={jo.emptyWrap}>
+                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>No job orders found matching your filters</Text>
                   </View>
                 )
               )}
             </ScrollView>
 
             {!isLoading && sortedJobOrders.length > 0 && totalPages > 1 && (
-              <View style={{
-                borderTopWidth: 1,
-                padding: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+              <View style={[jo.paginationBar, {
                 backgroundColor: isDarkMode ? '#111827' : '#ffffff',
                 borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }}>
+              }]}>
                 <View>
-                  <Text style={{
-                    fontSize: 14,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>
-                    Showing <Text style={{ fontWeight: '500' }}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={{ fontWeight: '500' }}>{Math.min(currentPage * itemsPerPage, sortedJobOrders.length)}</Text> of <Text style={{ fontWeight: '500' }}>{sortedJobOrders.length}</Text> results
+                  <Text style={[jo.paginationInfo, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
+                    Showing <Text style={jo.bold500}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={jo.bold500}>{Math.min(currentPage * itemsPerPage, sortedJobOrders.length)}</Text> of <Text style={jo.bold500}>{sortedJobOrders.length}</Text> results
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={jo.paginationBtns}>
                   <Pressable
                     onPress={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 4,
-                      backgroundColor: currentPage === 1
-                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
-                        : (isDarkMode ? '#374151' : '#ffffff'),
+                    style={[jo.pageBtn, {
+                      backgroundColor: currentPage === 1 ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
                       borderWidth: currentPage === 1 ? 0 : 1,
                       borderColor: '#d1d5db'
-                    }}
+                    }]}
                   >
-                    <Text style={{
-                      fontSize: 14,
-                      color: currentPage === 1
-                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
-                        : (isDarkMode ? '#ffffff' : '#374151')
-                    }}>Previous</Text>
+                    <Text style={[jo.pageBtnText, {
+                      color: currentPage === 1 ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151')
+                    }]}>Previous</Text>
                   </Pressable>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{
-                      paddingHorizontal: 8,
-                      fontSize: 14,
-                      color: isDarkMode ? '#ffffff' : '#111827'
-                    }}>
+                  <View style={jo.pageIndicatorWrap}>
+                    <Text style={[jo.pageIndicator, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
                       Page {currentPage} of {totalPages}
                     </Text>
                   </View>
@@ -1150,23 +981,15 @@ const JobOrderPage: React.FC = () => {
                   <Pressable
                     onPress={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 4,
-                      backgroundColor: currentPage === totalPages
-                        ? (isDarkMode ? '#1f2937' : '#f3f4f6')
-                        : (isDarkMode ? '#374151' : '#ffffff'),
+                    style={[jo.pageBtn, {
+                      backgroundColor: currentPage === totalPages ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
                       borderWidth: currentPage === totalPages ? 0 : 1,
                       borderColor: '#d1d5db'
-                    }}
+                    }]}
                   >
-                    <Text style={{
-                      fontSize: 14,
-                      color: currentPage === totalPages
-                        ? (isDarkMode ? '#4b5563' : '#9ca3af')
-                        : (isDarkMode ? '#ffffff' : '#374151')
-                    }}>Next</Text>
+                    <Text style={[jo.pageBtnText, {
+                      color: currentPage === totalPages ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151')
+                    }]}>Next</Text>
                   </Pressable>
                 </View>
               </View>
@@ -1176,13 +999,10 @@ const JobOrderPage: React.FC = () => {
       </View>
 
       {selectedJobOrder && mobileView === 'details' && (
-        <View style={{
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
+        <View style={[jo.mobileDetail, {
           backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
           display: isTablet ? 'none' : 'flex'
-        }}>
+        }]}>
           <JobOrderDetails
             jobOrder={selectedJobOrder}
             onClose={handleMobileBack}
@@ -1193,11 +1013,7 @@ const JobOrderPage: React.FC = () => {
       )}
 
       {selectedJobOrder && (mobileView !== 'details' || isTablet) && (
-        <View style={{
-          flexShrink: 0,
-          overflow: 'hidden',
-          display: isTablet ? 'flex' : 'none'
-        }}>
+        <View style={[jo.tabletDetail, { display: isTablet ? 'flex' : 'none' }]}>
           <JobOrderDetails
             jobOrder={selectedJobOrder}
             onClose={() => setSelectedJobOrder(null)}
@@ -1218,5 +1034,67 @@ const JobOrderPage: React.FC = () => {
     </View>
   );
 };
+
+const jo = StyleSheet.create({
+  container: { height: '100%', overflow: 'hidden' },
+  // Mobile overlay
+  mobileOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
+  mobileBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  mobileSidebar: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 256, flexDirection: 'column' },
+  mobileSidebarHeader: { padding: 16, paddingTop: 60, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Sidebar
+  sidebar: { borderRightWidth: 1, flexShrink: 0, flexDirection: 'column', position: 'relative' },
+  sidebarHeaderBox: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
+  sidebarTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  sidebarTitle: { fontSize: 18, fontWeight: '600' },
+  pad16: { padding: 16 },
+  // Main content
+  mainContent: { overflow: 'hidden', flex: 1, flexDirection: 'column' },
+  mainInner: { flexDirection: 'column', height: '100%' },
+  // Toolbar
+  toolbar: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
+  toolbarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBtn: { padding: 8, borderRadius: 4 },
+  menuBtn: { backgroundColor: '#374151', padding: 8, borderRadius: 4 },
+  searchWrap: { position: 'relative', flex: 1 },
+  searchInput: { width: '100%', borderRadius: 4, paddingLeft: 40, paddingRight: 16, paddingVertical: 8, borderWidth: 1 },
+  searchIcon: { position: 'absolute', left: 12, top: 10 },
+  actionsRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
+  // List area
+  listArea: { flex: 1, overflow: 'hidden', flexDirection: 'column' },
+  flex1: { flex: 1 },
+  // Loading
+  loadingWrap: { paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' },
+  skeletonCol: { flexDirection: 'column', alignItems: 'center' },
+  skeletonBar1: { height: 16, width: '33%', borderRadius: 4, marginBottom: 16 },
+  skeletonBar2: { height: 16, width: '50%', borderRadius: 4 },
+  loadingText: { marginTop: 16 },
+  retryBtn: { marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
+  retryText: { color: 'white' },
+  // Cards
+  cardRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  cardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardLeft: { flex: 1, minWidth: 0 },
+  cardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
+  cardSub: { fontSize: 12 },
+  cardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
+  // Pagination
+  paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  paginationInfo: { fontSize: 14 },
+  bold500: { fontWeight: '500' },
+  paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtnText: { fontSize: 14 },
+  pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
+  // Detail panels
+  mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
+  tabletDetail: { flexShrink: 0, overflow: 'hidden' },
+  // StatusText
+  statusDash: { color: '#9ca3af' },
+  statusLabel: { fontWeight: 'bold', textTransform: 'uppercase' },
+});
 
 export default JobOrderPage;

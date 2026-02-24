@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard } from 'react-native';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, StyleSheet } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search } from 'lucide-react-native';
@@ -949,8 +949,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const activeColor = colorPalette?.primary || '#ea580c';
 
   const renderLabel = (text: string, required = false) => (
-    <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-      {text} {required && <Text className="text-red-500">*</Text>}
+    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+      {text} {required && <Text style={styles.required}>*</Text>}
     </Text>
   );
 
@@ -960,13 +960,18 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     editable = true,
     keyboardType: 'default' | 'numeric' | 'email-address' = 'default'
   ) => (
-    <View className="mb-4">
+    <View style={styles.inputGroup}>
       {renderLabel(placeholder.replace('Enter ', ''), !editable && field !== 'dateInstalled' ? false : true)}
       <TextInput
-        className={`border rounded-lg p-3 text-base ${!editable
-          ? (isDarkMode ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200')
-          : (isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300')
-          } ${errors[field] ? 'border-red-500' : ''}`}
+        style={[styles.textInput, {
+          backgroundColor: !editable
+            ? (isDarkMode ? '#374151' : '#f3f4f6')
+            : (isDarkMode ? '#1f2937' : '#ffffff'),
+          color: !editable
+            ? (isDarkMode ? '#9ca3af' : '#6b7280')
+            : (isDarkMode ? '#ffffff' : '#111827'),
+          borderColor: errors[field] ? '#ef4444' : (!editable ? (isDarkMode ? '#4b5563' : '#e5e7eb') : (isDarkMode ? '#374151' : '#d1d5db'))
+        }]}
         value={String(formData[field])}
         onChangeText={(text) => handleInputChange(field, text)}
         placeholder={placeholder}
@@ -975,7 +980,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         keyboardType={keyboardType}
       />
       {errors[field] && (
-        <Text className="text-red-500 text-xs mt-1">{errors[field]}</Text>
+        <Text style={styles.errorText}>{errors[field]}</Text>
       )}
     </View>
   );
@@ -986,9 +991,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     label: string,
     enabled = true
   ) => (
-    <View className="mb-4">
+    <View style={styles.inputGroup}>
       {renderLabel(label)}
-      <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+      <View style={[styles.pickerContainer, {
+        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+      }]}>
         <Picker
           selectedValue={formData[field]}
           onValueChange={(val) => handleInputChange(field, val)}
@@ -1006,9 +1014,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   );
 
   const renderLcpNapPicker = () => (
-    <View className="mb-4">
+    <View style={styles.inputGroup}>
       {renderLabel('New LCP-NAP', true)}
-      <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+      <View style={[styles.pickerContainer, {
+        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+      }]}>
         <Picker
           selectedValue={formData.newLcpnap}
           onValueChange={(val) => handleInputChange('newLcpnap', val)}
@@ -1032,9 +1043,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     });
 
     return (
-      <View className="mb-4">
+      <View style={styles.inputGroup}>
         {renderLabel('New Port', true)}
-        <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+        <View style={[styles.pickerContainer, {
+          borderColor: isDarkMode ? '#374151' : '#d1d5db',
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+        }]}>
           <Picker
             selectedValue={formData.newPort}
             onValueChange={(val) => handleInputChange('newPort', val)}
@@ -1066,46 +1080,45 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1 bg-black/50 justify-end"
+        style={styles.modalOverlay}
       >
-        <View className={`h-[95%] w-full shadow-2xl rounded-t-3xl overflow-hidden flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <View style={[styles.modalContent, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
 
           {/* Header */}
-          <View className={`px-6 py-4 flex-row items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
-            <View className="flex-row items-center space-x-3">
-              <Text className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+          <View style={[styles.header, {
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          }]}>
+            <View style={styles.headerTitleContainer}>
+              <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
                 {serviceOrderData?.ticket_id || serviceOrderData?.id} | {formData.fullName}
               </Text>
             </View>
-            <View className="flex-row items-center space-x-3 gap-2">
+            <View style={styles.headerActions}>
               <Pressable
                 onPress={onClose}
-                className="px-4 py-2 border rounded-lg"
-                style={{ borderColor: activeColor }}
+                style={[styles.cancelButton, { borderColor: activeColor }]}
               >
-                <Text style={{ color: activeColor }} className="text-sm font-medium">Cancel</Text>
+                <Text style={[styles.cancelButtonText, { color: activeColor }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
                 disabled={loading}
-                className="px-6 py-2 rounded-lg"
-                style={{ backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : activeColor }}
+                style={[styles.saveButton, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : activeColor }]}
               >
-                {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text className="text-white text-sm font-medium">Save</Text>}
+                {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
               </Pressable>
             </View>
           </View>
 
-          <View
-            style={{ flex: 1 }}
-          >
+          <View style={styles.contentContainer}>
             <ScrollView
-              className="flex-1 p-6"
-              contentContainerStyle={{ paddingBottom: 40 }}
+              style={styles.contentContainer}
+              contentContainerStyle={styles.scrollViewContent}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps="handled"
             >
-              <View className="space-y-4">
+              <View style={styles.inputGroup}>
 
                 {renderInput('accountNo', 'Account No', false)}
                 {renderInput('dateInstalled', 'Date Installed', false)}
@@ -1116,31 +1129,38 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 {renderInput('plan', 'Plan', false)}
                 {renderInput('username', 'Username', false)}
 
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Full Address</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Full Address</Text>
                   <TextInput
                     value={formData.fullAddress}
                     editable={false}
                     multiline={true}
                     numberOfLines={2}
                     placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    className={`w-full px-3 py-2 border rounded-lg opacity-75 ${isDarkMode
-                      ? 'bg-gray-700 border-gray-600 text-gray-300'
-                      : 'bg-gray-100 border-gray-300 text-gray-600'
-                      }`}
+                    style={[styles.textInput, {
+                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                      borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                      color: isDarkMode ? '#9ca3af' : '#6b7280',
+                      textAlignVertical: 'top'
+                    }]}
                   />
                 </View>
 
                 {/* Connection Type */}
-                <View className="mb-4">
-                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Connection Type</Text>
-                  <View className="flex-row gap-2">
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
+                  <View style={styles.connectionTypeContainer}>
                     <Pressable
                       onPress={() => handleInputChange('connectionType', 'Fiber')}
-                      className={`px-4 py-2 rounded-lg border ${formData.connectionType === 'Fiber' ? '' : (isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white')}`}
-                      style={formData.connectionType === 'Fiber' ? { backgroundColor: activeColor, borderColor: activeColor } : {}}
+                      style={[styles.connectionTypeButton, {
+                        backgroundColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
+                        borderColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
+                      }]}
                     >
-                      <Text style={{ color: formData.connectionType === 'Fiber' ? '#fff' : (isDarkMode ? '#fff' : '#000') }}>Fiber</Text>
+                      <Text style={{
+                        color: formData.connectionType === 'Fiber' ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'),
+                        fontWeight: '500'
+                      }}>Fiber</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1157,9 +1177,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   <>
                     {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
 
-                    <View className="mb-4">
+                    <View style={styles.inputGroup}>
                       {renderLabel('Assigned Email', true)}
-                      <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                      <View style={[styles.pickerContainer, {
+                        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                      }]}>
                         <Picker
                           selectedValue={formData.assignedEmail}
                           onValueChange={(val) => handleInputChange('assignedEmail', val)}
@@ -1186,9 +1209,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             {renderPicker('newVlan', vlans, 'New VLAN')}
 
                             {/* Router Model Picker */}
-                            <View className="mb-4">
+                            <View style={styles.inputGroup}>
                               {renderLabel('Router Model', true)}
-                              <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                              <View style={[styles.pickerContainer, {
+                                borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                              }]}>
                                 <Picker
                                   selectedValue={formData.routerModel}
                                   onValueChange={(val) => handleInputChange('routerModel', val)}
@@ -1212,9 +1238,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         {formData.repairCategory === 'Update Vlan' && renderPicker('newVlan', vlans, 'New VLAN')}
 
                         {/* Visit By */}
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit By', true)}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitBy}
                               onValueChange={(val) => handleInputChange('visitBy', val)}
@@ -1230,9 +1259,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
 
                         {/* Visit With */}
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit With')}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitWith}
                               onValueChange={(val) => handleInputChange('visitWith', val)}
@@ -1249,9 +1281,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         </View>
 
                         {/* Visit With Other */}
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit With Other')}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitWithOther}
                               onValueChange={(val) => handleInputChange('visitWithOther', val)}
@@ -1269,30 +1304,36 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                         {renderInput('visitRemarks', 'Visit Remarks')}
 
-                        <View className="mb-4 z-50">
+                        <View style={[styles.inputGroup, { zIndex: 50 }]}>
                           {renderLabel('Client Signature')}
                           {!isDrawingSignature ? (
                             <View>
                               <Pressable
                                 onPress={() => setIsDrawingSignature(true)}
-                                className={`h-40 border border-dashed rounded-lg items-center justify-center mb-2 ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}
+                                style={[styles.signatureContainer, {
+                                  borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                                }]}
                               >
                                 {imageFiles.clientSignatureFile || formData.clientSignature ? (
-                                  <Image source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
+                                  <Image
+                                    source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }}
+                                    style={styles.signatureImage}
+                                  />
                                 ) : (
-                                  <View className="items-center">
-                                    <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Tap to Draw Signature</Text>
+                                  <View style={styles.signaturePlaceholder}>
+                                    <Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text>
                                   </View>
                                 )}
                               </Pressable>
                               {imageFiles.clientSignatureFile && (
-                                <Pressable onPress={handleSignatureClear} className="self-end px-3 py-1 bg-red-500 rounded-md">
-                                  <Text className="text-white text-xs">Clear Signature</Text>
+                                <Pressable onPress={handleSignatureClear} style={styles.clearSignatureButton}>
+                                  <Text style={styles.clearSignatureText}>Clear Signature</Text>
                                 </Pressable>
                               )}
                             </View>
                           ) : (
-                            <View className="h-60 border border-gray-500 bg-white mb-2">
+                            <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
                               <SignatureScreen
                                 ref={signatureRef}
                                 onOK={handleSignatureOK}
@@ -1309,7 +1350,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   setIsDrawingSignature(false);
                                   setScrollEnabled(true);
                                 }}
-                                className="absolute top-2 right-2 p-1 bg-gray-200 rounded-full z-10"
+                                style={styles.signatureCloseButton}
                               >
                                 <X size={20} color="#000" />
                               </Pressable>
@@ -1317,31 +1358,39 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           )}
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Items', true)}
                           {orderItems.map((item, idx) => (
-                            <View key={idx} className="z-10 mb-4">
-                              <View className="flex-row gap-2 items-start">
-                                <View className="flex-1 relative">
+                            <View key={idx} style={[styles.itemRow, { zIndex: openItemIndex === idx ? 1000 : 1 }]}>
+                              <View style={styles.itemRowContent}>
+                                <View style={styles.itemSearchContainer}>
                                   <Pressable
                                     onPress={() => setOpenItemIndex(openItemIndex === idx ? null : idx)}
-                                    className={`flex-row items-center justify-between p-3 border rounded-lg ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}
+                                    style={[styles.searchContainer, {
+                                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                                    }]}
                                   >
-                                    <Text className={`text-base ${item.itemId ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`}>
+                                    <Text style={[styles.itemSelectText, {
+                                      color: item.itemId ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280')
+                                    }]}>
                                       {item.itemId || 'Select Item'}
                                     </Text>
                                     <ChevronDown size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                   </Pressable>
 
                                   {openItemIndex === idx && (
-                                    <View
-                                      className={`absolute top-full left-0 right-0 mt-1 rounded-xl shadow-2xl border z-[999] overflow-hidden ${isDarkMode ? 'bg-gray-800 border-gray-700 shadow-black' : 'bg-white border-gray-200 shadow-gray-400'}`}
-                                      style={{ elevation: 1000 }}
-                                    >
-                                      <View className={`px-4 py-3 border-b flex-row items-center space-x-2 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-100 bg-gray-50'}`}>
+                                    <View style={[styles.dropdown, {
+                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                                    }]}>
+                                      <View style={[styles.dropdownSearchContainer, {
+                                        borderColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
+                                      }]}>
                                         <Search size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                         <TextInput
-                                          className={`flex-1 text-sm p-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+                                          style={[styles.dropdownSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                                           placeholder="Search items..."
                                           placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
                                           value={itemSearch}
@@ -1361,7 +1410,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                         nestedScrollEnabled={true}
                                       >
                                         <Pressable
-                                          className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === 'None' ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                          style={[styles.dropdownItem, {
+                                            borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                            backgroundColor: item.itemId === 'None' ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed') : 'transparent'
+                                          }]}
                                           onPress={() => {
                                             handleItemChange(idx, 'itemId', 'None');
                                             setOpenItemIndex(null);
@@ -1369,12 +1421,15 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                             Keyboard.dismiss();
                                           }}
                                         >
-                                          <View className="flex-row items-center justify-between">
-                                            <Text className={`text-sm ${item.itemId === 'None' ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                          <View style={styles.dropdownItemContent}>
+                                            <Text style={[styles.dropdownItemText, {
+                                              color: item.itemId === 'None' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                              fontWeight: item.itemId === 'None' ? '500' : 'normal'
+                                            }]}>
                                               None
                                             </Text>
                                             {item.itemId === 'None' && (
-                                              <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                              <View style={[styles.dropdownSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                             )}
                                           </View>
                                         </Pressable>
@@ -1384,7 +1439,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                           .map((invItem) => (
                                             <Pressable
                                               key={invItem.id}
-                                              className={`px-4 py-3 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-100'} ${item.itemId === invItem.item_name ? (isDarkMode ? 'bg-orange-600/20' : 'bg-orange-50') : ''}`}
+                                              style={[styles.dropdownItem, {
+                                                borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
+                                                backgroundColor: item.itemId === invItem.item_name ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed') : 'transparent'
+                                              }]}
                                               onPress={() => {
                                                 handleItemChange(idx, 'itemId', invItem.item_name);
                                                 setOpenItemIndex(null);
@@ -1392,20 +1450,24 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                                 Keyboard.dismiss();
                                               }}
                                             >
-                                              <View className="flex-row items-center justify-between">
-                                                <Text className={`text-sm flex-1 mr-2 ${item.itemId === invItem.item_name ? 'text-orange-500 font-medium' : (isDarkMode ? 'text-gray-200' : 'text-gray-700')}`}>
+                                              <View style={styles.dropdownItemContent}>
+                                                <Text style={[styles.dropdownItemText, {
+                                                  flex: 1,
+                                                  marginRight: 8,
+                                                  color: item.itemId === invItem.item_name ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#e5e7eb' : '#374151'),
+                                                  fontWeight: item.itemId === invItem.item_name ? '500' : 'normal'
+                                                }]}>
                                                   {invItem.item_name}
                                                 </Text>
-                                                <View className="flex-row items-center gap-2">
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                                   {(invItem.image_url || (invItem as any).image) && (
                                                     <Image
                                                       source={{ uri: convertGoogleDriveUrl(invItem.image_url || (invItem as any).image) || undefined }}
-                                                      className="w-12 h-12 rounded-lg bg-gray-100"
-                                                      resizeMode="cover"
+                                                      style={styles.dropdownItemImage}
                                                     />
                                                   )}
                                                   {item.itemId === invItem.item_name && (
-                                                    <View className="w-2 h-2 rounded-full bg-orange-500" />
+                                                    <View style={[styles.dropdownSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
                                                   )}
                                                 </View>
                                               </View>
@@ -1413,8 +1475,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                           ))}
 
                                         {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
-                                          <View className="px-4 py-8 items-center">
-                                            <Text className={`text-sm italic ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                                          <View style={styles.emptyDropdown}>
+                                            <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                               No results found
                                             </Text>
                                           </View>
@@ -1424,9 +1486,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   )}
                                 </View>
 
-                                <View className="w-24">
+                                <View style={styles.itemQtyContainer}>
                                   <TextInput
-                                    className={`border rounded-lg p-3 text-base ${isDarkMode ? 'border-gray-700 bg-gray-800 text-white' : 'border-gray-300 bg-white text-black'}`}
+                                    style={[styles.textInput, {
+                                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                      color: isDarkMode ? '#ffffff' : '#111827'
+                                    }]}
                                     placeholder="Qty"
                                     placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                                     value={item.quantity}
@@ -1442,7 +1508,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                       newItems.splice(idx, 1);
                                       setOrderItems(newItems);
                                     }}
-                                    className="p-3"
+                                    style={styles.itemRemoveButton}
                                   >
                                     <X size={20} color="#ef4444" />
                                   </Pressable>
@@ -1452,30 +1518,48 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           ))}
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Time In Image')}
-                          <Pressable onPress={() => handleImageChange('timeInFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
+                          <Pressable
+                            onPress={() => handleImageChange('timeInFile')}
+                            style={[styles.signatureContainer, {
+                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                            }]}
+                          >
                             {imageFiles.timeInFile || formData.timeIn ? (
-                              <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
-                            ) : <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Upload Time In</Text>}
+                              <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={styles.signatureImage} />
+                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time In</Text>}
                           </Pressable>
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Modem Setup Image')}
-                          <Pressable onPress={() => handleImageChange('modemSetupFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
+                          <Pressable
+                            onPress={() => handleImageChange('modemSetupFile')}
+                            style={[styles.signatureContainer, {
+                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                            }]}
+                          >
                             {imageFiles.modemSetupFile || formData.modemSetupImage ? (
-                              <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
-                            ) : <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Upload Modem Setup</Text>}
+                              <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={styles.signatureImage} />
+                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Modem Setup</Text>}
                           </Pressable>
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Time Out Image')}
-                          <Pressable onPress={() => handleImageChange('timeOutFile')} className={`h-40 border border-dashed rounded-lg items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-400 bg-gray-50'}`}>
+                          <Pressable
+                            onPress={() => handleImageChange('timeOutFile')}
+                            style={[styles.signatureContainer, {
+                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                            }]}
+                          >
                             {imageFiles.timeOutFile || formData.timeOut ? (
-                              <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
-                            ) : <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>Upload Time Out</Text>}
+                              <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={styles.signatureImage} />
+                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time Out</Text>}
                           </Pressable>
                         </View>
                       </>
@@ -1485,9 +1569,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                     {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
                       <>
                         {/* Visit By/With/Other/Remarks for Reschedule/Failed */}
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit By', true)}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitBy}
                               onValueChange={(val) => handleInputChange('visitBy', val)}
@@ -1502,9 +1589,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           </View>
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit With', true)}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitWith}
                               onValueChange={(val) => handleInputChange('visitWith', val)}
@@ -1519,9 +1609,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           </View>
                         </View>
 
-                        <View className="mb-4">
+                        <View style={styles.inputGroup}>
                           {renderLabel('Visit With Other', true)}
-                          <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                          <View style={[styles.pickerContainer, {
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                          }]}>
                             <Picker
                               selectedValue={formData.visitWithOther}
                               onValueChange={(val) => handleInputChange('visitWithOther', val)}
@@ -1543,16 +1636,23 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 )}
 
                 {/* Concern */}
-                <View className="mb-4">
+                <View style={styles.inputGroup}>
                   {renderLabel('Concern', true)}
                   {isTechnician ? (
                     <TextInput
-                      className={`border rounded-lg p-3 text-base ${isDarkMode ? 'bg-gray-700 text-gray-400 border-gray-600' : 'bg-gray-100 text-gray-500 border-gray-200'}`}
+                      style={[styles.textInput, {
+                        backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                        borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                        color: isDarkMode ? '#9ca3af' : '#6b7280'
+                      }]}
                       value={formData.concern}
                       editable={false}
                     />
                   ) : (
-                    <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                    <View style={[styles.pickerContainer, {
+                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                    }]}>
                       <Picker
                         selectedValue={formData.concern}
                         onValueChange={(val) => handleInputChange('concern', val)}
@@ -1567,9 +1667,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 </View>
 
                 {formData.concern === 'Upgrade/Downgrade Plan' && (
-                  <View className="mb-4">
+                  <View style={styles.inputGroup}>
                     {renderLabel('New Plan', true)}
-                    <View className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                    <View style={[styles.pickerContainer, {
+                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                    }]}>
                       <Picker
                         selectedValue={formData.newPlan}
                         onValueChange={(val) => handleInputChange('newPlan', val)}
@@ -1600,5 +1703,246 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '95%',
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  saveButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#ef4444',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  connectionTypeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  connectionTypeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  signatureContainer: {
+    height: 160,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signaturePlaceholder: {
+    alignItems: 'center',
+  },
+  signatureText: {
+    fontSize: 14,
+  },
+  signatureImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  clearSignatureButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#ef4444',
+    borderRadius: 6,
+  },
+  clearSignatureText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  signatureCanvasContainer: {
+    height: 240,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    marginBottom: 8,
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  signatureCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 9999,
+    zIndex: 10,
+  },
+  itemRow: {
+    zIndex: 10,
+    marginBottom: 16,
+  },
+  itemRowContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  itemSearchContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  itemSelectText: {
+    fontSize: 16,
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    zIndex: 999,
+    overflow: 'hidden',
+    elevation: 1000,
+  },
+  dropdownSearchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+  },
+  dropdownItemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    resizeMode: 'cover',
+  },
+  dropdownSelectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f97316',
+  },
+  emptyDropdown: {
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyDropdownText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  itemQtyContainer: {
+    width: 96,
+  },
+  itemRemoveButton: {
+    padding: 12,
+  },
+});
 
 export default ServiceOrderEditModal;

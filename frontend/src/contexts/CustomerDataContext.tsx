@@ -1,10 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
-import { transactionService } from '../services/transactionService';
-import { paymentPortalLogsService } from '../services/paymentPortalLogsService';
-import { soaService } from '../services/soaService';
-import { invoiceService } from '../services/invoiceService';
+import apiClient from '../config/api';
 
 interface PaymentRecord {
     id: string;
@@ -30,11 +27,25 @@ interface InvoiceRecord {
     print_link?: string;
 }
 
+interface ServiceOrderRecord {
+    id: string;
+    date: string;
+    requestId: string;
+    issue: string;
+    issueDetails: string;
+    status: string;
+    statusNote: string;
+    assignedEmail: string;
+    visitNote: string;
+    visitInfo: { status: string };
+}
+
 interface CustomerDataContextType {
     customerDetail: CustomerDetailData | null;
     payments: PaymentRecord[];
     soaRecords: SOARecord[];
     invoiceRecords: InvoiceRecord[];
+    serviceOrders: ServiceOrderRecord[];
     isLoading: boolean;
     error: string | null;
     refreshData: () => Promise<void>;
@@ -57,6 +68,7 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
     const [payments, setPayments] = useState<PaymentRecord[]>([]);
     const [soaRecords, setSoaRecords] = useState<SOARecord[]>([]);
     const [invoiceRecords, setInvoiceRecords] = useState<InvoiceRecord[]>([]);
+    const [serviceOrders, setServiceOrders] = useState<ServiceOrderRecord[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -82,45 +94,60 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
             const billingId = detail.billingAccount?.id;
 
             if (accNo) {
-                // 2. Fetch everything else in parallel
-                const [logsRes, txRes, soaRes, invoiceRes] = await Promise.all([
-                    paymentPortalLogsService.getLogsByAccountNo(accNo).catch(() => []),
-                    transactionService.getAllTransactions().catch(() => ({ success: false, data: [] })),
-                    soaService.getStatementsByAccount(accNo).catch(() => []),
-                    invoiceService.getInvoicesByAccount(accNo).catch(() => [])
+                // 2. Fetch everything else in parallel using correct backend routes
+                const [logsRes, txRes, soaRes, invoiceRes, soRes] = await Promise.all([
+                    apiClient.get(`/payment-portal-logs/account/${accNo}`).catch((e) => { console.error('Payment logs fetch error:', e); return { data: { data: [] } }; }),
+                    apiClient.get(`/transactions/by-account/${accNo}`).catch((e) => { console.error('Transactions fetch error:', e); return { data: { data: [] } }; }),
+                    apiClient.get(`/statement-of-accounts/by-account/${accNo}`).catch((e) => { console.error('SOA fetch error:', e); return { data: { data: [] } }; }),
+                    apiClient.get(`/invoices/by-account/${accNo}`).catch((e) => { console.error('Invoices fetch error:', e); return { data: { data: [] } }; }),
+                    apiClient.get(`/service-orders`, { params: { account_no: accNo, page: 1, limit: 50 } }).catch((e) => { console.error('Service orders fetch error:', e); return { data: { success: false, data: [] } }; })
                 ]);
 
-                // Process Payments
-                const formattedLogs: PaymentRecord[] = Array.isArray(logsRes) ? logsRes.map((l: any) => ({
+                // Process Payment Portal Logs
+                const logsData = logsRes?.data?.data || [];
+                const formattedLogs: PaymentRecord[] = Array.isArray(logsData) ? logsData.map((l: any) => ({
                     id: `log-${l.id}`,
                     date: l.date_time,
                     reference: l.reference_no,
                     amount: parseFloat(l.total_amount) || 0,
-                    source: 'Online',
+                    source: 'Online' as const,
                     status: l.status
                 })) : [];
 
-                let formattedTxs: PaymentRecord[] = [];
-                if (txRes && txRes.success && Array.isArray(txRes.data)) {
-                    formattedTxs = txRes.data
-                        .filter((t: any) => t.account_no === accNo)
-                        .map((t: any) => ({
-                            id: `tx-${t.id}`,
-                            date: t.payment_date || t.created_at,
-                            reference: t.or_no || t.reference_no || `TR-${t.id}`,
-                            amount: parseFloat(t.received_payment || t.amount || 0),
-                            source: 'Manual',
-                            status: 'Posted'
-                        }));
-                }
+                // Process Transactions
+                const txData = txRes?.data?.data || [];
+                const formattedTxs: PaymentRecord[] = Array.isArray(txData) ? txData.map((t: any) => ({
+                    id: `tx-${t.id}`,
+                    date: t.payment_date || t.created_at,
+                    reference: t.or_no || t.reference_no || `TR-${t.id}`,
+                    amount: parseFloat(t.received_payment || t.amount || 0),
+                    source: 'Manual' as const,
+                    status: t.status || 'Posted'
+                })) : [];
 
                 const allPayments = [...formattedLogs, ...formattedTxs].sort((a, b) =>
                     new Date(b.date).getTime() - new Date(a.date).getTime()
                 );
 
                 setPayments(allPayments);
-                setSoaRecords(soaRes || []);
-                setInvoiceRecords(invoiceRes || []);
+                setSoaRecords(soaRes?.data?.data || []);
+                setInvoiceRecords(invoiceRes?.data?.data || []);
+
+                // Process Service Orders
+                const soData = soRes?.data?.data || [];
+                const mappedOrders: ServiceOrderRecord[] = Array.isArray(soData) ? soData.map((order: any) => ({
+                    id: order.id,
+                    date: order.created_at ? new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+                    requestId: order.ticket_id,
+                    issue: order.concern || '',
+                    issueDetails: order.concern_remarks || '',
+                    status: order.support_status || 'Pending',
+                    statusNote: order.support_remarks || '',
+                    assignedEmail: order.assigned_email || '',
+                    visitNote: order.visit_remarks || '',
+                    visitInfo: { status: order.visit_status || 'Pending' }
+                })) : [];
+                setServiceOrders(mappedOrders);
             }
 
             setLastUpdated(new Date());
@@ -147,6 +174,7 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
                 payments,
                 soaRecords,
                 invoiceRecords,
+                serviceOrders,
                 isLoading,
                 error,
                 refreshData,
