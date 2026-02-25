@@ -37,6 +37,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [successMessage, setSuccessMessage] = useState<string>('');
 
 
+  const isAgent = userRole === 'agent' || userRoleId === 4 || String(userRoleId) === '4';
+
   const defaultFields = [
     'timestamp',
     'jobOrderNumber',
@@ -53,16 +55,18 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'remarks',
     'installationLandmark',
     'connectionType',
-    'modemRouterSn',
-    'routerModel',
-    'lcpnap',
-    'port',
-    'vlan',
-    'username',
-    'ipAddress',
-    'usageType',
-    'installation_fee',
-    'itemsUsed',
+    ...(!isAgent ? [
+      'modemRouterSn',
+      'routerModel',
+      'lcpnap',
+      'port',
+      'vlan',
+      'username',
+      'ipAddress',
+      'usageType',
+      'installation_fee',
+      'itemsUsed',
+    ] : []),
     'dateInstalled',
     'visitBy',
     'visitWith',
@@ -71,13 +75,15 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     'modifiedBy',
     'modifiedDate',
     'assignedEmail',
-    'setupImage',
-    'speedtestImage',
-    'signedContractImage',
-    'boxReadingImage',
-    'routerReadingImage',
-    'portLabelImage',
-    'houseFrontPicture'
+    ...(!isAgent ? [
+      'setupImage',
+      'speedtestImage',
+      'signedContractImage',
+      'boxReadingImage',
+      'routerReadingImage',
+      'portLabelImage',
+      'houseFrontPicture'
+    ] : [])
   ];
 
 

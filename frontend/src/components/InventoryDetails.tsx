@@ -282,7 +282,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
 
   const ToolbarButtons = ({ showCollapse }: { showCollapse?: boolean }) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-      <TouchableOpacity onPress={handleDelete} style={{ padding: 8, borderRadius: 6 }}>
+      <TouchableOpacity onPress={handleDelete} style={{ padding: 4, borderRadius: 6 }}>
         <Trash2 size={18} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
@@ -435,8 +435,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
         <View
           style={{
             paddingHorizontal: 24,
-            paddingVertical: 8,
-            paddingTop: isTablet ? 8 : 60,
+            paddingVertical: 4,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
@@ -649,8 +648,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 16,
-            paddingVertical: 8,
-            paddingTop: isTablet ? 8 : 60,
+            paddingVertical: 4,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
             borderBottomWidth: isDarkMode ? 0 : 1,
             borderBottomColor: borderColor,
@@ -698,7 +696,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
         <View
           style={{
             paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingVertical: 4,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',

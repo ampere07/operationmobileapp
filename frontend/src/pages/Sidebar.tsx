@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List } from 'lucide-react-native';
+import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List, ClipboardCheck } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -42,8 +42,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
   const menuItems: MenuItem[] = [
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },
-    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },
-    { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'] },
+    { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] },
+    { id: 'work-order', label: 'Work Order', icon: ClipboardCheck, allowedRoles: ['agent', 'administrator'], allowedRoleIds: [4, '4', 6, '6'] },
+    { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'], allowedRoleIds: [6, '6'] },
     // Inventory specific items
     { id: 'inventory', label: 'Inventory', icon: Package, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },
     { id: 'inventory-category-list', label: 'Categories', icon: List, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },
@@ -51,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'customer-bills', label: 'Bills', icon: ReceiptText, allowedRoles: ['customer'] },
     { id: 'customer-support', label: 'Support', icon: LifeBuoy, allowedRoles: ['customer'] },
-    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator', 'inventorystaff', 'agent'], allowedRoleIds: [5, '5', 4, '4'] },
+    { id: 'menu', label: 'Menu', icon: MenuIcon, allowedRoles: ['customer', 'technician', 'administrator', 'inventorystaff', 'agent'], allowedRoleIds: [5, '5', 4, '4', 6, '6'] },
   ];
 
   const filterMenuByRole = (items: MenuItem[]): MenuItem[] => {

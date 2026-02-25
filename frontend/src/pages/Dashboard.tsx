@@ -29,7 +29,7 @@ import DashboardContent from '../components/DashboardContent';
 // import { PaymentPortalProvider } from '../contexts/PaymentPortalContext';
 // import { SOAProvider } from '../contexts/SOAContext';
 // import GroupManagement from './GroupManagement';
-import ApplicationManagement from './ApplicationManagement';
+// import ApplicationManagement from './ApplicationManagement';
 // import Customer from './Customer';
 // import BillingListView from './BillingListView';
 // import TransactionList from './TransactionList';
@@ -55,7 +55,7 @@ import InventoryCategoryList from './InventoryCategoryList';
 // import StatusRemarksList from './StatusRemarksList';
 // import Settings from './Settings';
 import LcpNapLocation from './LcpNapLocation';
-// import BillingConfig from './BillingConfig';
+import WorkOrder from './WorkOrder';
 // import RadiusConfig from './RadiusConfig';
 // import SmsConfig from './SmsConfig';
 // import SMSTemplate from './SMSTemplate';
@@ -99,7 +99,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     // Use the initialized user data if available
                     if (user.role === 'customer') {
                         setActiveSection('customer-dashboard');
-                    } else if (user.role === 'technician' || user.role?.toLowerCase() === 'agent' || String(user.role_id) === '4') {
+                    } else if (user.role?.toLowerCase() === 'agent') {
+                        setActiveSection('job-order');
+                    } else if (String(user.role_id) === '6') {
+                        setActiveSection('lcp-nap-location');
+                    } else if (user.role === 'technician' || String(user.role_id) === '4') {
                         setActiveSection('job-order');
                     } else if (user.role?.toLowerCase() === 'inventorystaff' || String(user.role_id) === '5') {
                         setActiveSection('inventory');
@@ -208,8 +212,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             //     return <OrganizationManagement />;
             // case 'group-management':
             //     return <GroupManagement />;
-            case 'application-management':
-                return <ApplicationManagement />;
+            // case 'application-management':
+            //     return <ApplicationManagement />;
             // case 'customer':
             //     return <Customer initialSearchQuery={customerInitialSearch} autoOpenAccountNo={customerAutoOpenAccountNo} />;
             // case 'transaction-list':
@@ -222,6 +226,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <JobOrder />;
             case 'service-order':
                 return <ServiceOrder />;
+            case 'work-order':
+                return <WorkOrder />;
             // case 'application-visit':
             //     return <ApplicationVisit />;
             // case 'location-list':

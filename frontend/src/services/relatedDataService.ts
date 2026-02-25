@@ -297,7 +297,7 @@ export const relatedDataService = {
   // Fetch related inventory logs by item ID
   getRelatedInventoryLogs: async (itemId: string | number): Promise<ApiResponse> => {
     try {
-      const response = await apiClient.get<ApiResponse>(`/inventory-stock-logs/by-item/${itemId}`);
+      const response = await apiClient.get<ApiResponse>(`/inventory-logs/by-item/${itemId}`);
       return {
         success: true,
         data: response.data.data || [],
