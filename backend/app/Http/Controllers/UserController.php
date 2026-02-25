@@ -24,7 +24,14 @@ class UserController extends Controller
             }
 
             if ($request->has('role_id')) {
-                $query->where('role_id', $request->input('role_id'));
+                $roleId = $request->input('role_id');
+                if (is_array($roleId)) {
+                    $query->whereIn('role_id', $roleId);
+                } elseif (is_string($roleId) && strpos($roleId, ',') !== false) {
+                    $query->whereIn('role_id', explode(',', $roleId));
+                } else {
+                    $query->where('role_id', $roleId);
+                }
             }
             
             $users = $query->get();

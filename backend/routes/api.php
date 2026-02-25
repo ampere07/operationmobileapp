@@ -1547,6 +1547,26 @@ Route::prefix('usage-types')->group(function () {
     Route::delete('/{id}', [\App\Http\Controllers\Api\UsageTypeApiController::class, 'destroy']);
 });
 
+// Work Order Category Management Routes
+Route::prefix('work-categories')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'store']);
+    Route::get('/statistics', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'getStatistics']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'destroy']);
+});
+
+// Work Order Management Routes
+Route::prefix('work-orders')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'store']);
+    Route::get('/statistics', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'getStatistics']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'destroy']);
+});
+
 // VLANs (plural) for frontend compatibility
 Route::prefix('vlans')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\VlanApiController::class, 'index']);

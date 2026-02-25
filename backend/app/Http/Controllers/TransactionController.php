@@ -825,28 +825,7 @@ class TransactionController extends Controller
                     \Log::error('[TRANSACTION RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
 
-                // Send Email Notification
-                try {
-                    if (!empty($customerInfo->email_address)) {
-                         $emailService = app(\App\Services\EmailQueueService::class);
-                         
-                         $emailData = [
-                             'Full_Name' => $customerInfo->full_name,
-                             'Plan' => $plan,
-                             'Account_No' => $accountNo,
-                             'account_no' => $accountNo,
-                             'recipient_email' => $customerInfo->email_address,
-                         ];
-
-                         $emailService->queueFromTemplate('RECONNECT', $emailData);
-                         
-                         \Log::info('[TRANSACTION RECONNECT EMAIL] Email queued for ' . $customerInfo->email_address);
-                    } else {
-                        \Log::warning('[TRANSACTION RECONNECT EMAIL SKIP] No email address for customer');
-                    }
-                } catch (\Exception $e) {
-                    \Log::error('[TRANSACTION RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
-                }
+                // Email Notification is now handled by ManualRadiusOperationsService
 
                 return 'success';
             } else {
@@ -981,4 +960,5 @@ class TransactionController extends Controller
     }
 
 }
+
 

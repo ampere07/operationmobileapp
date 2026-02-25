@@ -52,7 +52,10 @@ class EmailQueueService
         }
 
         $subject = $this->replacePlaceholders($template->Subject_Line, $data);
-        $content = !empty($template->Body_HTML) ? $template->Body_HTML : $template->email_body;
+        
+        // Use email_body exclusively for email content (Body_HTML is for PDF generation)
+        $content = trim($template->email_body ?? '');
+        
         $bodyHtml = $this->replacePlaceholders($content, $data);
 
         return $this->queueEmail([

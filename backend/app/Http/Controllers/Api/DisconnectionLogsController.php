@@ -16,11 +16,15 @@ class DisconnectionLogsController extends Controller
                 ->leftJoin('billing_accounts', 'disconnected_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('plan_list', 'billing_accounts.plan_id', '=', 'plan_list.id')
+                ->leftJoin('users', 'disconnected_logs.created_by_user_id', '=', 'users.id')
                 ->select(
                     'disconnected_logs.id',
+                    'disconnected_logs.session_id',
                     'disconnected_logs.created_at as disconnection_date',
                     'disconnected_logs.remarks',
                     'disconnected_logs.username',
+                    'users.first_name as user_first_name',
+                    'users.last_name as user_last_name',
                     'billing_accounts.account_no',
                     'customers.first_name',
                     'customers.last_name',
@@ -43,11 +47,7 @@ class DisconnectionLogsController extends Controller
             }
             
             if ($request->has('city') && $request->city !== 'all') {
-                // If city is passed as ID or name. Frontend passes ID usually. 
-                // Let's assume frontend might pass ID. But customers.city is likely a string name.
-                // We'll see. The frontend logic maps IDs to names.
-                // For now let's just ignore city filter or try to match if column exists.
-                // $query->where('customers.city', $request->city); 
+                // Future city implementation
             }
 
             $query->orderBy('disconnected_logs.created_at', 'desc');
@@ -55,6 +55,11 @@ class DisconnectionLogsController extends Controller
             $records = $query->get();
 
             $data = $records->map(function ($record) {
+                $disconnectedBy = trim(($record->user_first_name ?? '') . ' ' . ($record->user_last_name ?? ''));
+                if (empty($disconnectedBy)) {
+                    $disconnectedBy = 'System/N/A';
+                }
+
                 return [
                     'id' => (string)$record->id,
                     'accountNo' => $record->account_no ?? 'N/A',
@@ -62,12 +67,14 @@ class DisconnectionLogsController extends Controller
                     'address' => $record->address ?? '',
                     'contactNumber' => $record->contact_number_primary ?? '',
                     'emailAddress' => $record->email_address ?? '',
-                    'plan' => $record->plan_name ?? '', // value might be null if column doesn't exist
+                    'plan' => $record->plan_name ?? '', 
                     'status' => 'Disconnected',
                     'disconnectionDate' => $record->disconnection_date ? Carbon::parse($record->disconnection_date)->format('n/j/Y g:i:s A') : '',
                     'remarks' => $record->remarks ?? '',
                     'username' => $record->username ?? '',
-                    'provider' => 'SWITCH', // Hardcoded for now
+                    'sessionId' => $record->session_id ?? '',
+                    'disconnectedBy' => $disconnectedBy,
+                    'provider' => 'SWITCH', 
                     'date' => $record->disconnection_date ? Carbon::parse($record->disconnection_date)->format('n/j/Y g:i:s A') : '',
                     'barangay' => $record->barangay ?? '',
                     'city' => $record->city ?? '',

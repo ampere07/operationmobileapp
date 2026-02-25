@@ -16,8 +16,6 @@ import {
   ChevronRight,
   Trash2,
   X,
-  Copy,
-  Printer,
   AlertTriangle,
   Eye,
   Pencil,
@@ -286,15 +284,6 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
       <TouchableOpacity onPress={handleDelete} style={{ padding: 8, borderRadius: 6 }}>
         <Trash2 size={18} color={iconColor} />
-      </TouchableOpacity>
-      <TouchableOpacity style={{ padding: 8, borderRadius: 6 }}>
-        <X size={18} color={iconColor} />
-      </TouchableOpacity>
-      <TouchableOpacity style={{ padding: 8, borderRadius: 6 }}>
-        <Printer size={18} color={iconColor} />
-      </TouchableOpacity>
-      <TouchableOpacity style={{ padding: 8, borderRadius: 6 }}>
-        <Copy size={18} color={iconColor} />
       </TouchableOpacity>
       <TouchableOpacity
         style={{

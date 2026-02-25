@@ -15,13 +15,17 @@ class ReconnectionLogsController extends Controller
             $query = DB::table('reconnection_logs')
                 ->leftJoin('billing_accounts', 'reconnection_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                ->leftJoin('plan_list', 'billing_accounts.plan_id', '=', 'plan_list.id')
+                ->leftJoin('plan_list', 'reconnection_logs.plan_id', '=', 'plan_list.id')
+                ->leftJoin('users', 'reconnection_logs.created_by_user_id', '=', 'users.id')
                 ->select(
                     'reconnection_logs.id',
+                    'reconnection_logs.session_id',
                     'reconnection_logs.created_at as reconnection_date',
                     'reconnection_logs.remarks',
                     'reconnection_logs.username',
                     'reconnection_logs.reconnection_fee',
+                    'users.first_name as user_first_name',
+                    'users.last_name as user_last_name',
                     'billing_accounts.account_no',
                     'plan_list.plan_name',
                     'customers.first_name',
@@ -48,6 +52,11 @@ class ReconnectionLogsController extends Controller
             $records = $query->get();
 
             $data = $records->map(function ($record) {
+                $reconnectedBy = trim(($record->user_first_name ?? '') . ' ' . ($record->user_last_name ?? ''));
+                if (empty($reconnectedBy)) {
+                    $reconnectedBy = 'System/N/A';
+                }
+
                 return [
                     'id' => (string)$record->id,
                     'accountNo' => $record->account_no ?? 'N/A',
@@ -61,6 +70,8 @@ class ReconnectionLogsController extends Controller
                     'reconnectionFee' => (float)$record->reconnection_fee,
                     'remarks' => $record->remarks ?? '',
                     'username' => $record->username ?? '',
+                    'sessionId' => $record->session_id ?? '',
+                    'reconnectedBy' => $reconnectedBy,
                     'provider' => 'SWITCH',
                     'date' => $record->reconnection_date ? Carbon::parse($record->reconnection_date)->format('n/j/Y g:i:s A') : '',
                     'barangay' => $record->barangay ?? '',

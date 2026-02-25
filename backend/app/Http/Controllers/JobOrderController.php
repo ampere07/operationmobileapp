@@ -61,25 +61,6 @@ class JobOrderController extends Controller
                 ]);
             }
 
-            if ($request->has('user_role') && strtolower($request->query('user_role')) === 'agent') {
-                $userEmail = $request->query('user_email');
-                if ($userEmail) {
-                    $user = \App\Models\User::where('email_address', $userEmail)->first();
-                    if ($user) {
-                        $agentName = trim($user->first_name . ' ' . ($user->middle_initial ? $user->middle_initial . ' ' : '') . $user->last_name);
-                        
-                        $query->whereHas('application', function ($appQuery) use ($agentName) {
-                            $appQuery->where('referred_by', $agentName);
-                        });
-                        
-                        \Log::info('Filtering job orders for agent role', [
-                            'agent_name' => $agentName,
-                            'agent_email' => $userEmail
-                        ]);
-                    }
-                }
-            }
-
             // Apply search filter
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -500,6 +481,7 @@ class JobOrderController extends Controller
                 'installation_fee' => 'nullable|numeric|min:0',
                 'billing_day' => 'nullable|integer|min:0',
                 'onsite_status' => 'nullable|string|max:100',
+                'billing_status' => 'nullable|string|max:255',
                 'assigned_email' => 'nullable|email|max:255',
                 'onsite_remarks' => 'nullable|string',
                 'status_remarks' => 'nullable|string|max:255',
@@ -894,7 +876,7 @@ class JobOrderController extends Controller
 
             // Check if online status already exists for this username
             if (OnlineStatus::where('username', $generatedUsername)->exists()) {
-                throw new \Exception('theirs already a data in database');
+                throw new \Exception('there\'s already data in database');
             }
 
             OnlineStatus::create([
@@ -1050,7 +1032,7 @@ class JobOrderController extends Controller
             
             // Map common error messages to user-friendly "duplicate" message
             $duplicateMessages = [
-                'theirs already a data in database',
+                'there\'s already data in database',
                 'Duplicate entry',
                 'Integrity constraint violation',
                 'Billing account already exists',
@@ -1068,7 +1050,7 @@ class JobOrderController extends Controller
             if ($isDuplicate) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'theirs already a data in database',
+                    'message' => 'there\'s already data in database',
                     'error' => $e->getMessage(),
                 ], 409); // Conflict
             }

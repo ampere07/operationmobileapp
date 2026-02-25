@@ -856,23 +856,7 @@ class ServiceOrderApiController extends Controller
                     \Log::error('[API SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
 
-                // Send Email Notification
-                try {
-                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
-                    
-                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
-                              $emailService = app(\App\Services\EmailQueueService::class);
-                              $emailData = [
-                                  'customer_name' => $customerInfo->full_name,
-                                  'account_no' => $accountNo,
-                                  'recipient_email' => $customerInfo->email_address,
-                              ];
-                              $emailService->queueFromTemplate('RECONNECT', $emailData);
-                              \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
-                         }
-                } catch (\Exception $e) {
-                    \Log::error('[API SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
-                }
+                // Email Notification is now handled by ManualRadiusOperationsService
 
                 return 'success';
             } else {
@@ -1258,4 +1242,5 @@ class ServiceOrderApiController extends Controller
         }
     }
 }
+
 

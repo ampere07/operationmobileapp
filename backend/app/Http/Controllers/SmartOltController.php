@@ -158,7 +158,7 @@ class SmartOltController extends Controller
                         if ($exists) {
                             return response()->json([
                                 'success' => false,
-                                'message' => 'Please check on customer details. SN Duplicate Detected'
+                                'message' => 'already exist'
                             ]);
                         }
 
@@ -170,7 +170,7 @@ class SmartOltController extends Controller
                     } else {
                          return response()->json([
                             'success' => false,
-                            'message' => 'SN not found in smart olt'
+                            'message' => 'Invalid router model sn: SN not found in SmartOLT system'
                         ], 200);
                     }
                 } else {

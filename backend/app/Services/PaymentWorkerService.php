@@ -499,41 +499,7 @@ class PaymentWorkerService
                     $this->workerLog("[RECONNECT SMS EXCEPTION] " . $e->getMessage());
                 }
 
-                // Send Email Notification
-                try {
-                    $emailTemplate = DB::table('email_templates')->where('Template_Code', 'RECONNECT')->first();
-
-                    if ($emailTemplate && !empty($emailAddress)) {
-                        // Use email_body as the content (body) as requested
-                        $body = $emailTemplate->email_body;
-
-                        if (!empty($body)) {
-                            // Resolve EmailQueueService from container since it serves dependencies
-                            $emailService = app(\App\Services\EmailQueueService::class);
-
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name ?? 'Customer'));
-                            $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
-
-                            $emailData = [
-                                'Full_Name' => $customerName,
-                                'Plan' => $planNameFormatted,
-                                'Account_No' => $accountNo,
-                                'account_no' => $accountNo,
-                                'recipient_email' => $emailAddress,
-                            ];
-                            $emailService->queueFromTemplate('RECONNECT', $emailData);
-
-                            $this->workerLog("[RECONNECT EMAIL] Email queued via template for {$emailAddress}");
-                        } else {
-                            $this->workerLog("[RECONNECT EMAIL SKIP] email_body is empty");
-                        }
-                    } else {
-                        if (!$emailTemplate) $this->workerLog("[RECONNECT EMAIL SKIP] RECONNECT template not found");
-                        if (empty($emailAddress)) $this->workerLog("[RECONNECT EMAIL SKIP] No email address for customer");
-                    }
-                } catch (Exception $e) {
-                    $this->workerLog("[RECONNECT EMAIL EXCEPTION] " . $e->getMessage());
-                }
+                // Email Notification is now handled by ManualRadiusOperationsService
 
                 return 'success';
             } else {
@@ -778,5 +744,6 @@ class PaymentWorkerService
         return $retryPayments->count();
     }
 }
+
 
 
