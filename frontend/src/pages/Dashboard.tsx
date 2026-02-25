@@ -101,8 +101,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                         setActiveSection('customer-dashboard');
                     } else if (user.role?.toLowerCase() === 'agent') {
                         setActiveSection('job-order');
-                    } else if (String(user.role_id) === '6') {
-                        setActiveSection('lcp-nap-location');
+                    } else if (String(user.role_id) === '6' || user.role?.toLowerCase() === 'osp') {
+                        setActiveSection('work-order');
                     } else if (user.role === 'technician' || String(user.role_id) === '4') {
                         setActiveSection('job-order');
                     } else if (user.role?.toLowerCase() === 'inventorystaff' || String(user.role_id) === '5') {
