@@ -769,13 +769,14 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
 
     try {
-      // SmartOLT Validation Logic
+      // SmartOLT and Technical Details Validation
       if (updatedFormData.connectionType === 'Fiber') {
         // Validate New Router Modem SN if provided
         const isNewModemSnVisible = updatedFormData.visitStatus === 'Done' &&
           (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router');
 
         if (isNewModemSnVisible && updatedFormData.newRouterModemSN?.trim()) {
+          // 1. SmartOLT Validation Logic (Check if exists first)
           try {
             console.log('[SMARTOLT VALIDATION] Validating New Modem SN:', updatedFormData.newRouterModemSN);
             const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
@@ -784,9 +785,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
             if (!(smartOltResponse.data as any).success) {
               setLoading(false);
-              const errorMessage = (smartOltResponse.data as any).message || 'Invalid New Modem SN';
-              setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
-              Alert.alert('SmartOLT Verification Failed', errorMessage);
+              const errorMsg = 'sn not existing in smart olt';
+              setErrors(prev => ({ ...prev, newRouterModemSN: errorMsg }));
+              Alert.alert('SmartOLT Verification Failed', errorMsg);
               return;
             }
           } catch (error: any) {
@@ -796,6 +797,33 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
             Alert.alert('Validation Error', errorMessage);
             return;
+          }
+
+          // 2. Duplicate SN Check (Technical Details)
+          try {
+            const duplicateResponse = await apiClient.get('/job-orders', {
+              params: {
+                search: updatedFormData.newRouterModemSN,
+                limit: 50
+              }
+            });
+
+            if (duplicateResponse.data && duplicateResponse.data.success && Array.isArray(duplicateResponse.data.data)) {
+              const isDuplicate = duplicateResponse.data.data.some((jo: any) => {
+                const joSN = jo.modem_sn || jo.Modem_SN || jo.modem_router_sn;
+                return String(joSN || '').trim().toLowerCase() === updatedFormData.newRouterModemSN.trim().toLowerCase();
+              });
+
+              if (isDuplicate) {
+                setLoading(false);
+                const errorMessage = 'Please check on Customer Details. SN Duplicate Detected.';
+                setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
+                Alert.alert('Validation Error', errorMessage);
+                return;
+              }
+            }
+          } catch (error) {
+            console.error('Error checking duplicate SN:', error);
           }
         }
       }

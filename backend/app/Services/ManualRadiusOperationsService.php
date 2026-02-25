@@ -101,69 +101,100 @@ class ManualRadiusOperationsService
             $radiusEndpoints = $this->getRadiusEndpoints();
 
             // Perform RADIUS operations
-            $this->radiusOps(
-                $radiusEndpoints,
-                $username,
-                $cleanPlan,
-                'Active',
-                true, // isDisconnectAction
-                $accountNo,
-                $updatedBy
-            );
-
-            // Global Reconnection Logging
             try {
-                $billingAccount = null;
-                if (!empty($accountNo)) {
-                    $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
-                }
-
-                if (!$billingAccount && !empty($username)) {
-                    $techDetail = DB::table('technical_details')->where('username', $username)->first();
-                    if ($techDetail) {
-                        $billingAccount = DB::table('billing_accounts')->where('id', $techDetail->account_id)->first();
+                // MOVE LOGGING HERE to ensure it captures the attempt
+                // Global Reconnection Logging
+                try {
+                    $billingAccount = null;
+                    if (!empty($accountNo)) {
+                        $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
                     }
-                }
 
-                if ($billingAccount) {
-                    $planId = null;
-                    if ($rawPlan) {
-                        $cleanPlanForId = $rawPlan;
-                        if (strpos($rawPlan, ' - ') !== false) {
-                            $cleanPlanForId = explode(' - ', $rawPlan)[0];
-                        }
-                        $planId = DB::table('plans')->where('plan_name', $cleanPlanForId)->value('id');
-                        if (!$planId) {
-                            $planId = DB::table('plans')->where('name', $cleanPlanForId)->value('id');
+                    if (!$billingAccount && !empty($username)) {
+                        $techDetail = DB::table('technical_details')->where('username', $username)->first();
+                        if ($techDetail) {
+                            $billingAccount = DB::table('billing_accounts')->where('id', $techDetail->account_id)->first();
                         }
                     }
 
-                    $reconnectionFee = $params['reconnectionFee'] ?? 0;
-                    $remarks = $params['remarks'] ?? 'Auto-Reconnect via RADIUS Service';
-                    
-                    // Extra check: if it's a Service Order, try to get fee
-                    if ($reconnectionFee == 0 && isset($params['serviceOrderId'])) {
-                        $reconnectionFee = DB::table('service_orders')->where('id', $params['serviceOrderId'])->value('service_charge') ?? 0;
-                    }
+                    if ($billingAccount) {
+                        // User requested: plan value will be from account_no -> billing_accounts (customer_id) -> customers (desired_plan)
+                        $customer = DB::table('customers')->where('id', $billingAccount->customer_id)->first();
+                        $desiredPlan = $customer ? $customer->desired_plan : ($rawPlan ?: 'N/A');
+                        
+                        $planId = null;
+                        if ($desiredPlan && $desiredPlan != 'N/A') {
+                            $cleanPlanForId = $desiredPlan;
+                            if (strpos($desiredPlan, ' - ') !== false) {
+                                $cleanPlanForId = explode(' - ', $desiredPlan)[0];
+                            }
+                            // FIXED: Changed table name from 'plans' to 'plan_list'
+                            $planId = DB::table('plan_list')->where('plan_name', $cleanPlanForId)->value('id');
+                            if (!$planId) {
+                                // Try searching in description if not found in name
+                                $planId = DB::table('plan_list')->where('description', 'like', "%{$cleanPlanForId}%")->value('id');
+                            }
+                        }
 
-                    DB::table('reconnection_logs')->insert([
-                        'account_id' => $billingAccount->id,
+                        $reconnectionFee = $params['reconnectionFee'] ?? 0;
+                        $remarks = $params['remarks'] ?? 'Auto-Reconnect via RADIUS Service';
+                        
+                        // Extra check: if it's a Service Order, try to get fee
+                        if ($reconnectionFee == 0 && isset($params['serviceOrderId'])) {
+                            $reconnectionFee = DB::table('service_orders')->where('id', $params['serviceOrderId'])->value('service_charge') ?? 0;
+                        }
+
+                        // Insert into reconnection_logs
+                        // Find user ID from email since reconnection_logs uses user_ids
+                        $userId = null;
+                        if (!empty($updatedBy)) {
+                            $userId = DB::table('users')->where('email_address', $updatedBy)->value('id');
+                            if (!$userId) {
+                                // Try 'email' column if email_address not found
+                                $userId = DB::table('users')->where('email', $updatedBy)->value('id');
+                            }
+                        }
+
+                        $logData = [
+                            'account_id' => $billingAccount->id,
+                            'username' => $username,
+                            'plan_id' => $planId,
+                            'reconnection_fee' => $reconnectionFee,
+                            'remarks' => $remarks,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                            'created_by_user_id' => $userId,
+                            'updated_by_user_id' => $userId,
+                        ];
+
+                        DB::table('reconnection_logs')->insert($logData);
+                        
+                        $this->writeLog("[DB] Reconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
+                    } else {
+                        $this->writeLog("[WARNING] Could not find billing account for reconnection log (Account: $accountNo, User: $username)");
+                    }
+                } catch (Throwable $dbEx) {
+                    $this->writeLog("[DB ERROR] Failed to create reconnection log: " . $dbEx->getMessage());
+                    // Log the full error to help debugging
+                    \Log::error("Reconnection Log Insertion Failed: " . $dbEx->getMessage(), [
+                        'accountNo' => $accountNo,
                         'username' => $username,
-                        'plan_id' => $planId,
-                        'reconnection_fee' => $reconnectionFee,
-                        'remarks' => $remarks,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                        'created_by_user' => $updatedBy,
-                        'updated_by_user' => $updatedBy,
+                        'updatedBy' => $updatedBy
                     ]);
-                    
-                    $this->writeLog("[DB] Reconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
-                } else {
-                    $this->writeLog("[WARNING] Could not find billing account for reconnection log (Account: $accountNo, User: $username)");
                 }
-            } catch (Throwable $dbEx) {
-                $this->writeLog("[DB ERROR] Failed to create reconnection log: " . $dbEx->getMessage());
+
+                $this->radiusOps(
+                    $radiusEndpoints,
+                    $username,
+                    $cleanPlan,
+                    'Active',
+                    true, // isDisconnectAction
+                    $accountNo,
+                    $updatedBy
+                );
+            } catch (Throwable $radiusEx) {
+                $this->writeLog("[RADIUS ERROR] Operation failed: " . $radiusEx->getMessage());
+                throw $radiusEx; // Re-throw to be caught by outer catch
             }
 
             // Global Email Notification for Reconnection

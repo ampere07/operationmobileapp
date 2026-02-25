@@ -1063,10 +1063,48 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    // Duplicate SN Check (Technical Details)
+    // SmartOLT and Technical Details Validation
     if (formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && formData.modemSN.trim()) {
+      setLoading(true);
+
+      // 1. SmartOLT Validation Logic (Check if exists first)
       try {
-        setLoading(true);
+        console.log('[SMARTOLT VALIDATION] Validating Modem SN:', formData.modemSN);
+
+        const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+          params: { sn: formData.modemSN }
+        });
+
+        if (!(smartOltResponse.data as any).success) {
+          console.log('[SMARTOLT VALIDATION] Failed:', smartOltResponse.data);
+          setLoading(false);
+          const errorMsg = 'sn not existing in smart olt';
+          setErrors(prev => ({
+            ...prev,
+            modemSN: errorMsg
+          }));
+          showMessageModal('SmartOLT Verification Failed', [
+            { type: 'error', text: errorMsg }
+          ]);
+          return;
+        }
+        console.log('[SMARTOLT VALIDATION] Success');
+      } catch (error: any) {
+        console.error('[SMARTOLT VALIDATION] API Error:', error);
+        setLoading(false);
+        const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
+        setErrors(prev => ({
+          ...prev,
+          modemSN: errorMessage
+        }));
+        showMessageModal('Validation Error', [
+          { type: 'error', text: errorMessage }
+        ]);
+        return;
+      }
+
+      // 2. Duplicate SN Check (Technical Details)
+      try {
         // Check if SN exists in other Job Orders
         const duplicateResponse = await apiClient.get('/job-orders', {
           params: {
@@ -1088,7 +1126,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
           if (isDuplicate) {
             setLoading(false);
-            const errorMessage = 'this sn already exist';
+            const errorMessage = 'Please check on Customer Details. SN Duplicate Detected.';
             setErrors(prev => ({
               ...prev,
               modemSN: errorMessage
@@ -1101,48 +1139,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       } catch (error) {
         console.error('Error checking duplicate SN:', error);
-        // We continue validation even if duplicate check fails (fail open or closed? let's fail open but log)
       }
 
-      // SmartOLT Validation Logic
-      try {
-        console.log('[SMARTOLT VALIDATION] Validating Modem SN:', formData.modemSN);
-
-        // setLoading(true); // Already loading from duplicate check
-
-        const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-          params: { sn: formData.modemSN }
-        });
-
-        if (!(smartOltResponse.data as any).success) {
-          console.log('[SMARTOLT VALIDATION] Failed:', smartOltResponse.data);
-          setLoading(false);
-          const backendMsg = (smartOltResponse.data as any).message || 'sn not exist';
-          setErrors(prev => ({
-            ...prev,
-            modemSN: backendMsg
-          }));
-          showMessageModal('SmartOLT Verification Failed', [
-            { type: 'error', text: backendMsg }
-          ]);
-          return;
-        }
-
-        console.log('[SMARTOLT VALIDATION] Success');
-        setLoading(false);
-      } catch (error: any) {
-        console.error('[SMARTOLT VALIDATION] API Error:', error);
-        setLoading(false);
-        const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
-        setErrors(prev => ({
-          ...prev,
-          modemSN: errorMessage
-        }));
-        showMessageModal('Validation Error', [
-          { type: 'error', text: errorMessage }
-        ]);
-        return;
-      }
+      setLoading(false);
     }
 
 
