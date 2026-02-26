@@ -7,6 +7,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { createServiceOrder } from '../services/serviceOrderService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import * as WebBrowser from 'expo-web-browser';
+import SupportDetails from '../components/SupportDetails';
 
 interface SupportRequest {
   id: string;
@@ -47,6 +48,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const ITEMS_PER_PAGE = 5;
   const [currentPage, setCurrentPage] = useState(0);
+  const [selectedRequest, setSelectedRequest] = useState<SupportRequest | null>(null);
 
   const concernOptions = [
     'No Internet',
@@ -365,7 +367,10 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
                         Visit: {request.visitInfo.status}
                       </Text>
                     </View>
-                    <Pressable style={[s.detailsBtn, { borderColor: (colorPalette?.primary || '#3b82f6') + '80' }]}>
+                    <Pressable
+                      onPress={() => setSelectedRequest(request)}
+                      style={[s.detailsBtn, { borderColor: (colorPalette?.primary || '#3b82f6') + '80' }]}
+                    >
                       <Text style={[s.detailsBtnText, { color: colorPalette?.primary || '#3b82f6' }]}>Details</Text>
                     </Pressable>
                   </View>
@@ -396,6 +401,21 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* Support Details Modal */}
+      <Modal
+        visible={!!selectedRequest}
+        animationType="slide"
+        onRequestClose={() => setSelectedRequest(null)}
+      >
+        {selectedRequest && (
+          <SupportDetails
+            request={selectedRequest}
+            isDarkMode={isDarkMode}
+            onClose={() => setSelectedRequest(null)}
+          />
+        )}
+      </Modal>
 
       {/* Floating Action Button */}
       <Pressable

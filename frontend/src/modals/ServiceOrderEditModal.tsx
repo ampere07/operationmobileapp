@@ -1022,7 +1022,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     <View style={styles.inputGroup}>
       {renderLabel(label)}
       <View style={[styles.pickerContainer, {
-        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+        borderColor: errors[field] ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
       }]}>
         <Picker
@@ -1038,6 +1038,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           ))}
         </Picker>
       </View>
+      {errors[field] && (
+        <Text style={styles.errorText}>{errors[field]}</Text>
+      )}
     </View>
   );
 
@@ -1045,7 +1048,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     <View style={styles.inputGroup}>
       {renderLabel('New LCP-NAP', true)}
       <View style={[styles.pickerContainer, {
-        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+        borderColor: errors.newLcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
       }]}>
         <Picker
@@ -1060,6 +1063,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           ))}
         </Picker>
       </View>
+      {errors.newLcpnap && (
+        <Text style={styles.errorText}>{errors.newLcpnap}</Text>
+      )}
     </View>
   );
 
@@ -1074,7 +1080,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       <View style={styles.inputGroup}>
         {renderLabel('New Port', true)}
         <View style={[styles.pickerContainer, {
-          borderColor: isDarkMode ? '#374151' : '#d1d5db',
+          borderColor: errors.newPort ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
           backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
         }]}>
           <Picker
@@ -1092,6 +1098,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             })}
           </Picker>
         </View>
+        {errors.newPort && (
+          <Text style={styles.errorText}>{errors.newPort}</Text>
+        )}
       </View>
     );
   };
@@ -1208,7 +1217,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                     <View style={styles.inputGroup}>
                       {renderLabel('Assigned Email', true)}
                       <View style={[styles.pickerContainer, {
-                        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                        borderColor: errors.assignedEmail ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                       }]}>
                         <Picker
@@ -1223,6 +1232,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           ))}
                         </Picker>
                       </View>
+                      {errors.assignedEmail && (
+                        <Text style={styles.errorText}>{errors.assignedEmail}</Text>
+                      )}
                     </View>
 
                     {formData.visitStatus === 'Done' && (
@@ -1240,7 +1252,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             <View style={styles.inputGroup}>
                               {renderLabel('Router Model', true)}
                               <View style={[styles.pickerContainer, {
-                                borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                                 backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                               }]}>
                                 <Picker
@@ -1255,6 +1267,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   ))}
                                 </Picker>
                               </View>
+                              {errors.routerModel && (
+                                <Text style={styles.errorText}>{errors.routerModel}</Text>
+                              )}
                             </View>
                           </>
                         )}
@@ -1269,7 +1284,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         <View style={styles.inputGroup}>
                           {renderLabel('Visit By', true)}
                           <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            borderColor: errors.visitBy ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                             backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                           }]}>
                             <Picker
@@ -1284,13 +1299,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               ))}
                             </Picker>
                           </View>
+                          {errors.visitBy && (
+                            <Text style={styles.errorText}>{errors.visitBy}</Text>
+                          )}
                         </View>
 
                         {/* Visit With */}
                         <View style={styles.inputGroup}>
                           {renderLabel('Visit With')}
                           <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            borderColor: errors.visitWith ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                             backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                           }]}>
                             <Picker
@@ -1306,13 +1324,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               ))}
                             </Picker>
                           </View>
+                          {errors.visitWith && (
+                            <Text style={styles.errorText}>{errors.visitWith}</Text>
+                          )}
                         </View>
 
                         {/* Visit With Other */}
                         <View style={styles.inputGroup}>
                           {renderLabel('Visit With Other')}
                           <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            borderColor: errors.visitWithOther ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                             backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                           }]}>
                             <Picker
@@ -1328,6 +1349,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               ))}
                             </Picker>
                           </View>
+                          {errors.visitWithOther && (
+                            <Text style={styles.errorText}>{errors.visitWithOther}</Text>
+                          )}
                         </View>
 
                         {renderInput('visitRemarks', 'Visit Remarks')}
@@ -1395,7 +1419,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   <Pressable
                                     onPress={() => setOpenItemIndex(openItemIndex === idx ? null : idx)}
                                     style={[styles.searchContainer, {
-                                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                      borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                                       backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                                     }]}
                                   >
@@ -1517,7 +1541,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                 <View style={styles.itemQtyContainer}>
                                   <TextInput
                                     style={[styles.textInput, {
-                                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                                      borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                                       backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
                                       color: isDarkMode ? '#ffffff' : '#111827'
                                     }]}
@@ -1544,6 +1568,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               </View>
                             </View>
                           ))}
+                          {errors.items && (
+                            <Text style={styles.errorText}>{errors.items}</Text>
+                          )}
                         </View>
 
                         <View style={styles.inputGroup}>
@@ -1677,20 +1704,25 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                       editable={false}
                     />
                   ) : (
-                    <View style={[styles.pickerContainer, {
-                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                    }]}>
-                      <Picker
-                        selectedValue={formData.concern}
-                        onValueChange={(val) => handleInputChange('concern', val)}
-                        dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                        style={{ color: isDarkMode ? '#fff' : '#000' }}
-                      >
-                        <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                        {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
-                      </Picker>
-                    </View>
+                    <>
+                      <View style={[styles.pickerContainer, {
+                        borderColor: errors.concern ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                      }]}>
+                        <Picker
+                          selectedValue={formData.concern}
+                          onValueChange={(val) => handleInputChange('concern', val)}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                        >
+                          <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                          {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
+                        </Picker>
+                      </View>
+                      {errors.concern && (
+                        <Text style={styles.errorText}>{errors.concern}</Text>
+                      )}
+                    </>
                   )}
                 </View>
 
@@ -1698,7 +1730,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   <View style={styles.inputGroup}>
                     {renderLabel('New Plan', true)}
                     <View style={[styles.pickerContainer, {
-                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                      borderColor: errors.newPlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                       backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
                     }]}>
                       <Picker
@@ -1715,6 +1747,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         })}
                       </Picker>
                     </View>
+                    {errors.newPlan && (
+                      <Text style={styles.errorText}>{errors.newPlan}</Text>
+                    )}
                   </View>
                 )}
 

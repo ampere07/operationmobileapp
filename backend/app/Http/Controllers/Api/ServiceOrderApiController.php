@@ -921,22 +921,6 @@ class ServiceOrderApiController extends Controller
                 
                 \Log::info('[API SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
 
-                // Create Disconnected Log
-                try {
-                    DB::table('disconnected_logs')->insert([
-                        'account_id' => $billingAccount->id,
-                        'username' => $username,
-                        'remarks' => 'Service Order Auto-Disconnect',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                        'created_by_user_id' => Auth::id(),
-                        'updated_by_user_id' => Auth::id(),
-                    ]);
-                    \Log::info('[API SERVICE ORDER DISCONNECT LOG] Log created successfully');
-                } catch (\Exception $e) {
-                    \Log::error('[API SERVICE ORDER DISCONNECT LOG EXCEPTION] ' . $e->getMessage());
-                }
-
                 // Send SMS Notification
                 try {
                     $smsTemplate = DB::table('sms_templates')

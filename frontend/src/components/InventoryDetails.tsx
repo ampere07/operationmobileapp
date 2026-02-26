@@ -435,7 +435,8 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
         <View
           style={{
             paddingHorizontal: 24,
-            paddingVertical: 4,
+            paddingTop: isTablet ? 16 : 60,
+            paddingBottom: 16,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
@@ -648,7 +649,8 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 16,
-            paddingVertical: 4,
+            paddingTop: isTablet ? 16 : 60,
+            paddingBottom: 16,
             backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
             borderBottomWidth: isDarkMode ? 0 : 1,
             borderBottomColor: borderColor,

@@ -346,15 +346,7 @@ class AutoDisconnectService
                     'updated_at' => Carbon::now()
                 ]);
 
-            // Log disconnection
-            DB::table('disconnected_logs')->insert([
-                'account_id' => $billingAccount->id,
-                'username' => $username,
-                'remarks' => "System Auto DC (Overdue {$dcActualOffset} days)",
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now()
-            ]);
-            $this->writeLog("  [LOG] Recorded in disconnected_logs and status updated to 4");
+            $this->writeLog("  [LOG] Status updated to 4 (RADIUS Service handled disconnected_logs)");
 
             $this->writeLog("  [DB] STARTING DB COMMIT for Account {$accountNo}...");
             DB::commit();

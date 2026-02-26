@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 use Exception;
+use App\Models\DisconnectedLog;
+use App\Models\ReconnectionLog;
 
 class ManualRadiusOperationsService
 {
@@ -37,6 +39,21 @@ class ManualRadiusOperationsService
             // Get RADIUS configurations
             $radiusEndpoints = $this->getRadiusEndpoints();
 
+            // Try to get active session ID before it's gone
+            $sessionId = null;
+            if (!empty($username)) {
+                $sessPath = "/rest/user-manage/session?user=" . urlencode($username);
+                foreach ($radiusEndpoints as $endpoint) {
+                    $fullUrl = $endpoint['url'] . $sessPath;
+                    $sessResult = $this->callApiWithRetry($fullUrl, 'GET', null, $endpoint['username'], $endpoint['password']);
+                    if ($sessResult && is_array($sessResult) && isset($sessResult[0]['.id'])) {
+                        $sessionId = $sessResult[0]['.id'];
+                        $this->writeLog("[SESSION] Found session ID for logging: $sessionId");
+                        break;
+                    }
+                }
+            }
+
             // Perform RADIUS operations
             $this->radiusOps(
                 $radiusEndpoints,
@@ -47,6 +64,45 @@ class ManualRadiusOperationsService
                 $accountNo,
                 $updatedBy
             );
+
+            // LOG DISCONNECTION TO DATABASE
+            try {
+                $billingAccount = null;
+                if (!empty($accountNo)) {
+                    $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
+                }
+
+                if (!$billingAccount && !empty($username)) {
+                    $techDetail = DB::table('technical_details')->where('username', $username)->first();
+                    if ($techDetail) {
+                        $billingAccount = DB::table('billing_accounts')->where('id', $techDetail->account_id)->first();
+                    }
+                }
+
+                if ($billingAccount) {
+                    // Find user ID for created_by/updated_by columns
+                    $userId = null;
+                    if (!empty($updatedBy) && $updatedBy !== 'System') {
+                        $userId = DB::table('users')
+                            ->where('username', $updatedBy)
+                            ->orWhere('email_address', $updatedBy)
+                            ->orWhere('contact_number', $updatedBy)
+                            ->value('id');
+                    }
+
+                    DisconnectedLog::create([
+                        'account_id' => $billingAccount->id,
+                        'session_id' => $sessionId,
+                        'username' => $username,
+                        'remarks' => $remarks ?: "Manual Disconnect",
+                        'created_by_user' => $userId ? (string)$userId : $updatedBy,
+                        'updated_by_user' => $userId ? (string)$userId : $updatedBy
+                    ]);
+                    $this->writeLog("[DB] Disconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
+                }
+            } catch (Throwable $dbEx) {
+                $this->writeLog("[DB ERROR] Failed to create disconnection log: " . $dbEx->getMessage());
+            }
 
             $this->writeLog("[SUCCESS] User disconnected successfully");
             $this->writeLog("=== DISCONNECT USER END ===");
@@ -145,29 +201,25 @@ class ManualRadiusOperationsService
                         }
 
                         // Insert into reconnection_logs
-                        // Find user ID from email since reconnection_logs uses user_ids
+                        // Find user ID for created_by/updated_by columns
                         $userId = null;
-                        if (!empty($updatedBy)) {
-                            $userId = DB::table('users')->where('email_address', $updatedBy)->value('id');
-                            if (!$userId) {
-                                // Try 'email' column if email_address not found
-                                $userId = DB::table('users')->where('email', $updatedBy)->value('id');
-                            }
+                        if (!empty($updatedBy) && $updatedBy !== 'System') {
+                            $userId = DB::table('users')
+                                ->where('username', $updatedBy)
+                                ->orWhere('email_address', $updatedBy)
+                                ->orWhere('contact_number', $updatedBy)
+                                ->value('id');
                         }
 
-                        $logData = [
+                        ReconnectionLog::create([
                             'account_id' => $billingAccount->id,
                             'username' => $username,
                             'plan_id' => $planId,
                             'reconnection_fee' => $reconnectionFee,
                             'remarks' => $remarks,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                            'created_by_user_id' => $userId,
-                            'updated_by_user_id' => $userId,
-                        ];
-
-                        DB::table('reconnection_logs')->insert($logData);
+                            'created_by_user' => $userId ? (string)$userId : $updatedBy,
+                            'updated_by_user' => $userId ? (string)$userId : $updatedBy,
+                        ]);
                         
                         $this->writeLog("[DB] Reconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
                     } else {
@@ -687,14 +739,14 @@ class ManualRadiusOperationsService
         ?array $payload,
         string $username,
         string $password,
-        int $retries = 3
+        int $retries = 2
     ) {
         for ($attempt = 1; $attempt <= $retries; $attempt++) {
             try {
                 $this->writeLog("[API] Attempt $attempt/$retries: $method $url");
 
                 $response = Http::withBasicAuth($username, $password)
-                    ->timeout(10)
+                    ->timeout(5)
                     ->withOptions(['verify' => false]);
 
                 switch (strtoupper($method)) {

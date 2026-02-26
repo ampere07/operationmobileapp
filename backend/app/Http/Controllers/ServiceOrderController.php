@@ -977,22 +977,6 @@ class ServiceOrderController extends Controller
             if ($result['status'] === 'success') {
                 \Log::info('[SERVICE ORDER DISCONNECT SUCCESS] Disconnection completed successfully');
 
-                // Create Disconnected Log
-                try {
-                    DB::table('disconnected_logs')->insert([
-                        'account_id' => $billingAccount->id,
-                        'username' => $username,
-                        'remarks' => 'Service Order Auto-Disconnect',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                        'created_by_user_id' => Auth::id(),
-                        'updated_by_user_id' => Auth::id(),
-                    ]);
-                    \Log::info('[SERVICE ORDER DISCONNECT LOG] Log created successfully');
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER DISCONNECT LOG EXCEPTION] ' . $e->getMessage());
-                }
-
                 // Update billing_status_id to 4 (Disconnected) AFTER successful RADIUS disconnect
                 $billingAccount->billing_status_id = 4;
                 $billingAccount->updated_at = now();
