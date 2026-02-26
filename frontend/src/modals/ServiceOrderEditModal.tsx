@@ -1134,9 +1134,15 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             <View style={styles.headerActions}>
               <Pressable
                 onPress={onClose}
-                style={[styles.cancelButton, { borderColor: activeColor }]}
+                disabled={loading}
+                style={[styles.cancelButton, {
+                  borderColor: loading ? (isDarkMode ? '#374151' : '#e5e7eb') : activeColor,
+                  opacity: loading ? 0.6 : 1
+                }]}
               >
-                <Text style={[styles.cancelButtonText, { color: activeColor }]}>Cancel</Text>
+                <Text style={[styles.cancelButtonText, {
+                  color: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : activeColor
+                }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}

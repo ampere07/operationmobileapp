@@ -1740,11 +1740,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             <View style={styles.headerActions}>
               <Pressable
                 onPress={onClose}
+                disabled={loading}
                 style={[styles.cancelButton, {
-                  borderColor: colorPalette?.primary || '#ea580c',
+                  borderColor: loading ? (isDarkMode ? '#374151' : '#e5e7eb') : (colorPalette?.primary || '#ea580c'),
+                  opacity: loading ? 0.6 : 1
                 }]}
               >
-                <Text style={[styles.cancelButtonText, { color: colorPalette?.primary || '#ea580c' }]}>Cancel</Text>
+                <Text style={[styles.cancelButtonText, {
+                  color: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
+                }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
