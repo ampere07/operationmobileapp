@@ -56,7 +56,7 @@ const LoadingModal: React.FC<LoadingModalProps> = ({
           <Loader2 
             className="w-12 h-12 animate-spin mb-4" 
             style={{
-              color: colorPalette?.primary || '#ea580c'
+              color: colorPalette?.primary || '#7c3aed'
             }}
           />
           <p className={`text-center mb-2 ${
@@ -72,14 +72,14 @@ const LoadingModal: React.FC<LoadingModalProps> = ({
                   className="h-2.5 rounded-full transition-all duration-300"
                   style={{ 
                     width: `${percentage}%`,
-                    backgroundColor: colorPalette?.primary || '#ea580c'
+                    backgroundColor: colorPalette?.primary || '#7c3aed'
                   }}
                 ></div>
               </div>
               <p 
                 className="text-center text-sm font-medium"
                 style={{
-                  color: colorPalette?.primary || '#ea580c'
+                  color: colorPalette?.primary || '#7c3aed'
                 }}
               >
                 {percentage}%

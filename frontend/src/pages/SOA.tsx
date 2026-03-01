@@ -452,7 +452,7 @@ const SOA: React.FC = () => {
             disabled={!record.printLink}
             className="px-3 py-1 rounded text-sm text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              backgroundColor: record.printLink ? (colorPalette?.primary || '#ea580c') : '#6b7280'
+              backgroundColor: record.printLink ? (colorPalette?.primary || '#7c3aed') : '#6b7280'
             }}
             onMouseEnter={(e) => {
               if (record.printLink && colorPalette?.accent) {
@@ -567,7 +567,7 @@ const SOA: React.FC = () => {
           <div
             className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
             style={{
-              backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
+              backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#7c3aed') : 'transparent'
             }}
             onMouseEnter={(e) => {
               if (!isResizingSidebar && colorPalette?.primary) {
@@ -601,7 +601,7 @@ const SOA: React.FC = () => {
                     : 'bg-white text-gray-900 border border-gray-300'
                     }`}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
+                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
                   } as React.CSSProperties}
                   onFocus={(e) => {
                     if (colorPalette?.primary) {
@@ -621,7 +621,7 @@ const SOA: React.FC = () => {
                   disabled={isPaymentProcessing}
                   className="text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
-                    backgroundColor: isPaymentProcessing ? '#6b7280' : (colorPalette?.primary || '#ea580c')
+                    backgroundColor: isPaymentProcessing ? '#6b7280' : (colorPalette?.primary || '#7c3aed')
                   }}
                   onMouseEnter={(e) => {
                     if (!isPaymentProcessing && colorPalette?.accent) {
@@ -642,7 +642,7 @@ const SOA: React.FC = () => {
                 disabled={isLoading}
                 className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600"
                 style={{
-                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
                 }}
                 onMouseEnter={(e) => {
                   if (!isLoading && colorPalette?.accent) {
@@ -771,7 +771,7 @@ const SOA: React.FC = () => {
               <div className="text-center">
                 <div
                   className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#ea580c' }}
+                  style={{ borderBottomColor: colorPalette?.primary || '#7c3aed' }}
                 ></div>
                 <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
               </div>
@@ -846,7 +846,7 @@ const SOA: React.FC = () => {
                     : 'bg-white border-gray-300 text-gray-900'
                     } border focus:outline-none focus:ring-2`}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
+                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
                   } as React.CSSProperties}
                 />
                 <div className={`text-sm text-right mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
@@ -877,7 +877,7 @@ const SOA: React.FC = () => {
                   style={{
                     backgroundColor: (isPaymentProcessing || paymentAmount < 1)
                       ? '#6b7280'
-                      : (colorPalette?.primary || '#ea580c')
+                      : (colorPalette?.primary || '#7c3aed')
                   }}
                   onMouseEnter={(e) => {
                     if (!isPaymentProcessing && paymentAmount >= 1 && colorPalette?.accent) {
@@ -925,7 +925,7 @@ const SOA: React.FC = () => {
                 </p>
                 <div className="flex justify-between mt-4">
                   <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#ea580c' }}>
+                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#7c3aed' }}>
                     ₱{pendingPayment.amount.toFixed(2)}
                   </span>
                 </div>
@@ -944,7 +944,7 @@ const SOA: React.FC = () => {
                 <button
                   onClick={handleResumePendingPayment}
                   className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors"
-                  style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                  style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}
                   onMouseEnter={(e) => {
                     if (colorPalette?.accent) {
                       e.currentTarget.style.backgroundColor = colorPalette.accent;
@@ -981,7 +981,7 @@ const SOA: React.FC = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#ea580c' }}>
+                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#7c3aed' }}>
                     ₱{paymentLinkData.amount.toFixed(2)}
                   </span>
                 </div>
@@ -990,7 +990,7 @@ const SOA: React.FC = () => {
               <button
                 onClick={handleOpenPaymentLink}
                 className="w-full px-4 py-3 rounded font-bold text-white transition-colors"
-                style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}
+                style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}
                 onMouseEnter={(e) => {
                   if (colorPalette?.accent) {
                     e.currentTarget.style.backgroundColor = colorPalette.accent;

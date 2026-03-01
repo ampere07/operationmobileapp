@@ -18,7 +18,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     onUpload,
     error,
     isDarkMode = false,
-    colorPrimary = '#ea580c'
+    colorPrimary = '#7c3aed'
 }) => {
     const [modalVisible, setModalVisible] = useState(false);
 
@@ -41,7 +41,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
             const file = {
                 uri: asset.uri,
                 name: asset.fileName || 'upload.jpg',
-                type: asset.type || 'image/jpeg'
+                type: (asset as any).mimeType || (asset.type === 'image' ? 'image/jpeg' : asset.type)
             };
             onUpload(file);
             setModalVisible(false);
@@ -66,7 +66,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
             const file = {
                 uri: asset.uri,
                 name: asset.fileName || 'photo.jpg',
-                type: asset.type || 'image/jpeg'
+                type: (asset as any).mimeType || (asset.type === 'image' ? 'image/jpeg' : asset.type)
             };
             onUpload(file);
             setModalVisible(false);

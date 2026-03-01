@@ -326,7 +326,7 @@ const LcpNapLocation: React.FC = () => {
 
   const renderLocationItem = useCallback((item: LcpNapItem, isHorizontal: boolean = false) => {
     const isSelected = (item.id === 0 && selectedLcpNapId === 'all') || (item.id !== 0 && selectedLcpNapId === item.id);
-    const primaryColor = colorPalette?.primary || '#ea580c';
+    const primaryColor = colorPalette?.primary || '#7c3aed';
     const textColor = isSelected ? primaryColor : (isDarkMode ? '#d1d5db' : '#374151');
 
     return (
@@ -412,7 +412,7 @@ const LcpNapLocation: React.FC = () => {
               </View>
 
               <View style={[styles.limitWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-                <MapPin size={18} color={colorPalette?.primary || '#ea580c'} style={styles.iconMargin} />
+                <MapPin size={18} color={colorPalette?.primary || '#7c3aed'} style={styles.iconMargin} />
                 <TextInput
                   style={[styles.limitInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                   placeholder="Limit"
@@ -514,7 +514,7 @@ const LcpNapLocation: React.FC = () => {
             <View style={styles.mapActionButtons}>
               <Pressable
                 onPress={() => setShowAddModal(true)}
-                style={[styles.mapActionButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+                style={[styles.mapActionButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
               >
                 <Plus size={24} color="white" />
               </Pressable>

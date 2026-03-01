@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
@@ -237,6 +237,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   // Signature State
   const signatureRef = useRef<any>(null);
+  const routerModelInputRef = useRef<TextInput>(null);
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
@@ -278,140 +279,174 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
 
-  useEffect(() => {
-    const fetchImageSizeSettings = async () => {
-      if (isOpen) {
-        try {
-          const settings = await getActiveImageSize();
-          setActiveImageSize(settings);
-        } catch (error) {
-          setActiveImageSize(null);
-        }
-      }
-    };
-
-    fetchImageSizeSettings();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchUsernamePattern = async () => {
-      if (isOpen) {
-        try {
-          const patterns = await pppoeService.getPatterns('username');
-          if (patterns && patterns.length > 0) {
-            const pattern = patterns[0];
-            setUsernamePattern(pattern);
-
-            // Load existing pppoe_username if available
-            const existingUsername = jobOrderData?.pppoe_username || jobOrderData?.PPPoE_Username || '';
-            if (existingUsername && pattern.sequence.some(item => item.type === 'tech_input')) {
-              setTechInputValue(existingUsername);
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch username pattern:', error);
-          setUsernamePattern(null);
-        }
-      }
-    };
-
-    fetchUsernamePattern();
-  }, [isOpen, jobOrderData]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (jobOrderData) {
-      const isValidImageUrl = (url: any): boolean => {
-        if (!url) return false;
-        if (typeof url !== 'string') return false;
-        const trimmed = url.trim().toLowerCase();
-        return trimmed !== '' && trimmed !== 'null' && trimmed !== 'undefined';
-      };
-
-      const getImageUrl = (fieldVariations: string[]): string | null => {
-        for (const field of fieldVariations) {
-          const value = jobOrderData?.[field];
-          if (isValidImageUrl(value)) {
-            return value;
-          }
-        }
-        return null;
-      };
-
-      const clientSignatureVariations = [
-        'client_signature_image_url',
-        'Client_Signature_Image_URL',
-        'client_sig_image_url',
-        'signature_image_url',
-        'clientSignatureImageUrl',
-        'ClientSignatureImageURL',
-        'client_signature_url',
-        'clientSignatureUrl'
-      ];
-
-      const newImagePreviews = {
-        signedContractImage: convertGoogleDriveUrl(jobOrderData?.signed_contract_image_url || jobOrderData?.Signed_Contract_Image_URL),
-        setupImage: convertGoogleDriveUrl(jobOrderData?.setup_image_url || jobOrderData?.Setup_Image_URL),
-        boxReadingImage: convertGoogleDriveUrl(jobOrderData?.box_reading_image_url || jobOrderData?.Box_Reading_Image_URL),
-        routerReadingImage: convertGoogleDriveUrl(jobOrderData?.router_reading_image_url || jobOrderData?.Router_Reading_Image_URL),
-        portLabelImage: convertGoogleDriveUrl(jobOrderData?.port_label_image_url || jobOrderData?.Port_Label_Image_URL),
-        clientSignatureImage: convertGoogleDriveUrl(getImageUrl(clientSignatureVariations)),
-        speedTestImage: convertGoogleDriveUrl(jobOrderData?.speedtest_image_url || jobOrderData?.Speedtest_Image_URL)
-      };
-
-      setImagePreviews(newImagePreviews);
-
-      const errorsToClear: string[] = [];
-      if (newImagePreviews.signedContractImage) errorsToClear.push('signedContractImage');
-      if (newImagePreviews.setupImage) errorsToClear.push('setupImage');
-      if (newImagePreviews.boxReadingImage) errorsToClear.push('boxReadingImage');
-      if (newImagePreviews.routerReadingImage) errorsToClear.push('routerReadingImage');
-      if (newImagePreviews.portLabelImage) errorsToClear.push('portLabelImage');
-      if (newImagePreviews.clientSignatureImage) errorsToClear.push('clientSignatureImage');
-      if (newImagePreviews.speedTestImage) errorsToClear.push('speedTestImage');
-
-      if (errorsToClear.length > 0) {
-        setErrors(prev => {
-          const newErrors = { ...prev };
-          errorsToClear.forEach(key => delete newErrors[key]);
-          return newErrors;
-        });
-      }
-    } else {
-      setImagePreviews({
-        signedContractImage: null,
-        setupImage: null,
-        boxReadingImage: null,
-        routerReadingImage: null,
-        portLabelImage: null,
-        clientSignatureImage: null,
-        speedTestImage: null
-      });
-    }
-  }, [jobOrderData, isOpen]);
-
+  // Consolidated data fetching - all independent API calls batched into one effect
+  // This prevents 12+ simultaneous state update storms that crash the app
   useEffect(() => {
     if (!isOpen) {
+      // Cleanup when modal closes
       setOrderItems([{ itemId: '', quantity: '' }]);
       setTechInputValue('');
-      Object.values(imagePreviews).forEach(url => {
-        if (url && url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
+      return;
     }
-  }, [isOpen, imagePreviews]);
 
-  // Load existing job order items from database
-  useEffect(() => {
+    let isMounted = true;
+
+    const fetchAllData = async () => {
+      // Fire all independent API calls in parallel with Promise.allSettled
+      // so one failure doesn't block the rest
+      const [
+        imageSizeResult,
+        usernamePatternResult,
+        lcpnapResult,
+        vlanResult,
+        usageTypeResult,
+        inventoryResult,
+        technicianResult,
+        planResult,
+        routerModelResult,
+      ] = await Promise.allSettled([
+        getActiveImageSize(),
+        pppoeService.getPatterns('username'),
+        getAllLCPNAPs('', 1, 1000),
+        getAllVLANs(),
+        getAllUsageTypes(),
+        getAllInventoryItems(),
+        userService.getUsersByRole('technician'),
+        planService.getAllPlans(),
+        routerModelService.getAllRouterModels(),
+      ]);
+
+      if (!isMounted) return;
+
+      // Image Size
+      if (imageSizeResult.status === 'fulfilled') {
+        setActiveImageSize(imageSizeResult.value);
+      } else {
+        setActiveImageSize(null);
+      }
+
+      // Username Pattern
+      if (usernamePatternResult.status === 'fulfilled') {
+        const patterns = usernamePatternResult.value;
+        if (patterns && patterns.length > 0) {
+          const pattern = patterns[0];
+          setUsernamePattern(pattern);
+          const existingUsername = jobOrderData?.pppoe_username || jobOrderData?.PPPoE_Username || '';
+          if (existingUsername && pattern.sequence.some((item: any) => item.type === 'tech_input')) {
+            setTechInputValue(existingUsername);
+          }
+        }
+      } else {
+        console.error('Failed to fetch username pattern:', usernamePatternResult.reason);
+        setUsernamePattern(null);
+      }
+
+      // LCPNAPs
+      if (lcpnapResult.status === 'fulfilled') {
+        const response = lcpnapResult.value;
+        if (response.success && Array.isArray(response.data)) {
+          setLcpnaps(response.data);
+        } else {
+          setLcpnaps([]);
+        }
+      } else {
+        setLcpnaps([]);
+      }
+
+      // VLANs
+      if (vlanResult.status === 'fulfilled') {
+        const response = vlanResult.value;
+        if (response.success && Array.isArray(response.data)) {
+          setVlans(response.data);
+        } else {
+          setVlans([]);
+        }
+      } else {
+        setVlans([]);
+      }
+
+      // Usage Types
+      if (usageTypeResult.status === 'fulfilled') {
+        const response = usageTypeResult.value;
+        if (response.success && Array.isArray(response.data)) {
+          const filtered = (response.data as any[]).filter(ut => {
+            const val = ut.usage_name || ut.Usage_Name || ut.usageName;
+            if (!val) return false;
+            const name = String(val).trim().toLowerCase();
+            return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+          });
+          setUsageTypes(filtered);
+        } else {
+          setUsageTypes([]);
+        }
+      } else {
+        setUsageTypes([]);
+      }
+
+      // Inventory Items
+      if (inventoryResult.status === 'fulfilled') {
+        const response = inventoryResult.value;
+        if (response.success && Array.isArray(response.data)) {
+          const filteredItems = response.data.filter(item => {
+            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+            return catId === 1 || String(catId) === '1';
+          });
+          setInventoryItems(filteredItems);
+        } else {
+          setInventoryItems([]);
+        }
+      } else {
+        setInventoryItems([]);
+      }
+
+      // Technicians
+      if (technicianResult.status === 'fulfilled') {
+        const response = technicianResult.value;
+        if (response.success && response.data) {
+          const technicianList = response.data
+            .filter((user: any) => user.first_name || user.last_name)
+            .map((user: any) => {
+              const firstName = (user.first_name || '').trim();
+              const lastName = (user.last_name || '').trim();
+              const fullName = `${firstName} ${lastName}`.trim();
+              return {
+                email: user.email_address || user.email || '',
+                name: fullName || user.username || user.email_address || user.email || ''
+              };
+            })
+            .filter((tech: any) => tech.name);
+          setTechnicians(technicianList);
+        }
+      }
+
+      // Plans
+      if (planResult.status === 'fulfilled') {
+        setPlans(planResult.value);
+      }
+
+      // Router Models
+      if (routerModelResult.status === 'fulfilled') {
+        const filtered = routerModelResult.value.filter((rm: any) => {
+          if (!rm.model) return false;
+          const name = String(rm.model).trim().toLowerCase();
+          return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
+        });
+        setRouterModels(filtered);
+      }
+    };
+
+    fetchAllData();
+
+    // Fetch job order items separately (depends on jobOrderData)
     const fetchJobOrderItems = async () => {
-      if (isOpen && jobOrderData) {
+      if (jobOrderData) {
         const jobOrderId = jobOrderData.id || jobOrderData.JobOrder_ID;
         if (jobOrderId) {
           try {
             const response = await apiClient.get(`/job-order-items?job_order_id=${jobOrderId}`);
             const data = response.data as { success: boolean; data: any[] };
+
+            if (!isMounted) return;
 
             if (data.success && Array.isArray(data.data)) {
               const items = data.data;
@@ -444,41 +479,32 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               }
             }
           } catch (error) {
-            setOrderItems([{ itemId: '', quantity: '' }]);
+            if (isMounted) setOrderItems([{ itemId: '', quantity: '' }]);
           }
         }
       }
     };
 
     fetchJobOrderItems();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, jobOrderData]);
 
+  // Ports fetching - depends on formData.lcpnap which changes independently
   useEffect(() => {
-    const fetchLcpnaps = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllLCPNAPs('', 1, 1000);
+    if (!isOpen) return;
 
-          if (response.success && Array.isArray(response.data)) {
-            setLcpnaps(response.data);
-          } else {
-            setLcpnaps([]);
-          }
-        } catch (error) {
-          setLcpnaps([]);
-        }
-      }
-    };
+    let isMounted = true;
 
-    fetchLcpnaps();
-  }, [isOpen]);
-
-  useEffect(() => {
     const fetchPorts = async () => {
-      if (isOpen && formData.lcpnap) {
+      if (formData.lcpnap) {
         try {
           const jobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
           const response = await getAllPorts(formData.lcpnap, 1, 100, true, jobOrderId);
+
+          if (!isMounted) return;
 
           if (response.success && Array.isArray(response.data)) {
             setPorts(response.data);
@@ -486,26 +512,28 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             setPorts([]);
           }
         } catch (error) {
-          setPorts([]);
+          if (isMounted) setPorts([]);
         }
-      } else if (isOpen && !formData.lcpnap) {
+      } else {
         setPorts([]);
       }
     };
     fetchPorts();
+
+    return () => { isMounted = false; };
   }, [isOpen, jobOrderData, formData.lcpnap]);
 
   // Fetch used ports for the selected LCPNAP
   useEffect(() => {
-    const fetchUsedPorts = async () => {
-      if (!isOpen || !formData.lcpnap) {
-        setUsedPorts(new Set());
-        return;
-      }
+    if (!isOpen || !formData.lcpnap) {
+      setUsedPorts(new Set());
+      return;
+    }
 
+    let isMounted = true;
+
+    const fetchUsedPorts = async () => {
       try {
-        // Fetch job orders to check for used ports
-        // We use a large limit to capture as many as possible
         const response = await apiClient.get('/job-orders', {
           params: {
             lcpnap: formData.lcpnap,
@@ -513,19 +541,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           }
         });
 
+        if (!isMounted) return;
+
         if (response.data && response.data.success && Array.isArray(response.data.data)) {
           const used = new Set<string>();
           const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
 
           response.data.data.forEach((jo: any) => {
-            // Check LCPNAP match (in case backend didn't filter)
             const joLcpnap = jo.lcpnap || jo.LCPNAP;
 
             if (joLcpnap === formData.lcpnap) {
               const joPort = jo.port || jo.PORT;
               const joId = jo.id || jo.JobOrder_ID;
 
-              // If port is used by ANOTHER job order, mark it as used
               if (joPort && String(joId) !== String(currentId)) {
                 used.add(joPort.toString());
               }
@@ -540,140 +568,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     };
 
     fetchUsedPorts();
+
+    return () => { isMounted = false; };
   }, [isOpen, formData.lcpnap, jobOrderData]);
-
-  useEffect(() => {
-    const fetchVlans = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllVLANs();
-          if (response.success && Array.isArray(response.data)) {
-            setVlans(response.data);
-          } else {
-            setVlans([]);
-          }
-        } catch (error) {
-          setVlans([]);
-        }
-      }
-    };
-    fetchVlans();
-  }, [isOpen]);
-
-
-
-  useEffect(() => {
-    const fetchUsageTypes = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllUsageTypes();
-
-          if (response.success && Array.isArray(response.data)) {
-            const filtered = (response.data as any[]).filter(ut => {
-              const val = ut.usage_name || ut.Usage_Name || ut.usageName;
-              if (!val) return false;
-              const name = String(val).trim().toLowerCase();
-              return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-            });
-            setUsageTypes(filtered);
-          } else {
-            setUsageTypes([]);
-          }
-        } catch (error) {
-          setUsageTypes([]);
-        }
-      }
-    };
-
-    fetchUsageTypes();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchInventoryItems = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllInventoryItems();
-
-          if (response.success && Array.isArray(response.data)) {
-            const filteredItems = response.data.filter(item => {
-              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
-              return catId === 1 || String(catId) === '1';
-            });
-            setInventoryItems(filteredItems);
-          } else {
-            setInventoryItems([]);
-          }
-        } catch (error) {
-          setInventoryItems([]);
-        }
-      }
-    };
-
-    fetchInventoryItems();
-  }, [isOpen]);
-
-
-
-  useEffect(() => {
-    const fetchTechnicians = async () => {
-      if (isOpen) {
-        try {
-          const response = await userService.getUsersByRole('technician');
-          if (response.success && response.data) {
-            const technicianList = response.data
-              .filter((user: any) => user.first_name || user.last_name)
-              .map((user: any) => {
-                const firstName = (user.first_name || '').trim();
-                const lastName = (user.last_name || '').trim();
-                const fullName = `${firstName} ${lastName}`.trim();
-                return {
-                  email: user.email_address || user.email || '',
-                  name: fullName || user.username || user.email_address || user.email || ''
-                };
-              })
-              .filter((tech: any) => tech.name);
-            setTechnicians(technicianList);
-          }
-        } catch (error) {
-        }
-      }
-    };
-
-    fetchTechnicians();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchPlans = async () => {
-      if (isOpen) {
-        try {
-          const fetchedPlans = await planService.getAllPlans();
-          setPlans(fetchedPlans);
-        } catch (error) {
-        }
-      }
-    };
-
-    fetchPlans();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchRouterModels = async () => {
-      if (isOpen) {
-        try {
-          const fetchedRouterModels = await routerModelService.getAllRouterModels();
-          const filtered = fetchedRouterModels.filter(rm => {
-            if (!rm.model) return false;
-            const name = String(rm.model).trim().toLowerCase();
-            return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-          });
-          setRouterModels(filtered);
-        } catch (error) {
-        }
-      }
-    };
-
-    fetchRouterModels();
-  }, [isOpen]);
 
   useEffect(() => {
     if (jobOrderData && isOpen) {
@@ -843,7 +740,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
   }, [jobOrderData, isOpen]);
 
-  const handleInputChange = (field: keyof JobOrderDoneFormData, value: string | File | null) => {
+  const handleInputChange = useCallback((field: keyof JobOrderDoneFormData, value: string | File | null) => {
     if (field === 'addressCoordinates') {
       console.log('[INPUT DEBUG] Address Coordinates changed to:', value);
     }
@@ -864,12 +761,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       }
       return newData;
     });
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
+    setErrors(prev => {
+      if (prev[field]) {
+        return { ...prev, [field]: '' };
+      }
+      return prev;
+    });
+  }, []);
 
-  const handleImageUpload = (field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage', file: any) => {
+  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage', file: any) => {
     try {
       // In React Native/Expo, the file object from ImagePicker is { uri, name, type }
       // We don't need to create object URLs or resize with web APIs.
@@ -881,16 +781,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       // Use the URI directly for preview
       setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
 
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
+      setErrors(prev => {
+        if (prev[field]) {
+          return { ...prev, [field]: '' };
+        }
+        return prev;
+      });
     } catch (error) {
       console.error(`[UPLOAD ERROR] ${field}:`, error);
       // Fallback
       setFormData(prev => ({ ...prev, [field]: file }));
       setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
     }
-  };
+  }, []);
 
   const handleSignatureOK = async (signature: string) => {
     setIsDrawingSignature(false);
@@ -924,7 +827,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     setImagePreviews(prev => ({ ...prev, clientSignatureImage: null }));
   };
 
-  const handleItemChange = (index: number, field: 'itemId' | 'quantity', value: string) => {
+  const handleItemChange = useCallback((index: number, field: 'itemId' | 'quantity', value: string) => {
     setOrderItems(prevItems => {
       const newItems = prevItems.map((item, i) =>
         i === index ? { ...item, [field]: value } : item
@@ -937,14 +840,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
       return newItems;
     });
-  };
+  }, []);
 
-  const handleRemoveItem = (index: number) => {
-    if (orderItems.length > 1) {
-      const newOrderItems = orderItems.filter((_, i) => i !== index);
-      setOrderItems(newOrderItems);
-    }
-  };
+  const handleRemoveItem = useCallback((index: number) => {
+    setOrderItems(prev => {
+      if (prev.length > 1) {
+        return prev.filter((_, i) => i !== index);
+      }
+      return prev;
+    });
+  }, []);
 
   const showMessageModal = (title: string, messages: Array<{ type: 'success' | 'warning' | 'error'; text: string }>) => {
     setModalContent({ title, messages });
@@ -1618,14 +1523,60 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData]);
 
-  const fullName = `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim();
-
-  const selectedLcpnap = lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap);
+  const selectedLcpnap = useMemo(() => lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap), [lcpnaps, formData.lcpnap]);
   const portTotal = selectedLcpnap?.port_total || 0;
 
+  // Memoize filtered lists to prevent expensive re-computation on every render
+  const filteredRouterModels = useMemo(() =>
+    routerModels.filter(rm => {
+      if (!rm || !rm.model) return false;
+      return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
+    }),
+    [routerModels, routerModelSearch]
+  );
 
+  const filteredLcpnaps = useMemo(() =>
+    lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())),
+    [lcpnaps, lcpnapSearch]
+  );
+
+  const filteredInventoryItems = useMemo(() =>
+    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())),
+    [inventoryItems, itemSearch]
+  );
+
+  const visitByTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other),
+    [technicians, formData.visit_with, formData.visit_with_other]
+  );
+
+  const visitWithTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other),
+    [technicians, formData.visit_by, formData.visit_with_other]
+  );
+
+  const visitWithOtherTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with),
+    [technicians, formData.visit_by, formData.visit_with]
+  );
+
+  const failedVisitByTechnicians = useMemo(() =>
+    technicians, [technicians]
+  );
+
+  const failedVisitWithTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visit_by),
+    [technicians, formData.visit_by]
+  );
+
+  const failedVisitWithOtherTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with),
+    [technicians, formData.visit_by, formData.visit_with]
+  );
+
+  if (!isOpen) return null;
 
   return (
     <Modal
@@ -1648,7 +1599,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             <View style={[styles.loadingModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
               <ActivityIndicator
                 size="large"
-                color={colorPalette?.primary || '#ea580c'}
+                color={colorPalette?.primary || '#7c3aed'}
               />
               <View>
                 <Text style={[styles.loadingPercentage, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{loadingPercentage}%</Text>
@@ -1719,7 +1670,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 <Pressable
                   onPress={() => setShowModal(false)}
                   style={[styles.messageModalButton, {
-                    backgroundColor: colorPalette?.primary || '#ea580c'
+                    backgroundColor: colorPalette?.primary || '#7c3aed'
                   }]}
                 >
                   <Text style={styles.messageModalButtonText}>Close</Text>
@@ -1742,19 +1693,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 onPress={onClose}
                 disabled={loading}
                 style={[styles.cancelButton, {
-                  borderColor: loading ? (isDarkMode ? '#374151' : '#e5e7eb') : (colorPalette?.primary || '#ea580c'),
+                  borderColor: loading ? (isDarkMode ? '#374151' : '#e5e7eb') : (colorPalette?.primary || '#7c3aed'),
                   opacity: loading ? 0.6 : 1
                 }]}
               >
                 <Text style={[styles.cancelButtonText, {
-                  color: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
+                  color: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed')
                 }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
                 disabled={loading}
                 style={[styles.submitButton, {
-                  backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c')
+                  backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed')
                 }]}
               >
                 <Text style={styles.submitButtonText}>{loading ? 'Submitting...' : 'Submit'}</Text>
@@ -1803,10 +1754,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   </View>
                   {errors.choosePlan && (
                     <View style={styles.errorContainer}>
-                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                         <Text style={styles.errorIconText}>!</Text>
                       </View>
-                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.choosePlan}</Text>
+                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.choosePlan}</Text>
                     </View>
                   )}
                 </View>
@@ -1835,10 +1786,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   </View>
                   {errors.onsiteStatus && (
                     <View style={styles.errorContainer}>
-                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                      <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                         <Text style={styles.errorIconText}>!</Text>
                       </View>
-                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteStatus}</Text>
+                      <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.onsiteStatus}</Text>
                     </View>
                   )}
                 </View>
@@ -1921,10 +1872,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.dateInstalled && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
@@ -1978,10 +1929,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.usageType && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
@@ -1995,7 +1946,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           onPress={() => handleInputChange('connectionType', 'Antenna')}
                           style={[styles.connectionTypeButton, {
                             backgroundColor: formData.connectionType === 'Antenna'
-                              ? (colorPalette?.primary || '#ea580c')
+                              ? (colorPalette?.primary || '#7c3aed')
                               : (isDarkMode ? '#1f2937' : '#f3f4f6'),
                             borderColor: formData.connectionType === 'Antenna'
                               ? (colorPalette?.accent || '#dc2626')
@@ -2012,7 +1963,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           onPress={() => handleInputChange('connectionType', 'Fiber')}
                           style={[styles.connectionTypeButton, {
                             backgroundColor: formData.connectionType === 'Fiber'
-                              ? (colorPalette?.primary || '#ea580c')
+                              ? (colorPalette?.primary || '#7c3aed')
                               : (isDarkMode ? '#1f2937' : '#f3f4f6'),
                             borderColor: formData.connectionType === 'Fiber'
                               ? (colorPalette?.accent || '#dc2626')
@@ -2029,7 +1980,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           onPress={() => handleInputChange('connectionType', 'Local')}
                           style={[styles.connectionTypeButton, {
                             backgroundColor: formData.connectionType === 'Local'
-                              ? (colorPalette?.primary || '#ea580c')
+                              ? (colorPalette?.primary || '#7c3aed')
                               : (isDarkMode ? '#1f2937' : '#f3f4f6'),
                             borderColor: formData.connectionType === 'Local'
                               ? (colorPalette?.accent || '#dc2626')
@@ -2045,10 +1996,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.connectionType && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
@@ -2064,13 +2015,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         }]}>
                           <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                           <TextInput
+                            ref={routerModelInputRef}
                             placeholder="Search Router Model..."
-                            value={isRouterModelOpen ? routerModelSearch : (formData.routerModel || routerModelSearch)}
+                            value={isRouterModelOpen ? routerModelSearch : (formData.routerModel || '')}
                             onChangeText={(text) => {
                               setRouterModelSearch(text);
                               if (!isRouterModelOpen) setIsRouterModelOpen(true);
                             }}
-                            onFocus={() => setIsRouterModelOpen(true)}
+                            onFocus={() => {
+                              setIsRouterModelOpen(true);
+                              if (formData.routerModel) {
+                                setRouterModelSearch(formData.routerModel);
+                              }
+                            }}
                             placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
                             style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                           />
@@ -2101,11 +2058,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             borderColor: isDarkMode ? '#374151' : '#e5e7eb'
                           }]}>
                             <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
-                              {routerModels
-                                .filter(rm => {
-                                  if (!rm || !rm.model) return false;
-                                  return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
-                                })
+                              {filteredRouterModels
                                 .map((routerModel, index) => (
                                   <Pressable
                                     key={routerModel.model || index}
@@ -2119,6 +2072,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                       handleInputChange('routerModel', routerModel.model);
                                       setRouterModelSearch('');
                                       setIsRouterModelOpen(false);
+                                      Keyboard.dismiss();
                                     }}
                                   >
                                     <View style={styles.dropdownItemContent}>
@@ -2136,26 +2090,23 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                     </View>
                                   </Pressable>
                                 ))}
-                              {routerModels.filter(rm => {
-                                if (!rm || !rm.model) return false;
-                                return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
-                              }).length === 0 && (
-                                  <View style={styles.emptyDropdown}>
-                                    <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
-                                      No results found for "{routerModelSearch}"
-                                    </Text>
-                                  </View>
-                                )}
+                              {filteredRouterModels.length === 0 && (
+                                <View style={styles.emptyDropdown}>
+                                  <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
+                                    No results found for "{routerModelSearch}"
+                                  </Text>
+                                </View>
+                              )}
                             </ScrollView>
                           </View>
                         )}
                       </View>
                       {errors.routerModel && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>This entry is required</Text>
                         </View>
                       )}
                     </View>
@@ -2176,10 +2127,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       />
                       {errors.modemSN && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.modemSN}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.modemSN}</Text>
                         </View>
                       )}
                     </View>
@@ -2207,10 +2158,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         />
                         {errors.techInput && (
                           <View style={styles.errorContainer}>
-                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                               <Text style={styles.errorIconText}>!</Text>
                             </View>
-                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.techInput}</Text>
+                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.techInput}</Text>
                           </View>
                         )}
                         {!techInputValue.trim() && !errors.techInput && (
@@ -2238,10 +2189,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         />
                         {errors.ip && (
                           <View style={styles.errorContainer}>
-                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                               <Text style={styles.errorIconText}>!</Text>
                             </View>
-                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>This entry is required</Text>
+                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>This entry is required</Text>
                           </View>
                         )}
                       </View>
@@ -2261,12 +2212,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                               <TextInput
                                 placeholder="Search LCP-NAP..."
-                                value={isLcpnapOpen ? lcpnapSearch : (formData.lcpnap || lcpnapSearch)}
+                                value={isLcpnapOpen ? lcpnapSearch : (formData.lcpnap || '')}
                                 onChangeText={(text) => {
                                   setLcpnapSearch(text);
                                   if (!isLcpnapOpen) setIsLcpnapOpen(true);
                                 }}
-                                onFocus={() => setIsLcpnapOpen(true)}
+                                onFocus={() => {
+                                  setIsLcpnapOpen(true);
+                                  if (formData.lcpnap) {
+                                    setLcpnapSearch(formData.lcpnap);
+                                  }
+                                }}
                                 placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
                                 style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
                               />
@@ -2297,8 +2253,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 borderColor: isDarkMode ? '#374151' : '#e5e7eb'
                               }]}>
                                 <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
-                                  {lcpnaps
-                                    .filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase()))
+                                  {filteredLcpnaps
                                     .map((lcpnap) => (
                                       <Pressable
                                         key={lcpnap.id}
@@ -2312,6 +2267,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                           handleInputChange('lcpnap', lcpnap.lcpnap_name);
                                           setLcpnapSearch('');
                                           setIsLcpnapOpen(false);
+                                          setIsRouterModelOpen(false);
+                                          if (routerModelInputRef.current) {
+                                            routerModelInputRef.current.blur();
+                                          }
+                                          Keyboard.dismiss();
                                         }}
                                       >
                                         <View style={styles.dropdownItemContent}>
@@ -2329,7 +2289,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                         </View>
                                       </Pressable>
                                     ))}
-                                  {lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())).length === 0 && (
+                                  {filteredLcpnaps.length === 0 && (
                                     <View style={styles.emptyDropdown}>
                                       <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                         No results found for "{lcpnapSearch}"
@@ -2342,10 +2302,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           </View>
                           {errors.lcpnap && (
                             <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                                 <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.lcpnap}</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.lcpnap}</Text>
                             </View>
                           )}
                         </View>
@@ -2393,10 +2353,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           </View>
                           {errors.port && (
                             <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                                 <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.port}</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.port}</Text>
                             </View>
                           )}
                         </View>
@@ -2436,10 +2396,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           </View>
                           {errors.vlan && (
                             <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                                 <Text style={styles.errorIconText}>!</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.vlan}</Text>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.vlan}</Text>
                             </View>
                           )}
                         </View>
@@ -2470,7 +2430,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item key="custom" label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other).map((technician, index) => (
+                            {visitByTechnicians.map((technician, index) => (
                               <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -2478,10 +2438,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_by && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_by}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
                         </View>
                       )}
                     </View>
@@ -2512,7 +2472,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with_other).map((technician, index) => (
+                            {visitWithTechnicians.map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -2520,10 +2480,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_with && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
                         </View>
                       )}
                     </View>
@@ -2554,7 +2514,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
+                            {visitWithOtherTechnicians.map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -2562,10 +2522,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_with_other && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with_other}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
                         </View>
                       )}
                     </View>
@@ -2588,10 +2548,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       />
                       {errors.onsiteRemarks && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteRemarks}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.onsiteRemarks}</Text>
                         </View>
                       )}
                     </View>
@@ -2651,8 +2611,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               />
                             ) : (
                               <View style={styles.signaturePlaceholder}>
-                                <View style={[styles.signatureIconCircle, { backgroundColor: (colorPalette?.primary || '#ea580c') + '20' }]}>
-                                  <Camera size={24} color={colorPalette?.primary || '#ea580c'} />
+                                <View style={[styles.signatureIconCircle, { backgroundColor: (colorPalette?.primary || '#7c3aed') + '20' }]}>
+                                  <Camera size={24} color={colorPalette?.primary || '#7c3aed'} />
                                 </View>
                                 <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap to Draw Signature</Text>
                               </View>
@@ -2669,7 +2629,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               </Pressable>
                               <Pressable
                                 onPress={() => setIsDrawingSignature(true)}
-                                style={[styles.redrawButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+                                style={[styles.redrawButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
                               >
                                 <Text style={styles.redrawButtonText}>Redraw</Text>
                               </Pressable>
@@ -2803,8 +2763,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                           </View>
                                         </Pressable>
                                       )}
-                                      {inventoryItems
-                                        .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                      {filteredInventoryItems
                                         .map((invItem) => (
                                           <Pressable
                                             key={invItem.id}
@@ -2846,7 +2805,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                             </View>
                                           </Pressable>
                                         ))}
-                                      {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 &&
+                                      {filteredInventoryItems.length === 0 &&
                                         !"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
                                           <View style={styles.emptyDropdown}>
                                             <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
@@ -2859,7 +2818,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 )}
                               </View>
                               {errors[`item_${index}`] && (
-                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c', marginTop: 4 }]}>{errors[`item_${index}`]}</Text>
+                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed', marginTop: 4 }]}>{errors[`item_${index}`]}</Text>
                               )}
                             </View>
 
@@ -2878,7 +2837,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                   }]}
                                 />
                                 {errors[`quantity_${index}`] && (
-                                  <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c', marginTop: 4 }]}>{errors[`quantity_${index}`]}</Text>
+                                  <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed', marginTop: 4 }]}>{errors[`quantity_${index}`]}</Text>
                                 )}
                               </View>
                             )}
@@ -2896,23 +2855,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       ))}
                       {errors.items && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.items}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.items}</Text>
                         </View>
                       )}
                     </View>
 
-                    <LocationPicker
-                      value={formData.addressCoordinates}
-                      onChange={(coordinates) => handleInputChange('addressCoordinates', coordinates)}
-                      isDarkMode={isDarkMode}
-                      label="Address Coordinates"
-                      required={true}
-                      error={errors.addressCoordinates}
-                      style={styles.inputGroup}
-                    />
+                    <View style={styles.inputGroup}>
+                      <LocationPicker
+                        value={formData.addressCoordinates}
+                        onChange={(coordinates) => handleInputChange('addressCoordinates', coordinates)}
+                        isDarkMode={isDarkMode}
+                        label="Address Coordinates"
+                        required={true}
+                        error={errors.addressCoordinates}
+                      />
+                    </View>
                   </>
                 )}
 
@@ -2942,7 +2902,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item label={val} value={val} />;
                             })()}
-                            {technicians.map((technician, index) => (
+                            {failedVisitByTechnicians.map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -2950,10 +2910,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_by && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_by}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
                         </View>
                       )}
                     </View>
@@ -2984,7 +2944,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item key="custom" label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_by).map((technician, index) => (
+                            {failedVisitWithTechnicians.map((technician, index) => (
                               <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -2992,10 +2952,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_with && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
                         </View>
                       )}
                     </View>
@@ -3026,7 +2986,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               if (technicians.some(t => t.name === val)) return null;
                               return <Picker.Item label={val} value={val} />;
                             })()}
-                            {technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with).map((technician, index) => (
+                            {failedVisitWithOtherTechnicians.map((technician, index) => (
                               <Picker.Item key={index} label={technician.name} value={technician.name} />
                             ))}
                           </Picker>
@@ -3034,10 +2994,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.visit_with_other && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.visit_with_other}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
                         </View>
                       )}
                     </View>
@@ -3060,10 +3020,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       />
                       {errors.onsiteRemarks && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.onsiteRemarks}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.onsiteRemarks}</Text>
                         </View>
                       )}
                     </View>
@@ -3093,10 +3053,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       </View>
                       {errors.statusRemarks && (
                         <View style={styles.errorContainer}>
-                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#ea580c' }]}>
+                          <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
                             <Text style={styles.errorIconText}>!</Text>
                           </View>
-                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#ea580c' }]}>{errors.statusRemarks}</Text>
+                          <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.statusRemarks}</Text>
                         </View>
                       )}
                     </View>

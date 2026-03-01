@@ -242,7 +242,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     onClose();
   };
 
-  const primaryColor = colorPalette?.primary || '#ea580c';
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
   const labelStyle = {
     fontSize: 14,

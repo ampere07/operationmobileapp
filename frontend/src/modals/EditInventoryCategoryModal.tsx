@@ -141,7 +141,7 @@ const EditInventoryCategoryModal: React.FC<EditInventoryCategoryModalProps> = ({
         }
     };
 
-    const primaryColor = colorPalette?.primary || '#ea580c';
+    const primaryColor = colorPalette?.primary || '#7c3aed';
 
     return (
         <Modal

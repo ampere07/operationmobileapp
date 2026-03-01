@@ -9,11 +9,12 @@ import {
   Alert,
   SafeAreaView,
   RefreshControl,
+  Modal,
   Platform,
   StyleSheet,
   useWindowDimensions
 } from 'react-native';
-import { Search, Plus, Edit2, Trash2, RefreshCw } from 'lucide-react-native';
+import { Search, Plus, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -31,7 +32,6 @@ const WorkOrderPage: React.FC = () => {
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [deletingItems, setDeletingItems] = useState<Set<number>>(new Set());
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
@@ -86,47 +86,7 @@ const WorkOrderPage: React.FC = () => {
     fetchWorkOrders(1, 1000, '', '');
   }, [fetchWorkOrders]);
 
-  const handleDelete = async (workOrder: WorkOrder) => {
-    Alert.alert(
-      "Confirm Delete",
-      "⚠️ Are you sure you want to permanently delete this work order?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setDeletingItems(prev => new Set(prev).add(workOrder.id));
-            try {
-              const response = await fetch(`${API_BASE_URL}/work-orders/${workOrder.id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json',
-                },
-              });
-              const data = await response.json();
-              if (response.ok && data.success) {
-                await fetchWorkOrders(1, 1000, '', '');
-              } else {
-                Alert.alert('Error', '❌ Failed to delete work order');
-              }
-            } catch (error) {
-              console.error('Error deleting work order:', error);
-            } finally {
-              setDeletingItems(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(workOrder.id);
-                return newSet;
-              });
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleEdit = (workOrder: WorkOrder) => {
+  const handleCardPress = (workOrder: WorkOrder) => {
     setSelectedWorkOrder(workOrder);
     setShowDetailsModal(true);
   };
@@ -233,13 +193,22 @@ const WorkOrderPage: React.FC = () => {
     );
   };
 
-  const getStatusStyles = (status: string) => {
+  const StatusText = ({ status }: { status?: string | null }) => {
+    if (!status) return <Text style={st.statusDash}>-</Text>;
+
+    let textColor = '';
     const s = status.toLowerCase();
-    if (s === 'completed') return { text: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)', border: 'rgba(34, 197, 94, 0.2)' };
-    if (s === 'in progress') return { text: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)', border: 'rgba(59, 130, 246, 0.2)' };
-    if (s === 'failed' || s === 'cancelled') return { text: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.2)' };
-    if (s === 'pending') return { text: '#f97316', bg: 'rgba(249, 115, 22, 0.1)', border: 'rgba(249, 115, 22, 0.2)' };
-    return { text: '#6b7280', bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.2)' };
+    if (s === 'completed' || s === 'done') textColor = '#4ade80';
+    else if (s === 'in progress' || s === 'inprogress') textColor = '#60a5fa';
+    else if (s === 'pending') textColor = '#fb923c';
+    else if (s === 'failed' || s === 'cancelled') textColor = '#ef4444';
+    else textColor = '#9ca3af';
+
+    return (
+      <Text style={[st.statusLabel, { color: textColor }]}>
+        {s === 'inprogress' ? 'In Progress' : status}
+      </Text>
+    );
   };
 
   return (
@@ -269,7 +238,7 @@ const WorkOrderPage: React.FC = () => {
             <TouchableOpacity
               onPress={() => fetchWorkOrders(1, 1000, '', '')}
               disabled={isLoading}
-              style={[st.actionIconBtn, { backgroundColor: isLoading ? (isDarkMode ? '#4b5563' : '#d1d5db') : (colorPalette?.primary || '#ea580c') }]}
+              style={[st.actionIconBtn, { backgroundColor: isLoading ? (isDarkMode ? '#4b5563' : '#d1d5db') : (colorPalette?.primary || '#7c3aed') }]}
             >
               <RefreshCw size={20} color="white" />
             </TouchableOpacity>
@@ -277,7 +246,7 @@ const WorkOrderPage: React.FC = () => {
             {(userRole === 1 || userRole === 7) && (
               <TouchableOpacity
                 onPress={handleAddNew}
-                style={[st.actionIconBtn, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+                style={[st.actionIconBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
               >
                 <Plus size={20} color="white" />
               </TouchableOpacity>
@@ -299,75 +268,41 @@ const WorkOrderPage: React.FC = () => {
       >
         {isLoading && workOrders.length === 0 ? (
           <View style={st.centerContent}>
-            <ActivityIndicator size="large" color={colorPalette?.primary || '#ea580c'} />
+            <ActivityIndicator size="large" color={colorPalette?.primary || '#7c3aed'} />
           </View>
         ) : error ? (
           <Text style={st.errorText}>{error}</Text>
         ) : filteredWorkOrders.length > 0 ? (
           <>
             <View style={st.cardList}>
-              {paginatedWorkOrders.map((wo: WorkOrder) => {
-                const statusStyles = getStatusStyles(wo.work_status || '');
-                return (
-                  <View
-                    key={wo.id}
-                    style={[st.card, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#1f2937' : '#e5e7eb', marginBottom: 16 }]}
-                  >
-                    <View style={st.cardBody}>
-                      <View style={st.cardHeader}>
-                        <View style={st.cardHeaderLeft}>
-                          <Text numberOfLines={1} style={[st.cardTitle, { color: isDarkMode ? '#f3f4f6' : '#111827' }]}>{wo.instructions || ''}</Text>
-                          <Text style={[st.cardId, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>ID: #{wo.id}</Text>
-                        </View>
-                        <View style={[st.statusBadge, { backgroundColor: statusStyles.bg, borderColor: statusStyles.border }]}>
-                          <Text style={[st.statusText, { color: statusStyles.text }]}>{(wo.work_status || '').toUpperCase()}</Text>
-                        </View>
-                      </View>
-
-                      <View style={st.cardDetails}>
-                        <View style={st.detailRow}>
-                          <Text style={[st.detailLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Report To:</Text>
-                          <Text numberOfLines={1} style={[st.detailValue, { color: isDarkMode ? '#d1d5db' : '#4b5563' }]}>{wo.report_to || ''}</Text>
-                        </View>
-                        <View style={st.detailRow}>
-                          <Text style={[st.detailLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Assign To:</Text>
-                          <Text numberOfLines={1} style={[st.detailValue, { color: isDarkMode ? '#d1d5db' : '#4b5563' }]}>{wo.assign_to || '-'}</Text>
-                        </View>
-                        <View style={st.detailRow}>
-                          <Text style={[st.detailLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Requested By:</Text>
-                          <Text numberOfLines={1} style={[st.detailValue, { color: isDarkMode ? '#d1d5db' : '#4b5563' }]}>{wo.requested_by || ''}</Text>
-                        </View>
-                        <View style={[st.detailRowDate, { borderTopColor: isDarkMode ? 'rgba(55,65,81,0.3)' : '#f1f5f9' }]}>
-                          <Text style={[st.detailLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Date:</Text>
-                          <Text style={[st.dateText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{formatDate(wo.requested_date)}</Text>
-                        </View>
-                      </View>
+              {paginatedWorkOrders.map((wo: WorkOrder) => (
+                <TouchableOpacity
+                  key={wo.id}
+                  onPress={() => handleCardPress(wo)}
+                  style={[st.cardRow, {
+                    backgroundColor: selectedWorkOrder?.id === wo.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
+                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                  }]}
+                >
+                  <View style={st.cardInner}>
+                    <View style={st.cardLeft}>
+                      <Text
+                        style={[st.cardName, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {wo.instructions || 'No Instructions'}
+                      </Text>
+                      <Text style={[st.cardSub, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
+                        {formatDate(wo.requested_date)}
+                      </Text>
                     </View>
-
-                    <View style={[st.cardFooter, { backgroundColor: isDarkMode ? 'rgba(31,41,55,0.5)' : '#f9fafb', borderTopColor: isDarkMode ? '#1f2937' : '#f1f5f9' }]}>
-                      <TouchableOpacity
-                        onPress={() => handleEdit(wo)}
-                        style={st.actionBtn}
-                      >
-                        <Edit2 size={14} color="#60a5fa" />
-                        <Text style={[st.actionTextBlue, { marginLeft: 6 }]}>Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDelete(wo)}
-                        disabled={deletingItems.has(wo.id)}
-                        style={st.actionBtn}
-                      >
-                        {deletingItems.has(wo.id) ? (
-                          <ActivityIndicator size="small" color="#f87171" />
-                        ) : (
-                          <Trash2 size={14} color="#f87171" style={{ marginRight: 6 }} />
-                        )}
-                        <Text style={st.actionTextRed}>Delete</Text>
-                      </TouchableOpacity>
+                    <View style={st.cardRight}>
+                      <StatusText status={wo.work_status} />
                     </View>
                   </View>
-                );
-              })}
+                </TouchableOpacity>
+              ))}
             </View>
             <PaginationControls />
             <View style={{ height: 40 }} />
@@ -382,23 +317,39 @@ const WorkOrderPage: React.FC = () => {
       </ScrollView>
 
       {showDetailsModal && selectedWorkOrder && (
-        <WorkOrderDetails
-          workOrder={selectedWorkOrder}
-          onClose={handleCloseModal}
-          isDarkMode={isDarkMode}
-          colorPalette={colorPalette}
-        />
+        <Modal
+          visible={showDetailsModal}
+          animationType="none"
+          onRequestClose={handleCloseModal}
+          transparent={false}
+        >
+          <WorkOrderDetails
+            workOrder={selectedWorkOrder}
+            onClose={handleCloseModal}
+            onEdit={() => {
+              setShowAssignModal(true);
+            }}
+            isDarkMode={isDarkMode}
+            colorPalette={colorPalette}
+          />
+        </Modal>
       )}
 
       {showAssignModal && (
         <AssignWorkOrderModal
           isOpen={showAssignModal}
-          onClose={() => setShowAssignModal(false)}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedWorkOrder(null);
+          }}
           onSave={() => {
             setShowAssignModal(false);
+            setSelectedWorkOrder(null);
             fetchWorkOrders(1, 1000, '', '');
           }}
           onRefresh={() => fetchWorkOrders(1, 1000, '', '')}
+          isEditMode={!!selectedWorkOrder}
+          workOrder={selectedWorkOrder || undefined}
         />
       )}
     </SafeAreaView>
@@ -415,28 +366,19 @@ const st = StyleSheet.create({
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actionIconBtn: { padding: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
-  scrollContent: { padding: 16 },
+  scrollContent: { paddingVertical: 16 },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80 },
   errorText: { textAlign: 'center', paddingVertical: 80, color: '#ef4444' },
   cardList: { flexDirection: 'column' },
-  card: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
-  cardBody: { padding: 20 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  cardHeaderLeft: { flex: 1, paddingRight: 8 },
-  cardTitle: { fontWeight: '600', fontSize: 18 },
-  cardId: { fontSize: 12, marginTop: 4 },
-  statusBadge: { paddingVertical: 4, borderRadius: 9999, borderWidth: 1, paddingHorizontal: 10 },
-  statusText: { fontSize: 10, fontWeight: 'bold' },
-  cardDetails: {},
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  detailRowDate: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderStyle: 'dotted' },
-  detailLabel: { fontSize: 12, opacity: 0.7 },
-  detailValue: { fontSize: 12, fontWeight: '500', maxWidth: '60%' },
-  dateText: { fontSize: 10 },
-  cardFooter: { paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'flex-end' },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  actionTextBlue: { color: '#60a5fa', fontWeight: '500', fontSize: 12 },
-  actionTextRed: { color: '#f87171', fontWeight: '500', fontSize: 12 },
+  cardRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  cardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardLeft: { flex: 1, minWidth: 0 },
+  cardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
+  cardSub: { fontSize: 12 },
+  cardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
+  statusDash: { color: '#9ca3af' },
+  statusLabel: { fontWeight: 'bold', textTransform: 'uppercase', fontSize: 12 },
+
   pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 16, marginTop: 24, borderRadius: 8, borderWidth: 1 },
   paginationInfo: { flex: 1 },
   paginationText: { fontSize: 12 },

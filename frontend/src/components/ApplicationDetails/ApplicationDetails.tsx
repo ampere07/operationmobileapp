@@ -648,19 +648,19 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
       <View style={{ padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', fontWeight: '500' }}>{getClientFullName()}</Text>
-          {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#fb923c' : '#ea580c' }}>Loading...</Text>}
+          {loading && <Text style={{ marginLeft: 12, fontSize: 14, color: isDarkMode ? '#fb923c' : '#7c3aed' }}>Loading...</Text>}
         </View>
         
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Pressable 
-            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#7c3aed' }}
             onPress={handleMoveToJO}
             disabled={loading}
           >
             <Text style={{ color: '#ffffff' }}>Move to JO</Text>
           </Pressable>
           <Pressable 
-            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#ea580c' }}
+            style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center', backgroundColor: colorPalette?.primary || '#7c3aed' }}
             onPress={handleScheduleVisit}
             disabled={loading}
           >
@@ -683,7 +683,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
           onPress={() => handleStatusChange('No Facility')}
           disabled={loading}
         >
-          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#7c3aed' }}>
             <Ban width={18} height={18} color="#ffffff" />
           </View>
           <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>No Facility</Text>
@@ -694,7 +694,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
           onPress={() => handleStatusChange('Cancelled')}
           disabled={loading}
         >
-          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#7c3aed' }}>
             <XCircle width={18} height={18} color="#ffffff" />
           </View>
           <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Cancelled</Text>
@@ -705,7 +705,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
           onPress={() => handleStatusChange('No Slot')}
           disabled={loading}
         >
-          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#7c3aed' }}>
             <RotateCw width={18} height={18} color="#ffffff" />
           </View>
           <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>No Slot</Text>
@@ -716,7 +716,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
           onPress={() => handleStatusChange('Duplicate')}
           disabled={loading}
         >
-          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#7c3aed' }}>
             <Square width={18} height={18} color="#ffffff" />
           </View>
           <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Duplicate</Text>
@@ -727,7 +727,7 @@ const ApplicationDetails: React.FC<ApplicationDetailsProps> = ({ application, on
           onPress={() => handleStatusChange('In Progress')}
           disabled={loading}
         >
-          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#ea580c' }}>
+          <View style={{ padding: 8, borderRadius: 9999, backgroundColor: colorPalette?.primary || '#7c3aed' }}>
             <CheckCircle width={18} height={18} color="#ffffff" />
           </View>
           <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#d1d5db' : '#374151' }}>Clear Status</Text>

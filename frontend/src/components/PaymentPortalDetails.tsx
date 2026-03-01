@@ -201,11 +201,11 @@ const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onC
       <div
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
         style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#ea580c') : 'transparent'
+          backgroundColor: isResizing ? (colorPalette?.primary || '#7c3aed') : 'transparent'
         }}
         onMouseEnter={(e) => {
           if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#ea580c';
+            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#7c3aed';
           }
         }}
         onMouseLeave={(e) => {

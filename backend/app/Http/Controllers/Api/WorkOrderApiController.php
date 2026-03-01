@@ -94,35 +94,49 @@ class WorkOrderApiController extends Controller
                 $workOrder->work_status = 'Pending';
             }
 
-            // Handle file uploads
-            $uploadPath = 'work_orders';
+            $workOrder->save();
+
+            // Handle file uploads to Google Drive
+            $driveService = new \App\Services\GoogleDriveService();
             
-            if ($request->hasFile('image_1')) {
-                $file = $request->file('image_1');
-                $filename = time() . '_img1.' . $file->getClientOriginalExtension();
-                $file->move(public_path($uploadPath), $filename);
-                $workOrder->image_1 = '/' . $uploadPath . '/' . $filename;
-            }
+            // 1. Ensure "Work Order" root folder exists
+            $rootFolderName = 'Work Order';
+            $rootFolderId = $driveService->createFolder($rootFolderName);
             
-            if ($request->hasFile('image_2')) {
-                $file = $request->file('image_2');
-                $filename = time() . '_img2.' . $file->getClientOriginalExtension();
-                $file->move(public_path($uploadPath), $filename);
-                $workOrder->image_2 = '/' . $uploadPath . '/' . $filename;
-            }
+            // 2. Create individual folder for this Work Order inside the root
+            $orderFolderName = 'WorkOrder_' . $workOrder->id;
+            $orderFolderId = $driveService->createFolder($orderFolderName, $rootFolderId);
             
-            if ($request->hasFile('image_3')) {
-                $file = $request->file('image_3');
-                $filename = time() . '_img3.' . $file->getClientOriginalExtension();
-                $file->move(public_path($uploadPath), $filename);
-                $workOrder->image_3 = '/' . $uploadPath . '/' . $filename;
-            }
-            
-            if ($request->hasFile('signature')) {
-                $file = $request->file('signature');
-                $filename = time() . '_sig.' . $file->getClientOriginalExtension();
-                $file->move(public_path($uploadPath), $filename);
-                $workOrder->signature = '/' . $uploadPath . '/' . $filename;
+            $images = ['image_1', 'image_2', 'image_3', 'signature'];
+
+            foreach ($images as $imgField) {
+                if ($request->hasFile($imgField)) {
+                    \Log::info("WorkOrder Store: Found file for $imgField");
+                    $file = $request->file($imgField);
+                    $fileName = 'workorder_' . $workOrder->id . '_' . time() . '_' . $file->getClientOriginalName();
+                    
+                    $mimeType = $file->getMimeType();
+                    if ($imgField === 'signature') {
+                        $mimeType = 'image/png';
+                    }
+
+                    $imageUrl = $driveService->uploadFile(
+                        $file,
+                        $orderFolderId,
+                        $fileName,
+                        $mimeType
+                    );
+                    
+                    \Log::info("WorkOrder Store: Uploaded $imgField, URL: $imageUrl");
+                    
+                    if (strpos($imageUrl, 'drive.google.com') !== false && strpos($imageUrl, '/view') === false) {
+                         if (!preg_match('/\/view$/', $imageUrl) && !preg_match('/\/view\?/', $imageUrl)) {
+                             $imageUrl = rtrim($imageUrl, '/') . '/view';
+                         }
+                    }
+                    $workOrder->$imgField = $imageUrl;
+                    \Log::info("WorkOrder Store: Assigned $imgField to model");
+                }
             }
 
             $workOrder->save();
@@ -139,6 +153,113 @@ class WorkOrderApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error adding work order: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function uploadImages(Request $request, $id)
+    {
+        try {
+            \Log::info('[BACKEND] WorkOrder Upload images request received', [
+                'work_order_id' => $id,
+                'folder_name' => $request->input('folder_name'),
+                'has_image_1' => $request->hasFile('image_1'),
+                'has_image_2' => $request->hasFile('image_2'),
+                'has_image_3' => $request->hasFile('image_3'),
+                'has_signature' => $request->hasFile('signature'),
+            ]);
+
+            $filesInfo = [];
+            foreach (['image_1', 'image_2', 'image_3', 'signature'] as $field) {
+                if ($request->hasFile($field)) {
+                    $file = $request->file($field);
+                    $filesInfo[$field] = [
+                        'original_name' => $file->getClientOriginalName(),
+                        'mime_type' => $file->getMimeType(),
+                        'size' => $file->getSize()
+                    ];
+                }
+            }
+
+            \Log::info('[BACKEND] WorkOrder Upload files info', $filesInfo);
+
+            $validator = \Validator::make($request->all(), [
+                'folder_name' => 'required|string|max:255',
+                'image_1' => 'nullable|file|max:10240',
+                'image_2' => 'nullable|file|max:10240',
+                'image_3' => 'nullable|file|max:10240',
+                'signature' => 'nullable|file|max:10240',
+            ]);
+
+            if ($validator->fails()) {
+                \Log::warning('[BACKEND] WorkOrder Upload validation failed', [
+                   'errors' => $validator->errors()->toArray(),
+                   'request_all' => $request->all() // Warning: might be large if binary is dumped as string
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $workOrder = WorkOrder::findOrFail($id);
+            $folderName = $request->input('folder_name');
+
+            $driveService = new \App\Services\GoogleDriveService();
+            
+            // 1. Ensure "Work Order" root folder exists
+            $rootFolderName = 'Work Order';
+            $rootFolderId = $driveService->createFolder($rootFolderName);
+            
+            // 2. Create individual folder for this Work Order inside the root
+            $orderFolderId = $driveService->createFolder($folderName, $rootFolderId);
+
+            $imageUrls = [];
+            $fields = ['image_1', 'image_2', 'image_3', 'signature'];
+
+            foreach ($fields as $field) {
+                if ($request->hasFile($field)) {
+                    $file = $request->file($field);
+                    $fileName = 'workorder_' . $workOrder->id . '_' . $field . '_' . time() . '.' . $file->getClientOriginalExtension();
+                    
+                    $mimeType = $field === 'signature' ? 'image/png' : $file->getMimeType();
+
+                    $url = $driveService->uploadFile(
+                        $file,
+                        $orderFolderId,
+                        $fileName,
+                        $mimeType
+                    );
+
+                    // Ensure the URL is viewable
+                    if (strpos($url, 'drive.google.com') !== false && strpos($url, '/view') === false) {
+                         if (!preg_match('/\/view$/', $url) && !preg_match('/\/view\?/', $url)) {
+                             $url = rtrim($url, '/') . '/view';
+                         }
+                    }
+
+                    $imageUrls[$field . '_url'] = $url;
+                    
+                    // Also update the work order record
+                    $workOrder->$field = $url;
+                }
+            }
+
+            $workOrder->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Images uploaded successfully',
+                'data' => $imageUrls,
+                'work_order' => $workOrder
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('WorkOrder Upload Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error uploading images: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -204,26 +325,36 @@ class WorkOrderApiController extends Controller
             $workOrder->fill($data);
 
             $driveService = new \App\Services\GoogleDriveService();
-            $folderName = 'WorkOrder_' . $workOrder->id;
+            
+            // 1. Ensure "Work Order" root folder exists
+            $rootFolderName = 'Work Order';
+            $rootFolderId = $driveService->createFolder($rootFolderName);
+            
+            // 2. Create/Get individual folder for this Work Order inside the root
+            $orderFolderName = 'WorkOrder_' . $workOrder->id;
+            $orderFolderId = $driveService->createFolder($orderFolderName, $rootFolderId);
             
             $images = ['image_1', 'image_2', 'image_3', 'signature'];
-            $folderId = null;
 
             foreach ($images as $imgField) {
                 if ($request->hasFile($imgField)) {
-                    if (!$folderId) {
-                        $folderId = $driveService->createFolder($folderName);
-                    }
-                    
+                    \Log::info("WorkOrder Update: Found file for $imgField");
                     $file = $request->file($imgField);
                     $fileName = 'workorder_' . $workOrder->id . '_' . time() . '_' . $file->getClientOriginalName();
                     
+                    $mimeType = $file->getMimeType();
+                    if ($imgField === 'signature') {
+                        $mimeType = 'image/png';
+                    }
+
                     $imageUrl = $driveService->uploadFile(
                         $file,
-                        $folderId,
+                        $orderFolderId,
                         $fileName,
-                        $file->getMimeType()
+                        $mimeType
                     );
+                    
+                    \Log::info("WorkOrder Update: Uploaded $imgField, URL: $imageUrl");
                     
                     if (strpos($imageUrl, 'drive.google.com') !== false && strpos($imageUrl, '/view') === false) {
                          if (!preg_match('/\/view$/', $imageUrl) && !preg_match('/\/view\?/', $imageUrl)) {
@@ -231,6 +362,7 @@ class WorkOrderApiController extends Controller
                          }
                     }
                     $workOrder->$imgField = $imageUrl;
+                    \Log::info("WorkOrder Update: Assigned $imgField to model");
                 }
             }
 

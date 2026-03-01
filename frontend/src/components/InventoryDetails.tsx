@@ -252,7 +252,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
     setIsExpanded(false);
   };
 
-  const primaryColor = colorPalette?.primary || '#ea580c';
+  const primaryColor = colorPalette?.primary || '#7c3aed';
   const iconColor = isDarkMode ? '#9ca3af' : '#4b5563';
   const borderColor = isDarkMode ? '#374151' : '#e5e7eb';
   const cardBg = isDarkMode ? '#1f2937' : '#ffffff';

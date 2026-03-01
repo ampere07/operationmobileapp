@@ -11,16 +11,20 @@ import {
   Image,
   Platform,
   StyleSheet,
-  useWindowDimensions
+  useWindowDimensions,
+  KeyboardAvoidingView,
+  Pressable
 } from 'react-native';
+import * as ExpoFileSystem from 'expo-file-system';
 import { Picker } from '@react-native-picker/picker';
-import { X, Camera, ImageIcon, Trash2 } from 'lucide-react-native';
+import { X, Camera, ImageIcon, Trash2, ChevronDown, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { userService } from '../services/userService';
-import { API_BASE_URL } from '../config/api';
+import apiClient, { API_BASE_URL } from '../config/api';
+import ImagePreview from '../components/ImagePreview';
 
 // Removed global Dimensions usage
 
@@ -52,6 +56,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   const [assignees, setAssignees] = useState<User[]>([]);
   const [categories, setCategories] = useState<{ id: number, category: string }[]>([]);
   const [userRole, setUserRole] = useState<number | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
 
@@ -83,6 +88,10 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+
+  const isAssignedToMe = userEmail && formData.assign_to === userEmail;
 
   useEffect(() => {
     const init = async () => {
@@ -97,6 +106,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
         try {
           const parsed = JSON.parse(authData);
           setUserRole(parsed.role_id || parsed.roleId || null);
+          setUserEmail(parsed.email_address || parsed.email || null);
         } catch (e) { }
       }
     };
@@ -188,50 +198,39 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
-  const pickImage = async (field: string, useCamera: boolean = false) => {
-    let result;
-    const options: ImagePicker.ImagePickerOptions = {
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    };
-
-    if (useCamera) {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission denied', 'Camera access is required to take photos.');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync(options);
+  const handleImageUpload = (field: string, file: any) => {
+    if (file) {
+      setImages(prev => ({ ...prev, [field]: file }));
+      setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
     } else {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission denied', 'Gallery access is required to pick photos.');
-        return;
-      }
-      result = await ImagePicker.launchImageLibraryAsync(options);
+      setImages(prev => ({ ...prev, [field]: null }));
+      setImagePreviews(prev => ({ ...prev, [field]: '' }));
     }
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const imageFile = {
-        uri: asset.uri,
-        type: 'image/jpeg',
-        name: asset.fileName || `${field}_${Date.now()}.jpg`,
-      };
-      setImages(prev => ({ ...prev, [field]: imageFile }));
-      setImagePreviews(prev => ({ ...prev, [field]: asset.uri }));
-    }
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
-  const handleSignature = (signature: string) => {
-    setImagePreviews(prev => ({ ...prev, signature }));
-    const sigFile = {
-      uri: signature,
-      type: 'image/png',
-      name: 'signature.png'
-    };
-    setImages(prev => ({ ...prev, signature: sigFile }));
+  const handleSignature = async (signature: string) => {
+    setIsDrawingSignature(false);
+    setScrollEnabled(true);
+    try {
+      const path = `${ExpoFileSystem.cacheDirectory}signature_${Date.now()}.png`;
+      const base64Code = signature.replace('data:image/png;base64,', '');
+      await ExpoFileSystem.writeAsStringAsync(path, base64Code, {
+        encoding: ExpoFileSystem.EncodingType.Base64,
+      });
+
+      const sigFile = {
+        uri: path,
+        name: `signature_${Date.now()}.png`,
+        type: 'image/png',
+        size: base64Code.length * 0.75
+      };
+      setImages(prev => ({ ...prev, signature: sigFile }));
+      setImagePreviews(prev => ({ ...prev, signature: path }));
+    } catch (e) {
+      console.error('Error handling signature:', e);
+      Alert.alert('Error', 'Failed to save signature');
+    }
   };
 
   const validateForm = () => {
@@ -263,359 +262,728 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
       const parsedUser = authData ? JSON.parse(authData) : null;
       const currentUserEmail = parsedUser ? (parsedUser.email_address || parsedUser.email || 'system') : 'system';
 
-      const submitData = new FormData();
-      submitData.append('instructions', formData.instructions);
-      submitData.append('report_to', formData.report_to);
-      submitData.append('assign_to', formData.assign_to);
-      submitData.append('remarks', formData.remarks);
-      submitData.append('requested_by', currentUserEmail);
-      submitData.append('work_category', formData.work_category);
+      const url = isEditMode && workOrder?.id
+        ? `/work-orders/${workOrder.id}`
+        : `/work-orders`;
 
-      if ((userRole !== 1 && userRole !== 7) || isEditMode) {
-        submitData.append('work_status', formData.work_status);
+      // Step 1: Save the core data first
+      const formDataToSend: Record<string, any> = {
+        instructions: formData.instructions,
+        report_to: formData.report_to,
+        assign_to: formData.assign_to,
+        remarks: formData.remarks,
+        work_category: formData.work_category,
+        requested_by: currentUserEmail,
+        updated_by: currentUserEmail,
+      };
+
+      if ((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) {
+        formDataToSend.work_status = formData.work_status;
       } else {
-        submitData.append('work_status', 'Pending');
+        formDataToSend.work_status = 'Pending';
       }
-
-      if (images.image_1) submitData.append('image_1', images.image_1 as any);
-      if (images.image_2) submitData.append('image_2', images.image_2 as any);
-      if (images.image_3) submitData.append('image_3', images.image_3 as any);
-      if (images.signature) submitData.append('signature', images.signature as any);
 
       if (isEditMode && workOrder?.id) {
-        submitData.append('_method', 'PUT');
+        formDataToSend._method = 'PUT';
       }
 
-      const url = isEditMode && workOrder?.id
-        ? `${API_BASE_URL}/work-orders/${workOrder.id}`
-        : `${API_BASE_URL}/work-orders`;
+      console.log('[SAVE DEBUG] Step 1: Saving core data to:', url);
+      const response = await apiClient.post(url, formDataToSend);
+      const savedWorkOrder = response.data.data;
+      const workOrderId = savedWorkOrder?.id;
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
-        },
-        body: submitData
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to save');
+      if (!workOrderId) {
+        throw new Error('Failed to retrieve Work Order ID after save.');
       }
 
-      clearInterval(progressInterval);
+      // Step 2: Upload images if any exist
+      const hasImages = !!(images.image_1 || images.image_2 || images.image_3 || images.signature);
+
+      if (hasImages) {
+        setLoadingPercentage(40);
+        console.log('[SAVE DEBUG] Step 2: Preparing images for upload...');
+
+        const imageFormData = new FormData();
+        imageFormData.append('folder_name', `WorkOrder_${workOrderId}`);
+
+        const appendFile = (field: string, file: any) => {
+          if (file && file.uri) {
+            const name = file.name || `${field}_${Date.now()}.jpg`;
+            imageFormData.append(field, {
+              uri: file.uri,
+              name: name,
+              type: file.type || 'image/jpeg'
+            } as any, name); // Using 3 arguments for better RN compatibility
+          }
+        };
+
+        appendFile('image_1', images.image_1);
+        appendFile('image_2', images.image_2);
+        appendFile('image_3', images.image_3);
+        appendFile('signature', images.signature);
+
+        try {
+          console.log(`[SAVE DEBUG] Sending images to: /work-orders/${workOrderId}/upload-images`);
+          const uploadResponse = await apiClient.post(`/work-orders/${workOrderId}/upload-images`, imageFormData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            }
+          });
+
+          if (uploadResponse.data.success) {
+            console.log('[SAVE DEBUG] Images uploaded successfully');
+          }
+        } catch (uploadError: any) {
+          console.error('[SAVE ERROR] Image Upload failed:', uploadError.response?.data || uploadError.message);
+          Alert.alert('Warning', 'Work order saved, but some images failed to upload.');
+        }
+      }
+
+      if (progressInterval) clearInterval(progressInterval);
       setLoadingPercentage(100);
 
       setTimeout(() => {
-        onSave();
+        if (onSave) onSave();
         if (onRefresh) onRefresh();
+        onClose();
       }, 500);
 
     } catch (error: any) {
-      clearInterval(progressInterval);
-      Alert.alert('Error', error.message || 'An error occurred');
+      if (progressInterval) clearInterval(progressInterval);
+      console.error('[SAVE ERROR] Full Error Object:', error);
+      if (error.response) {
+        console.error('[SAVE ERROR] Data:', error.response.data);
+        console.error('[SAVE ERROR] Status:', error.response.status);
+      } else {
+        console.error('[SAVE ERROR] Message:', error.message);
+      }
+      Alert.alert('Error', error.response?.data?.message || error.message || 'An error occurred');
     } finally {
       setTimeout(() => {
         setLoading(false);
         setLoadingPercentage(0);
-      }, 500);
+      }, 800);
     }
   };
 
-  const ImageUploadSection = ({ field, label }: { field: 'image_1' | 'image_2' | 'image_3', label: string }) => (
-    <View style={st.imageSection}>
-      <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-        {label}
-      </Text>
-      <View style={[st.dashedBox, {
-        borderColor: isDarkMode ? '#374151' : '#e5e7eb',
-        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
-      }]}>
-        {imagePreviews[field] ? (
-          <View style={st.relativeFull}>
-            <Image source={{ uri: imagePreviews[field] }} style={st.previewImg} resizeMode="cover" />
-            <TouchableOpacity
-              onPress={() => {
-                setImagePreviews(prev => ({ ...prev, [field]: '' }));
-                setImages(prev => ({ ...prev, [field]: null }));
-              }}
-              style={st.deleteBtn}
-            >
-              <Trash2 size={16} color="white" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={st.uploadActions}>
-            <TouchableOpacity
-              onPress={() => pickImage(field, false)}
-              style={[st.uploadBtn, { marginRight: 16 }]}
-            >
-              <ImageIcon size={24} color="#ea580c" />
-              <Text style={st.uploadBtnText}>GALLERY</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => pickImage(field, true)}
-              style={st.uploadBtn}
-            >
-              <Camera size={24} color="#ea580c" />
-              <Text style={st.uploadBtnText}>CAMERA</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    </View>
-  );
 
   return (
-    <Modal visible={isOpen} animationType="slide" transparent={false} onRequestClose={onClose}>
-      <View style={[st.container, { backgroundColor: isDarkMode ? '#030712' : '#ffffff' }]}>
-        {/* Loading Overlay */}
-        {loading && (
-          <View style={st.loadingOverlay}>
-            <View style={[st.loadingBox, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-              <ActivityIndicator size="large" color="#ea580c" />
-              <Text style={[st.loadingTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{loadingPercentage}%</Text>
-              <Text style={[st.loadingSubTitle, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>Saving your progress...</Text>
-            </View>
-          </View>
-        )}
+    <Modal visible={isOpen} animationType="slide" transparent={true} onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <View style={st.modalOverlay}>
+          <View style={[st.modalContainer, { backgroundColor: isDarkMode ? '#030712' : '#ffffff' }]}>
+            {/* Loading Overlay Removed */}
 
-        {/* Header */}
-        <View style={[st.header, {
-          backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-          borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-          paddingTop: isTablet ? 16 : 60
-        }]}>
-          <View style={st.flexOne}>
-            {/* Removed Title */}
-          </View>
-          <View style={st.headerBtns}>
-            <TouchableOpacity onPress={onClose} style={[st.cancelHeaderBtn, { marginRight: 8 }]}>
-              <Text style={st.cancelHeaderBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleSave}
-              disabled={loading}
-              style={[st.saveHeaderBtn, {
-                backgroundColor: colorPalette?.primary || '#ea580c',
-                opacity: loading ? 0.5 : 1
-              }]}
+            {/* Header */}
+            <View style={[st.header, {
+              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+              borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+            }]}>
+              <Text style={[st.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+                {isEditMode ? 'Edit Work Order' : 'New Work Order'}
+              </Text>
+              <View style={st.headerActions}>
+                <TouchableOpacity
+                  onPress={loading ? undefined : onClose}
+                  disabled={loading}
+                  style={[st.cancelButton, {
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    opacity: loading ? 0.5 : 1
+                  }]}
+                >
+                  <Text style={[st.cancelButtonText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSave}
+                  disabled={loading}
+                  style={[st.submitButton, {
+                    backgroundColor: colorPalette?.primary || '#7c3aed',
+                    opacity: loading ? 0.5 : 1
+                  }]}
+                >
+                  <Text style={st.submitButtonText}>{loading ? 'Submitting...' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              scrollEnabled={scrollEnabled}
+              style={st.scrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={st.scrollViewContent}
             >
-              <Text style={st.saveHeaderBtnText}>Save</Text>
-            </TouchableOpacity>
+              <View style={st.inputGroup}>
+                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Instructions <Text style={st.required}>*</Text></Text>
+                <TextInput
+                  value={formData.instructions}
+                  onChangeText={(text) => handleInputChange('instructions', text)}
+                  placeholder="Enter detailed instructions"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  editable={!isAssignedToMe}
+                  style={[st.textInput, {
+                    borderColor: errors.instructions ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    opacity: isAssignedToMe ? 0.7 : 1
+                  }]}
+                />
+                {errors.instructions && (
+                  <View style={st.errorContainer}>
+                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                      <Text style={st.errorIconText}>!</Text>
+                    </View>
+                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.instructions}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={st.inputGroup}>
+                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Category <Text style={st.required}>*</Text></Text>
+                <View style={[st.pickerContainer, {
+                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  borderColor: errors.work_category ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb'
+                }]}>
+                  <Picker
+                    selectedValue={formData.work_category}
+                    onValueChange={(val) => handleInputChange('work_category', val)}
+                    style={{ color: isDarkMode ? 'white' : 'black' }}
+                    dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                    enabled={!isAssignedToMe}
+                  >
+                    <Picker.Item
+                      label={formData.work_category || "Select Category"}
+                      value={formData.work_category || ""}
+                    />
+                    {categories
+                      .filter(c => c.category !== formData.work_category)
+                      .map(c => <Picker.Item key={c.id} label={c.category} value={c.category} />)}
+                  </Picker>
+                </View>
+                {errors.work_category && (
+                  <View style={st.errorContainer}>
+                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                      <Text style={st.errorIconText}>!</Text>
+                    </View>
+                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.work_category}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={st.inputGroup}>
+                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Report To <Text style={st.required}>*</Text></Text>
+                <TextInput
+                  value={formData.report_to}
+                  onChangeText={(text) => handleInputChange('report_to', text)}
+                  placeholder="Person name"
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  editable={!isAssignedToMe}
+                  style={[st.textInput, {
+                    borderColor: errors.report_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827',
+                    opacity: isAssignedToMe ? 0.7 : 1
+                  }]}
+                />
+                {errors.report_to && (
+                  <View style={st.errorContainer}>
+                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                      <Text style={st.errorIconText}>!</Text>
+                    </View>
+                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.report_to}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={st.inputGroup}>
+                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Assign To <Text style={st.required}>*</Text></Text>
+                <View style={[st.pickerContainer, {
+                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  borderColor: errors.assign_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb'
+                }]}>
+                  <Picker
+                    selectedValue={formData.assign_to}
+                    onValueChange={(val) => handleInputChange('assign_to', val)}
+                    style={{ color: isDarkMode ? 'white' : 'black' }}
+                    dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                    enabled={!isAssignedToMe}
+                  >
+                    <Picker.Item label="Select User" value="" />
+                    {assignees.map(t => <Picker.Item key={t.email} label={t.email} value={t.email} />)}
+                  </Picker>
+                </View>
+                {errors.assign_to && (
+                  <View style={st.errorContainer}>
+                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                      <Text style={st.errorIconText}>!</Text>
+                    </View>
+                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.assign_to}</Text>
+                  </View>
+                )}
+              </View>
+
+              {((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) && (
+                <View style={st.inputGroup}>
+                  <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Status</Text>
+                  <View style={[st.pickerContainer, {
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                  }]}>
+                    <Picker
+                      selectedValue={formData.work_status}
+                      onValueChange={(val) => handleInputChange('work_status', val)}
+                      style={{ color: isDarkMode ? 'white' : 'black' }}
+                      dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                    >
+                      <Picker.Item label="Pending" value="Pending" />
+                      <Picker.Item label="In Progress" value="In Progress" />
+                      <Picker.Item label="Completed" value="Completed" />
+                      <Picker.Item label="Cancelled" value="Cancelled" />
+                    </Picker>
+                  </View>
+                </View>
+              )}
+
+              <View style={st.inputGroup}>
+                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Remarks</Text>
+                <TextInput
+                  value={formData.remarks}
+                  onChangeText={(text) => handleInputChange('remarks', text)}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  placeholder="Internal notes..."
+                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  style={[st.textInput, st.textArea, {
+                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    color: isDarkMode ? '#ffffff' : '#111827'
+                  }]}
+                />
+              </View>
+
+              {(isEditMode || (userEmail && formData.assign_to === userEmail)) && (
+                <>
+                  <ImagePreview
+                    label="Project Photo 1"
+                    imageUrl={imagePreviews.image_1}
+                    onUpload={(file) => handleImageUpload('image_1', file)}
+                    error={errors.image_1}
+                    isDarkMode={isDarkMode}
+                    colorPrimary={colorPalette?.primary}
+                  />
+                  <ImagePreview
+                    label="Project Photo 2"
+                    imageUrl={imagePreviews.image_2}
+                    onUpload={(file) => handleImageUpload('image_2', file)}
+                    error={errors.image_2}
+                    isDarkMode={isDarkMode}
+                    colorPrimary={colorPalette?.primary}
+                  />
+                  <ImagePreview
+                    label="Project Photo 3"
+                    imageUrl={imagePreviews.image_3}
+                    onUpload={(file) => handleImageUpload('image_3', file)}
+                    error={errors.image_3}
+                    isDarkMode={isDarkMode}
+                    colorPrimary={colorPalette?.primary}
+                  />
+
+                  <View style={st.inputGroup}>
+                    <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature</Text>
+                    {!isDrawingSignature ? (
+                      <View>
+                        <Pressable
+                          onPress={() => setIsDrawingSignature(true)}
+                          style={[st.signatureContainer, {
+                            borderColor: errors.signature ? '#ef4444' : (isDarkMode ? '#374151' : '#e5e7eb'),
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                          }]}
+                        >
+                          {imagePreviews.signature ? (
+                            <Image
+                              source={{ uri: imagePreviews.signature }}
+                              style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                            />
+                          ) : (
+                            <View style={st.signaturePlaceholder}>
+                              <View style={[st.signatureIconCircle, { backgroundColor: (colorPalette?.primary || '#7c3aed') + '20' }]}>
+                                <Camera size={24} color={colorPalette?.primary || '#7c3aed'} />
+                              </View>
+                              <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap to Draw Signature</Text>
+                            </View>
+                          )}
+                        </Pressable>
+                        {imagePreviews.signature && (
+                          <View style={st.signatureActions}>
+                            <Pressable
+                              onPress={() => {
+                                setImagePreviews(prev => ({ ...prev, signature: '' }));
+                                setImages(prev => ({ ...prev, signature: null }));
+                              }}
+                              style={st.removeButton}
+                            >
+                              <X size={16} color="#ef4444" />
+                              <Text style={st.removeButtonText}>Remove</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => setIsDrawingSignature(true)}
+                              style={[st.redrawButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
+                            >
+                              <Text style={st.redrawButtonText}>Redraw</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    ) : (
+                      <View style={[st.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}>
+                        <SignatureScreen
+                          ref={sigCanvas}
+                          onOK={handleSignature}
+                          onBegin={() => setScrollEnabled(false)}
+                          onEnd={() => setScrollEnabled(true)}
+                          onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
+                          webStyle={signatureStyle}
+                          autoClear={false}
+                          descriptionText="Sign above"
+                          clearText="Clear"
+                          confirmText="Save"
+                        />
+                        <TouchableOpacity
+                          onPress={() => {
+                            setIsDrawingSignature(false);
+                            setScrollEnabled(true);
+                          }}
+                          style={st.signatureCloseButton}
+                        >
+                          <X size={20} color="#000" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    {errors.signature && (
+                      <Text style={[st.errorText, { color: '#ef4444', marginTop: 4 }]}>{errors.signature}</Text>
+                    )}
+                  </View>
+                </>
+              )}
+              <View style={st.bottomSpacer} />
+            </ScrollView>
           </View>
         </View>
-
-        <ScrollView style={st.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={st.formWrapper}>
-          <View style={st.fieldItem}>
-            <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Instructions <Text style={st.requiredStar}>*</Text></Text>
-            <TextInput
-              value={formData.instructions}
-              onChangeText={(text) => handleInputChange('instructions', text)}
-              placeholder="Enter detailed instructions"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={[st.textInput, {
-                borderColor: errors.instructions ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }]}
-            />
-          </View>
-
-          <View style={st.fieldItem}>
-            <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Category <Text style={st.requiredStar}>*</Text></Text>
-            <View style={[st.pickerWrapper, {
-              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-              borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-            }]}>
-              <Picker
-                selectedValue={formData.work_category}
-                onValueChange={(val) => handleInputChange('work_category', val)}
-                style={{ color: isDarkMode ? 'white' : 'black' }}
-                dropdownIconColor={isDarkMode ? 'white' : 'black'}
-              >
-                <Picker.Item label="Select Category" value="" />
-                {categories.map(c => <Picker.Item key={c.id} label={c.category} value={c.category} />)}
-              </Picker>
-            </View>
-          </View>
-
-          <View style={st.row}>
-            <View style={[st.flexOne, { marginRight: 16 }]}>
-              <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Report To <Text style={st.requiredStar}>*</Text></Text>
-              <TextInput
-                value={formData.report_to}
-                onChangeText={(text) => handleInputChange('report_to', text)}
-                placeholder="Person name"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                style={[st.textInput, {
-                  borderColor: errors.report_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                  backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                  color: isDarkMode ? '#ffffff' : '#111827'
-                }]}
-              />
-            </View>
-            <View style={st.flexOne}>
-              <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Assign To <Text style={st.requiredStar}>*</Text></Text>
-              <View style={[st.pickerWrapper, {
-                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-              }]}>
-                <Picker
-                  selectedValue={formData.assign_to}
-                  onValueChange={(val) => handleInputChange('assign_to', val)}
-                  style={{ color: isDarkMode ? 'white' : 'black' }}
-                  dropdownIconColor={isDarkMode ? 'white' : 'black'}
-                >
-                  <Picker.Item label="Select User" value="" />
-                  {assignees.map(t => <Picker.Item key={t.email} label={t.email} value={t.email} />)}
-                </Picker>
-              </View>
-            </View>
-          </View>
-
-          {((userRole !== 1 && userRole !== 7) || isEditMode) && (
-            <View style={st.fieldItem}>
-              <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Status</Text>
-              <View style={[st.pickerWrapper, {
-                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-              }]}>
-                <Picker
-                  selectedValue={formData.work_status}
-                  onValueChange={(val) => handleInputChange('work_status', val)}
-                  style={{ color: isDarkMode ? 'white' : 'black' }}
-                  dropdownIconColor={isDarkMode ? 'white' : 'black'}
-                >
-                  <Picker.Item label="Pending" value="Pending" />
-                  <Picker.Item label="In Progress" value="In Progress" />
-                  <Picker.Item label="Completed" value="Completed" />
-                  <Picker.Item label="Failed" value="Failed" />
-                  <Picker.Item label="Cancelled" value="Cancelled" />
-                </Picker>
-              </View>
-            </View>
-          )}
-
-          <View style={st.fieldItem}>
-            <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Remarks</Text>
-            <TextInput
-              value={formData.remarks}
-              onChangeText={(text) => handleInputChange('remarks', text)}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              placeholder="Internal notes..."
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={[st.textArea, {
-                borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                color: isDarkMode ? '#ffffff' : '#111827'
-              }]}
-            />
-          </View>
-
-          {isEditMode && (
-            <View style={st.editSection}>
-              <View style={{ marginBottom: 24 }}>
-                <ImageUploadSection field="image_1" label="Project Photo 1" />
-              </View>
-              <View style={{ marginBottom: 24 }}>
-                <ImageUploadSection field="image_2" label="Project Photo 2" />
-              </View>
-              <View style={{ marginBottom: 24 }}>
-                <ImageUploadSection field="image_3" label="Project Photo 3" />
-              </View>
-
-              <View style={st.fieldItem}>
-                <Text style={[st.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                  Client Signature
-                </Text>
-                <View style={[st.sigWrapper, { borderColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
-                  {imagePreviews.signature ? (
-                    <View style={st.sigPreview}>
-                      <Image source={{ uri: imagePreviews.signature }} style={st.sigImg} resizeMode="contain" />
-                      <TouchableOpacity
-                        onPress={() => {
-                          setImagePreviews(prev => ({ ...prev, signature: '' }));
-                          setImages(prev => ({ ...prev, signature: null }));
-                        }}
-                        style={st.sigTrashBtn}
-                      >
-                        <Trash2 size={20} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={st.flexOne}>
-                      <SignatureScreen
-                        ref={sigCanvas}
-                        onOK={handleSignature}
-                        webStyle={signatureStyle}
-                        descriptionText="Please sign above"
-                        clearText="Clear"
-                        confirmText="Lock Signature"
-                      />
-                    </View>
-                  )}
-                </View>
-                <Text style={[st.hintText, { color: isDarkMode ? '#4b5563' : '#9ca3af' }]}>
-                  * Tap 'Lock Signature' to confirm your drawing.
-                </Text>
-              </View>
-            </View>
-          )}
-          <View style={st.bottomSpacer} />
-        </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const signatureStyle = `
-  .m-signature-pad--footer { display: none; margin: 0px; }
-  body,html { width: 100%; height: 100%; background-color: #fff; }
+  .m-signature-pad--footer { display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px; }
+  .m-signature-pad--body { border: 1px solid #ccc; }
 `;
 
 const st = StyleSheet.create({
-  container: { flex: 1 },
-  loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, alignItems: 'center', justifyContent: 'center' },
-  loadingBox: { padding: 32, borderRadius: 24, alignItems: 'center' },
-  loadingTitle: { marginTop: 16, fontSize: 24, fontWeight: 'bold' },
-  loadingSubTitle: { marginTop: 8, fontSize: 14 },
-  header: { paddingHorizontal: 16, paddingBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold' },
-  headerBtns: { flexDirection: 'row', alignItems: 'center' },
-  cancelHeaderBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#e5e7eb' },
-  cancelHeaderBtnText: { color: '#111827', fontWeight: 'bold' },
-  saveHeaderBtn: { paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
-  saveHeaderBtnText: { color: 'white', fontWeight: 'bold' },
-  scrollView: { flex: 1 },
-  formWrapper: { padding: 16, paddingBottom: 40 },
-  fieldItem: { marginBottom: 16 },
-  fieldLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  requiredStar: { color: '#ef4444' },
-  textInput: { width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderRadius: 12 },
-  pickerWrapper: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
-  row: { flexDirection: 'row', marginBottom: 16 },
-  flexOne: { flex: 1 },
-  textArea: { width: '100%', paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderRadius: 12, minHeight: 100 },
-  editSection: { marginTop: 16 },
-  imageSection: { marginBottom: 16 },
-  dashedBox: { borderWidth: 2, borderStyle: 'dashed', borderRadius: 12, padding: 16, alignItems: 'center', justifyContent: 'center', minHeight: 160 },
-  relativeFull: { position: 'relative', width: '100%', alignItems: 'center' },
-  previewImg: { width: '100%', height: 160, borderRadius: 8 },
-  deleteBtn: { position: 'absolute', top: -10, right: -10, backgroundColor: '#ef4444', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', elevation: 4 },
-  uploadActions: { flexDirection: 'row' },
-  uploadBtn: { alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, backgroundColor: 'rgba(234, 88, 12, 0.1)', borderWidth: 1, borderColor: 'rgba(234, 88, 12, 0.2)' },
-  uploadBtnText: { fontSize: 10, marginTop: 4, color: '#ea580c', fontWeight: 'bold' },
-  sigWrapper: { borderWidth: 1, borderRadius: 16, overflow: 'hidden', position: 'relative', width: '100%', height: 320, backgroundColor: '#ffffff' },
-  sigPreview: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
-  sigImg: { width: '100%', height: '100%' },
-  sigTrashBtn: { position: 'absolute', top: 16, right: 16, backgroundColor: '#ef4444', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 4 },
-  hintText: { fontSize: 10, marginTop: 8, fontStyle: 'italic' },
-  bottomSpacer: { height: 40 }
+  container: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    height: '90%',
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    zIndex: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingBox: {
+    padding: 32,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  loadingTitle: {
+    marginTop: 16,
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  loadingSubTitle: {
+    marginTop: 8,
+    fontSize: 14,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  submitButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#ef4444',
+  },
+  textInput: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    fontSize: 15,
+  },
+  textArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  flexHalf: {
+    flex: 1,
+  },
+  dashedBox: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    padding: 24,
+    minHeight: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  relativeFull: {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+  },
+  previewImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  deleteBtn: {
+    position: 'absolute',
+    top: -12,
+    right: -12,
+    backgroundColor: '#ef4444',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  uploadActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  uploadBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 100,
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  uploadBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  errorIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  errorIconText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  errorText: {
+    fontSize: 12,
+  },
+  sigWrapper: {
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: 300,
+    backgroundColor: '#ffffff',
+  },
+  sigPreview: {
+    flex: 1,
+    position: 'relative',
+  },
+  sigImg: {
+    width: '100%',
+    height: '100%',
+  },
+  sigTrashBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: '#EF4444',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  flexOne: {
+    flex: 1,
+  },
+  hintText: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  bottomSpacer: {
+    height: 40,
+  },
+  signatureContainer: {
+    height: 192,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signaturePlaceholder: {
+    alignItems: 'center',
+  },
+  signatureIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signatureActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  removeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  removeButtonText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  redrawButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  redrawButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  signatureCanvasContainer: {
+    height: 320,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    marginBottom: 8,
+    overflow: 'hidden',
+    borderRadius: 16,
+  },
+  signatureCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 8,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 9999,
+    zIndex: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  }
 });
 
 export default AssignWorkOrderModal;

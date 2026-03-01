@@ -109,7 +109,7 @@ const ApprovalConfirmationModal: React.FC<ApprovalConfirmationModalProps> = ({
                   paddingVertical: 10,
                   paddingHorizontal: 16,
                   borderRadius: 4,
-                  backgroundColor: colorPalette?.primary || '#ea580c',
+                  backgroundColor: colorPalette?.primary || '#7c3aed',
                   opacity: loading ? 0.5 : 1,
                   flexDirection: 'row',
                   alignItems: 'center',

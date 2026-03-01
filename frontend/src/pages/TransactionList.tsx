@@ -472,7 +472,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
                     : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
                     }`}
                   style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#ea580c'
+                    backgroundColor: colorPalette?.primary || '#7c3aed'
                   } : {}}
                 >
                   {location.count}
@@ -485,7 +485,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
         <div
           className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
           style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#ea580c') : 'transparent'
+            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#7c3aed') : 'transparent'
           }}
           onMouseEnter={(e) => {
             if (!isResizingSidebar && colorPalette?.primary) {
@@ -518,7 +518,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
                     : 'bg-white text-gray-900 border border-gray-300'
                     }`}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#ea580c'
+                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
                   } as React.CSSProperties}
                   onFocus={(e) => {
                     if (colorPalette?.primary) {
@@ -536,7 +536,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
                 onClick={() => isBatchApproveMode ? handleCancelApprove() : setIsBatchApproveMode(true)}
                 className="px-4 py-2 rounded flex items-center transition-colors text-white"
                 style={{
-                  backgroundColor: isBatchApproveMode ? '#dc2626' : (colorPalette?.primary || '#ea580c')
+                  backgroundColor: isBatchApproveMode ? '#dc2626' : (colorPalette?.primary || '#7c3aed')
                 }}
                 onMouseEnter={(e) => {
                   if (isBatchApproveMode) {
@@ -630,7 +630,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
                             onChange={toggleSelectAll}
                             className="w-4 h-4 rounded border-gray-300 cursor-pointer"
                             style={{
-                              accentColor: colorPalette?.primary || '#ea580c'
+                              accentColor: colorPalette?.primary || '#7c3aed'
                             }}
                           />
                         </th>
@@ -711,7 +711,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
                                   className={`w-4 h-4 rounded border-gray-300 ${isPending ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
                                     }`}
                                   style={{
-                                    accentColor: colorPalette?.primary || '#ea580c'
+                                    accentColor: colorPalette?.primary || '#7c3aed'
                                   }}
                                 />
                               </td>
@@ -796,7 +796,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
               <div className="text-center">
                 <div
                   className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#ea580c' }}
+                  style={{ borderBottomColor: colorPalette?.primary || '#7c3aed' }}
                 ></div>
                 <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
               </div>

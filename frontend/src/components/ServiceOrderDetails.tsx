@@ -453,7 +453,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
           {userRole !== 'agent' && userRoleId !== 4 && (
             <>
               <Pressable
-                style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+                style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
                 onPress={handleEditClick}
               >
                 <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />

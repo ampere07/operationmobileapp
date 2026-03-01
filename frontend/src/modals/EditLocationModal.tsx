@@ -191,7 +191,7 @@ const EditLocationModal: React.FC<EditLocationModalProps> = ({
               onClick={handleSave}
               className="px-4 py-2 text-white rounded text-sm transition-colors"
               style={{
-                backgroundColor: colorPalette?.primary || '#ea580c'
+                backgroundColor: colorPalette?.primary || '#7c3aed'
               }}
               onMouseEnter={(e) => {
                 if (colorPalette?.accent) {
@@ -199,7 +199,7 @@ const EditLocationModal: React.FC<EditLocationModalProps> = ({
                 }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
               }}
             >
               Save

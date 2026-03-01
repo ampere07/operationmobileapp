@@ -313,7 +313,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     if (isLoading) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
-                <ActivityIndicator size="large" color="#ea580c" />
+                <ActivityIndicator size="large" color="#7c3aed" />
             </View>
         );
     }

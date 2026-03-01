@@ -113,7 +113,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 paddingVertical: 10,
                 paddingHorizontal: 16,
                 borderRadius: 4,
-                backgroundColor: colorPalette?.primary || '#ea580c',
+                backgroundColor: colorPalette?.primary || '#7c3aed',
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center'

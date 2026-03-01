@@ -637,7 +637,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
               <Loader2
                 width={80}
                 height={80}
-                color={colorPalette?.primary || '#ea580c'}
+                color={colorPalette?.primary || '#7c3aed'}
               />
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ fontSize: 36, fontWeight: 'bold', color: isDarkMode ? '#ffffff' : '#111827' }}>{loadingPercentage}%</Text>
@@ -664,7 +664,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
                   <Text style={{ textAlign: 'center', color: isDarkMode ? '#d1d5db' : '#374151' }}>{resultMessage}</Text>
                   <Pressable
                     onPress={() => setShowResultModal(false)}
-                    style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 8, backgroundColor: '#ea580c', borderRadius: 4 }}
+                    style={{ marginTop: 16, paddingHorizontal: 24, paddingVertical: 8, backgroundColor: '#7c3aed', borderRadius: 4 }}
                   >
                     <Text style={{ color: '#ffffff' }}>Close</Text>
                   </Pressable>
@@ -692,14 +692,14 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Pressable
                 onPress={handleClose}
-                style={{ paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 4, borderColor: isDarkMode ? '#ea580c' : '#ea580c', backgroundColor: 'transparent' }}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderRadius: 4, borderColor: isDarkMode ? '#7c3aed' : '#7c3aed', backgroundColor: 'transparent' }}
               >
-                <Text style={{ color: isDarkMode ? '#fb923c' : '#ea580c' }}>Cancel</Text>
+                <Text style={{ color: isDarkMode ? '#fb923c' : '#7c3aed' }}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={handleSubmit}
                 disabled={loading}
-                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#ea580c', opacity: loading ? 0.5 : 1 }}
+                style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#7c3aed', opacity: loading ? 0.5 : 1 }}
               >
                 <Text style={{ color: '#ffffff' }}>{loading ? 'Saving...' : 'Save'}</Text>
               </Pressable>
@@ -786,19 +786,19 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable
                     onPress={() => setFormData({ ...formData, port_total: '8' })}
-                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '8' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '8' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '8' ? '#7c3aed' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '8' ? '#7c3aed' : (isDarkMode ? '#1f2937' : '#ffffff') }}
                   >
                     <Text style={{ textAlign: 'center', color: formData.port_total === '8' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>8</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => setFormData({ ...formData, port_total: '16' })}
-                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '16' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '16' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '16' ? '#7c3aed' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '16' ? '#7c3aed' : (isDarkMode ? '#1f2937' : '#ffffff') }}
                   >
                     <Text style={{ textAlign: 'center', color: formData.port_total === '16' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>16</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => setFormData({ ...formData, port_total: '32' })}
-                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '32' ? '#ea580c' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '32' ? '#ea580c' : (isDarkMode ? '#1f2937' : '#ffffff') }}
+                    style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: formData.port_total === '32' ? '#7c3aed' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: formData.port_total === '32' ? '#7c3aed' : (isDarkMode ? '#1f2937' : '#ffffff') }}
                   >
                     <Text style={{ textAlign: 'center', color: formData.port_total === '32' ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>32</Text>
                   </Pressable>

@@ -647,7 +647,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       }]}>
         <View style={st.headerLeft}>
           <Text style={[st.headerName, { maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
-          {loading && <Text style={[st.loadingLabel, { color: isDarkMode ? '#fb923c' : '#ea580c' }]}>Loading...</Text>}
+          {loading && <Text style={[st.loadingLabel, { color: isDarkMode ? '#fb923c' : '#7c3aed' }]}>Loading...</Text>}
         </View>
 
         <View style={st.headerActions}>
@@ -658,7 +658,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
           )}
           {!(jobOrder.Onsite_Status && jobOrder.Onsite_Status.toLowerCase() === 'done') && userRole !== 'agent' && userRoleId !== 4 && (
             <Pressable
-              style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#ea580c' }]}
+              style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
               onPress={handleDoneClick}
               disabled={loading}
             >
@@ -679,7 +679,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         }]}>
           <View style={st.editBarInner}>
             <Pressable onPress={handleEditClick} disabled={loading} style={st.editBtnWrap}>
-              <View style={[st.editIconCircle, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#ea580c') }]}>
+              <View style={[st.editIconCircle, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed') }]}>
                 <Edit width={18} height={18} color="#ffffff" />
               </View>
               <Text style={[st.editLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Edit</Text>

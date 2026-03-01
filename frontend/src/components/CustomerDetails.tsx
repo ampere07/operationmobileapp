@@ -867,11 +867,11 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
       <div
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
         style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#ea580c') : 'transparent'
+          backgroundColor: isResizing ? (colorPalette?.primary || '#7c3aed') : 'transparent'
         }}
         onMouseEnter={(e) => {
           if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#ea580c';
+            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#7c3aed';
           }
         }}
         onMouseLeave={(e) => {
@@ -912,7 +912,7 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
             onClick={handleTransactClick}
             className="px-3 py-1 rounded text-sm transition-colors text-white"
             style={{
-              backgroundColor: colorPalette?.primary || '#ea580c'
+              backgroundColor: colorPalette?.primary || '#7c3aed'
             }}
             onMouseEnter={(e) => {
               if (colorPalette?.accent) {
@@ -1553,7 +1553,7 @@ const BillingDetails: React.FC<BillingDetailsProps> = ({
                 onClick={handleSORequestConfirm}
                 className="px-4 py-2 rounded transition-colors text-white"
                 style={{
-                  backgroundColor: colorPalette?.primary || '#ea580c'
+                  backgroundColor: colorPalette?.primary || '#7c3aed'
                 }}
                 onMouseEnter={(e) => {
                   if (colorPalette?.accent) {

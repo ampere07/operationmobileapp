@@ -23,6 +23,7 @@ export type WorkOrderData = WorkOrder;
 export interface WorkOrderDetailsProps {
   workOrder: WorkOrder | null;
   onClose: () => void;
+  onEdit?: () => void;
   onRefresh?: () => void;
   isMobile?: boolean;
 }

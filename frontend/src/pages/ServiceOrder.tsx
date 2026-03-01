@@ -603,7 +603,7 @@ const ServiceOrderPage: React.FC = () => {
           <ScrollView
             style={so.flex1}
             refreshControl={
-              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
+              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
             }
           >
             {locationItems.map((location) => (
@@ -623,7 +623,7 @@ const ServiceOrderPage: React.FC = () => {
                 </View>
                 {location.count > 0 && (
                   <View style={[so.badge, {
-                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#e5e7eb')
+                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#7c3aed') : (isDarkMode ? '#374151' : '#e5e7eb')
                   }]}>
                     <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151') }]}>{location.count}</Text>
                   </View>
@@ -648,7 +648,7 @@ const ServiceOrderPage: React.FC = () => {
           <ScrollView
             style={so.flex1}
             refreshControl={
-              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
+              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
             }
           >
             {locationItems.map((location) => (
@@ -668,7 +668,7 @@ const ServiceOrderPage: React.FC = () => {
                 </View>
                 {location.count > 0 && (
                   <View style={[so.badgeLg, {
-                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#ea580c') : (isDarkMode ? '#374151' : '#e5e7eb')
+                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#7c3aed') : (isDarkMode ? '#374151' : '#e5e7eb')
                   }]}>
                     <Text style={[so.badgeLgText, { color: selectedLocation === location.id ? 'white' : (isDarkMode ? '#d1d5db' : '#374151') }]}>{location.count}</Text>
                   </View>
@@ -703,7 +703,7 @@ const ServiceOrderPage: React.FC = () => {
                     <Text style={[so.locationName, { color: selectedLocation === location.id ? '#fb923c' : '#d1d5db' }]}>{location.name}</Text>
                   </View>
                   {location.count > 0 && (
-                    <View style={[so.badge, { backgroundColor: selectedLocation === location.id ? '#ea580c' : '#374151' }]}>
+                    <View style={[so.badge, { backgroundColor: selectedLocation === location.id ? '#7c3aed' : '#374151' }]}>
                       <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : '#d1d5db' }]}>{location.count}</Text>
                     </View>
                   )}
@@ -754,7 +754,7 @@ const ServiceOrderPage: React.FC = () => {
                 <Pressable
                   onPress={handleRefresh}
                   disabled={isLoading}
-                  style={[so.actionBtn, { backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#ea580c') }]}
+                  style={[so.actionBtn, { backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#7c3aed') }]}
                 >
                   <RefreshCw size={20} color="white" />
                 </Pressable>
@@ -766,7 +766,7 @@ const ServiceOrderPage: React.FC = () => {
             <ScrollView
               style={so.flex1}
               refreshControl={
-                <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#ea580c'} colors={[colorPalette?.primary || '#ea580c']} />
+                <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
               }
             >
               {isLoading ? (

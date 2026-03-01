@@ -101,14 +101,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
             <IconComponent
               size={24}
               color={isActive
-                ? (colorPalette?.primary || '#ea580c')
+                ? (colorPalette?.primary || '#7c3aed')
                 : '#4b5563'}
             />
             <Text style={{
               fontSize: 10,
               marginTop: 4,
               color: isActive
-                ? (colorPalette?.primary || '#ea580c')
+                ? (colorPalette?.primary || '#7c3aed')
                 : '#4b5563'
             }}>
               {item.label}

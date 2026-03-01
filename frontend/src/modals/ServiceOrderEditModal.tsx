@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, StyleSheet } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -238,103 +238,71 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     loadSettings();
   }, []);
 
-  // UseEffects for data fetching
+  // Consolidated data fetching - all independent API calls batched into one effect
+  // This prevents multiple simultaneous state update storms that crash the app
   useEffect(() => {
-    const fetchRouterModels = async () => {
-      if (isOpen) {
-        try {
-          const fetchedRouterModels = await routerModelService.getAllRouterModels();
-          setRouterModels(fetchedRouterModels);
-        } catch (error) {
-          console.error('Failed to fetch router models:', error);
-        }
+    if (!isOpen) return;
+
+    let isMounted = true;
+
+    const fetchAllData = async () => {
+      // Fire all independent API calls in parallel with Promise.allSettled
+      // so one failure doesn't block the rest
+      const [
+        routerModelResult,
+        inventoryResult,
+        technicianResult,
+        technicalDetailsResult,
+        concernResult,
+      ] = await Promise.allSettled([
+        routerModelService.getAllRouterModels(),
+        getAllInventoryItems(),
+        apiClient.get<{ success: boolean; data: any[] }>('/users'),
+        Promise.all([
+          apiClient.get<{ success: boolean; data: any[] }>('/lcp'),
+          apiClient.get<{ success: boolean; data: any[] }>('/nap'),
+          apiClient.get<{ success: boolean; data: any[] }>('/vlan'),
+          getAllLCPNAPs('', 1, 1000),
+          apiClient.get<{ success: boolean; data: any[] }>('/plans'),
+        ]),
+        concernService.getAllConcerns(),
+      ]);
+
+      if (!isMounted) return;
+
+      // Router Models
+      if (routerModelResult.status === 'fulfilled') {
+        setRouterModels(routerModelResult.value);
+      } else {
+        console.error('Failed to fetch router models:', routerModelResult.reason);
       }
-    };
-    fetchRouterModels();
-  }, [isOpen]);
 
-  useEffect(() => {
-    const fetchServiceOrderItems = async () => {
-      if (isOpen && serviceOrderData) {
-        if (serviceOrderId) {
-          try {
-            const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
-            const data = response.data;
-
-            if (data.success && Array.isArray(data.data)) {
-              const items = data.data;
-
-              if (items.length > 0) {
-                const uniqueItems = new Map();
-
-                items.forEach((item: any) => {
-                  const key = item.item_name;
-                  if (uniqueItems.has(key)) {
-                    const existing = uniqueItems.get(key);
-                    uniqueItems.set(key, {
-                      itemId: item.item_name || '',
-                      quantity: (parseInt(existing.quantity) + parseInt(item.quantity || 0)).toString()
-                    });
-                  } else {
-                    uniqueItems.set(key, {
-                      itemId: item.item_name || '',
-                      quantity: item.quantity ? item.quantity.toString() : ''
-                    });
-                  }
-                });
-
-                const formattedItems = Array.from(uniqueItems.values());
-                formattedItems.push({ itemId: '', quantity: '' });
-
-                setOrderItems(formattedItems);
-              } else {
-                setOrderItems([{ itemId: '', quantity: '' }]);
-              }
-            }
-          } catch (error) {
-            setOrderItems([{ itemId: '', quantity: '' }]);
-          }
-        }
-      }
-    };
-
-    fetchServiceOrderItems();
-  }, [isOpen, serviceOrderData]);
-
-  useEffect(() => {
-    const fetchInventoryItems = async () => {
-      if (isOpen) {
-        try {
-          const response = await getAllInventoryItems();
-          if (response.success && Array.isArray(response.data)) {
-            const filteredItems = response.data.filter(item => {
-              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
-              return catId === 1 || String(catId) === '1';
-            });
-            setInventoryItems(filteredItems);
-          } else {
-            setInventoryItems([]);
-          }
-        } catch (error) {
+      // Inventory Items
+      if (inventoryResult.status === 'fulfilled') {
+        const response = inventoryResult.value;
+        if (response.success && Array.isArray(response.data)) {
+          const filteredItems = response.data.filter(item => {
+            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+            return catId === 1 || String(catId) === '1';
+          });
+          setInventoryItems(filteredItems);
+        } else {
           setInventoryItems([]);
         }
+      } else {
+        setInventoryItems([]);
       }
-    };
 
-    fetchInventoryItems();
-  }, [isOpen]);
-
-  useEffect(() => {
-    const fetchTechnicians = async () => {
-      try {
-        const response = await apiClient.get<{ success: boolean; data: any[] }>('/users');
+      // Technicians
+      if (technicianResult.status === 'fulfilled') {
+        const response = technicianResult.value;
         if (response.data.success && Array.isArray(response.data.data)) {
           const technicianUsers = response.data.data
-            .filter(user => {
+            .filter((user: any) => {
               const role = typeof user.role === 'string' ? user.role : (user.role as any)?.role_name || '';
               return role.toLowerCase() === 'technician';
             })
-            .map(user => {
+            .map((user: any) => {
               const firstName = (user.first_name || '').trim();
               const lastName = (user.last_name || '').trim();
               const fullName = `${firstName} ${lastName}`.trim();
@@ -343,109 +311,157 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 name: fullName || user.username || user.email_address || user.email || ''
               };
             })
-            .filter(tech => tech.name);
+            .filter((tech: any) => tech.name);
           setTechnicians(technicianUsers);
         }
-      } catch (error) {
-        console.error('Error fetching technicians:', error);
+      } else {
+        console.error('Error fetching technicians:', technicianResult.reason);
       }
-    };
 
-    const fetchTechnicalDetails = async () => {
-      try {
-        const [lcpResponse, napResponse, vlanResponse, lcpnapsRes] = await Promise.all([
-          apiClient.get<{ success: boolean; data: any[] }>('/lcp'),
-          apiClient.get<{ success: boolean; data: any[] }>('/nap'),
-          apiClient.get<{ success: boolean; data: any[] }>('/vlan'),
-          getAllLCPNAPs('', 1, 1000)
-        ]);
+      // Technical Details (LCP, NAP, VLAN, LCPNAPs, Plans)
+      if (technicalDetailsResult.status === 'fulfilled') {
+        const [lcpResponse, napResponse, vlanResponse, lcpnapsRes, planResponse] = technicalDetailsResult.value;
 
         if (lcpResponse.data.success && Array.isArray(lcpResponse.data.data)) {
-          const lcpOptions = lcpResponse.data.data.map(item => item.lcp_name || item.lcp || item.name).filter(Boolean);
+          const lcpOptions = lcpResponse.data.data.map((item: any) => item.lcp_name || item.lcp || item.name).filter(Boolean);
           setLcps(lcpOptions as string[]);
         }
 
         if (napResponse.data.success && Array.isArray(napResponse.data.data)) {
-          const napOptions = napResponse.data.data.map(item => item.nap_name || item.nap || item.name).filter(Boolean);
+          const napOptions = napResponse.data.data.map((item: any) => item.nap_name || item.nap || item.name).filter(Boolean);
           setNaps(napOptions as string[]);
         }
 
         if (vlanResponse.data.success && Array.isArray(vlanResponse.data.data)) {
-          const vlanOptions = vlanResponse.data.data.map(item => item.value).filter(Boolean);
+          const vlanOptions = vlanResponse.data.data.map((item: any) => item.value).filter(Boolean);
           setVlans(vlanOptions as string[]);
         }
 
-        // Plans
-        const planResponse = await apiClient.get<{ success: boolean; data: any[] }>('/plans');
         if (planResponse.data.success && Array.isArray(planResponse.data.data)) {
           setPlans(planResponse.data.data.map((p: any) => ({
             name: p.plan_name || p.name || '',
             price: p.price || 0
-          })).filter(p => p.name));
+          })).filter((p: any) => p.name));
         }
 
         if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data)) {
           setLcpnaps(lcpnapsRes.data);
         }
-      } catch (error) {
-        console.error('Error fetching technical details:', error);
+      } else {
+        console.error('Error fetching technical details:', technicalDetailsResult.reason);
+      }
+
+      // Concerns
+      if (concernResult.status === 'fulfilled') {
+        setConcerns(concernResult.value);
+      } else {
+        console.error('Error fetching concerns:', concernResult.reason);
       }
     };
 
-    const fetchConcerns = async () => {
-      try {
-        const data = await concernService.getAllConcerns();
-        setConcerns(data);
-      } catch (error) {
-        console.error('Error fetching concerns:', error);
-      }
-    };
+    fetchAllData();
 
-    if (isOpen) {
-      fetchTechnicians();
-      fetchTechnicalDetails();
-      fetchConcerns();
-    }
-  }, [isOpen]);
-
-
-
-
-  // Used Ports Effect
-  useEffect(() => {
-    const fetchUsedPortsFunc = async () => {
-      if (isOpen && formData.newLcpnap) {
+    // Fetch service order items separately (depends on serviceOrderData)
+    const fetchServiceOrderItems = async () => {
+      if (serviceOrderData && serviceOrderId) {
         try {
+          const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
+          const data = response.data;
 
-          // Also fetch total ports for this LCP-NAP
-          const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
-          if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data) && lcpnapsRes.data.length > 0) {
-            const match = lcpnapsRes.data.find((item: any) => item.lcpnap_name === formData.newLcpnap);
-            if (match) {
-              setTotalPorts(match.port_total || 32);
+          if (!isMounted) return;
+
+          if (data.success && Array.isArray(data.data)) {
+            const items = data.data;
+
+            if (items.length > 0) {
+              const uniqueItems = new Map();
+
+              items.forEach((item: any) => {
+                const key = item.item_name;
+                if (uniqueItems.has(key)) {
+                  const existing = uniqueItems.get(key);
+                  uniqueItems.set(key, {
+                    itemId: item.item_name || '',
+                    quantity: (parseInt(existing.quantity) + parseInt(item.quantity || 0)).toString()
+                  });
+                } else {
+                  uniqueItems.set(key, {
+                    itemId: item.item_name || '',
+                    quantity: item.quantity ? item.quantity.toString() : ''
+                  });
+                }
+              });
+
+              const formattedItems = Array.from(uniqueItems.values());
+              formattedItems.push({ itemId: '', quantity: '' });
+
+              setOrderItems(formattedItems);
+            } else {
+              setOrderItems([{ itemId: '', quantity: '' }]);
             }
           }
-
-          const usedRes = await getUsedPorts(formData.newLcpnap, serviceOrderId);
-
-          if (usedRes.success && usedRes.data) {
-            setUsedPorts(usedRes.data.used);
-            if (!totalPorts) setTotalPorts(usedRes.data.total);
-          } else {
-            setUsedPorts([]);
-            if (!totalPorts) setTotalPorts(32);
-          }
         } catch (error) {
-          console.error('Error fetching used ports/location:', error);
+          if (isMounted) setOrderItems([{ itemId: '', quantity: '' }]);
+        }
+      }
+    };
+
+    fetchServiceOrderItems();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, serviceOrderData]);
+
+
+
+
+  // Used Ports Effect - separate because it depends on formData.newLcpnap
+  useEffect(() => {
+    if (!isOpen || !formData.newLcpnap) {
+      setUsedPorts([]);
+      setTotalPorts(32);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchUsedPortsFunc = async () => {
+      try {
+        // Also fetch total ports for this LCP-NAP
+        const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
+
+        if (!isMounted) return;
+
+        if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data) && lcpnapsRes.data.length > 0) {
+          const match = lcpnapsRes.data.find((item: any) => item.lcpnap_name === formData.newLcpnap);
+          if (match) {
+            setTotalPorts(match.port_total || 32);
+          }
+        }
+
+        const usedRes = await getUsedPorts(formData.newLcpnap, serviceOrderId);
+
+        if (!isMounted) return;
+
+        if (usedRes.success && usedRes.data) {
+          setUsedPorts(usedRes.data.used);
+          if (!totalPorts) setTotalPorts(usedRes.data.total);
+        } else {
+          setUsedPorts([]);
+          if (!totalPorts) setTotalPorts(32);
+        }
+      } catch (error) {
+        console.error('Error fetching used ports/location:', error);
+        if (isMounted) {
           setUsedPorts([]);
           setTotalPorts(32);
         }
-      } else {
-        setUsedPorts([]);
-        setTotalPorts(32);
       }
     };
     fetchUsedPortsFunc();
+
+    return () => { isMounted = false; };
   }, [isOpen, formData.newLcpnap, serviceOrderData?.id]);
 
   // Initialize Form Data
@@ -581,7 +597,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     return () => clearTimeout(timer);
   }, [isOpen, serviceOrderData]);
 
-  const handleInputChange = (field: keyof ServiceOrderEditFormData, value: string) => {
+  const handleInputChange = useCallback((field: keyof ServiceOrderEditFormData, value: string) => {
     setFormData(prev => {
       const newState = { ...prev, [field]: value };
       if (field === 'newLcp' || field === 'newNap' || field === 'newLcpnap') {
@@ -590,10 +606,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
       return newState;
     });
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
+    setErrors(prev => {
+      if (prev[field]) {
+        return { ...prev, [field]: '' };
+      }
+      return prev;
+    });
+  }, []);
 
   const handleImageChange = async (field: keyof ImageFiles) => {
     try {
@@ -964,17 +983,49 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
   };
 
-  const handleItemChange = (index: number, field: keyof OrderItem, value: string) => {
-    const newItems = [...orderItems];
-    newItems[index][field] = value;
-    setOrderItems(newItems);
-    if (field === 'itemId' && value && index === orderItems.length - 1) {
-      setOrderItems([...newItems, { itemId: '', quantity: '' }]);
-    }
-  };
+  const handleItemChange = useCallback((index: number, field: keyof OrderItem, value: string) => {
+    setOrderItems(prevItems => {
+      const newItems = prevItems.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      );
+
+      // Auto-add new row if item selected in the last row
+      if (field === 'itemId' && value && index === prevItems.length - 1) {
+        return [...newItems, { itemId: '', quantity: '' }];
+      }
+
+      return newItems;
+    });
+  }, []);
+
+  // Memoize filtered lists to prevent expensive re-computation on every render
+  const filteredInventoryItems = useMemo(() =>
+    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())),
+    [inventoryItems, itemSearch]
+  );
+
+  const visitByTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visitWith && t.name !== formData.visitWithOther),
+    [technicians, formData.visitWith, formData.visitWithOther]
+  );
+
+  const visitWithTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWithOther),
+    [technicians, formData.visitBy, formData.visitWithOther]
+  );
+
+  const visitWithOtherTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWith),
+    [technicians, formData.visitBy, formData.visitWith]
+  );
+
+  const failedVisitWithTechnicians = useMemo(() =>
+    technicians.filter(t => t.name !== formData.visitBy),
+    [technicians, formData.visitBy]
+  );
 
   // Render Helpers
-  const activeColor = colorPalette?.primary || '#ea580c';
+  const activeColor = colorPalette?.primary || '#7c3aed';
 
   const renderLabel = (text: string, required = false) => (
     <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
@@ -1300,7 +1351,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                             >
                               <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {technicians.filter(t => t.name !== formData.visitWith && t.name !== formData.visitWithOther).map((t, i) => (
+                              {visitByTechnicians.map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
                             </Picker>
@@ -1325,7 +1376,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             >
                               <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                               <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                              {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWithOther).map((t, i) => (
+                              {visitWithTechnicians.map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
                             </Picker>
@@ -1350,7 +1401,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             >
                               <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                               <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                              {technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWith).map((t, i) => (
+                              {visitWithOtherTechnicians.map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
                             </Picker>
@@ -1492,8 +1543,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                           </View>
                                         </Pressable>
 
-                                        {inventoryItems
-                                          .filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                        {filteredInventoryItems
                                           .map((invItem) => (
                                             <Pressable
                                               key={invItem.id}
@@ -1532,7 +1582,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                             </Pressable>
                                           ))}
 
-                                        {inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                                        {filteredInventoryItems.length === 0 && (
                                           <View style={styles.emptyDropdown}>
                                             <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                               No results found
@@ -1663,7 +1713,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                             >
                               <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {technicians.filter(t => t.name !== formData.visitBy).map((t, i) => (
+                              {failedVisitWithTechnicians.map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
                             </Picker>
@@ -1683,7 +1733,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               style={{ color: isDarkMode ? '#fff' : '#000' }}
                             >
                               <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {technicians.filter(t => t.name !== formData.visitBy).map((t, i) => (
+                              {failedVisitWithTechnicians.map((t, i) => (
                                 <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                               ))}
                             </Picker>

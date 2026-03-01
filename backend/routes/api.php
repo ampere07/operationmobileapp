@@ -876,6 +876,26 @@ Route::post('/fix-customer-password', function (Request $request) {
     }
 });
 
+// Work Order Category Management Routes
+Route::prefix('work-categories')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'store']);
+    Route::get('/statistics', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'getStatistics']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\WorkOrderCategoryApiController::class, 'destroy']);
+});
+
+// Work Order Management Routes
+Route::prefix('work-orders')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'store']);
+    Route::get('/statistics', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'getStatistics']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'destroy']);
+});
+
 // Authentication endpoints
 Route::post('/login-debug', function (Request $request) {
     try {
@@ -1565,6 +1585,7 @@ Route::prefix('work-orders')->group(function () {
     Route::get('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'update']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'destroy']);
+    Route::post('/{id}/upload-images', [\App\Http\Controllers\Api\WorkOrderApiController::class, 'uploadImages']);
 });
 
 // VLANs (plural) for frontend compatibility

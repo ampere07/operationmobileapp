@@ -368,7 +368,7 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                                   {column.label}
                                 </Text>
                                 {hasFilter && (
-                                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#ea580c' }} />
+                                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#7c3aed' }} />
                                 )}
                               </View>
                               <ChevronRight width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
@@ -391,7 +391,7 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                   </Pressable>
                   <Pressable
                     onPress={handleApply}
-                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#ea580c' }}
+                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#7c3aed' }}
                   >
                     <Text style={{ color: '#ffffff', textAlign: 'center', fontWeight: '500' }}>Apply Filters</Text>
                   </Pressable>

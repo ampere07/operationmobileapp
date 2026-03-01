@@ -392,7 +392,7 @@ const Settings: React.FC = () => {
           isDarkMode ? 'border-gray-700' : 'border-gray-300'
         }`}>
           <div className="flex items-center gap-3 mb-4">
-            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <h3 className={`text-lg font-semibold ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
@@ -420,7 +420,7 @@ const Settings: React.FC = () => {
                   <label
                     className="px-4 py-2 text-white rounded transition-colors cursor-pointer text-sm"
                     style={{
-                      backgroundColor: colorPalette?.primary || '#ea580c'
+                      backgroundColor: colorPalette?.primary || '#7c3aed'
                     }}
                     onMouseEnter={(e) => {
                       if (colorPalette?.accent) {
@@ -428,7 +428,7 @@ const Settings: React.FC = () => {
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
                     }}
                   >
                     Change Logo
@@ -479,7 +479,7 @@ const Settings: React.FC = () => {
                         disabled={isUploadingLogo}
                         className="px-4 py-2 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                         style={{
-                          backgroundColor: isUploadingLogo ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                          backgroundColor: isUploadingLogo ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
                         }}
                         onMouseEnter={(e) => {
                           if (!isUploadingLogo && colorPalette?.accent) {
@@ -488,7 +488,7 @@ const Settings: React.FC = () => {
                         }}
                         onMouseLeave={(e) => {
                           if (!isUploadingLogo) {
-                            e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                            e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
                           }
                         }}
                       >
@@ -507,7 +507,7 @@ const Settings: React.FC = () => {
                   <label
                     className="px-4 py-2 text-white rounded transition-colors cursor-pointer inline-block text-sm"
                     style={{
-                      backgroundColor: colorPalette?.primary || '#ea580c'
+                      backgroundColor: colorPalette?.primary || '#7c3aed'
                     }}
                     onMouseEnter={(e) => {
                       if (colorPalette?.accent) {
@@ -515,7 +515,7 @@ const Settings: React.FC = () => {
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
                     }}
                   >
                     Select Logo
@@ -536,7 +536,7 @@ const Settings: React.FC = () => {
           isDarkMode ? 'border-gray-700' : 'border-gray-300'
         }`}>
           <div className="flex items-center gap-3 mb-4">
-            <Sun className="h-5 w-5" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Sun className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <h3 className={`text-lg font-semibold ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
@@ -565,7 +565,7 @@ const Settings: React.FC = () => {
               disabled={isTogglingDarkMode}
               className="relative inline-flex h-8 w-14 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
-                backgroundColor: isDarkMode ? (colorPalette?.primary || '#ea580c') : '#4b5563'
+                backgroundColor: isDarkMode ? (colorPalette?.primary || '#7c3aed') : '#4b5563'
               }}
             >
               <span
@@ -574,7 +574,7 @@ const Settings: React.FC = () => {
                 }`}
               >
                 {isDarkMode ? (
-                  <Moon className="h-4 w-4 m-1" style={{ color: colorPalette?.primary || '#ea580c' }} />
+                  <Moon className="h-4 w-4 m-1" style={{ color: colorPalette?.primary || '#7c3aed' }} />
                 ) : (
                   <Sun className="h-4 w-4 text-gray-600 m-1" />
                 )}
@@ -585,7 +585,7 @@ const Settings: React.FC = () => {
 
         <div className="pt-6">
           <div className="flex items-center gap-3 mb-4">
-            <Palette className="h-5 w-5" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Palette className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <h3 className={`text-lg font-semibold ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
@@ -603,7 +603,7 @@ const Settings: React.FC = () => {
                     isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                   }`}
                   style={{
-                    borderColor: palette.status === 'active' ? (colorPalette?.primary || '#ea580c') : undefined,
+                    borderColor: palette.status === 'active' ? (colorPalette?.primary || '#7c3aed') : undefined,
                     boxShadow: palette.status === 'active' ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)' : undefined
                   }}
                 >
@@ -615,7 +615,7 @@ const Settings: React.FC = () => {
                     </h4>
                     <div className="flex items-center gap-2">
                       {palette.status === 'active' && (
-                        <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}>
+                        <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
                           <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
@@ -695,7 +695,7 @@ const Settings: React.FC = () => {
               <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
               }`}>
-                <Plus className="h-5 w-5" style={{ color: colorPalette?.primary || '#ea580c' }} />
+                <Plus className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
               </div>
               <p className={`font-medium text-sm ${
                 isDarkMode ? 'text-white' : 'text-gray-900'
@@ -713,7 +713,7 @@ const Settings: React.FC = () => {
           isDarkMode ? 'border-gray-700' : 'border-gray-300'
         }`}>
           <div className="flex items-center gap-3 mb-4">
-            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <h3 className={`text-lg font-semibold ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
@@ -733,8 +733,8 @@ const Settings: React.FC = () => {
                     isEditingImageSize ? 'cursor-pointer' : ''
                   }`}
                   style={{
-                    borderColor: selectedImageSizeId === size.id ? (colorPalette?.primary || '#ea580c') : undefined,
-                    backgroundColor: selectedImageSizeId === size.id ? `${colorPalette?.primary || '#ea580c'}1A` : undefined
+                    borderColor: selectedImageSizeId === size.id ? (colorPalette?.primary || '#7c3aed') : undefined,
+                    backgroundColor: selectedImageSizeId === size.id ? `${colorPalette?.primary || '#7c3aed'}1A` : undefined
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -750,14 +750,14 @@ const Settings: React.FC = () => {
                     </span>
                   </div>
                   {size.status === 'active' && !isEditingImageSize && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}>
+                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
                       <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
                   )}
                   {selectedImageSizeId === size.id && isEditingImageSize && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#ea580c' }}>
+                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
                       <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
@@ -773,7 +773,7 @@ const Settings: React.FC = () => {
                   onClick={handleEditImageSize}
                   className="px-4 py-2 text-white rounded transition-colors text-sm"
                   style={{
-                    backgroundColor: colorPalette?.primary || '#ea580c'
+                    backgroundColor: colorPalette?.primary || '#7c3aed'
                   }}
                   onMouseEnter={(e) => {
                     if (colorPalette?.accent) {
@@ -781,7 +781,7 @@ const Settings: React.FC = () => {
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                    e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
                   }}
                 >
                   Edit
@@ -793,7 +793,7 @@ const Settings: React.FC = () => {
                     disabled={isSavingImageSize || selectedImageSizeId === activeImageSizeId}
                     className="px-4 py-2 text-white rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-sm"
                     style={{
-                      backgroundColor: (isSavingImageSize || selectedImageSizeId === activeImageSizeId) ? '#4b5563' : (colorPalette?.primary || '#ea580c')
+                      backgroundColor: (isSavingImageSize || selectedImageSizeId === activeImageSizeId) ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
                     }}
                     onMouseEnter={(e) => {
                       if (!isSavingImageSize && selectedImageSizeId !== activeImageSizeId && colorPalette?.accent) {
@@ -802,7 +802,7 @@ const Settings: React.FC = () => {
                     }}
                     onMouseLeave={(e) => {
                       if (!isSavingImageSize && selectedImageSizeId !== activeImageSizeId) {
-                        e.currentTarget.style.backgroundColor = colorPalette?.primary || '#ea580c';
+                        e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
                       }
                     }}
                   >
@@ -831,7 +831,7 @@ const Settings: React.FC = () => {
       {isLoading && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
           <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <p className="text-white font-medium">{loadingMessage}</p>
           </div>
         </div>
@@ -840,7 +840,7 @@ const Settings: React.FC = () => {
       {isTogglingDarkMode && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
           <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#ea580c' }} />
+            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#7c3aed' }} />
             <p className="text-white font-medium">Updating theme preference...</p>
           </div>
         </div>
