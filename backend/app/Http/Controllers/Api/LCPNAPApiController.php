@@ -213,4 +213,41 @@ class LCPNAPApiController extends Controller
             ], 500);
         }
     }
+    public function getMostUsedLCPNAPs()
+    {
+        try {
+            $mostUsed = \Illuminate\Support\Facades\DB::table('job_orders')
+                ->select('lcpnap', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+                ->whereNotNull('lcpnap')
+                ->where('lcpnap', '!=', '')
+                ->groupBy('lcpnap')
+                ->orderBy('count', 'desc')
+                ->take(5)
+                ->get();
+
+            $names = $mostUsed->pluck('lcpnap')->toArray();
+            
+            $locations = LCPNAPLocation::whereIn('lcpnap_name', $names)
+                ->get()
+                ->sortBy(function($location) use ($names) {
+                    return array_search($location->lcpnap_name, $names);
+                })
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => $locations
+            ]);
+        } catch (Exception $e) {
+            Log::error('Most used LCP/NAP error', [
+                'message' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch most used LCP/NAP records',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

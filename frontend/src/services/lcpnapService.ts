@@ -59,7 +59,7 @@ export const getAllLCPNAPs = async (search?: string, page: number = 1, limit: nu
     if (search) {
       params.search = search;
     }
-    
+
     const response = await apiClient.get<ApiResponse<LCPNAP[]>>('/lcpnap', { params });
     return response.data;
   } catch (error: any) {
@@ -161,5 +161,18 @@ export const getLCPNAPLookupData = async (): Promise<ApiResponse<Array<{ id: num
   } catch (error: any) {
     console.error('Error fetching LCPNAP lookup data:', error);
     throw error;
+  }
+};
+export const getMostUsedLCPNAPs = async (): Promise<ApiResponse<LCPNAP[]>> => {
+  try {
+    const response = await apiClient.get<ApiResponse<LCPNAP[]>>('/lcpnap/get-most-used');
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching most used LCPNAP records:', error);
+    return {
+      success: false,
+      data: [],
+      message: error.message || 'Failed to fetch most used LCPNAP records'
+    };
   }
 };

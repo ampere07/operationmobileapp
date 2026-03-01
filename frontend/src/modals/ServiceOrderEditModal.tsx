@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, StyleSheet } from 'react-native';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, StyleSheet, FlatList } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search } from 'lucide-react-native';
+import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignatureScreen from 'react-native-signature-canvas';
@@ -193,6 +193,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const [itemSearch, setItemSearch] = useState('');
+  const [lcpnapSearch, setLcpnapSearch] = useState('');
+  const [routerModelSearch, setRouterModelSearch] = useState('');
+  const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
+  const [isRouterModelMiniModalVisible, setIsRouterModelMiniModalVisible] = useState(false);
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
 
   const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
@@ -1024,6 +1028,20 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     [technicians, formData.visitBy]
   );
 
+  const filteredLcpnaps = useMemo(() => {
+    const query = lcpnapSearch.toLowerCase();
+    return lcpnaps
+      .filter(ln => ln && ln.lcpnap_name && ln.lcpnap_name.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [lcpnaps, lcpnapSearch]);
+
+  const filteredRouterModels = useMemo(() => {
+    const query = routerModelSearch.toLowerCase();
+    return routerModels
+      .filter(rm => rm && rm.model && rm.model.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [routerModels, routerModelSearch]);
+
   // Render Helpers
   const activeColor = colorPalette?.primary || '#7c3aed';
 
@@ -1098,22 +1116,28 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const renderLcpNapPicker = () => (
     <View style={styles.inputGroup}>
       {renderLabel('New LCP-NAP', true)}
-      <View style={[styles.pickerContainer, {
-        borderColor: errors.newLcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-      }]}>
-        <Picker
-          selectedValue={formData.newLcpnap}
-          onValueChange={(val) => handleInputChange('newLcpnap', val)}
-          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-          style={{ color: isDarkMode ? '#fff' : '#000' }}
-        >
-          <Picker.Item label="Select LCP-NAP" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-          {lcpnaps.map((item) => (
-            <Picker.Item key={item.id} label={item.lcpnap_name} value={item.lcpnap_name} color={isDarkMode ? '#fff' : '#000'} />
-          ))}
-        </Picker>
-      </View>
+      <Pressable
+        onPress={() => {
+          setIsLcpnapMiniModalVisible(true);
+          setLcpnapSearch('');
+        }}
+        style={[styles.searchContainer, {
+          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+          borderColor: errors.newLcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+          height: 50,
+        }]}
+      >
+        <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+        <Text style={{
+          flex: 1,
+          paddingHorizontal: 12,
+          color: formData.newLcpnap ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
+          fontSize: 16
+        }}>
+          {formData.newLcpnap || "Select LCP-NAP"}
+        </Text>
+        <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+      </Pressable>
       {errors.newLcpnap && (
         <Text style={styles.errorText}>{errors.newLcpnap}</Text>
       )}
@@ -1305,25 +1329,31 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             {renderNewPortPicker()}
                             {renderPicker('newVlan', vlans, 'New VLAN')}
 
-                            {/* Router Model Picker */}
+                            {/* Router Model Selection */}
                             <View style={styles.inputGroup}>
                               {renderLabel('Router Model', true)}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.routerModel}
-                                  onValueChange={(val) => handleInputChange('routerModel', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Router Model" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  {routerModels.map((rm, i) => (
-                                    <Picker.Item key={i} label={rm.model} value={rm.model} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
+                              <Pressable
+                                onPress={() => {
+                                  setIsRouterModelMiniModalVisible(true);
+                                  setRouterModelSearch('');
+                                }}
+                                style={[styles.searchContainer, {
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                  borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                  height: 50,
+                                }]}
+                              >
+                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                <Text style={{
+                                  flex: 1,
+                                  paddingHorizontal: 12,
+                                  color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
+                                  fontSize: 16
+                                }}>
+                                  {formData.routerModel || "Select Router Model"}
+                                </Text>
+                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              </Pressable>
                               {errors.routerModel && (
                                 <Text style={styles.errorText}>{errors.routerModel}</Text>
                               )}
@@ -1819,6 +1849,180 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* LCP-NAP Mini Modal */}
+      <Modal
+        visible={isLcpnapMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsLcpnapMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP-NAP</Text>
+              <Pressable onPress={() => setIsLcpnapMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search LCP-NAP..."
+                  value={lcpnapSearch}
+                  onChangeText={setLcpnapSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  autoFocus={true}
+                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                />
+                {lcpnapSearch.length > 0 && (
+                  <Pressable onPress={() => setLcpnapSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            <FlatList
+              data={filteredLcpnaps}
+              keyExtractor={(item) => item.id.toString()}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 16 }} />
+              )}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    handleInputChange('newLcpnap', item.lcpnap_name);
+                    setIsLcpnapMiniModalVisible(false);
+                    setLcpnapSearch('');
+                    Keyboard.dismiss();
+                  }}
+                  style={({ pressed }) => [
+                    styles.miniModalItem,
+                    {
+                      backgroundColor: pressed
+                        ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                        : 'transparent'
+                    }
+                  ]}
+                >
+                  <Text style={[styles.miniModalItemText, {
+                    color: formData.newLcpnap === item.lcpnap_name
+                      ? (colorPalette?.primary || '#7c3aed')
+                      : (isDarkMode ? '#e5e7eb' : '#374151'),
+                    fontWeight: formData.newLcpnap === item.lcpnap_name ? '700' : 'bold',
+                    flex: 1
+                  }]}>
+                    {item.lcpnap_name}
+                  </Text>
+                  {formData.newLcpnap === item.lcpnap_name && (
+                    <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                  )}
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <View style={styles.miniModalEmpty}>
+                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                </View>
+              }
+              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              style={{ flexGrow: 1 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Router Model Mini Modal */}
+      <Modal
+        visible={isRouterModelMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsRouterModelMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Router Model</Text>
+              <Pressable onPress={() => setIsRouterModelMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search Router Model..."
+                  value={routerModelSearch}
+                  onChangeText={setRouterModelSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  autoFocus={true}
+                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                />
+                {routerModelSearch.length > 0 && (
+                  <Pressable onPress={() => setRouterModelSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            <FlatList
+              data={filteredRouterModels}
+              keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 16 }} />
+              )}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    handleInputChange('routerModel', item.model);
+                    setIsRouterModelMiniModalVisible(false);
+                    setRouterModelSearch('');
+                    Keyboard.dismiss();
+                  }}
+                  style={({ pressed }) => [
+                    styles.miniModalItem,
+                    {
+                      backgroundColor: pressed
+                        ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                        : 'transparent'
+                    }
+                  ]}
+                >
+                  <Text style={[styles.miniModalItemText, {
+                    color: formData.routerModel === item.model
+                      ? (colorPalette?.primary || '#7c3aed')
+                      : (isDarkMode ? '#e5e7eb' : '#374151'),
+                    fontWeight: formData.routerModel === item.model ? '700' : 'bold',
+                    flex: 1
+                  }]}>
+                    {item.model}
+                  </Text>
+                  {formData.routerModel === item.model && (
+                    <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                  )}
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                <View style={styles.miniModalEmpty}>
+                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                </View>
+              }
+              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              style={{ flexGrow: 1 }}
+            />
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -2061,6 +2265,64 @@ const styles = StyleSheet.create({
   },
   itemRemoveButton: {
     padding: 12,
+  },
+  miniModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  miniModalContent_mini: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  miniModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  miniModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  miniModalClose: {
+    padding: 4,
+  },
+  miniModalSearchContainer: {
+    padding: 12,
+  },
+  miniModalSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 12,
+  },
+  miniModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  miniModalItemText: {
+    fontSize: 24,
+    textAlign: 'left',
+  },
+  miniModalEmpty: {
+    padding: 24,
+    alignItems: 'center',
   },
 });
 

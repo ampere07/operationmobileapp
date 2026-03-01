@@ -1600,6 +1600,7 @@ Route::prefix('vlans')->group(function () {
 
 // LCPNAP Location Management Routes - Using lcpnap table
 Route::prefix('lcpnap')->group(function () {
+    Route::get('/get-most-used', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'getMostUsedLCPNAPs']);
     Route::get('/', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'index']);
     Route::post('/', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'store']);
     Route::get('/statistics', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'getStatistics']);

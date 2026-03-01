@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import { X, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
+import { X, ChevronDown, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2, Search, Check } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
@@ -12,7 +12,7 @@ import { userService } from '../services/userService';
 import { planService, Plan } from '../services/planService';
 import { routerModelService, RouterModel } from '../services/routerModelService';
 import { getAllPorts, Port } from '../services/portService';
-import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
+import { getAllLCPNAPs, LCPNAP, getMostUsedLCPNAPs } from '../services/lcpnapService';
 import { getAllVLANs, VLAN } from '../services/vlanService';
 
 import { getAllUsageTypes, UsageType } from '../services/usageTypeService';
@@ -228,11 +228,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [lcpnapSearch, setLcpnapSearch] = useState('');
   const [itemSearch, setItemSearch] = useState('');
   const [routerModelSearch, setRouterModelSearch] = useState('');
-  const [isRouterModelOpen, setIsRouterModelOpen] = useState(false);
+  const [isRouterModelMiniModalVisible, setIsRouterModelMiniModalVisible] = useState(false);
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
   const [usedPorts, setUsedPorts] = useState<Set<string>>(new Set());
 
-  const [isLcpnapOpen, setIsLcpnapOpen] = useState(false);
+  const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
+  const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Signature State
@@ -432,6 +433,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
         });
         setRouterModels(filtered);
+      }
+      // Fetch most used LCPNAPs
+      try {
+        const resp = await getMostUsedLCPNAPs();
+        if (resp.success) {
+          setMostUsedLcpnaps(resp.data);
+        }
+      } catch (err) {
+        console.error('Error fetching most used LCPNAPs:', err);
       }
     };
 
@@ -1529,23 +1539,40 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const portTotal = selectedLcpnap?.port_total || 0;
 
   // Memoize filtered lists to prevent expensive re-computation on every render
-  const filteredRouterModels = useMemo(() =>
-    routerModels.filter(rm => {
-      if (!rm || !rm.model) return false;
-      return rm.model.toLowerCase().includes(routerModelSearch.toLowerCase());
-    }),
-    [routerModels, routerModelSearch]
-  );
+  const filteredRouterModels = useMemo(() => {
+    const query = routerModelSearch.toLowerCase();
+    return routerModels
+      .filter(rm => {
+        if (!rm || !rm.model) return false;
+        return String(rm.model).toLowerCase().includes(query);
+      })
+      .slice(0, 50);
+  }, [routerModels, routerModelSearch]);
 
-  const filteredLcpnaps = useMemo(() =>
-    lcpnaps.filter(ln => ln.lcpnap_name.toLowerCase().includes(lcpnapSearch.toLowerCase())),
-    [lcpnaps, lcpnapSearch]
-  );
+  const filteredLcpnaps = useMemo(() => {
+    const query = lcpnapSearch.toLowerCase();
 
-  const filteredInventoryItems = useMemo(() =>
-    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())),
-    [inventoryItems, itemSearch]
-  );
+    if (!query) {
+      return mostUsedLcpnaps;
+    }
+
+    return lcpnaps
+      .filter(ln => {
+        if (!ln || !ln.lcpnap_name) return false;
+        return String(ln.lcpnap_name).toLowerCase().includes(query);
+      })
+      .slice(0, 50);
+  }, [lcpnaps, lcpnapSearch, mostUsedLcpnaps]);
+
+  const filteredInventoryItems = useMemo(() => {
+    const query = itemSearch.toLowerCase();
+    return inventoryItems
+      .filter(invItem => {
+        if (!invItem || !invItem.item_name) return false;
+        return String(invItem.item_name).toLowerCase().includes(query);
+      })
+      .slice(0, 50);
+  }, [inventoryItems, itemSearch]);
 
   const visitByTechnicians = useMemo(() =>
     technicians.filter(t => t.name !== formData.visit_with && t.name !== formData.visit_with_other),
@@ -1624,7 +1651,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   <X size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                 </Pressable>
               </View>
-              <ScrollView style={styles.messageList}>
+              <View style={styles.messageList}>
                 <View>
                   {modalContent.messages.map((message, index) => (
                     <View
@@ -1665,7 +1692,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     </View>
                   ))}
                 </View>
-              </ScrollView>
+              </View>
               <View style={[styles.messageModalFooter, { borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
                 <Pressable
                   onPress={() => setShowModal(false)}
@@ -1676,6 +1703,181 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   <Text style={styles.messageModalButtonText}>Close</Text>
                 </Pressable>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* LCP-NAP Selection Mini-Modal */}
+        <Modal
+          visible={isLcpnapMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsLcpnapMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP-NAP</Text>
+                <Pressable onPress={() => setIsLcpnapMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search LCP-NAP..."
+                    value={lcpnapSearch}
+                    onChangeText={setLcpnapSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={true}
+                  />
+                  {lcpnapSearch.length > 0 && (
+                    <Pressable onPress={() => setLcpnapSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <FlatList
+                data={filteredLcpnaps}
+                keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 16 }} />
+                )}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      const name = item.lcpnap_name || (item as any).name || '';
+                      handleInputChange('lcpnap', name);
+                      setIsLcpnapMiniModalVisible(false);
+                      setLcpnapSearch('');
+                      Keyboard.dismiss();
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniModalItem,
+                      {
+                        backgroundColor: pressed
+                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                          : 'transparent'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.miniModalItemText, {
+                      color: formData.lcpnap === (item.lcpnap_name || (item as any).name)
+                        ? (colorPalette?.primary || '#7c3aed')
+                        : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      fontWeight: formData.lcpnap === (item.lcpnap_name || (item as any).name) ? '700' : 'bold',
+                      flex: 1
+                    }]}>
+                      {item.lcpnap_name || (item as any).name}
+                    </Text>
+                    {formData.lcpnap === (item.lcpnap_name || (item as any).name) && (
+                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                    )}
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                style={{ flexGrow: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Router Model Mini Modal */}
+        <Modal
+          visible={isRouterModelMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsRouterModelMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Router Model</Text>
+                <Pressable onPress={() => setIsRouterModelMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search Router Model..."
+                    value={routerModelSearch}
+                    onChangeText={setRouterModelSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    autoFocus={true}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  />
+                  {routerModelSearch.length > 0 && (
+                    <Pressable onPress={() => setRouterModelSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <FlatList
+                data={filteredRouterModels}
+                keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 16 }} />
+                )}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      handleInputChange('routerModel', item.model);
+                      setIsRouterModelMiniModalVisible(false);
+                      setRouterModelSearch('');
+                      Keyboard.dismiss();
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniModalItem,
+                      {
+                        backgroundColor: pressed
+                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                          : 'transparent'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.miniModalItemText, {
+                      color: formData.routerModel === item.model
+                        ? (colorPalette?.primary || '#7c3aed')
+                        : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      fontWeight: formData.routerModel === item.model ? '700' : 'bold',
+                      flex: 1
+                    }]}>
+                      {item.model}
+                    </Text>
+                    {formData.routerModel === item.model && (
+                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                    )}
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                style={{ flexGrow: 1 }}
+              />
             </View>
           </View>
         </Modal>
@@ -1713,7 +1915,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             </View>
           </View>
 
-          <View style={styles.contentContainer}>
+          <View style={[styles.contentContainer, { flex: 1 }]}>
             <ScrollView
               style={styles.contentContainer}
               contentContainerStyle={styles.scrollViewContent}
@@ -2008,99 +2210,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                         Router Model<Text style={styles.required}>*</Text>
                       </Text>
-                      <View style={{ zIndex: isRouterModelOpen ? 100 : 1 }}>
-                        <View style={[styles.searchContainer, {
+                      <Pressable
+                        onPress={() => setIsRouterModelMiniModalVisible(true)}
+                        style={[styles.searchContainer, {
                           backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                          borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
-                        }]}>
-                          <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                          <TextInput
-                            ref={routerModelInputRef}
-                            placeholder="Search Router Model..."
-                            value={isRouterModelOpen ? routerModelSearch : (formData.routerModel || '')}
-                            onChangeText={(text) => {
-                              setRouterModelSearch(text);
-                              if (!isRouterModelOpen) setIsRouterModelOpen(true);
-                            }}
-                            onFocus={() => {
-                              setIsRouterModelOpen(true);
-                              if (formData.routerModel) {
-                                setRouterModelSearch(formData.routerModel);
-                              }
-                            }}
-                            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                            style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                          />
-                          {(isRouterModelOpen || formData.routerModel) && (
-                            <Pressable
-                              onPress={() => {
-                                if (isRouterModelOpen) {
-                                  setIsRouterModelOpen(false);
-                                  setRouterModelSearch('');
-                                } else {
-                                  handleInputChange('routerModel', '');
-                                  setRouterModelSearch('');
-                                }
-                              }}
-                              style={{ padding: 4 }}
-                            >
-                              <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                            </Pressable>
-                          )}
-                          {!isRouterModelOpen && !formData.routerModel && (
-                            <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                          )}
-                        </View>
-
-                        {isRouterModelOpen && (
-                          <View style={[styles.dropdown, {
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-                          }]}>
-                            <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
-                              {filteredRouterModels
-                                .map((routerModel, index) => (
-                                  <Pressable
-                                    key={routerModel.model || index}
-                                    style={[styles.dropdownItem, {
-                                      borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
-                                      backgroundColor: formData.routerModel === routerModel.model
-                                        ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
-                                        : 'transparent'
-                                    }]}
-                                    onPress={() => {
-                                      handleInputChange('routerModel', routerModel.model);
-                                      setRouterModelSearch('');
-                                      setIsRouterModelOpen(false);
-                                      Keyboard.dismiss();
-                                    }}
-                                  >
-                                    <View style={styles.dropdownItemContent}>
-                                      <Text style={[styles.dropdownItemText, {
-                                        color: formData.routerModel === routerModel.model
-                                          ? (colorPalette?.primary || '#f97316')
-                                          : (isDarkMode ? '#e5e7eb' : '#374151'),
-                                        fontWeight: formData.routerModel === routerModel.model ? '500' : 'normal'
-                                      }]}>
-                                        {routerModel.model}
-                                      </Text>
-                                      {formData.routerModel === routerModel.model && (
-                                        <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
-                                      )}
-                                    </View>
-                                  </Pressable>
-                                ))}
-                              {filteredRouterModels.length === 0 && (
-                                <View style={styles.emptyDropdown}>
-                                  <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
-                                    No results found for "{routerModelSearch}"
-                                  </Text>
-                                </View>
-                              )}
-                            </ScrollView>
-                          </View>
-                        )}
-                      </View>
+                          borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          height: 50,
+                          paddingHorizontal: 12,
+                        }]}
+                      >
+                        <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                        <Text style={{
+                          flex: 1,
+                          paddingHorizontal: 12,
+                          color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                          fontSize: 14
+                        }}>
+                          {formData.routerModel || "Select Router Model..."}
+                        </Text>
+                        <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                      </Pressable>
                       {errors.routerModel && (
                         <View style={styles.errorContainer}>
                           <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
@@ -2204,102 +2333,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                             LCP-NAP<Text style={styles.required}>*</Text>
                           </Text>
-                          <View style={{ zIndex: isLcpnapOpen ? 100 : 1 }}>
-                            <View style={[styles.searchContainer, {
+                          <Pressable
+                            onPress={() => {
+                              setIsLcpnapMiniModalVisible(true);
+                              setLcpnapSearch(''); // Clear search on open to show recommendations (Top 5)
+                            }}
+                            style={[styles.searchContainer, {
                               backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                              borderColor: errors.lcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                              borderColor: errors.lcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              paddingVertical: 12
+                            }]}
+                          >
+                            <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            <Text style={[styles.searchInput, {
+                              color: formData.lcpnap ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563')
                             }]}>
-                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              <TextInput
-                                placeholder="Search LCP-NAP..."
-                                value={isLcpnapOpen ? lcpnapSearch : (formData.lcpnap || '')}
-                                onChangeText={(text) => {
-                                  setLcpnapSearch(text);
-                                  if (!isLcpnapOpen) setIsLcpnapOpen(true);
-                                }}
-                                onFocus={() => {
-                                  setIsLcpnapOpen(true);
-                                  if (formData.lcpnap) {
-                                    setLcpnapSearch(formData.lcpnap);
-                                  }
-                                }}
-                                placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                                style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                              />
-                              {(isLcpnapOpen || formData.lcpnap) && (
-                                <Pressable
-                                  onPress={() => {
-                                    if (isLcpnapOpen) {
-                                      setIsLcpnapOpen(false);
-                                      setLcpnapSearch('');
-                                    } else {
-                                      handleInputChange('lcpnap', '');
-                                      setLcpnapSearch('');
-                                    }
-                                  }}
-                                  style={{ padding: 4 }}
-                                >
-                                  <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                </Pressable>
-                              )}
-                              {!isLcpnapOpen && !formData.lcpnap && (
-                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              )}
-                            </View>
-
-                            {isLcpnapOpen && (
-                              <View style={[styles.dropdown, {
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-                              }]}>
-                                <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
-                                  {filteredLcpnaps
-                                    .map((lcpnap) => (
-                                      <Pressable
-                                        key={lcpnap.id}
-                                        style={[styles.dropdownItem, {
-                                          borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
-                                          backgroundColor: formData.lcpnap === lcpnap.lcpnap_name
-                                            ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed')
-                                            : 'transparent'
-                                        }]}
-                                        onPress={() => {
-                                          handleInputChange('lcpnap', lcpnap.lcpnap_name);
-                                          setLcpnapSearch('');
-                                          setIsLcpnapOpen(false);
-                                          setIsRouterModelOpen(false);
-                                          if (routerModelInputRef.current) {
-                                            routerModelInputRef.current.blur();
-                                          }
-                                          Keyboard.dismiss();
-                                        }}
-                                      >
-                                        <View style={styles.dropdownItemContent}>
-                                          <Text style={[styles.dropdownItemText, {
-                                            color: formData.lcpnap === lcpnap.lcpnap_name
-                                              ? (colorPalette?.primary || '#f97316')
-                                              : (isDarkMode ? '#e5e7eb' : '#374151'),
-                                            fontWeight: formData.lcpnap === lcpnap.lcpnap_name ? '500' : 'normal'
-                                          }]}>
-                                            {lcpnap.lcpnap_name}
-                                          </Text>
-                                          {formData.lcpnap === lcpnap.lcpnap_name && (
-                                            <View style={[styles.dropdownItemSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
-                                          )}
-                                        </View>
-                                      </Pressable>
-                                    ))}
-                                  {filteredLcpnaps.length === 0 && (
-                                    <View style={styles.emptyDropdown}>
-                                      <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
-                                        No results found for "{lcpnapSearch}"
-                                      </Text>
-                                    </View>
-                                  )}
-                                </ScrollView>
-                              </View>
-                            )}
-                          </View>
+                              {formData.lcpnap || "Select LCP-NAP..."}
+                            </Text>
+                            <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                          </Pressable>
                           {errors.lcpnap && (
                             <View style={styles.errorContainer}>
                               <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
@@ -2732,7 +2784,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                     borderColor: isDarkMode ? '#374151' : '#e5e7eb',
                                     elevation: 10
                                   }]}>
-                                    <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="always">
+                                    <ScrollView
+                                      style={{ maxHeight: 240 }}
+                                      nestedScrollEnabled={true}
+                                      onScrollBeginDrag={() => setScrollEnabled(false)}
+                                      onScrollEndDrag={() => setScrollEnabled(true)}
+                                      onMomentumScrollBegin={() => setScrollEnabled(false)}
+                                      onMomentumScrollEnd={() => setScrollEnabled(true)}
+                                      keyboardShouldPersistTaps="always"
+                                    >
                                       {"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
                                         <Pressable
                                           key="none-item-option"
@@ -2763,10 +2823,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                           </View>
                                         </Pressable>
                                       )}
-                                      {filteredInventoryItems
-                                        .map((invItem) => (
+
+                                      {filteredInventoryItems.length > 0 ? (
+                                        filteredInventoryItems.map((invItem, idx) => (
                                           <Pressable
-                                            key={invItem.id}
+                                            key={invItem.id ? invItem.id.toString() : idx.toString()}
                                             style={[styles.dropdownItem, {
                                               borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
                                               backgroundColor: item.itemId === invItem.item_name
@@ -2804,15 +2865,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                               </View>
                                             </View>
                                           </Pressable>
-                                        ))}
-                                      {filteredInventoryItems.length === 0 &&
-                                        !"None".toLowerCase().includes(itemSearch.toLowerCase()) && (
+                                        ))
+                                      ) : (
+                                        ! "None".toLowerCase().includes(itemSearch.toLowerCase()) && (
                                           <View style={styles.emptyDropdown}>
                                             <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
                                               No results found for "{itemSearch}"
                                             </Text>
                                           </View>
-                                        )}
+                                        )
+                                      )}
                                     </ScrollView>
                                   </View>
                                 )}
@@ -3065,9 +3127,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               </View>
             </ScrollView>
           </View>
-        </View >
-      </KeyboardAvoidingView >
-    </Modal >
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
@@ -3416,6 +3478,59 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '500',
     textAlign: 'center',
+  },
+  miniModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  miniModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  miniModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  miniModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  miniModalClose: {
+    padding: 4,
+  },
+  miniModalSearchContainer: {
+    padding: 12,
+  },
+  miniModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  miniModalItemText: {
+    fontSize: 24,
+    textAlign: 'left',
+  },
+  miniModalEmpty: {
+    padding: 24,
+    alignItems: 'center',
   },
 });
 
