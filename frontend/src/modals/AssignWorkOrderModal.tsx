@@ -425,9 +425,9 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                   editable={!isAssignedToMe}
                   style={[st.textInput, {
                     borderColor: errors.instructions ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    color: isDarkMode ? '#ffffff' : '#111827',
-                    opacity: isAssignedToMe ? 0.7 : 1
+                    backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+                    color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+                    opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
                 {errors.instructions && (
@@ -443,13 +443,14 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               <View style={st.inputGroup}>
                 <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Category <Text style={st.required}>*</Text></Text>
                 <View style={[st.pickerContainer, {
-                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                  borderColor: errors.work_category ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb'
+                  backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+                  borderColor: errors.work_category ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                  opacity: isAssignedToMe ? 0.8 : 1
                 }]}>
                   <Picker
                     selectedValue={formData.work_category}
                     onValueChange={(val) => handleInputChange('work_category', val)}
-                    style={{ color: isDarkMode ? 'white' : 'black' }}
+                    style={{ color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? 'white' : 'black') }}
                     dropdownIconColor={isDarkMode ? 'white' : 'black'}
                     enabled={!isAssignedToMe}
                   >
@@ -482,9 +483,9 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                   editable={!isAssignedToMe}
                   style={[st.textInput, {
                     borderColor: errors.report_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    color: isDarkMode ? '#ffffff' : '#111827',
-                    opacity: isAssignedToMe ? 0.7 : 1
+                    backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+                    color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+                    opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
                 {errors.report_to && (
@@ -500,13 +501,14 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               <View style={st.inputGroup}>
                 <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Assign To <Text style={st.required}>*</Text></Text>
                 <View style={[st.pickerContainer, {
-                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                  borderColor: errors.assign_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb'
+                  backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+                  borderColor: errors.assign_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                  opacity: isAssignedToMe ? 0.8 : 1
                 }]}>
                   <Picker
                     selectedValue={formData.assign_to}
                     onValueChange={(val) => handleInputChange('assign_to', val)}
-                    style={{ color: isDarkMode ? 'white' : 'black' }}
+                    style={{ color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? 'white' : 'black') }}
                     dropdownIconColor={isDarkMode ? 'white' : 'black'}
                     enabled={!isAssignedToMe}
                   >
