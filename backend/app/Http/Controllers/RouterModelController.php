@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\RouterModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class RouterModelController extends Controller
 {
@@ -47,6 +48,18 @@ class RouterModelController extends Controller
                 'brand' => $request->brand,
                 'description' => $request->description
             ]);
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Router Model Created',
+                "New Router Model created: {$routerModel->brand} {$routerModel->model}",
+                'info',
+                [
+                    'resource_type' => 'RouterModel',
+                    'resource_id' => $routerModel->id,
+                    'additional_data' => $routerModel->toArray()
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -99,6 +112,18 @@ class RouterModelController extends Controller
             $routerModel = RouterModel::findOrFail($id);
             $routerModel->update($request->only(['model', 'brand', 'description']));
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Router Model Updated',
+                "Router Model updated: {$routerModel->brand} {$routerModel->model} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'RouterModel',
+                    'resource_id' => $id,
+                    'additional_data' => $routerModel->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Router model updated successfully',
@@ -117,7 +142,20 @@ class RouterModelController extends Controller
     {
         try {
             $routerModel = RouterModel::findOrFail($id);
+            $routerModelData = $routerModel->toArray();
             $routerModel->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Router Model Deleted',
+                "Router Model deleted: {$routerModelData['brand']} {$routerModelData['model']} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'RouterModel',
+                    'resource_id' => $id,
+                    'additional_data' => $routerModelData
+                ]
+            );
 
             return response()->json([
                 'success' => true,

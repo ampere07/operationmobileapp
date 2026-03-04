@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\WorkOrderCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class WorkOrderCategoryApiController extends Controller
 {
@@ -74,6 +75,18 @@ class WorkOrderCategoryApiController extends Controller
             $category->created_by = $request->input('created_by', 'system');
             $category->save();
             
+            // Log Activity
+            ActivityLog::log(
+                'Work Category Created',
+                "New Work Category created: {$category->category}",
+                'info',
+                [
+                    'resource_type' => 'WorkOrderCategory',
+                    'resource_id' => $category->id,
+                    'additional_data' => $category->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Work category added successfully',
@@ -140,6 +153,18 @@ class WorkOrderCategoryApiController extends Controller
             $category->category = $request->input('category');
             $category->save();
             
+            // Log Activity
+            ActivityLog::log(
+                'Work Category Updated',
+                "Work Category updated: {$category->category} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'WorkOrderCategory',
+                    'resource_id' => $id,
+                    'additional_data' => $category->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Work category updated successfully',
@@ -165,7 +190,20 @@ class WorkOrderCategoryApiController extends Controller
                 ], 404);
             }
             
+            $categoryData = $category->toArray();
             $category->delete();
+            
+            // Log Activity
+            ActivityLog::log(
+                'Work Category Deleted',
+                "Work Category deleted: {$categoryData['category']} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'WorkOrderCategory',
+                    'resource_id' => $id,
+                    'additional_data' => $categoryData
+                ]
+            );
             
             return response()->json([
                 'success' => true,

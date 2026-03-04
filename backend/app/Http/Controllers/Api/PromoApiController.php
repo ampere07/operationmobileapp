@@ -7,6 +7,7 @@ use App\Models\Promo;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Models\ActivityLog;
 
 class PromoApiController extends Controller
 {
@@ -55,6 +56,21 @@ class PromoApiController extends Controller
             $validated['updated_by_user_id'] = auth()->id() ?? 1;
 
             $promo = Promo::create($validated);
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Promo Created',
+                "New Promo created: {$validated['name']} (Status: " . ($validated['status'] ?? 'N/A') . ")",
+                'info',
+                [
+                    'resource_type' => 'Promo',
+                    'resource_id' => $promo->id,
+                    'additional_data' => [
+                        'name' => $validated['name'],
+                        'status' => $validated['status']
+                    ]
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -118,6 +134,18 @@ class PromoApiController extends Controller
 
             $promo->update($validated);
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Promo Updated',
+                "Promo #{$id} updated: " . ($validated['name'] ?? $promo->name) . " (Status: " . ($validated['status'] ?? $promo->status) . ")",
+                'info',
+                [
+                    'resource_type' => 'Promo',
+                    'resource_id' => $id,
+                    'additional_data' => $validated
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Promo updated successfully',
@@ -144,7 +172,22 @@ class PromoApiController extends Controller
     {
         try {
             $promo = Promo::findOrFail($id);
+            $promoName = $promo->name;
             $promo->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Promo Deleted',
+                "Promo #{$id} deleted: {$promoName}",
+                'warning',
+                [
+                    'resource_type' => 'Promo',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'name' => $promoName
+                    ]
+                ]
+            );
 
             return response()->json([
                 'success' => true,

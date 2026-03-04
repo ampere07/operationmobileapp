@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class NapApiController extends Controller
 {
@@ -138,6 +139,18 @@ class NapApiController extends Controller
             // Get the inserted record
             $nap = DB::select('SELECT id, nap_name, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
             
+            // Log Activity
+            ActivityLog::log(
+                'NAP Created',
+                "New NAP created: {$name}",
+                'info',
+                [
+                    'resource_type' => 'NAP',
+                    'resource_id' => $id,
+                    'additional_data' => $insertData
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'NAP added successfully',
@@ -234,6 +247,18 @@ class NapApiController extends Controller
             // Get updated record
             $nap = DB::select('SELECT id, nap_name, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
             
+            // Log Activity
+            ActivityLog::log(
+                'NAP Updated',
+                "NAP updated: {$name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'NAP',
+                    'resource_id' => $id,
+                    'additional_data' => $updateData
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'NAP updated successfully',
@@ -267,6 +292,18 @@ class NapApiController extends Controller
             $deleted = DB::table('nap')->where('id', $id)->delete();
             
             if ($deleted) {
+                // Log Activity
+                ActivityLog::log(
+                    'NAP Deleted',
+                    "NAP deleted: {$existing[0]->nap_name} (ID: {$id})",
+                    'warning',
+                    [
+                        'resource_type' => 'NAP',
+                        'resource_id' => $id,
+                        'additional_data' => (array)$existing[0]
+                    ]
+                );
+
                 return response()->json([
                     'success' => true,
                     'message' => 'NAP permanently deleted from database'

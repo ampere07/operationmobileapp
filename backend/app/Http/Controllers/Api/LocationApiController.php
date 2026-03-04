@@ -10,6 +10,7 @@ use App\Models\LocationDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class LocationApiController extends Controller
 {
@@ -313,6 +314,18 @@ class LocationApiController extends Controller
                 'region' => $name
             ]);
             
+            // Log Activity
+            ActivityLog::log(
+                'Location Created',
+                "New Region created: {$name}",
+                'info',
+                [
+                    'resource_type' => 'Region',
+                    'resource_id' => $region->id,
+                    'additional_data' => $region->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Region added successfully',
@@ -365,6 +378,18 @@ class LocationApiController extends Controller
                 'city' => $name
             ]);
             
+            // Log Activity
+            ActivityLog::log(
+                'Location Created',
+                "New City created: {$name} in Region ID: {$regionId}",
+                'info',
+                [
+                    'resource_type' => 'City',
+                    'resource_id' => $city->id,
+                    'additional_data' => $city->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'City added successfully',
@@ -417,6 +442,18 @@ class LocationApiController extends Controller
                 'barangay' => $name
             ]);
             
+            // Log Activity
+            ActivityLog::log(
+                'Location Created',
+                "New Barangay created: {$name} in City ID: {$cityId}",
+                'info',
+                [
+                    'resource_type' => 'Barangay',
+                    'resource_id' => $barangay->id,
+                    'additional_data' => $barangay->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Barangay added successfully',
@@ -472,6 +509,18 @@ class LocationApiController extends Controller
                 'location_name' => $name
             ]);
             
+            // Log Activity
+            ActivityLog::log(
+                'Location Created',
+                "New Location created: {$name}" . ($barangayId ? " in Barangay ID: {$barangayId}" : ""),
+                'info',
+                [
+                    'resource_type' => 'LocationDetail',
+                    'resource_id' => $location->id,
+                    'additional_data' => $location->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Location added successfully',
@@ -611,6 +660,18 @@ class LocationApiController extends Controller
                     break;
             }
             
+            // Log Activity
+            ActivityLog::log(
+                'Location Updated',
+                ucfirst($type) . " updated: {$name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => ucfirst($type),
+                    'resource_id' => $id,
+                    'additional_data' => $location->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => ucfirst($type) . ' updated successfully',
@@ -774,6 +835,18 @@ class LocationApiController extends Controller
                         break;
                 }
                 
+                // Log Activity
+                ActivityLog::log(
+                    'Location Deleted',
+                    ucfirst($type) . " deleted: ID: {$id}" . ($cascade ? " (with all dependent locations)" : ""),
+                    'warning',
+                    [
+                        'resource_type' => ucfirst($type),
+                        'resource_id' => $id,
+                        'cascade' => $cascade
+                    ]
+                );
+
                 DB::commit();
                 
                 $message = ucfirst($type) . ' deleted successfully';

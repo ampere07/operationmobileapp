@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Port;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class PortApiController extends Controller
 {
@@ -116,6 +117,18 @@ class PortApiController extends Controller
             $port->Label = $label;
             $port->save();
             
+            // Create Activity Log
+            ActivityLog::log(
+                'Port Created',
+                "New Port created: {$port->Label} (ID: {$port->PORT_ID})",
+                'info',
+                [
+                    'resource_type' => 'Port',
+                    'resource_id' => $port->id,
+                    'additional_data' => $port->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Port added successfully',
@@ -194,6 +207,18 @@ class PortApiController extends Controller
             $port->PORT_ID = $portId;
             $port->Label = $label;
             $port->save();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Port Updated',
+                "Port updated: {$port->Label} (ID: {$port->PORT_ID})",
+                'info',
+                [
+                    'resource_type' => 'Port',
+                    'resource_id' => $port->id,
+                    'additional_data' => $port->toArray()
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -220,7 +245,20 @@ class PortApiController extends Controller
                 ], 404);
             }
             
+            $portData = $port->toArray();
             $port->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Port Deleted',
+                "Port deleted: {$portData['Label']} (ID: {$portData['PORT_ID']})",
+                'warning',
+                [
+                    'resource_type' => 'Port',
+                    'resource_id' => $id,
+                    'additional_data' => $portData
+                ]
+            );
             
             return response()->json([
                 'success' => true,

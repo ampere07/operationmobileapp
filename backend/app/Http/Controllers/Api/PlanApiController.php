@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class PlanApiController extends Controller
 {
@@ -84,6 +85,18 @@ class PlanApiController extends Controller
                 )
                 ->where('id', $planId)
                 ->first();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Plan Created',
+                "New Plan created: {$plan->name} (₱{$plan->price})",
+                'info',
+                [
+                    'resource_type' => 'Plan',
+                    'resource_id' => $plan->id,
+                    'additional_data' => (array) $plan
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -196,6 +209,18 @@ class PlanApiController extends Controller
                 )
                 ->where('id', $id)
                 ->first();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Plan Updated',
+                "Plan updated: {$plan->name} (₱{$plan->price})",
+                'info',
+                [
+                    'resource_type' => 'Plan',
+                    'resource_id' => $id,
+                    'additional_data' => (array) $plan
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -222,7 +247,20 @@ class PlanApiController extends Controller
                 ], 404);
             }
             
+            $planData = (array) $existing;
             DB::table('plan_list')->where('id', $id)->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Plan Deleted',
+                "Plan deleted: {$planData['plan_name']} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'Plan',
+                    'resource_id' => $id,
+                    'additional_data' => $planData
+                ]
+            );
             
             return response()->json([
                 'success' => true,

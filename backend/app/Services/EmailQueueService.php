@@ -124,7 +124,8 @@ class EmailQueueService
                 Log::error('Email failed', ['id' => $job->id, 'error' => $result['error']]);
             }
 
-            usleep(100000);
+            // Sleep for 600ms to stay under Resend's 2 req/sec rate limit
+            usleep(600000);
         }
 
         return $stats;
@@ -182,7 +183,8 @@ class EmailQueueService
                 Log::error('Email retry failed', ['id' => $job->id, 'attempts' => $job->attempts]);
             }
 
-            usleep(150000);
+            // Sleep for 600ms to stay under Resend's 2 req/sec rate limit
+            usleep(600000);
         }
 
         return $stats;

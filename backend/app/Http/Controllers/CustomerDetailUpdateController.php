@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Models\ActivityLog;
 
 class CustomerDetailUpdateController extends Controller
 {
@@ -93,6 +94,21 @@ class CustomerDetailUpdateController extends Controller
                 'house_front_picture_url' => $houseFrontPictureUrl,
                 'updated_by' => $request->user()->id ?? 1,
             ]);
+
+            // Log Activity
+            ActivityLog::log(
+                'Customer Details Updated',
+                "Customer details updated for Account: {$accountNo}",
+                'info',
+                [
+                    'resource_type' => 'Customer',
+                    'resource_id' => $customer->id,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'updated_fields' => $validated
+                    ]
+                ]
+            );
 
             DB::commit();
 
@@ -179,6 +195,21 @@ class CustomerDetailUpdateController extends Controller
             }
 
             $billingAccount->update($updateData);
+
+            // Log Activity
+            ActivityLog::log(
+                'Billing Details Updated',
+                "Billing details updated for Account: {$accountNo}",
+                'info',
+                [
+                    'resource_type' => 'BillingAccount',
+                    'resource_id' => $billingAccount->id,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'updated_fields' => $updateData
+                    ]
+                ]
+            );
 
             DB::commit();
 
@@ -284,6 +315,21 @@ class CustomerDetailUpdateController extends Controller
             $technicalDetail->updated_by = $request->user()->id ?? 1;
             
             $technicalDetail->save();
+
+            // Log Activity
+            ActivityLog::log(
+                'Technical Details Updated',
+                "Technical details updated for Account: {$accountNo}",
+                'info',
+                [
+                    'resource_type' => 'TechnicalDetail',
+                    'resource_id' => $technicalDetail->id,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'updated_fields' => $validated
+                    ]
+                ]
+            );
 
             DB::commit();
 

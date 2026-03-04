@@ -16,15 +16,13 @@ class DisconnectionLogsController extends Controller
                 ->leftJoin('billing_accounts', 'disconnected_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('plan_list', 'billing_accounts.plan_id', '=', 'plan_list.id')
-                ->leftJoin('users', 'disconnected_logs.created_by_user_id', '=', 'users.id')
                 ->select(
                     'disconnected_logs.id',
                     'disconnected_logs.session_id',
                     'disconnected_logs.created_at as disconnection_date',
                     'disconnected_logs.remarks',
                     'disconnected_logs.username',
-                    'users.first_name as user_first_name',
-                    'users.last_name as user_last_name',
+                    'disconnected_logs.created_by_user',
                     'billing_accounts.account_no',
                     'customers.first_name',
                     'customers.last_name',
@@ -55,7 +53,7 @@ class DisconnectionLogsController extends Controller
             $records = $query->get();
 
             $data = $records->map(function ($record) {
-                $disconnectedBy = trim(($record->user_first_name ?? '') . ' ' . ($record->user_last_name ?? ''));
+                $disconnectedBy = trim($record->created_by_user ?? '');
                 if (empty($disconnectedBy)) {
                     $disconnectedBy = 'System/N/A';
                 }

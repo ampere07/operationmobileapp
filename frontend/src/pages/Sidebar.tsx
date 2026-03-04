@@ -43,7 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },
     { id: 'service-order', label: 'Service Order', icon: Settings, allowedRoles: ['administrator', 'technician'] },
-    { id: 'work-order', label: 'Work Order', icon: ClipboardCheck, allowedRoles: ['agent', 'administrator'], allowedRoleIds: [4, '4', 6, '6'] },
+    { id: 'work-order', label: 'Work Order', icon: ClipboardCheck, allowedRoles: ['agent', 'administrator', 'technician'], allowedRoleIds: [4, '4', 6, '6', 2, '2'] },
     { id: 'lcp-nap-location', label: 'LCP/NAP', icon: MapPinned, allowedRoles: ['administrator', 'technician'], allowedRoleIds: [6, '6'] },
     // Inventory specific items
     { id: 'inventory', label: 'Inventory', icon: Package, allowedRoles: ['inventorystaff'], allowedRoleIds: [5, '5'] },

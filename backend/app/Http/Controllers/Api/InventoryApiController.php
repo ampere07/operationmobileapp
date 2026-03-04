@@ -9,6 +9,7 @@ use App\Models\InventoryCategory;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\ActivityLog;
 
 class InventoryApiController extends Controller
 {
@@ -111,6 +112,18 @@ class InventoryApiController extends Controller
             $item->created_by_user_id = auth()->id();
             $item->updated_by_user_id = auth()->id();
             $item->save();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Inventory Item Created',
+                "New Inventory Item created: {$item->item_name}" . ($request->category ? " (Category: {$request->category})" : ""),
+                'info',
+                [
+                    'resource_type' => 'Inventory',
+                    'resource_id' => $item->id,
+                    'additional_data' => $request->all()
+                ]
+            );
             
             $item->load('category');
             
@@ -245,6 +258,18 @@ class InventoryApiController extends Controller
             $item->image_url = $request->image ?? '';
             $item->updated_by_user_id = auth()->id();
             $item->save();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Inventory Item Updated',
+                "Inventory Item updated: {$item->item_name}",
+                'info',
+                [
+                    'resource_type' => 'Inventory',
+                    'resource_id' => $item->id,
+                    'additional_data' => $request->all()
+                ]
+            );
             
             $item->load('category');
             
@@ -295,6 +320,21 @@ class InventoryApiController extends Controller
             }
             
             $item->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Inventory Item Deleted',
+                "Inventory Item deleted: {$item->item_name}",
+                'warning',
+                [
+                    'resource_type' => 'Inventory',
+                    'resource_id' => $item->id,
+                    'additional_data' => [
+                        'item_name' => $item->item_name,
+                        'category_id' => $item->category_id
+                    ]
+                ]
+            );
             
             return response()->json([
                 'success' => true,

@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Services\GoogleDriveService;
 use App\Services\PppoeUsernameService;
 use App\Models\RadiusConfig;
+use App\Models\ActivityLog;
 
 class JobOrderController extends Controller
 {
@@ -275,6 +276,28 @@ class JobOrderController extends Controller
             ]);
             
             $jobOrder = JobOrder::create($data);
+            $jobOrder->load('application');
+
+            // Create Activity Log using helper
+            $customerName = trim(($jobOrder->application->first_name ?? '') . ' ' . ($jobOrder->application->last_name ?? ''));
+            ActivityLog::log(
+                'Job Order Assigned',
+                "New Job Order assigned for {$customerName} (Application #{$jobOrder->application_id}). Assigned to: " . ($jobOrder->assigned_email ?? 'Nobody'),
+                'info',
+                [
+                    'user_email' => $data['created_by_user_email'] ?? null,
+                    'target_user_email' => $jobOrder->assigned_email,
+                    'resource_type' => 'JobOrder',
+                    'resource_id' => $jobOrder->id,
+                    'additional_data' => [
+                        'customer_name' => $customerName,
+                        'application_id' => $jobOrder->application_id,
+                        'assigned_email' => $jobOrder->assigned_email,
+                        'installation_fee' => $jobOrder->installation_fee,
+                        'onsite_status' => $jobOrder->onsite_status
+                    ]
+                ]
+            );
 
             $jobOrder->load('application');
 
@@ -537,6 +560,23 @@ class JobOrderController extends Controller
 
             $oldStatus = $jobOrder->onsite_status;
             $jobOrder->update($data);
+
+            // Create Activity Log using helper
+            ActivityLog::log(
+                'Job Order Updated',
+                "Job Order #{$id} updated by " . ($data['updated_by_user_email'] ?? 'Technician') . " (Status: {$jobOrder->onsite_status})",
+                'info',
+                [
+                    'user_email' => $data['updated_by_user_email'] ?? null,
+                    'resource_type' => 'JobOrder',
+                    'resource_id' => $jobOrder->id,
+                    'additional_data' => [
+                        'onsite_status' => $jobOrder->onsite_status,
+                        'assigned_email' => $jobOrder->assigned_email,
+                        'updated_by' => $data['updated_by_user_email'] ?? null
+                    ]
+                ]
+            );
             
             if (($data['onsite_status'] ?? null) === 'Done' && $oldStatus !== 'Done') {
                 $this->broadcastJobOrderDone($jobOrder);
@@ -661,7 +701,22 @@ class JobOrderController extends Controller
     {
         try {
             $jobOrder = JobOrder::findOrFail($id);
+            $jobOrderData = $jobOrder->toArray();
             $jobOrder->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Job Order Deleted',
+                "Job Order #{$id} deleted by " . (auth()->user()->email ?? 'System'),
+                'warning',
+                [
+                    'resource_type' => 'JobOrder',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'job_order_data' => $jobOrderData
+                    ]
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -943,6 +998,23 @@ class JobOrderController extends Controller
 
             DB::commit();
 
+            // Create Activity Log using helper
+            ActivityLog::log(
+                'Job Order Approved',
+                "Job Order #{$id} approved. Created Billing Account: {$accountNumber} for {$application->first_name} {$application->last_name}",
+                'info',
+                [
+                    'resource_type' => 'JobOrder',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'account_number' => $accountNumber,
+                        'customer_id' => $customer->id,
+                        'application_id' => $application->id,
+                        'plan' => $application->desired_plan
+                    ]
+                ]
+            );
+
             // Send Welcome SMS
             $this->sendWelcomeSms($customer, $accountNumber, $generatedUsername, $generatedPassword, $application->desired_plan);
 
@@ -1036,7 +1108,8 @@ class JobOrderController extends Controller
                 'Duplicate entry',
                 'Integrity constraint violation',
                 'Billing account already exists',
-                'Technical details already exist'
+                'Technical details already exist',
+                'already been approved'
             ];
             
             $isDuplicate = false;
@@ -1057,7 +1130,7 @@ class JobOrderController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to approve job order',
+                'message' => $e->getMessage() ?: 'Failed to approve job order',
                 'error' => $e->getMessage(),
             ], 500);
         }

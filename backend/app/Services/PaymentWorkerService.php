@@ -208,8 +208,8 @@ class PaymentWorkerService
                 DB::commit();
 
                 // Send Approval Notifications
-                $this->sendApprovalSms($account, $result['invoices_paid'] ?? [], $amount);
-                $this->sendApprovalEmail($account, $result['invoices_paid'] ?? [], $amount);
+                $this->sendApprovalSms($account, $result['invoices_paid'] ?? [], $amount, $ref);
+                $this->sendApprovalEmail($account, $result['invoices_paid'] ?? [], $amount, $ref);
                 
             } else {
                 // Billing update failed
@@ -517,12 +517,23 @@ class PaymentWorkerService
     /**
      * Send Transaction Approval SMS notification
      */
-    private function sendApprovalSms($account, $invoicesPaid, $totalPaidAmount)
+    private function sendApprovalSms($account, $invoicesPaid, $totalPaidAmount, $referenceNo = null)
     {
         try {
             if ($account && !empty($account->contact_number_primary)) {
+                $paymentLogDate = date('Y-m-d');
+                $finalAmount = $totalPaidAmount;
+                
+                if ($referenceNo) {
+                    $logEntry = DB::table('payment_portal_logs')->where('reference_no', $referenceNo)->first();
+                    if ($logEntry) {
+                        $finalAmount = $logEntry->total_amount;
+                        $paymentLogDate = date('Y-m-d', strtotime($logEntry->date_time));
+                    }
+                }
+
                 $paidTemplate = DB::table('sms_templates')
-                    ->where('template_name', 'Paid')
+                    ->where('template_type', 'Paid')
                     ->where('is_active', 1)
                     ->first();
                     
@@ -547,13 +558,12 @@ class PaymentWorkerService
                     $message = str_replace('{{invoice_id}}', $invoiceIds, $message);
                     
                     // Support multiple variations of placeholders
-                    $formattedAmount = number_format($totalPaidAmount, 2);
-                    $currentDate = date('Y-m-d');
+                    $formattedAmount = number_format($finalAmount, 2);
                     
                     $message = str_replace('{{amount_paid}}', $formattedAmount, $message);
                     $message = str_replace('{{amount}}', $formattedAmount, $message);
-                    $message = str_replace('{{date}}', $currentDate, $message);
-                    $message = str_replace('{{payment_date}}', $currentDate, $message);
+                    $message = str_replace('{{date}}', $paymentLogDate, $message);
+                    $message = str_replace('{{payment_date}}', $paymentLogDate, $message);
                     
                     $message = $this->replaceGlobalVariables($message);
                     
@@ -577,11 +587,22 @@ class PaymentWorkerService
     /**
      * Send Transaction Approval Email notification
      */
-    private function sendApprovalEmail($account, $invoicesPaid, $totalPaidAmount)
+    private function sendApprovalEmail($account, $invoicesPaid, $totalPaidAmount, $referenceNo = null)
     {
         try {
             if ($account && !empty($account->email_address)) {
                 $emailService = app(\App\Services\EmailQueueService::class);
+                
+                $paymentLogDate = date('Y-m-d');
+                $finalAmount = $totalPaidAmount;
+                
+                if ($referenceNo) {
+                    $logEntry = DB::table('payment_portal_logs')->where('reference_no', $referenceNo)->first();
+                    if ($logEntry) {
+                        $finalAmount = $logEntry->total_amount;
+                        $paymentLogDate = date('Y-m-d', strtotime($logEntry->date_time));
+                    }
+                }
                 
                 // Consolidate invoice IDs or use N/A
                 $invoiceIds = !empty($invoicesPaid) 
@@ -593,12 +614,18 @@ class PaymentWorkerService
                 $customerName = preg_replace('/\s+/', ' ', trim($account->full_name));
                 $planNameFormatted = str_replace('₱', 'P', $account->desired_plan ?? 'N/A');
 
+                $formattedAmount = number_format($finalAmount, 2);
+
                 $emailData = [
-                    'Amount' => number_format($totalPaidAmount, 2),
+                    'Amount' => $formattedAmount,
+                    'amount' => $formattedAmount,
+                    'amount_paid' => $formattedAmount,
                     'Company_Name' => $brandName,
                     'Account_No' => $account->account_no,
                     'account_no' => $account->account_no,
-                    'Date' => date('Y-m-d'),
+                    'Date' => $paymentLogDate,
+                    'date' => $paymentLogDate,
+                    'payment_date' => $paymentLogDate,
                     'Full_Name' => $customerName,
                     'Plan' => $planNameFormatted,
                     'invoice_ids' => $invoiceIds,

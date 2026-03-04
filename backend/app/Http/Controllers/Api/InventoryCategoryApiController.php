@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\InventoryCategory;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class InventoryCategoryApiController extends Controller
 {
@@ -54,6 +55,18 @@ class InventoryCategoryApiController extends Controller
             $category->category_name = $request->name;
             $category->created_by_user_id = $request->created_by_user_id ?? null;
             $category->save();
+            
+            // Log Activity
+            ActivityLog::log(
+                'Inventory Category Created',
+                "New inventory category created: {$category->category_name}",
+                'info',
+                [
+                    'resource_type' => 'InventoryCategory',
+                    'resource_id' => $category->id,
+                    'additional_data' => $category->toArray()
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -118,6 +131,18 @@ class InventoryCategoryApiController extends Controller
             $category->updated_by_user_id = $request->updated_by_user_id ?? null;
             $category->save();
             
+            // Log Activity
+            ActivityLog::log(
+                'Inventory Category Updated',
+                "Inventory category updated: {$category->category_name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'InventoryCategory',
+                    'resource_id' => $category->id,
+                    'additional_data' => $category->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory category updated successfully',
@@ -142,7 +167,21 @@ class InventoryCategoryApiController extends Controller
     {
         try {
             $category = InventoryCategory::findOrFail($id);
+            $categoryData = $category->toArray();
+            $categoryName = $category->category_name;
             $category->delete();
+            
+            // Log Activity
+            ActivityLog::log(
+                'Inventory Category Deleted',
+                "Inventory category deleted: {$categoryName} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'InventoryCategory',
+                    'resource_id' => $id,
+                    'additional_data' => $categoryData
+                ]
+            );
             
             return response()->json([
                 'success' => true,

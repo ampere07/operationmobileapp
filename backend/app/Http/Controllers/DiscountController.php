@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\ActivityLog;
 
 class DiscountController extends Controller
 {
@@ -69,6 +70,18 @@ class DiscountController extends Controller
             $validated['updated_by_user_id'] = Auth::id();
 
             $discount = Discount::create($validated);
+
+            // Log Activity
+            ActivityLog::log(
+                'Discount Created',
+                "New discount created for Account: {$validated['account_no']} (Amount: {$validated['discount_amount']})",
+                'info',
+                [
+                    'resource_type' => 'Discount',
+                    'resource_id' => $discount->id,
+                    'additional_data' => $discount->toArray()
+                ]
+            );
 
             DB::commit();
 
@@ -161,6 +174,18 @@ class DiscountController extends Controller
 
             $discount->update($validated);
 
+            // Log Activity
+            ActivityLog::log(
+                'Discount Updated',
+                "Discount updated for Account: {$discount->account_no} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'Discount',
+                    'resource_id' => $id,
+                    'additional_data' => $discount->toArray()
+                ]
+            );
+
             DB::commit();
 
             return response()->json([
@@ -201,6 +226,18 @@ class DiscountController extends Controller
             DB::beginTransaction();
 
             $discount->delete();
+
+            // Log Activity
+            ActivityLog::log(
+                'Discount Deleted',
+                "Discount deleted for Account: {$discount->account_no} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'Discount',
+                    'resource_id' => $id,
+                    'additional_data' => $discount->toArray()
+                ]
+            );
 
             DB::commit();
 

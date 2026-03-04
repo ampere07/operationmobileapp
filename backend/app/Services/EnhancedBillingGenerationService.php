@@ -756,6 +756,7 @@ class EnhancedBillingGenerationService
         $transactions = DB::table('transactions')
             ->where('account_no', $account->account_no)
             ->where('status', 'Done')
+            ->where('transaction_type', 'Recurring Fee')
             ->whereMonth('payment_date', $lastMonth->month)
             ->whereYear('payment_date', $lastMonth->year)
             ->sum('received_payment');

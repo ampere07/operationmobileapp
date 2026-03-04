@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Concern;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class ConcernController extends Controller
 {
@@ -44,6 +45,18 @@ class ConcernController extends Controller
                 'concern_name' => $request->concern_name,
                 'created_by_user_id' => $request->created_by_user_id
             ]);
+
+            // Log Activity
+            ActivityLog::log(
+                'Concern Created',
+                "New concern created: {$request->concern_name}",
+                'info',
+                [
+                    'resource_type' => 'Concern',
+                    'resource_id' => $concern->id,
+                    'additional_data' => $concern->toArray()
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -97,6 +110,18 @@ class ConcernController extends Controller
                 'updated_by_user_id' => $request->updated_by_user_id
             ]);
 
+            // Log Activity
+            ActivityLog::log(
+                'Concern Updated',
+                "Concern updated: {$concern->concern_name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'Concern',
+                    'resource_id' => $id,
+                    'additional_data' => $concern->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Concern updated successfully',
@@ -116,6 +141,18 @@ class ConcernController extends Controller
         try {
             $concern = Concern::findOrFail($id);
             $concern->delete();
+
+            // Log Activity
+            ActivityLog::log(
+                'Concern Deleted',
+                "Concern deleted: {$concern->concern_name} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'Concern',
+                    'resource_id' => $id,
+                    'additional_data' => $concern->toArray()
+                ]
+            );
 
             return response()->json([
                 'success' => true,

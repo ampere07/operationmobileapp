@@ -9,6 +9,7 @@ use App\Models\Inventory;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\ActivityLog;
 use Illuminate\Support\Str;
 
 class InventoryLogApiController extends Controller
@@ -102,6 +103,26 @@ class InventoryLogApiController extends Controller
                 $item->total_quantity = ($item->total_quantity ?? 0) + $request->item_quantity;
             }
             $item->save();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Inventory Log Created',
+                "Inventory Log created for item: {$item->item_name} ({$request->log_type} - Qty: {$request->item_quantity})",
+                'info',
+                [
+                    'resource_type' => 'InventoryLog',
+                    'resource_id' => $log->id,
+                    'additional_data' => [
+                        'item_id' => $item->id,
+                        'item_name' => $item->item_name,
+                        'log_type' => $request->log_type,
+                        'quantity' => $request->item_quantity,
+                        'sn' => $request->sn,
+                        'requested_by' => $request->requested_by,
+                        'new_total_quantity' => $item->total_quantity
+                    ]
+                ]
+            );
 
             DB::commit();
 

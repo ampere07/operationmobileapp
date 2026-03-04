@@ -140,8 +140,8 @@ class TransactionController extends Controller
 
                     // Send Approval Notifications
                     if ($billingAccount) {
-                        $this->sendApprovalSms($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment);
-                        $this->sendApprovalEmail($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment);
+                        $this->sendApprovalSms($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment, $transaction->payment_date);
+                        $this->sendApprovalEmail($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment, $transaction->payment_date);
                     }
 
                 } else {
@@ -286,6 +286,24 @@ class TransactionController extends Controller
 
             DB::commit();
 
+            // Create Activity Log
+            \App\Models\ActivityLog::log(
+                'Transaction Approved',
+                "Transaction #{$transactionId} ($accountNo) approved by " . (Auth::user()->email_address ?? 'User'),
+                'info',
+                [
+                    'resource_type' => 'Transaction',
+                    'resource_id' => $transactionId,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'payment_received' => $paymentReceived,
+                        'new_balance' => $newBalance,
+                        'invoices_paid' => $invoiceUpdateResult['invoices_paid'],
+                        'distribution' => $invoiceUpdateResult['distribution']
+                    ]
+                ]
+            );
+
             \Log::info('Transaction approved successfully', [
                 'transaction_id' => $transactionId,
                 'account_no' => $accountNo,
@@ -295,8 +313,8 @@ class TransactionController extends Controller
             ]);
 
             // Send Approval Notifications (previously only on Paid status)
-            $this->sendApprovalSms($billingAccount, $invoiceUpdateResult['invoices_paid'] ?? [], $paymentReceived);
-            $this->sendApprovalEmail($billingAccount, $invoiceUpdateResult['invoices_paid'] ?? [], $paymentReceived);
+            $this->sendApprovalSms($billingAccount, $invoiceUpdateResult['invoices_paid'] ?? [], $paymentReceived, $transaction->payment_date);
+            $this->sendApprovalEmail($billingAccount, $invoiceUpdateResult['invoices_paid'] ?? [], $paymentReceived, $transaction->payment_date);
 
 
             // Attempt reconnection after successful approval
@@ -322,6 +340,146 @@ class TransactionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to approve transaction',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function revert(Request $request, string $id): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+
+            $transaction = Transaction::findOrFail($id);
+
+            if ($transaction->status !== 'Done') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only approved transactions can be reverted'
+                ], 400);
+            }
+
+            $accountNo = $transaction->account_no;
+            $paymentToRevert = floatval($transaction->received_payment);
+            $transactionId = $transaction->id;
+            $userId = Auth::id();
+            $currentTime = now();
+
+            if (!$accountNo) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaction has no associated account number'
+                ], 400);
+            }
+
+            $billingAccount = BillingAccount::where('account_no', $accountNo)->first();
+            if (!$billingAccount) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Billing account not found'
+                ], 404);
+            }
+
+            \Log::info('Transaction revert started', [
+                'transaction_id' => $transactionId,
+                'account_no' => $accountNo,
+                'payment_to_revert' => $paymentToRevert
+            ]);
+
+            // 1. Revert Account Balance
+            $currentBalance = floatval($billingAccount->account_balance ?? 0);
+            $newBalance = $currentBalance + $paymentToRevert;
+
+            $billingAccount->account_balance = round($newBalance, 2);
+            $billingAccount->balance_update_date = $currentTime;
+            $billingAccount->updated_by = $userId;
+            $billingAccount->save();
+
+            // 2. Revert Invoice Payments
+            // Find invoices updated by this transaction
+            $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
+                ->orderBy('invoice_date', 'desc') // Revert in reverse order of application
+                ->get();
+
+            $remainingToRevert = $paymentToRevert;
+            $revertedInvoices = [];
+
+            foreach ($invoices as $invoice) {
+                if ($remainingToRevert <= 0) break;
+
+                $currentReceived = floatval($invoice->received_payment ?? 0);
+                
+                // Subtract as much as possible from this invoice
+                $toSubtract = min($currentReceived, $remainingToRevert);
+                
+                $newReceived = $currentReceived - $toSubtract;
+                $invoice->received_payment = round($newReceived, 2);
+                
+                // Update status
+                if ($newReceived <= 0) {
+                    $invoice->status = 'Unpaid';
+                } else {
+                    $invoice->status = 'Partial';
+                }
+                
+                // Clear transaction_id since we're reverting
+                $invoice->transaction_id = null;
+                $invoice->updated_by = Auth::check() ? Auth::user()->email_address : 'unknown';
+                $invoice->updated_at = $currentTime;
+                $invoice->save();
+
+                $remainingToRevert -= $toSubtract;
+                $revertedInvoices[] = [
+                    'invoice_id' => $invoice->id,
+                    'amount_reverted' => $toSubtract,
+                    'new_status' => $invoice->status
+                ];
+            }
+
+            // 3. Update Transaction Status
+            $transaction->status = 'Pending';
+            $transaction->date_processed = null;
+            $transaction->approved_by = null;
+            $transaction->account_balance_before = null;
+            $transaction->updated_by_user = Auth::check() ? Auth::user()->email_address : 'unknown';
+            $transaction->save();
+
+            DB::commit();
+
+            // Create Activity Log
+            \App\Models\ActivityLog::log(
+                'Transaction Reverted',
+                "Transaction #{$transactionId} ($accountNo) reverted by " . (Auth::user()->email_address ?? 'User'),
+                'warning',
+                [
+                    'resource_type' => 'Transaction',
+                    'resource_id' => $transactionId,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'payment_amount' => $paymentToRevert,
+                        'new_balance' => $newBalance,
+                        'reverted_invoices' => $revertedInvoices
+                    ]
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaction reverted successfully',
+                'data' => [
+                    'transaction' => $transaction,
+                    'new_balance' => $newBalance,
+                    'reverted_invoices' => $revertedInvoices
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error reverting transaction: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to revert transaction',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -579,7 +737,8 @@ class TransactionController extends Controller
                         $accountPayments[$accountNo] = [
                             'account' => $billingAccount,
                             'invoices' => [],
-                            'total' => 0
+                            'total' => 0,
+                            'payment_date' => $transaction->payment_date
                         ];
                     }
                     if (!empty($invoiceUpdateResult['invoices_paid'])) {
@@ -620,8 +779,8 @@ class TransactionController extends Controller
 
             // Send consolidated notifications for each account (Successfully approved)
             foreach ($accountPayments as $accountNo => $data) {
-                $this->sendApprovalSms($data['account'], $data['invoices'], $data['total']);
-                $this->sendApprovalEmail($data['account'], $data['invoices'], $data['total']);
+                $this->sendApprovalSms($data['account'], $data['invoices'], $data['total'], $data['payment_date'] ?? null);
+                $this->sendApprovalEmail($data['account'], $data['invoices'], $data['total'], $data['payment_date'] ?? null);
             }
 
 
@@ -854,7 +1013,7 @@ class TransactionController extends Controller
     /**
      * Send Transaction Approval SMS notification
      */
-    private function sendApprovalSms($billingAccount, $invoicesPaid, $totalPaidAmount)
+    private function sendApprovalSms($billingAccount, $invoicesPaid, $totalPaidAmount, $paymentDate = null)
     {
         try {
             $billingAccount->load('customer');
@@ -862,7 +1021,7 @@ class TransactionController extends Controller
             
             if ($customer && !empty($customer->contact_number_primary)) {
                 $paidTemplate = DB::table('sms_templates')
-                    ->where('template_name', 'Paid')
+                    ->where('template_type', 'Paid')
                     ->where('is_active', 1)
                     ->first();
                     
@@ -889,12 +1048,12 @@ class TransactionController extends Controller
                     
                     // Support multiple variations of placeholders
                     $formattedAmount = number_format($totalPaidAmount, 2);
-                    $currentDate = date('Y-m-d');
+                    $txDate = $paymentDate ? date('Y-m-d', strtotime($paymentDate)) : date('Y-m-d');
                     
                     $message = str_replace('{{amount_paid}}', $formattedAmount, $message);
                     $message = str_replace('{{amount}}', $formattedAmount, $message);
-                    $message = str_replace('{{date}}', $currentDate, $message);
-                    $message = str_replace('{{payment_date}}', $currentDate, $message);
+                    $message = str_replace('{{date}}', $txDate, $message);
+                    $message = str_replace('{{payment_date}}', $txDate, $message);
                     
                     $message = $this->replaceGlobalVariables($message);
                     
@@ -921,7 +1080,7 @@ class TransactionController extends Controller
     /**
      * Send Transaction Approval Email notification
      */
-    private function sendApprovalEmail($billingAccount, $invoicesPaid, $totalPaidAmount)
+    private function sendApprovalEmail($billingAccount, $invoicesPaid, $totalPaidAmount, $paymentDate = null)
     {
         try {
             $billingAccount->load('customer');
@@ -936,13 +1095,19 @@ class TransactionController extends Controller
                     : 'N/A';
                     
                 $brandName = DB::table('form_ui')->value('brand_name') ?? 'Your ISP';
+                $txDate = $paymentDate ? date('Y-m-d', strtotime($paymentDate)) : date('Y-m-d');
+                $formattedAmount = number_format($totalPaidAmount, 2);
                 
                 $emailData = [
-                    'Amount' => number_format($totalPaidAmount, 2),
+                    'Amount' => $formattedAmount,
+                    'amount' => $formattedAmount,
+                    'amount_paid' => $formattedAmount,
                     'Company_Name' => $brandName,
                     'Account_No' => $billingAccount->account_no,
                     'account_no' => $billingAccount->account_no,
-                    'Date' => date('Y-m-d'),
+                    'Date' => $txDate,
+                    'payment_date' => $txDate,
+                    'date' => $txDate,
                     'Full_Name' => $customer->full_name,
                     'invoice_ids' => $invoiceIds,
                     'recipient_email' => $customer->email_address,
@@ -956,6 +1121,63 @@ class TransactionController extends Controller
             }
         } catch (\Exception $e) {
             \Log::error('Failed to send Approval Email: ' . $e->getMessage());
+        }
+    }
+
+    public function destroy(string $id): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+
+            $transaction = Transaction::findOrFail($id);
+
+            // Safety check: Don't allow deleting approved transactions
+            if ($transaction->status === 'Done') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Approved transactions cannot be deleted. Revert them first if necessary.'
+                ], 400);
+            }
+
+            // Remove associated invoices' transaction_id if any (just in case)
+            DB::table('invoices')
+                ->where('transaction_id', $transaction->id)
+                ->update([
+                    'transaction_id' => null,
+                    'updated_at' => now()
+                ]);
+
+            $transactionData = $transaction->toArray();
+            $transaction->delete();
+
+            DB::commit();
+
+            // Create Activity Log
+            \App\Models\ActivityLog::log(
+                'Transaction Deleted',
+                "Transaction #{$id} (" . ($transactionData['account_no'] ?? 'N/A') . ") deleted by " . (Auth::user()->email_address ?? 'User'),
+                'warning',
+                [
+                    'resource_type' => 'Transaction',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'transaction_data' => $transactionData
+                    ]
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaction deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error deleting transaction: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete transaction',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 

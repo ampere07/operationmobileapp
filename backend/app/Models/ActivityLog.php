@@ -34,13 +34,13 @@ class ActivityLog extends Model
     // Relationship with user who performed the action
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     // Relationship with target user (for user management actions)
     public function targetUser()
     {
-        return $this->belongsTo(User::class, 'target_user_id', 'user_id');
+        return $this->belongsTo(User::class, 'target_user_id', 'id');
     }
 
     // Scopes for filtering
@@ -67,5 +67,52 @@ class ActivityLog extends Model
     public function scopeRecent($query, $days = 30)
     {
         return $query->where('created_at', '>=', now()->subDays($days));
+    }
+
+    /**
+     * Helper method to create a log entry from anywhere in the application
+     */
+    public static function log($action, $message, $level = 'info', $params = [])
+    {
+        try {
+            $userId = $params['user_id'] ?? null;
+            
+            // If no user_id, try to find by email if provided
+            if (!$userId && isset($params['user_email'])) {
+                $user = User::where('email_address', $params['user_email'])
+                            ->orWhere('username', $params['user_email'])
+                            ->first();
+                if ($user) $userId = $user->id;
+            }
+            
+            // Fallback to authenticated user
+            if (!$userId) {
+                $userId = auth()->id();
+            }
+
+            $targetUserId = $params['target_user_id'] ?? null;
+            if (!$targetUserId && isset($params['target_user_email'])) {
+                $tUser = User::where('email_address', $params['target_user_email'])
+                             ->orWhere('username', $params['target_user_email'])
+                             ->first();
+                if ($tUser) $targetUserId = $tUser->id;
+            }
+
+            return self::create([
+                'level' => $level,
+                'action' => $action,
+                'message' => $message,
+                'user_id' => $userId,
+                'target_user_id' => $targetUserId,
+                'resource_type' => $params['resource_type'] ?? null,
+                'resource_id' => $params['resource_id'] ?? null,
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'additional_data' => $params['additional_data'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('ActivityLog failed: ' . $e->getMessage());
+            return null;
+        }
     }
 }

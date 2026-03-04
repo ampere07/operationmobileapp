@@ -113,8 +113,8 @@ const WorkOrderPage: React.FC = () => {
   const getFilteredWorkOrders = () => {
     let filtered = workOrders;
 
-    // Apply role-based filtering for OSP (6) and Agent (4)
-    if (userRole === 6 || userRole === 4) {
+    // Apply role-based filtering for OSP (6), Agent (4), and Technician (2)
+    if (userRole === 6 || userRole === 4 || userRole === 2) {
       filtered = filtered.filter((wo: WorkOrder) => {
         const targetAssign = (wo.assign_to || '').toLowerCase();
         return targetAssign === userEmail.toLowerCase() || targetAssign === userName.toLowerCase();

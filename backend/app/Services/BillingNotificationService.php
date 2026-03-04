@@ -6,6 +6,7 @@ use App\Models\BillingAccount;
 use App\Models\Invoice;
 use App\Models\StatementOfAccount;
 use App\Models\SMSTemplate;
+use App\Models\BillingConfig;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
@@ -342,6 +343,7 @@ class BillingNotificationService
                     
                     $soaDateStr = $soa && $soa->statement_date ? $soa->statement_date->format('M d, Y') : date('M d, Y');
                     $message = str_replace('{{soa_date}}', $soaDateStr, $message);
+                    $message = str_replace('{{soa_data}}', $soaDateStr, $message);
                     
                     $message = $this->replaceGlobalVariables($message);
                     
@@ -496,7 +498,10 @@ class BillingNotificationService
 
         $amount = $invoice ? $invoice->total_amount : $soa->total_amount_due;
         $dueDate = $invoice ? $invoice->due_date : $soa->due_date;
-        $dcDate = $dueDate->copy()->addDays(4); // Default rule
+        
+        $billingConfig = BillingConfig::first();
+        $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 4;
+        $dcDate = $dueDate->copy()->addDays($disconnectionDay); 
 
         $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name));
         $planFormatted = str_replace('₱', 'P', $customer->desired_plan ?? '');
@@ -509,22 +514,24 @@ class BillingNotificationService
             'Email' => $customer->email_address,
             'Account_No' => $account->account_no,
             'Plan' => $planFormatted,
-            'Due_Date' => $dueDate->format('F d, Y'),
-            'DC_Date' => $dcDate->format('F d, Y'),
+            'Due_Date' => $dueDate->format('F j Y'),
+            'DC_Date' => $dcDate->format('F j Y'),
             'Total_Due' => number_format($amount ?? 0, 2),
             'Amount_Due' => number_format($amount ?? 0, 2),
-            // Legacy mapping used by some simple templates
+            'amount' => number_format($amount ?? 0, 2),
+            'amount_due' => number_format($amount ?? 0, 2),
+            'balance' => number_format($amount ?? 0, 2),
             'account_no' => $account->account_no,
             'customer_name' => $customerName,
             'total_amount' => number_format($amount ?? 0, 2),
-            'due_date' => $dueDate->format('F d, Y'),
+            'due_date' => $dueDate->format('F j Y'),
             'plan' => $planFormatted,
             'contact_no' => $customer->contact_number_primary
         ];
 
         if ($soa) {
             $data['SOA_No'] = $soa->statement_no ?? '';
-            $data['Statement_Date'] = $soa->statement_date ? $soa->statement_date->format('F d, Y') : '';
+            $data['Statement_Date'] = $soa->statement_date ? $soa->statement_date->format('F j Y') : '';
             $data['Prev_Balance'] = number_format($soa->balance_from_previous_bill ?? 0, 2);
             $data['Prev_Payment'] = number_format($soa->payment_received_previous ?? 0, 2);
             $data['Rem_Balance'] = number_format($soa->remaining_balance_previous ?? 0, 2);
@@ -534,13 +541,16 @@ class BillingNotificationService
         } elseif ($invoice) {
              // Invoice specific data
             $data['SOA_No'] = $invoice->invoice_no ?? ''; // Or N/A
-            $data['Statement_Date'] = $invoice->invoice_date ? $invoice->invoice_date->format('F d, Y') : '';
+            $data['Statement_Date'] = $invoice->invoice_date ? $invoice->invoice_date->format('F j Y') : '';
             $data['Prev_Balance'] = '0.00';
             $data['Prev_Payment'] = number_format($invoice->received_payment ?? 0, 2);
             $data['Rem_Balance'] = number_format($invoice->invoice_balance ?? 0, 2);
             $data['Period_Start'] = '';
             $data['Period_End'] = '';
         }
+
+        $data['soa_date'] = $data['Statement_Date'] ?? '';
+        $data['soa_data'] = $data['Statement_Date'] ?? '';
 
         return $data;
     }

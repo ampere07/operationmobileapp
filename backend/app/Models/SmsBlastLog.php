@@ -15,14 +15,16 @@ class SmsBlastLog extends Model
 
     protected $fillable = [
         'message',
-        'location_id',
+        'barangay_id',
         'billing_day',
         'lcpnap_id',
         'lcp_id',
         'message_count',
         'timestamp',
         'credit_used',
+        'created_at',
         'created_by_user_id',
+        'updated_at',
         'updated_by_user_id'
     ];
 

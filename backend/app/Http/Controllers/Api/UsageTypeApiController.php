@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\UsageType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class UsageTypeApiController extends Controller
 {
@@ -79,6 +80,18 @@ class UsageTypeApiController extends Controller
             $usageType->updated_by_user_id = 1;
             $usageType->save();
             
+            // Log Activity
+            ActivityLog::log(
+                'Usage Type Created',
+                "New Usage Type created: {$usageType->usage_name}",
+                'info',
+                [
+                    'resource_type' => 'UsageType',
+                    'resource_id' => $usageType->id,
+                    'additional_data' => $usageType->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Usage type added successfully',
@@ -146,6 +159,18 @@ class UsageTypeApiController extends Controller
             $usageType->updated_by_user_id = 1;
             $usageType->save();
             
+            // Log Activity
+            ActivityLog::log(
+                'Usage Type Updated',
+                "Usage Type updated: {$usageType->usage_name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'UsageType',
+                    'resource_id' => $id,
+                    'additional_data' => $usageType->toArray()
+                ]
+            );
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Usage type updated successfully',
@@ -171,7 +196,20 @@ class UsageTypeApiController extends Controller
                 ], 404);
             }
             
+            $usageTypeData = $usageType->toArray();
             $usageType->delete();
+            
+            // Log Activity
+            ActivityLog::log(
+                'Usage Type Deleted',
+                "Usage Type deleted: {$usageTypeData['usage_name']} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'UsageType',
+                    'resource_id' => $id,
+                    'additional_data' => $usageTypeData
+                ]
+            );
             
             return response()->json([
                 'success' => true,

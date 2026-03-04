@@ -40,6 +40,11 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'full_name',
+        'user_id'
+    ];
+
     public function getAuthPassword()
     {
         return $this->password_hash;

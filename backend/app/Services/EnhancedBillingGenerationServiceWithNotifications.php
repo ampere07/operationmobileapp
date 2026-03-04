@@ -408,6 +408,7 @@ class EnhancedBillingGenerationServiceWithNotifications
             
             $this->markDiscountsAsUsed($account, $userId, $invoiceId);
             $this->markRebatesAsUsed($account, $userId, $invoiceId);
+            $this->markPlanChangesAsUsed($account, $userId, $invoiceId);
             $this->trackStaggeredInvoiceAssociation($account->account_no, $invoice->id);
 
             DB::commit();
@@ -453,7 +454,78 @@ class EnhancedBillingGenerationServiceWithNotifications
 
     protected function calculateProrateAmount(BillingAccount $account, float $monthlyFee, Carbon $currentDate): float
     {
-        // Always return the fixed monthly plan price (No Prorating)
+        // Try to find an unused plan change log for this account
+        $planChange = DB::table('plan_change_logs')
+            ->where('account_id', $account->id)
+            ->where('status', 'Unused')
+            ->orderBy('date_changed', 'desc')
+            ->first();
+
+        if (!$planChange) {
+            // No plan change, return the fixed monthly plan price
+            return $monthlyFee;
+        }
+
+        // Get the old and new plan details
+        $oldPlan = AppPlan::find($planChange->old_plan_id);
+        $newPlan = AppPlan::find($planChange->new_plan_id);
+
+        if (!$oldPlan || !$newPlan) {
+            $this->log('warning', 'Plan change log found but plans not found', [
+                'account_no' => $account->account_no,
+                'old_plan_id' => $planChange->old_plan_id,
+                'new_plan_id' => $planChange->new_plan_id
+            ]);
+            return $monthlyFee;
+        }
+
+        $oldPrice = (float)$oldPlan->price;
+        $newPrice = (float)$newPlan->price;
+        $dateChanged = Carbon::parse($planChange->date_changed);
+
+        // Define the billing cycle period (one month)
+        // $currentDate is the adjusted billing date (end of the period)
+        $cycleEnd = $currentDate->copy();
+        $cycleStart = $cycleEnd->copy()->subMonth();
+        
+        // Dynamic days based on the actual billing period (e.g., 28 for Feb, 31 for Mar)
+        $totalDays = $cycleStart->diffInDays($cycleEnd);
+        if ($totalDays <= 0) $totalDays = self::DAYS_IN_MONTH; 
+
+        // Check if the plan change occurred within this billing cycle
+        if ($dateChanged->lte($cycleEnd)) {
+            
+            if ($dateChanged->gt($cycleStart)) {
+                // Change happened during the cycle
+                $daysOnOldPlan = $cycleStart->diffInDays($dateChanged);
+                // Ensure we don't exceed the total days in the period
+                if ($daysOnOldPlan > $totalDays) $daysOnOldPlan = $totalDays;
+                
+                $daysOnNewPlan = $totalDays - $daysOnOldPlan;
+            } else {
+                // Change happened before the cycle start but was not used (pushed to this bill)
+                // If it's unused, we'll assume they were on the new plan for the whole month
+                // since they officially switched but it hasn't been applied to a bill yet.
+                return $monthlyFee;
+            }
+
+            $proratedAmount = (($daysOnOldPlan / $totalDays) * $oldPrice) + (($daysOnNewPlan / $totalDays) * $newPrice);
+            
+            $this->log('info', 'Prorating monthly fee due to plan change', [
+                'account_no' => $account->account_no,
+                'old_plan' => $oldPlan->plan_name,
+                'new_plan' => $newPlan->plan_name,
+                'days_old' => $daysOnOldPlan,
+                'days_new' => $daysOnNewPlan,
+                'old_price' => $oldPrice,
+                'new_price' => $newPrice,
+                'total_days_in_month' => $totalDays,
+                'total_amount' => $proratedAmount
+            ]);
+
+            return round($proratedAmount, 2);
+        }
+
         return $monthlyFee;
     }
 
@@ -807,6 +879,7 @@ class EnhancedBillingGenerationServiceWithNotifications
         $transactions = DB::table('transactions')
             ->where('account_no', $account->account_no)
             ->where('status', 'Done')
+            ->where('transaction_type', 'Recurring Fee')
             ->whereMonth('payment_date', $lastMonth->month)
             ->whereYear('payment_date', $lastMonth->year)
             ->sum('received_payment');
@@ -864,6 +937,20 @@ class EnhancedBillingGenerationServiceWithNotifications
                 ]);
             }
         }
+    }
+
+    protected function markPlanChangesAsUsed(BillingAccount $account, int $userId, string $invoiceId): void
+    {
+        DB::table('plan_change_logs')
+            ->where('account_id', $account->id)
+            ->where('status', 'Unused')
+            ->update([
+                'status' => 'Used',
+                'date_used' => now(),
+                'remarks' => DB::raw("CONCAT(IFNULL(remarks, ''), ' [Applied to Invoice: ', '$invoiceId', ']')"),
+                'updated_by_user_id' => $userId,
+                'updated_at' => now()
+            ]);
     }
 
     protected function markRebatesAsUsed(BillingAccount $account, int $userId, string $invoiceId): void

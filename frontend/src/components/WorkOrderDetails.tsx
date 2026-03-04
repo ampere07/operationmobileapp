@@ -237,7 +237,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     }]}>
       {/* Header */}
       <View style={[st.header, {
-        paddingTop: isMobile ? 16 : 12,
+        paddingTop: isMobile ? 60 : 12,
         backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
         borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
       }]}>

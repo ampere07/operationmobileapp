@@ -29,7 +29,7 @@ class LogsController extends Controller
                 ], 422);
             }
 
-            $query = ActivityLog::with(['user:user_id,username,full_name', 'targetUser:user_id,username,full_name'])
+            $query = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
                 ->orderBy('created_at', 'desc');
 
             // Apply filters
@@ -56,7 +56,8 @@ class LogsController extends Controller
                       ->orWhere('action', 'like', "%{$search}%")
                       ->orWhereHas('user', function ($userQuery) use ($search) {
                           $userQuery->where('username', 'like', "%{$search}%")
-                                   ->orWhere('full_name', 'like', "%{$search}%");
+                                   ->orWhere('first_name', 'like', "%{$search}%")
+                                   ->orWhere('last_name', 'like', "%{$search}%");
                       });
                 });
             }
@@ -93,7 +94,7 @@ class LogsController extends Controller
     public function show($id)
     {
         try {
-            $log = ActivityLog::with(['user:user_id,username,full_name', 'targetUser:user_id,username,full_name'])
+            $log = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
                 ->findOrFail($id);
 
             return response()->json([
@@ -131,7 +132,7 @@ class LogsController extends Controller
                     ->get(),
                 'active_users' => ActivityLog::recent($days)
                     ->whereNotNull('user_id')
-                    ->with('user:user_id,username,full_name')
+                    ->with('user:id,username,first_name,last_name,middle_initial')
                     ->select('user_id')
                     ->selectRaw('COUNT(*) as activity_count')
                     ->groupBy('user_id')
@@ -174,7 +175,7 @@ class LogsController extends Controller
             $format = $request->get('format', 'json');
             $days = $request->get('days', 30);
 
-            $query = ActivityLog::with(['user:user_id,username,full_name', 'targetUser:user_id,username,full_name'])
+            $query = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
                 ->recent($days)
                 ->orderBy('created_at', 'desc');
 

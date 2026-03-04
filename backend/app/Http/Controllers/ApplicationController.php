@@ -6,6 +6,8 @@ use App\Models\Application;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use App\Models\ActivityLog;
+use App\Models\User;
 
 class ApplicationController extends Controller
 {
@@ -229,6 +231,22 @@ class ApplicationController extends Controller
 
             $this->broadcastNewApplication($application);
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Application Created',
+                "New Application received for {$application->first_name} {$application->last_name} ({$application->desired_plan})",
+                'info',
+                [
+                    'resource_type' => 'Application',
+                    'resource_id' => $application->id,
+                    'additional_data' => [
+                        'email' => $application->email_address,
+                        'plan' => $application->desired_plan,
+                        'city' => $application->city
+                    ]
+                ]
+            );
+
             $formattedApplication = [
                 'id' => (string)$application->id,
                 'customer_name' => $this->getFullName($application),
@@ -373,8 +391,25 @@ class ApplicationController extends Controller
             ]);
 
             $application = Application::findOrFail($id);
+            $oldStatus = $application->status;
             $validatedData['updated_by'] = auth()->user()->email ?? 'system';
             $application->update($validatedData);
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Application Updated',
+                "Application #{$id} updated by " . (auth()->user()->email ?? 'System') . ($oldStatus !== $application->status ? " (Status: {$oldStatus} -> {$application->status})" : ""),
+                'info',
+                [
+                    'resource_type' => 'Application',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'old_status' => $oldStatus,
+                        'new_status' => $application->status,
+                        'updated_fields' => array_keys($validatedData)
+                    ]
+                ]
+            );
 
             return response()->json([
                 'message' => 'Application updated successfully',
@@ -396,7 +431,22 @@ class ApplicationController extends Controller
     {
         try {
             $application = Application::findOrFail($id);
+            $applicationData = $application->toArray();
             $application->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Application Deleted',
+                "Application #{$id} ({$applicationData['first_name']} {$applicationData['last_name']}) deleted by " . (auth()->user()->email ?? 'System'),
+                'warning',
+                [
+                    'resource_type' => 'Application',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'application_data' => $applicationData
+                    ]
+                ]
+            );
 
             return response()->json([
                 'message' => 'Application deleted successfully',

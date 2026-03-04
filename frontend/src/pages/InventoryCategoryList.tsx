@@ -158,7 +158,7 @@ const InventoryCategoryList: React.FC = () => {
     }
   };
 
-  const primaryColor = colorPalette?.primary || '#ea580c';
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
   if (categories.length === 0 && contextLoading) {
     return (
@@ -170,7 +170,7 @@ const InventoryCategoryList: React.FC = () => {
           backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
         }}
       >
-        <ActivityIndicator size="large" color="#ea580c" style={{ marginBottom: 16 }} />
+        <ActivityIndicator size="large" color="#7c3aed" style={{ marginBottom: 16 }} />
         <Text style={{ fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>
           Loading categories...
         </Text>

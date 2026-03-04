@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\StaggeredInstallation;
 use App\Models\BillingAccount;
 use App\Models\Invoice;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,18 @@ class StaggeredInstallationController extends Controller
 
             $staggeredInstallation = StaggeredInstallation::create($validated);
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Staggered Installation Created',
+                "New Staggered Installation created for Account #{$validated['account_no']}. Total: ₱{$validated['staggered_balance']} for {$validated['months_to_pay']} months.",
+                'info',
+                [
+                    'resource_type' => 'StaggeredInstallation',
+                    'resource_id' => $staggeredInstallation->id,
+                    'additional_data' => $validated
+                ]
+            );
+
             DB::commit();
 
             return response()->json([
@@ -100,6 +113,18 @@ class StaggeredInstallationController extends Controller
             }
 
             $staggered->update($validated);
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Staggered Installation Updated',
+                "Staggered Installation #{$id} updated. Account #{$staggered->account_no}.",
+                'info',
+                [
+                    'resource_type' => 'StaggeredInstallation',
+                    'resource_id' => $id,
+                    'additional_data' => $validated
+                ]
+            );
 
             DB::commit();
 
@@ -182,6 +207,24 @@ class StaggeredInstallationController extends Controller
             $staggered->modified_date = now();
             $staggered->timestamps = false;
             $staggered->save();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Staggered Installation Approved',
+                "Staggered Installation #{$id} approved for Account #{$accountNo}. Balance of ₱{$staggeredBalance} applied.",
+                'info',
+                [
+                    'resource_type' => 'StaggeredInstallation',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'account_no' => $accountNo,
+                        'staggered_balance' => $staggeredBalance,
+                        'new_account_balance' => $newBalance,
+                        'invoices_paid_count' => count($invoiceResult['invoices_paid']),
+                        'invoices_partial_count' => count($invoiceResult['invoices_partial'])
+                    ]
+                ]
+            );
 
             DB::commit();
 

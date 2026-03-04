@@ -7,6 +7,7 @@ use App\Models\MassRebate;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Models\ActivityLog;
 
 class MassRebateApiController extends Controller
 {
@@ -62,6 +63,24 @@ class MassRebateApiController extends Controller
 
             $rebate = MassRebate::create($validated);
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Mass Rebate Created',
+                "New Mass Rebate created with {$validated['rebate_days']} days for Billing Day {$validated['billing_day']} in {$validated['barangay_code']}",
+                'info',
+                [
+                    'resource_type' => 'MassRebate',
+                    'resource_id' => $rebate->id,
+                    'additional_data' => [
+                        'rebate_days' => $validated['rebate_days'],
+                        'billing_day' => $validated['billing_day'],
+                        'barangay_code' => $validated['barangay_code'],
+                        'rebate_date' => $validated['rebate_date'],
+                        'status' => $validated['status']
+                    ]
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mass rebate created successfully',
@@ -114,6 +133,18 @@ class MassRebateApiController extends Controller
 
             $rebate->update($validated);
 
+            // Create Activity Log
+            ActivityLog::log(
+                'Mass Rebate Updated',
+                "Mass Rebate #{$id} updated. Current Status: " . ($validated['status'] ?? $rebate->status),
+                'info',
+                [
+                    'resource_type' => 'MassRebate',
+                    'resource_id' => $id,
+                    'additional_data' => $validated
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mass rebate updated successfully',
@@ -133,7 +164,20 @@ class MassRebateApiController extends Controller
     {
         try {
             $rebate = MassRebate::findOrFail($id);
+            $rebateData = $rebate->toArray();
             $rebate->delete();
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Mass Rebate Deleted',
+                "Mass Rebate #{$id} deleted. Was for Billing Day {$rebateData['billing_day']}",
+                'warning',
+                [
+                    'resource_type' => 'MassRebate',
+                    'resource_id' => $id,
+                    'additional_data' => $rebateData
+                ]
+            );
 
             return response()->json([
                 'success' => true,
@@ -158,6 +202,22 @@ class MassRebateApiController extends Controller
                 'status' => 'Used',
                 'updated_by_user_id' => $request->user()->id ?? 1
             ]);
+
+            // Create Activity Log
+            ActivityLog::log(
+                'Mass Rebate Applied',
+                "Mass Rebate #{$id} marked as Used/Applied",
+                'info',
+                [
+                    'resource_type' => 'MassRebate',
+                    'resource_id' => $id,
+                    'additional_data' => [
+                        'status' => 'Used',
+                        'rebate_days' => $rebate->rebate_days,
+                        'billing_day' => $rebate->billing_day
+                    ]
+                ]
+            );
 
             return response()->json([
                 'success' => true,

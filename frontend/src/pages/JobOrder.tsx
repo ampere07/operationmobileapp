@@ -873,7 +873,7 @@ const JobOrderPage: React.FC = () => {
                 <Pressable
                   onPress={handleRefresh}
                   disabled={isRefreshing}
-                  style={[jo.actionBtn, { backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#ea580c') }]}
+                  style={[jo.actionBtn, { backgroundColor: isRefreshing ? '#4b5563' : (colorPalette?.primary || '#7c3aed') }]}
                 >
                   <RefreshCw size={20} color="white" />
                 </Pressable>
@@ -888,8 +888,8 @@ const JobOrderPage: React.FC = () => {
                 <RefreshControl
                   refreshing={isRefreshing}
                   onRefresh={handleRefresh}
-                  tintColor={colorPalette?.primary || '#ea580c'}
-                  colors={[colorPalette?.primary || '#ea580c']}
+                  tintColor={colorPalette?.primary || '#7c3aed'}
+                  colors={[colorPalette?.primary || '#7c3aed']}
                 />
               }
             >

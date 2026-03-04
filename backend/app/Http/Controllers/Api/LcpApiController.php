@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LCP;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Models\ActivityLog;
 
 class LcpApiController extends Controller
 {
@@ -86,6 +87,18 @@ class LcpApiController extends Controller
             $lcp = new LCP();
             $lcp->lcp_name = $name;
             $lcp->save();
+
+            // Log Activity
+            ActivityLog::log(
+                'LCP Created',
+                "New LCP created: {$name}",
+                'info',
+                [
+                    'resource_type' => 'LCP',
+                    'resource_id' => $lcp->id,
+                    'additional_data' => $lcp->toArray()
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -162,6 +175,18 @@ class LcpApiController extends Controller
             
             $lcp->lcp_name = $name;
             $lcp->save();
+
+            // Log Activity
+            ActivityLog::log(
+                'LCP Updated',
+                "LCP updated: {$name} (ID: {$id})",
+                'info',
+                [
+                    'resource_type' => 'LCP',
+                    'resource_id' => $id,
+                    'additional_data' => $lcp->toArray()
+                ]
+            );
             
             return response()->json([
                 'success' => true,
@@ -190,6 +215,18 @@ class LcpApiController extends Controller
             
             $lcp->delete();
             
+            // Log Activity
+            ActivityLog::log(
+                'LCP Deleted',
+                "LCP deleted: {$lcp->lcp_name} (ID: {$id})",
+                'warning',
+                [
+                    'resource_type' => 'LCP',
+                    'resource_id' => $id,
+                    'additional_data' => $lcp->toArray()
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'LCP permanently deleted from database'

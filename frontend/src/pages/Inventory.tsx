@@ -228,7 +228,7 @@ const Inventory: React.FC = () => {
     }
   };
 
-  const primaryColor = colorPalette?.primary || '#ea580c';
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
   if (loading) {
     return (
@@ -240,7 +240,7 @@ const Inventory: React.FC = () => {
           backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
         }}
       >
-        <ActivityIndicator size="large" color="#ea580c" style={{ marginBottom: 16 }} />
+        <ActivityIndicator size="large" color="#7c3aed" style={{ marginBottom: 16 }} />
         <Text style={{ fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>
           Loading inventory...
         </Text>
@@ -367,8 +367,8 @@ const Inventory: React.FC = () => {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={colorPalette?.primary || '#ea580c'}
-              colors={[colorPalette?.primary || '#ea580c']}
+              tintColor={colorPalette?.primary || '#7c3aed'}
+              colors={[colorPalette?.primary || '#7c3aed']}
             />
           }
         >
@@ -526,7 +526,7 @@ const Inventory: React.FC = () => {
                       paddingVertical: 2,
                       borderRadius: 9999,
                       backgroundColor: isActive
-                        ? (colorPalette?.primary || '#ea580c')
+                        ? (colorPalette?.primary || '#7c3aed')
                         : '#374151',
                     }}
                   >
