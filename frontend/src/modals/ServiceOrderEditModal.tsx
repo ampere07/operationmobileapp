@@ -508,12 +508,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const [itemSearch, setItemSearch] = useState('');
+  const [itemSearchModal, setItemSearchModal] = useState('');
   const [lcpnapSearch, setLcpnapSearch] = useState('');
   const [routerModelSearch, setRouterModelSearch] = useState('');
   const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
   const [isRouterModelMiniModalVisible, setIsRouterModelMiniModalVisible] = useState(false);
-  const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
+  const [isItemMiniModalVisible, setIsItemMiniModalVisible] = useState(false);
+  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
 
   // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
   const [isContentReady, setIsContentReady] = useState(false);
@@ -548,7 +549,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       if (authResult.status === 'fulfilled' && authResult.value) {
         try {
           setCurrentUser(JSON.parse(authResult.value));
-        } catch (error) {}
+        } catch (error) { }
       }
       if (paletteResult.status === 'fulfilled') {
         setColorPalette(paletteResult.value);
@@ -1312,8 +1313,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
   // Memoize filtered lists to prevent expensive re-computation on every render
   const filteredInventoryItems = useMemo(() =>
-    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearch.toLowerCase())),
-    [inventoryItems, itemSearch]
+    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearchModal.toLowerCase())),
+    [inventoryItems, itemSearchModal]
   );
 
   const visitByTechnicians = useMemo(() =>
@@ -1545,627 +1546,536 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                 <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280', marginTop: 12, fontSize: 14 }}>Loading form...</Text>
               </View>
             ) : (
-            <ScrollView
-              style={styles.contentContainer}
-              contentContainerStyle={styles.scrollViewContent}
-              scrollEnabled={scrollEnabled}
-              keyboardShouldPersistTaps="handled"
-              removeClippedSubviews={true}
-            >
-              <View style={styles.inputGroup}>
-
-                {renderInput('accountNo', 'Account No', false)}
-                {renderInput('dateInstalled', 'Date Installed', false)}
-
-                {renderInput('fullName', 'Full Name', false)}
-                {renderInput('contactNumber', 'Contact Number', false)}
-                {renderInput('emailAddress', 'Email Address', false)}
-                {renderInput('plan', 'Plan', false)}
-                {renderInput('username', 'Username', false)}
-
+              <ScrollView
+                style={styles.contentContainer}
+                contentContainerStyle={styles.scrollViewContent}
+                scrollEnabled={scrollEnabled}
+                keyboardShouldPersistTaps="handled"
+                removeClippedSubviews={true}
+              >
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Full Address</Text>
-                  <TextInput
-                    value={formData.fullAddress}
-                    editable={false}
-                    multiline={true}
-                    numberOfLines={2}
-                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                    style={[styles.textInput, {
-                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                      borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                      textAlignVertical: 'top'
-                    }]}
-                  />
-                </View>
 
-                {/* Connection Type */}
-                <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
-                  <View style={styles.connectionTypeContainer}>
-                    <Pressable
-                      onPress={() => handleInputChange('connectionType', 'Fiber')}
-                      style={[styles.connectionTypeButton, {
-                        backgroundColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
-                        borderColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
-                      }]}
-                    >
-                      <Text style={{
-                        color: formData.connectionType === 'Fiber' ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'),
-                        fontWeight: '500'
-                      }}>Fiber</Text>
-                    </Pressable>
-                  </View>
-                </View>
+                  {renderInput('accountNo', 'Account No', false)}
+                  {renderInput('dateInstalled', 'Date Installed', false)}
 
-                {renderInput('routerModemSN', 'Router/Modem SN', false)}
-                {renderInput('lcp', 'LCP', false)}
-                {renderInput('nap', 'NAP', false)}
-                {renderInput('port', 'PORT', false)}
-                {renderInput('vlan', 'VLAN', false)}
+                  {renderInput('fullName', 'Full Name', false)}
+                  {renderInput('contactNumber', 'Contact Number', false)}
+                  {renderInput('emailAddress', 'Email Address', false)}
+                  {renderInput('plan', 'Plan', false)}
+                  {renderInput('username', 'Username', false)}
 
-                {renderPicker('supportStatus', ['Resolved', 'Failed', 'In Progress', 'For Visit'], 'Support Status')}
-
-                {formData.supportStatus === 'For Visit' && (
-                  <>
-                    {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
-
-                    <View style={styles.inputGroup}>
-                      {renderLabel('Assigned Email', true)}
-                      <View style={[styles.pickerContainer, {
-                        borderColor: errors.assignedEmail ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                      }]}>
-                        <Picker
-                          selectedValue={formData.assignedEmail}
-                          onValueChange={(val) => handleInputChange('assignedEmail', val)}
-                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                          style={{ color: isDarkMode ? '#fff' : '#000' }}
-                        >
-                          <Picker.Item label="Select Technician" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                          {technicians.map((t, i) => (
-                            <Picker.Item key={i} label={t.name} value={t.email} color={isDarkMode ? '#fff' : '#000'} />
-                          ))}
-                        </Picker>
-                      </View>
-                      {errors.assignedEmail && (
-                        <Text style={styles.errorText}>{errors.assignedEmail}</Text>
-                      )}
-                    </View>
-
-                    {formData.visitStatus === 'Done' && (
-                      <>
-                        {renderPicker('repairCategory', ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'], 'Repair Category')}
-
-                        {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
-                          <>
-                            {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
-                            {renderLcpNapPicker()}
-                            {renderNewPortPicker()}
-                            {renderPicker('newVlan', vlans, 'New VLAN')}
-
-                            {/* Router Model Selection */}
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Router Model', true)}
-                              <Pressable
-                                onPress={() => {
-                                  setIsRouterModelMiniModalVisible(true);
-                                  setRouterModelSearch('');
-                                }}
-                                style={[styles.searchContainer, {
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                  borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  height: 50,
-                                }]}
-                              >
-                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                <Text style={{
-                                  flex: 1,
-                                  paddingHorizontal: 12,
-                                  color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
-                                  fontSize: 16
-                                }}>
-                                  {formData.routerModel || "Select Router Model"}
-                                </Text>
-                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              </Pressable>
-                              {errors.routerModel && (
-                                <Text style={styles.errorText}>{errors.routerModel}</Text>
-                              )}
-                            </View>
-                          </>
-                        )}
-                        {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
-                          <>
-                            {formData.repairCategory === 'Replace Router' && renderInput('newRouterModemSN', 'New Router SN')}
-                          </>
-                        )}
-                        {formData.repairCategory === 'Update Vlan' && renderPicker('newVlan', vlans, 'New VLAN')}
-
-                        {/* Visit By */}
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit By', true)}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.visitBy ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitBy}
-                              onValueChange={(val) => handleInputChange('visitBy', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {visitByTechnicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                          {errors.visitBy && (
-                            <Text style={styles.errorText}>{errors.visitBy}</Text>
-                          )}
-                        </View>
-
-                        {/* Visit With */}
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit With')}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.visitWith ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitWith}
-                              onValueChange={(val) => handleInputChange('visitWith', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                              {visitWithTechnicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                          {errors.visitWith && (
-                            <Text style={styles.errorText}>{errors.visitWith}</Text>
-                          )}
-                        </View>
-
-                        {/* Visit With Other */}
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit With Other')}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.visitWithOther ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitWithOther}
-                              onValueChange={(val) => handleInputChange('visitWithOther', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                              {visitWithOtherTechnicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                          {errors.visitWithOther && (
-                            <Text style={styles.errorText}>{errors.visitWithOther}</Text>
-                          )}
-                        </View>
-
-                        {renderInput('visitRemarks', 'Visit Remarks')}
-
-                        <View style={[styles.inputGroup, { zIndex: 50 }]}>
-                          {renderLabel('Client Signature')}
-                          {!isDrawingSignature ? (
-                            <View>
-                              <Pressable
-                                onPress={() => setIsDrawingSignature(true)}
-                                style={[styles.signatureContainer, {
-                                  borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                                }]}
-                              >
-                                {imageFiles.clientSignatureFile || formData.clientSignature ? (
-                                  <Image
-                                    source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }}
-                                    style={styles.signatureImage}
-                                  />
-                                ) : (
-                                  <View style={styles.signaturePlaceholder}>
-                                    <Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text>
-                                  </View>
-                                )}
-                              </Pressable>
-                              {imageFiles.clientSignatureFile && (
-                                <Pressable onPress={handleSignatureClear} style={styles.clearSignatureButton}>
-                                  <Text style={styles.clearSignatureText}>Clear Signature</Text>
-                                </Pressable>
-                              )}
-                            </View>
-                          ) : (
-                            <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
-                              <SignatureScreen
-                                ref={signatureRef}
-                                onOK={handleSignatureOK}
-                                onBegin={() => setScrollEnabled(false)}
-                                onEnd={() => setScrollEnabled(true)}
-                                onEmpty={() => console.log('Empty signature')}
-                                descriptionText="Sign above"
-                                clearText="Clear"
-                                confirmText="Save"
-                                webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
-                              />
-                              <Pressable
-                                onPress={() => {
-                                  setIsDrawingSignature(false);
-                                  setScrollEnabled(true);
-                                }}
-                                style={styles.signatureCloseButton}
-                              >
-                                <X size={20} color="#000" />
-                              </Pressable>
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Items', true)}
-                          {orderItems.map((item, idx) => (
-                            <View key={idx} style={[styles.itemRow, { zIndex: openItemIndex === idx ? 1000 : 1 }]}>
-                              <View style={styles.itemRowContent}>
-                                <View style={styles.itemSearchContainer}>
-                                  <Pressable
-                                    onPress={() => setOpenItemIndex(openItemIndex === idx ? null : idx)}
-                                    style={[styles.searchContainer, {
-                                      borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                                    }]}
-                                  >
-                                    <Text style={[styles.itemSelectText, {
-                                      color: item.itemId ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280')
-                                    }]}>
-                                      {item.itemId || 'Select Item'}
-                                    </Text>
-                                    <ChevronDown size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  </Pressable>
-
-                                  {openItemIndex === idx && (
-                                    <View style={[styles.dropdown, {
-                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-                                    }]}>
-                                      <View style={[styles.dropdownSearchContainer, {
-                                        borderColor: isDarkMode ? '#374151' : '#f3f4f6',
-                                        backgroundColor: isDarkMode ? '#111827' : '#f9fafb'
-                                      }]}>
-                                        <Search size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                        <TextInput
-                                          style={[styles.dropdownSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                                          placeholder="Search items..."
-                                          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                                          value={itemSearch}
-                                          onChangeText={setItemSearch}
-                                          autoFocus
-                                        />
-                                        {itemSearch !== '' && (
-                                          <Pressable onPress={() => setItemSearch('')}>
-                                            <X size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                          </Pressable>
-                                        )}
-                                      </View>
-
-                                      <ScrollView
-                                        style={{ maxHeight: 250 }}
-                                        keyboardShouldPersistTaps="always"
-                                        nestedScrollEnabled={true}
-                                        onScrollBeginDrag={() => setScrollEnabled(false)}
-                                        onScrollEndDrag={() => setScrollEnabled(true)}
-                                        onMomentumScrollBegin={() => setScrollEnabled(false)}
-                                        onMomentumScrollEnd={() => setScrollEnabled(true)}
-                                      >
-                                        <Pressable
-                                          style={[styles.dropdownItem, {
-                                            borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
-                                            backgroundColor: item.itemId === 'None' ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed') : 'transparent'
-                                          }]}
-                                          onPress={() => {
-                                            handleItemChange(idx, 'itemId', 'None');
-                                            setOpenItemIndex(null);
-                                            setItemSearch('');
-                                            Keyboard.dismiss();
-                                          }}
-                                        >
-                                          <View style={styles.dropdownItemContent}>
-                                            <Text style={[styles.dropdownItemText, {
-                                              color: item.itemId === 'None' ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#e5e7eb' : '#374151'),
-                                              fontWeight: item.itemId === 'None' ? '500' : 'normal'
-                                            }]}>
-                                              None
-                                            </Text>
-                                            {item.itemId === 'None' && (
-                                              <View style={[styles.dropdownSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
-                                            )}
-                                          </View>
-                                        </Pressable>
-
-                                        {filteredInventoryItems
-                                          .map((invItem) => (
-                                            <Pressable
-                                              key={invItem.id}
-                                              style={[styles.dropdownItem, {
-                                                borderBottomColor: isDarkMode ? '#374151' : '#f3f4f6',
-                                                backgroundColor: item.itemId === invItem.item_name ? (isDarkMode ? 'rgba(234, 88, 12, 0.2)' : '#fff7ed') : 'transparent'
-                                              }]}
-                                              onPress={() => {
-                                                handleItemChange(idx, 'itemId', invItem.item_name);
-                                                setOpenItemIndex(null);
-                                                setItemSearch('');
-                                                Keyboard.dismiss();
-                                              }}
-                                            >
-                                              <View style={styles.dropdownItemContent}>
-                                                <Text style={[styles.dropdownItemText, {
-                                                  flex: 1,
-                                                  marginRight: 8,
-                                                  color: item.itemId === invItem.item_name ? (colorPalette?.primary || '#f97316') : (isDarkMode ? '#e5e7eb' : '#374151'),
-                                                  fontWeight: item.itemId === invItem.item_name ? '500' : 'normal'
-                                                }]}>
-                                                  {invItem.item_name}
-                                                </Text>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                                  {(invItem.image_url || (invItem as any).image) && (
-                                                    <Image
-                                                      source={{ uri: convertGoogleDriveUrl(invItem.image_url || (invItem as any).image) || undefined }}
-                                                      style={styles.dropdownItemImage}
-                                                    />
-                                                  )}
-                                                  {item.itemId === invItem.item_name && (
-                                                    <View style={[styles.dropdownSelectedIndicator, { backgroundColor: colorPalette?.primary || '#f97316' }]} />
-                                                  )}
-                                                </View>
-                                              </View>
-                                            </Pressable>
-                                          ))}
-
-                                        {filteredInventoryItems.length === 0 && (
-                                          <View style={styles.emptyDropdown}>
-                                            <Text style={[styles.emptyDropdownText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>
-                                              No results found
-                                            </Text>
-                                          </View>
-                                        )}
-                                      </ScrollView>
-                                    </View>
-                                  )}
-                                </View>
-
-                                <View style={styles.itemQtyContainer}>
-                                  <TextInput
-                                    style={[styles.textInput, {
-                                      borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                      color: isDarkMode ? '#ffffff' : '#111827'
-                                    }]}
-                                    placeholder="Qty"
-                                    placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-                                    value={item.quantity}
-                                    keyboardType="numeric"
-                                    onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
-                                  />
-                                </View>
-
-                                {orderItems.length > 1 && (
-                                  <Pressable
-                                    onPress={() => {
-                                      const newItems = [...orderItems];
-                                      newItems.splice(idx, 1);
-                                      setOrderItems(newItems);
-                                    }}
-                                    style={styles.itemRemoveButton}
-                                  >
-                                    <X size={20} color="#ef4444" />
-                                  </Pressable>
-                                )}
-                              </View>
-                            </View>
-                          ))}
-                          {errors.items && (
-                            <Text style={styles.errorText}>{errors.items}</Text>
-                          )}
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Time In Image')}
-                          <Pressable
-                            onPress={() => handleImageChange('timeInFile')}
-                            style={[styles.signatureContainer, {
-                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                            }]}
-                          >
-                            {imageFiles.timeInFile || formData.timeIn ? (
-                              <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={styles.signatureImage} />
-                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time In</Text>}
-                          </Pressable>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Modem Setup Image')}
-                          <Pressable
-                            onPress={() => handleImageChange('modemSetupFile')}
-                            style={[styles.signatureContainer, {
-                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                            }]}
-                          >
-                            {imageFiles.modemSetupFile || formData.modemSetupImage ? (
-                              <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={styles.signatureImage} />
-                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Modem Setup</Text>}
-                          </Pressable>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Time Out Image')}
-                          <Pressable
-                            onPress={() => handleImageChange('timeOutFile')}
-                            style={[styles.signatureContainer, {
-                              borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                              backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                            }]}
-                          >
-                            {imageFiles.timeOutFile || formData.timeOut ? (
-                              <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={styles.signatureImage} />
-                            ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time Out</Text>}
-                          </Pressable>
-                        </View>
-                      </>
-                    )}
-
-                    {/* Failed/Reschedule Fields */}
-                    {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
-                      <>
-                        {/* Visit By/With/Other/Remarks for Reschedule/Failed */}
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit By', true)}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitBy}
-                              onValueChange={(val) => handleInputChange('visitBy', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {technicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit With', true)}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitWith}
-                              onValueChange={(val) => handleInputChange('visitWith', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {failedVisitWithTechnicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Visit With Other', true)}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.visitWithOther}
-                              onValueChange={(val) => handleInputChange('visitWithOther', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {failedVisitWithTechnicians.map((t, i) => (
-                                <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                        </View>
-
-                        {renderInput('visitRemarks', 'Visit Remarks')}
-                      </>
-                    )}
-                  </>
-                )}
-
-                {/* Concern */}
-                <View style={styles.inputGroup}>
-                  {renderLabel('Concern', true)}
-                  {isTechnician ? (
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Full Address</Text>
                     <TextInput
+                      value={formData.fullAddress}
+                      editable={false}
+                      multiline={true}
+                      numberOfLines={2}
+                      placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
                       style={[styles.textInput, {
                         backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
                         borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                        color: isDarkMode ? '#9ca3af' : '#6b7280'
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
+                        textAlignVertical: 'top'
                       }]}
-                      value={formData.concern}
-                      editable={false}
                     />
-                  ) : (
+                  </View>
+
+                  {/* Connection Type */}
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
+                    <View style={styles.connectionTypeContainer}>
+                      <Pressable
+                        onPress={() => handleInputChange('connectionType', 'Fiber')}
+                        style={[styles.connectionTypeButton, {
+                          backgroundColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
+                          borderColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
+                        }]}
+                      >
+                        <Text style={{
+                          color: formData.connectionType === 'Fiber' ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'),
+                          fontWeight: '500'
+                        }}>Fiber</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {renderInput('routerModemSN', 'Router/Modem SN', false)}
+                  {renderInput('lcp', 'LCP', false)}
+                  {renderInput('nap', 'NAP', false)}
+                  {renderInput('port', 'PORT', false)}
+                  {renderInput('vlan', 'VLAN', false)}
+
+                  {renderPicker('supportStatus', ['Resolved', 'Failed', 'In Progress', 'For Visit'], 'Support Status')}
+
+                  {formData.supportStatus === 'For Visit' && (
                     <>
-                      <View style={[styles.pickerContainer, {
-                        borderColor: errors.concern ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                      }]}>
-                        <Picker
-                          selectedValue={formData.concern}
-                          onValueChange={(val) => handleInputChange('concern', val)}
-                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                          style={{ color: isDarkMode ? '#fff' : '#000' }}
-                        >
-                          <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                          {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
-                        </Picker>
+                      {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
+
+                      <View style={styles.inputGroup}>
+                        {renderLabel('Assigned Email', true)}
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.assignedEmail ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
+                          <Picker
+                            selectedValue={formData.assignedEmail}
+                            onValueChange={(val) => handleInputChange('assignedEmail', val)}
+                            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                            style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          >
+                            <Picker.Item label="Select Technician" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                            {technicians.map((t, i) => (
+                              <Picker.Item key={i} label={t.name} value={t.email} color={isDarkMode ? '#fff' : '#000'} />
+                            ))}
+                          </Picker>
+                        </View>
+                        {errors.assignedEmail && (
+                          <Text style={styles.errorText}>{errors.assignedEmail}</Text>
+                        )}
                       </View>
-                      {errors.concern && (
-                        <Text style={styles.errorText}>{errors.concern}</Text>
+
+                      {formData.visitStatus === 'Done' && (
+                        <>
+                          {renderPicker('repairCategory', ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'], 'Repair Category')}
+
+                          {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
+                            <>
+                              {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
+                              {renderLcpNapPicker()}
+                              {renderNewPortPicker()}
+                              {renderPicker('newVlan', vlans, 'New VLAN')}
+
+                              {/* Router Model Selection */}
+                              <View style={styles.inputGroup}>
+                                {renderLabel('Router Model', true)}
+                                <Pressable
+                                  onPress={() => {
+                                    setIsRouterModelMiniModalVisible(true);
+                                    setRouterModelSearch('');
+                                  }}
+                                  style={[styles.searchContainer, {
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                    height: 50,
+                                  }]}
+                                >
+                                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  <Text style={{
+                                    flex: 1,
+                                    paddingHorizontal: 12,
+                                    color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
+                                    fontSize: 16
+                                  }}>
+                                    {formData.routerModel || "Select Router Model"}
+                                  </Text>
+                                  <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                </Pressable>
+                                {errors.routerModel && (
+                                  <Text style={styles.errorText}>{errors.routerModel}</Text>
+                                )}
+                              </View>
+                            </>
+                          )}
+                          {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
+                            <>
+                              {formData.repairCategory === 'Replace Router' && renderInput('newRouterModemSN', 'New Router SN')}
+                            </>
+                          )}
+                          {formData.repairCategory === 'Update Vlan' && renderPicker('newVlan', vlans, 'New VLAN')}
+
+                          {/* Visit By */}
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit By', true)}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: errors.visitBy ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitBy}
+                                onValueChange={(val) => handleInputChange('visitBy', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                {visitByTechnicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                            {errors.visitBy && (
+                              <Text style={styles.errorText}>{errors.visitBy}</Text>
+                            )}
+                          </View>
+
+                          {/* Visit With */}
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit With')}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: errors.visitWith ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitWith}
+                                onValueChange={(val) => handleInputChange('visitWith', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
+                                {visitWithTechnicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                            {errors.visitWith && (
+                              <Text style={styles.errorText}>{errors.visitWith}</Text>
+                            )}
+                          </View>
+
+                          {/* Visit With Other */}
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit With Other')}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: errors.visitWithOther ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitWithOther}
+                                onValueChange={(val) => handleInputChange('visitWithOther', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
+                                {visitWithOtherTechnicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                            {errors.visitWithOther && (
+                              <Text style={styles.errorText}>{errors.visitWithOther}</Text>
+                            )}
+                          </View>
+
+                          {renderInput('visitRemarks', 'Visit Remarks')}
+
+                          <View style={[styles.inputGroup, { zIndex: 50 }]}>
+                            {renderLabel('Client Signature')}
+                            {!isDrawingSignature ? (
+                              <View>
+                                <Pressable
+                                  onPress={() => setIsDrawingSignature(true)}
+                                  style={[styles.signatureContainer, {
+                                    borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                                  }]}
+                                >
+                                  {imageFiles.clientSignatureFile || formData.clientSignature ? (
+                                    <Image
+                                      source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }}
+                                      style={styles.signatureImage}
+                                    />
+                                  ) : (
+                                    <View style={styles.signaturePlaceholder}>
+                                      <Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text>
+                                    </View>
+                                  )}
+                                </Pressable>
+                                {imageFiles.clientSignatureFile && (
+                                  <Pressable onPress={handleSignatureClear} style={styles.clearSignatureButton}>
+                                    <Text style={styles.clearSignatureText}>Clear Signature</Text>
+                                  </Pressable>
+                                )}
+                              </View>
+                            ) : (
+                              <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
+                                <SignatureScreen
+                                  ref={signatureRef}
+                                  onOK={handleSignatureOK}
+                                  onBegin={() => setScrollEnabled(false)}
+                                  onEnd={() => setScrollEnabled(true)}
+                                  onEmpty={() => console.log('Empty signature')}
+                                  descriptionText="Sign above"
+                                  clearText="Clear"
+                                  confirmText="Save"
+                                  webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
+                                />
+                                <Pressable
+                                  onPress={() => {
+                                    setIsDrawingSignature(false);
+                                    setScrollEnabled(true);
+                                  }}
+                                  style={styles.signatureCloseButton}
+                                >
+                                  <X size={20} color="#000" />
+                                </Pressable>
+                              </View>
+                            )}
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Items', true)}
+                            {orderItems.map((item, idx) => (
+                              <View key={idx} style={styles.itemRow}>
+                                <View style={styles.itemRowContent}>
+                                  <View style={styles.itemSearchContainer}>
+                                    {/* Item trigger button — same pattern as LCP-NAP */}
+                                    <Pressable
+                                      onPress={() => {
+                                        setActiveItemIndex(idx);
+                                        setItemSearchModal('');
+                                        setIsItemMiniModalVisible(true);
+                                      }}
+                                      style={[styles.searchContainer, {
+                                        borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                                      }]}
+                                    >
+                                      <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                      <Text style={[styles.itemSelectText, {
+                                        flex: 1,
+                                        paddingHorizontal: 8,
+                                        color: item.itemId ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280')
+                                      }]}>
+                                        {item.itemId || 'Select Item...'}
+                                      </Text>
+                                      {item.itemId ? (
+                                        <Pressable
+                                          onPress={() => handleItemChange(idx, 'itemId', '')}
+                                          hitSlop={8}
+                                          style={{ padding: 2 }}
+                                        >
+                                          <X size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                        </Pressable>
+                                      ) : (
+                                        <ChevronDown size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                      )}
+                                    </Pressable>
+                                  </View>
+
+                                  <View style={styles.itemQtyContainer}>
+                                    <TextInput
+                                      style={[styles.textInput, {
+                                        borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                        color: isDarkMode ? '#ffffff' : '#111827'
+                                      }]}
+                                      placeholder="Qty"
+                                      placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                                      value={item.quantity}
+                                      keyboardType="numeric"
+                                      onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
+                                    />
+                                  </View>
+
+                                  {orderItems.length > 1 && (
+                                    <Pressable
+                                      onPress={() => {
+                                        const newItems = [...orderItems];
+                                        newItems.splice(idx, 1);
+                                        setOrderItems(newItems);
+                                      }}
+                                      style={styles.itemRemoveButton}
+                                    >
+                                      <X size={20} color="#ef4444" />
+                                    </Pressable>
+                                  )}
+                                </View>
+                              </View>
+                            ))}
+                            {errors.items && (
+                              <Text style={styles.errorText}>{errors.items}</Text>
+                            )}
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Time In Image')}
+                            <Pressable
+                              onPress={() => handleImageChange('timeInFile')}
+                              style={[styles.signatureContainer, {
+                                borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                                backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                              }]}
+                            >
+                              {imageFiles.timeInFile || formData.timeIn ? (
+                                <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={styles.signatureImage} />
+                              ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time In</Text>}
+                            </Pressable>
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Modem Setup Image')}
+                            <Pressable
+                              onPress={() => handleImageChange('modemSetupFile')}
+                              style={[styles.signatureContainer, {
+                                borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                                backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                              }]}
+                            >
+                              {imageFiles.modemSetupFile || formData.modemSetupImage ? (
+                                <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={styles.signatureImage} />
+                              ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Modem Setup</Text>}
+                            </Pressable>
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Time Out Image')}
+                            <Pressable
+                              onPress={() => handleImageChange('timeOutFile')}
+                              style={[styles.signatureContainer, {
+                                borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                                backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                              }]}
+                            >
+                              {imageFiles.timeOutFile || formData.timeOut ? (
+                                <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={styles.signatureImage} />
+                              ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time Out</Text>}
+                            </Pressable>
+                          </View>
+                        </>
+                      )}
+
+                      {/* Failed/Reschedule Fields */}
+                      {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
+                        <>
+                          {/* Visit By/With/Other/Remarks for Reschedule/Failed */}
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit By', true)}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitBy}
+                                onValueChange={(val) => handleInputChange('visitBy', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                {technicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit With', true)}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitWith}
+                                onValueChange={(val) => handleInputChange('visitWith', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                {failedVisitWithTechnicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                          </View>
+
+                          <View style={styles.inputGroup}>
+                            {renderLabel('Visit With Other', true)}
+                            <View style={[styles.pickerContainer, {
+                              borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                            }]}>
+                              <Picker
+                                selectedValue={formData.visitWithOther}
+                                onValueChange={(val) => handleInputChange('visitWithOther', val)}
+                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                                style={{ color: isDarkMode ? '#fff' : '#000' }}
+                              >
+                                <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                {failedVisitWithTechnicians.map((t, i) => (
+                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                ))}
+                              </Picker>
+                            </View>
+                          </View>
+
+                          {renderInput('visitRemarks', 'Visit Remarks')}
+                        </>
                       )}
                     </>
                   )}
-                </View>
 
-                {formData.concern === 'Upgrade/Downgrade Plan' && (
+                  {/* Concern */}
                   <View style={styles.inputGroup}>
-                    {renderLabel('New Plan', true)}
-                    <View style={[styles.pickerContainer, {
-                      borderColor: errors.newPlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                    }]}>
-                      <Picker
-                        selectedValue={formData.newPlan}
-                        onValueChange={(val) => handleInputChange('newPlan', val)}
-                        dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                        style={{ color: isDarkMode ? '#fff' : '#000' }}
-                      >
-                        <Picker.Item label="Select New Plan" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                        {plans.map((p, idx) => {
-                          const formattedPrice = parseFloat(p.price.toString());
-                          const displayValue = `${p.name} - ${formattedPrice}`;
-                          return <Picker.Item key={idx} label={displayValue} value={displayValue} color={isDarkMode ? '#fff' : '#000'} />;
-                        })}
-                      </Picker>
-                    </View>
-                    {errors.newPlan && (
-                      <Text style={styles.errorText}>{errors.newPlan}</Text>
+                    {renderLabel('Concern', true)}
+                    {isTechnician ? (
+                      <TextInput
+                        style={[styles.textInput, {
+                          backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                          borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                          color: isDarkMode ? '#9ca3af' : '#6b7280'
+                        }]}
+                        value={formData.concern}
+                        editable={false}
+                      />
+                    ) : (
+                      <>
+                        <View style={[styles.pickerContainer, {
+                          borderColor: errors.concern ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                        }]}>
+                          <Picker
+                            selectedValue={formData.concern}
+                            onValueChange={(val) => handleInputChange('concern', val)}
+                            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                            style={{ color: isDarkMode ? '#fff' : '#000' }}
+                          >
+                            <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                            {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
+                          </Picker>
+                        </View>
+                        {errors.concern && (
+                          <Text style={styles.errorText}>{errors.concern}</Text>
+                        )}
+                      </>
                     )}
                   </View>
-                )}
 
-                {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
-                {renderInput('modifiedBy', 'Modified By', false)}
-                {renderInput('supportRemarks', 'Support Remarks')}
-                {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
+                  {formData.concern === 'Upgrade/Downgrade Plan' && (
+                    <View style={styles.inputGroup}>
+                      {renderLabel('New Plan', true)}
+                      <View style={[styles.pickerContainer, {
+                        borderColor: errors.newPlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+                      }]}>
+                        <Picker
+                          selectedValue={formData.newPlan}
+                          onValueChange={(val) => handleInputChange('newPlan', val)}
+                          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                          style={{ color: isDarkMode ? '#fff' : '#000' }}
+                        >
+                          <Picker.Item label="Select New Plan" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                          {plans.map((p, idx) => {
+                            const formattedPrice = parseFloat(p.price.toString());
+                            const displayValue = `${p.name} - ${formattedPrice}`;
+                            return <Picker.Item key={idx} label={displayValue} value={displayValue} color={isDarkMode ? '#fff' : '#000'} />;
+                          })}
+                        </Picker>
+                      </View>
+                      {errors.newPlan && (
+                        <Text style={styles.errorText}>{errors.newPlan}</Text>
+                      )}
+                    </View>
+                  )}
 
-              </View>
-            </ScrollView>
+                  {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
+                  {renderInput('modifiedBy', 'Modified By', false)}
+                  {renderInput('supportRemarks', 'Support Remarks')}
+                  {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
+
+                </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -2333,6 +2243,111 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   )}
                 </Pressable>
               )}
+              ListEmptyComponent={
+                <View style={styles.miniModalEmpty}>
+                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                </View>
+              }
+              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              style={{ flexGrow: 1 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Item Selection Mini-Modal */}
+      <Modal
+        visible={isItemMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsItemMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Item</Text>
+              <Pressable onPress={() => setIsItemMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search items..."
+                  value={itemSearchModal}
+                  onChangeText={setItemSearchModal}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  autoFocus={true}
+                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                />
+                {itemSearchModal.length > 0 && (
+                  <Pressable onPress={() => setItemSearchModal('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+
+            <FlatList
+              data={[
+                ...('None'.toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
+                ...filteredInventoryItems
+              ]}
+              keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 16 }} />
+              )}
+              renderItem={({ item }) => {
+                const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
+                const isSelected = currentItemId === item.item_name;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      if (activeItemIndex !== null) {
+                        handleItemChange(activeItemIndex, 'itemId', item.item_name);
+                      }
+                      setIsItemMiniModalVisible(false);
+                      setItemSearchModal('');
+                      setActiveItemIndex(null);
+                      Keyboard.dismiss();
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniModalItem,
+                      {
+                        backgroundColor: pressed
+                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                          : 'transparent'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.miniModalItemText, {
+                      color: isSelected
+                        ? (colorPalette?.primary || '#7c3aed')
+                        : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      fontWeight: isSelected ? '700' : 'bold',
+                      flex: 1
+                    }]}>
+                      {item.item_name}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {item.image_url && (
+                        <Image
+                          source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
+                          style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
+                        />
+                      )}
+                      {isSelected && (
+                        <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              }}
               ListEmptyComponent={
                 <View style={styles.miniModalEmpty}>
                   <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
