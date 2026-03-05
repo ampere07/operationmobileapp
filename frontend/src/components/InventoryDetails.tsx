@@ -253,14 +253,14 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
   };
 
   const primaryColor = colorPalette?.primary || '#7c3aed';
-  const iconColor = isDarkMode ? '#9ca3af' : '#4b5563';
-  const borderColor = isDarkMode ? '#374151' : '#e5e7eb';
-  const cardBg = isDarkMode ? '#1f2937' : '#ffffff';
-  const labelColor = isDarkMode ? '#9ca3af' : '#4b5563';
-  const valueColor = isDarkMode ? '#ffffff' : '#111827';
-  const sectionBg = isDarkMode ? '#1f2937' : '#f9fafb';
-  const badgeBg = isDarkMode ? '#4b5563' : '#d1d5db';
-  const badgeText = isDarkMode ? '#ffffff' : '#374151';
+  const iconColor = '#4b5563';
+  const borderColor = '#e5e7eb';
+  const cardBg = '#ffffff';
+  const labelColor = '#4b5563';
+  const valueColor = '#111827';
+  const sectionBg = '#f9fafb';
+  const badgeBg = '#d1d5db';
+  const badgeText = '#374151';
 
   const getDirectImageUrl = (url?: string) => {
     if (!url) return null;
@@ -372,7 +372,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
 
   const EmptySection = () => (
     <View style={{ paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center' }}>
-      <Text style={{ color: isDarkMode ? '#6b7280' : '#9ca3af' }}>No items</Text>
+      <Text style={{ color: '#9ca3af' }}>No items</Text>
     </View>
   );
 
@@ -428,7 +428,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
       <View
         style={{
           flex: 1,
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          backgroundColor: '#ffffff',
         }}
       >
         {/* Toolbar */}
@@ -439,7 +439,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             paddingBottom: 16,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
-            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+            backgroundColor: '#f3f4f6',
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -468,7 +468,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
               borderWidth: 1,
               borderRadius: 6,
               borderColor,
-              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+              backgroundColor: '#f3f4f6',
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
@@ -481,7 +481,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                 resizeMode="cover"
               />
             ) : (
-              <AlertTriangle size={64} color={isDarkMode ? '#4b5563' : '#9ca3af'} />
+              <AlertTriangle size={64} color={'#9ca3af'} />
             )}
           </View>
 
@@ -640,7 +640,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
       <View
         style={{
           flex: 1,
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          backgroundColor: '#ffffff',
         }}
       >
         {/* Header */}
@@ -651,8 +651,8 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             paddingHorizontal: 16,
             paddingTop: isTablet ? 16 : 60,
             paddingBottom: 16,
-            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-            borderBottomWidth: isDarkMode ? 0 : 1,
+            backgroundColor: '#f3f4f6',
+            borderBottomWidth: 1,
             borderBottomColor: borderColor,
           }}
         >
@@ -661,7 +661,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
               paddingHorizontal: 8,
               paddingVertical: 4,
               borderRadius: 4,
-              backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
+              backgroundColor: '#d1d5db',
               marginRight: 12,
             }}
           >
@@ -670,7 +670,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                 fontSize: 12,
                 fontWeight: '500',
                 textTransform: 'uppercase',
-                color: isDarkMode ? '#d1d5db' : '#374151',
+                color: '#374151',
               }}
             >
               {item.category || 'EVENT'}
@@ -701,7 +701,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             paddingVertical: 4,
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
-            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+            backgroundColor: '#f3f4f6',
             alignItems: 'center',
           }}
         >
@@ -716,7 +716,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
             justifyContent: 'center',
             borderBottomWidth: 1,
             borderBottomColor: borderColor,
-            backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+            backgroundColor: '#f3f4f6',
             overflow: 'hidden',
           }}
         >
@@ -727,7 +727,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
               resizeMode="cover"
             />
           ) : (
-            <AlertTriangle size={48} color={isDarkMode ? '#4b5563' : '#9ca3af'} />
+            <AlertTriangle size={48} color={'#9ca3af'} />
           )}
         </View>
 
@@ -750,7 +750,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                   paddingHorizontal: 8,
                   paddingVertical: 4,
                   borderRadius: 4,
-                  backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
+                  backgroundColor: '#d1d5db',
                 }}
               >
                 <Text
@@ -758,7 +758,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                     fontSize: 14,
                     fontWeight: '500',
                     textTransform: 'uppercase',
-                    color: isDarkMode ? '#d1d5db' : '#374151',
+                    color: '#374151',
                   }}
                 >
                   {item.category || 'EVENT'}
@@ -798,7 +798,7 @@ const InventoryDetails: React.FC<InventoryDetailsProps> = ({
                           flexDirection: 'row',
                           paddingHorizontal: 24,
                           paddingVertical: 12,
-                          backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                          backgroundColor: '#e5e7eb',
                         }}
                       >
                         {['Date', 'Type', 'Qty', 'Req. By', 'Req. With'].map((col) => (

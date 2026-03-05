@@ -5,16 +5,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Defs, LinearGradient, Stop, Polyline, Circle } from 'react-native-svg';
 
 const DashboardContent: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
 
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-  }, []);
 
   const statsCards = [
     {
@@ -92,7 +85,7 @@ const DashboardContent: React.FC = () => {
         }}>
           {statsCards.map((card, index) => {
             const IconComponent = card.icon;
-            const cardWidth = isDesktop ? `${100/6 - 2.67}%` : isLargeTablet ? `${100/3 - 2.67}%` : isTablet ? `${100/2 - 2}%` : '100%';
+            const cardWidth = isDesktop ? `${100 / 6 - 2.67}%` : isLargeTablet ? `${100 / 3 - 2.67}%` : isTablet ? `${100 / 2 - 2}%` : '100%';
             return (
               <View key={index} style={{
                 width: cardWidth,

@@ -315,12 +315,16 @@ class PortApiController extends Controller
 
             $usedPortsJobOrders = $query->pluck('port')->toArray();
 
-            $usedPortsTechnicalDetails = \DB::table('technical_details')
+            $techQuery = \DB::table('technical_details')
                 ->where('lcpnap', $lcpnap)
                 ->whereNotNull('port')
-                ->where('port', '!=', '')
-                ->pluck('port')
-                ->toArray();
+                ->where('port', '!=', '');
+
+            if ($request->has('current_account_no')) {
+                $techQuery->where('account_no', '!=', $request->get('current_account_no'));
+            }
+
+            $usedPortsTechnicalDetails = $techQuery->pluck('port')->toArray();
 
             $usedPorts = array_unique(array_merge($usedPortsJobOrders, $usedPortsTechnicalDetails));
             $usedPorts = array_values($usedPorts);

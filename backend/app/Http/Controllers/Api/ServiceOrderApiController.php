@@ -507,13 +507,13 @@ class ServiceOrderApiController extends Controller
                         $lcpnapValue = $request->input('new_lcpnap');
                         $parts = explode(' - ', $lcpnapValue);
                         if (count($parts) === 2) {
-                            $newLcp = $parts[0];
-                            $newNap = $parts[1];
+                            $newLcp = trim($parts[0]);
+                            $newNap = trim($parts[1]);
                         } else {
                             $parts = explode('-', $lcpnapValue);
                             if (count($parts) === 2) {
-                                $newLcp = $parts[0];
-                                $newNap = $parts[1];
+                                $newLcp = trim($parts[0]);
+                                $newNap = trim($parts[1]);
                             }
                         }
                     }

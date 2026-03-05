@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
   StyleSheet
 } from 'react-native';
-import { X, ExternalLink, Edit } from 'lucide-react-native';
+import { X, ExternalLink } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WorkOrderDetailsProps } from '../types/workOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -22,7 +22,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
 }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const [isDarkMode, setIsDarkMode] = useState(propDarkMode ?? true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(propColorPalette ?? null);
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
@@ -31,10 +31,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        if (propDarkMode === undefined) {
-          const theme = await AsyncStorage.getItem('theme');
-          setIsDarkMode(theme !== 'light');
-        }
+        // Dark mode logic removed as per user request
 
         if (!propColorPalette) {
           const palette = await settingsColorPaletteService.getActive();
@@ -59,9 +56,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     loadSettings();
   }, []);
 
-  useEffect(() => {
-    if (propDarkMode !== undefined) setIsDarkMode(propDarkMode);
-  }, [propDarkMode]);
+  // Dark mode effect removed as per user request
 
   useEffect(() => {
     if (propColorPalette) setColorPalette(propColorPalette);
@@ -72,10 +67,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     console.log('Done clicked');
   };
 
-  const handleEditClick = () => {
-    // Placeholder for future implementation
-    console.log('Edit clicked');
-  };
+
 
   if (!workOrder) return null;
 
@@ -109,26 +101,26 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   };
 
   const getStatusBgColor = (status: string | undefined | null): string => {
-    if (!status) return isDarkMode ? 'rgba(156, 163, 175, 0.15)' : 'rgba(156, 163, 175, 0.1)';
+    if (!status) return 'rgba(156, 163, 175, 0.1)';
     switch (status.toLowerCase()) {
       case 'completed':
       case 'done':
-        return isDarkMode ? 'rgba(74, 222, 128, 0.15)' : 'rgba(74, 222, 128, 0.1)';
+        return 'rgba(74, 222, 128, 0.1)';
       case 'in progress':
-        return isDarkMode ? 'rgba(96, 165, 250, 0.15)' : 'rgba(96, 165, 250, 0.1)';
+        return 'rgba(96, 165, 250, 0.1)';
       case 'pending':
-        return isDarkMode ? 'rgba(251, 146, 60, 0.15)' : 'rgba(251, 146, 60, 0.1)';
+        return 'rgba(251, 146, 60, 0.1)';
       case 'failed':
       case 'cancelled':
-        return isDarkMode ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)';
+        return 'rgba(239, 68, 68, 0.1)';
       case 'on hold':
-        return isDarkMode ? 'rgba(167, 139, 250, 0.15)' : 'rgba(167, 139, 250, 0.1)';
+        return 'rgba(167, 139, 250, 0.1)';
       default:
-        return isDarkMode ? 'rgba(156, 163, 175, 0.15)' : 'rgba(156, 163, 175, 0.1)';
+        return 'rgba(156, 163, 175, 0.1)';
     }
   };
 
-  const dynamicValueColor = isDarkMode ? '#ffffff' : '#111827';
+  const dynamicValueColor = '#111827';
   const valStyle = [st.valueText, { color: dynamicValueColor }];
 
   const renderImageLink = (url: string | undefined | null, label: string) => (
@@ -138,7 +130,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       </Text>
       {url && (
         <Pressable onPress={() => Linking.openURL(url || '')}>
-          <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          <ExternalLink width={16} height={16} color="#4b5563" />
         </Pressable>
       )}
     </View>
@@ -220,8 +212,8 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     }
 
     return (
-      <View style={[st.fieldRow, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
-        <Text style={[st.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
+      <View style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>
+        <Text style={[st.fieldLabel, { color: '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
         <View style={st.fieldValueWrap}>
           {renderer()}
         </View>
@@ -232,27 +224,27 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   return (
     <View style={[st.container, {
       borderLeftWidth: !isMobile ? 1 : 0,
-      backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
-      borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db'
+      backgroundColor: '#f9fafb',
+      borderLeftColor: '#d1d5db'
     }]}>
       {/* Header */}
       <View style={[st.header, {
         paddingTop: isMobile ? 60 : 12,
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        backgroundColor: '#ffffff',
+        borderBottomColor: '#e5e7eb'
       }]}>
         <View style={st.headerLeft}>
           <Text
             style={[st.headerName, {
               maxWidth: isMobile ? 200 : undefined,
               fontSize: isMobile ? 20 : 24,
-              color: isDarkMode ? '#ffffff' : '#111827'
+              color: '#111827'
             }]}
             numberOfLines={1}
           >
             Work Order #{workOrder.id}
           </Text>
-          {loading && <Text style={[st.loadingLabel, { color: isDarkMode ? '#fb923c' : '#7c3aed' }]}>Loading...</Text>}
+          {loading && <Text style={[st.loadingLabel, { color: '#7c3aed' }]}>Loading...</Text>}
         </View>
 
         <View style={st.headerActions}>
@@ -266,30 +258,14 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
           ) : null}
 
           <Pressable onPress={onClose} style={{ padding: 4 }}>
-            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <X width={28} height={28} color="#4b5563" />
           </Pressable>
         </View>
       </View>
 
-      {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && (workOrder.work_status?.toLowerCase() === 'pending' || workOrder.work_status?.toLowerCase() === 'in progress') && (
-        <View style={[st.editBar, {
-          backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
-        }]}>
-          <View style={st.editBarInner}>
-            <Pressable onPress={onEdit} disabled={loading} style={st.editBtnWrap}>
-              <View style={[st.editIconCircle, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed') }]}>
-                <Edit width={18} height={18} color="#ffffff" />
-              </View>
-              <Text style={[st.editLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Edit</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
       {/* Content */}
       <ScrollView style={st.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={st.scrollContent}>
-        <View style={[st.fieldsContainer, { backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }]}>
+        <View style={[st.fieldsContainer, { backgroundColor: '#f9fafb' }]}>
           <View>
             {defaultFields.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
@@ -345,30 +321,6 @@ const st = StyleSheet.create({
   actionBtnText: {
     color: '#ffffff',
     fontWeight: '500',
-  },
-  editBar: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  editBarInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  editBtnWrap: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 6,
-  },
-  editIconCircle: {
-    padding: 8,
-    borderRadius: 9999,
-  },
-  editLabel: {
-    fontSize: 12,
-    marginTop: 4,
   },
   statusBadgeHeader: {
     flexDirection: 'row',

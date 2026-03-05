@@ -47,11 +47,14 @@ export const getAllPorts = async (lcpnap?: string, page: number = 1, limit: numb
   }
 };
 
-export const getUsedPorts = async (lcpnap: string, currentJobOrderId?: number): Promise<ApiResponse<{ used: string[], total: number }>> => {
+export const getUsedPorts = async (lcpnap: string, currentJobOrderId?: number, currentAccountNo?: string): Promise<ApiResponse<{ used: string[], total: number }>> => {
   try {
     const params: any = { lcpnap };
     if (currentJobOrderId) {
       params.current_job_order_id = currentJobOrderId;
+    }
+    if (currentAccountNo) {
+      params.current_account_no = currentAccountNo;
     }
     const response = await apiClient.get<any>('/ports/used', { params });
 

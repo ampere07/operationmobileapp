@@ -47,7 +47,7 @@ interface ApiResponse<T = any> {
 }
 
 const Inventory: React.FC = () => {
-  const isDarkMode = false;
+
   const { inventoryItems, dbCategories, isLoading: loading, error, refreshInventory } = useInventoryContext();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -237,11 +237,11 @@ const Inventory: React.FC = () => {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          backgroundColor: '#f9fafb',
         }}
       >
         <ActivityIndicator size="large" color="#7c3aed" style={{ marginBottom: 16 }} />
-        <Text style={{ fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>
+        <Text style={{ fontSize: 18, color: '#111827' }}>
           Loading inventory...
         </Text>
       </View>
@@ -255,7 +255,7 @@ const Inventory: React.FC = () => {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          backgroundColor: '#f9fafb',
         }}
       >
         <AlertTriangle size={48} color="#ef4444" style={{ marginBottom: 16 }} />
@@ -263,7 +263,7 @@ const Inventory: React.FC = () => {
           style={{
             fontSize: 18,
             marginBottom: 8,
-            color: isDarkMode ? '#ffffff' : '#111827',
+            color: '#111827',
           }}
         >
           Error Loading Inventory
@@ -271,7 +271,7 @@ const Inventory: React.FC = () => {
         <Text
           style={{
             marginBottom: 16,
-            color: isDarkMode ? '#9ca3af' : '#4b5563',
+            color: '#4b5563',
           }}
         >
           {error}
@@ -295,14 +295,14 @@ const Inventory: React.FC = () => {
     <View
       style={{
         flex: 1,
-        backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+        backgroundColor: '#f9fafb',
       }}
     >
       {/* Main Content Area */}
       <View
         style={{
           flex: 1,
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          backgroundColor: '#ffffff',
           paddingBottom: 64,
         }}
       >
@@ -312,8 +312,8 @@ const Inventory: React.FC = () => {
             padding: 16,
             paddingTop: isTablet ? 16 : 60,
             borderBottomWidth: 1,
-            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            borderBottomColor: '#e5e7eb',
+            backgroundColor: '#ffffff',
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
@@ -322,12 +322,12 @@ const Inventory: React.FC = () => {
           <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
             <Search
               size={16}
-              color={isDarkMode ? '#9ca3af' : '#6b7280'}
+              color={'#6b7280'}
               style={{ position: 'absolute', left: 10, zIndex: 1 }}
             />
             <TextInput
               placeholder="Search inventory..."
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              placeholderTextColor={'#9ca3af'}
               value={searchQuery}
               onChangeText={(text) => setSearchQuery(text)}
               style={{
@@ -337,9 +337,9 @@ const Inventory: React.FC = () => {
                 paddingRight: 16,
                 paddingVertical: 8,
                 borderWidth: 1,
-                backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-                color: isDarkMode ? '#ffffff' : '#111827',
-                borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                backgroundColor: '#f3f4f6',
+                color: '#111827',
+                borderColor: '#d1d5db',
               }}
             />
           </View>
@@ -426,7 +426,7 @@ const Inventory: React.FC = () => {
                 style={{
                   fontSize: 18,
                   marginBottom: 8,
-                  color: isDarkMode ? '#9ca3af' : '#4b5563',
+                  color: '#4b5563',
                 }}
               >
                 {selectedCategory === '' ? 'Select a category to view items' : 'No items found'}
@@ -434,7 +434,7 @@ const Inventory: React.FC = () => {
               <Text
                 style={{
                   fontSize: 14,
-                  color: isDarkMode ? '#9ca3af' : '#4b5563',
+                  color: '#4b5563',
                   textAlign: 'center',
                 }}
               >
@@ -478,8 +478,8 @@ const Inventory: React.FC = () => {
           left: 0,
           right: 0,
           borderTopWidth: 1,
-          borderTopColor: isDarkMode ? '#374151' : '#e5e7eb',
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          borderTopColor: '#e5e7eb',
+          backgroundColor: '#ffffff',
           zIndex: 40,
         }}
       >

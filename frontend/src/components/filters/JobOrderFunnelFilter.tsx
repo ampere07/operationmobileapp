@@ -97,18 +97,11 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
   onApplyFilters,
   currentFilters
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<Column | null>(null);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
 
-  useEffect(() => {
-    const loadTheme = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-    loadTheme();
-  }, []);
+
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -223,7 +216,7 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
       return (
         <View style={{ gap: 16 }}>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               From
             </Text>
             <TextInput
@@ -231,12 +224,12 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
               value={currentValue?.from?.toString() || ''}
               onChangeText={(value) => handleRangeChange(selectedColumn.key, 'from', value)}
               placeholder="Minimum value"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor={'#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               To
             </Text>
             <TextInput
@@ -244,8 +237,8 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
               value={currentValue?.to?.toString() || ''}
               onChangeText={(value) => handleRangeChange(selectedColumn.key, 'to', value)}
               placeholder="Maximum value"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor={'#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
         </View>
@@ -256,27 +249,27 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
       return (
         <View style={{ gap: 16 }}>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               From
             </Text>
             <TextInput
               value={currentValue?.from?.toString() || ''}
               onChangeText={(value) => handleDateChange(selectedColumn.key, 'from', value)}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor={'#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               To
             </Text>
             <TextInput
               value={currentValue?.to?.toString() || ''}
               onChangeText={(value) => handleDateChange(selectedColumn.key, 'to', value)}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor={'#9ca3af'}
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
         </View>
@@ -285,15 +278,15 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
 
     return (
       <View>
-        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
           Search Value
         </Text>
         <TextInput
           value={typeof currentValue?.value === 'string' ? currentValue.value : ''}
           onChangeText={(value) => handleTextChange(selectedColumn.key, value)}
           placeholder={`Enter ${selectedColumn.label.toLowerCase()}`}
-          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-          style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+          placeholderTextColor={'#9ca3af'}
+          style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
         />
       </View>
     );
@@ -317,9 +310,9 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
         />
 
         <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, maxWidth: 448, width: '100%', flexDirection: 'row' }}>
-          <View style={{ width: '100%', maxWidth: 448, backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
+          <View style={{ width: '100%', maxWidth: 448, backgroundColor: '#ffffff' }}>
             <View style={{ height: '100%', flexDirection: 'column' }}>
-              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     {selectedColumn && (
@@ -327,15 +320,15 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                         onPress={handleBack}
                         style={{ padding: 8, borderRadius: 8 }}
                       >
-                        <ChevronLeft width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                        <ChevronLeft width={20} height={20} color={'#4b5563'} />
                       </Pressable>
                     )}
                     <View>
-                      <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '600', color: '#111827' }}>
                         {selectedColumn ? selectedColumn.label : 'Filter'}
                       </Text>
                       {!selectedColumn && activeFilterCount > 0 && (
-                        <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                        <Text style={{ fontSize: 12, marginTop: 4, color: '#4b5563' }}>
                           {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
                         </Text>
                       )}
@@ -345,7 +338,7 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                     onPress={onClose}
                     style={{ padding: 8, borderRadius: 8 }}
                   >
-                    <X width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                    <X width={20} height={20} color={'#4b5563'} />
                   </Pressable>
                 </View>
               </View>
@@ -356,7 +349,7 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                 ) : (
                   <View style={{ gap: 24 }}>
                     <View>
-                      <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#4b5563' }}>
                         Job Order Details
                       </Text>
                       <View style={{ flexDirection: 'column', gap: 8, width: '100%' }}>
@@ -371,17 +364,17 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                             <Pressable
                               key={column.key}
                               onPress={() => handleColumnClick(column)}
-                              style={{ width: '100%', padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+                              style={{ width: '100%', padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}
                             >
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                                <Text style={{ fontSize: 14, fontWeight: '500', color: '#111827' }}>
                                   {column.label}
                                 </Text>
                                 {hasFilter && (
                                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colorPalette?.primary || '#7c3aed' }} />
                                 )}
                               </View>
-                              <ChevronRight width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                              <ChevronRight width={16} height={16} color={'#4b5563'} />
                             </Pressable>
                           );
                         })}
@@ -391,13 +384,13 @@ const JobOrderFunnelFilter: React.FC<JobOrderFunnelFilterProps> = ({
                 )}
               </ScrollView>
 
-              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <Pressable
                     onPress={handleReset}
-                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}
+                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: '#e5e7eb' }}
                   >
-                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', textAlign: 'center', fontWeight: '500' }}>Clear All</Text>
+                    <Text style={{ color: '#111827', textAlign: 'center', fontWeight: '500' }}>Clear All</Text>
                   </Pressable>
                   <Pressable
                     onPress={handleApply}

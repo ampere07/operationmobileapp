@@ -125,6 +125,7 @@ const LcpNapLocation: React.FC = () => {
   }, []);
 
   const loadLocations = useCallback(async () => {
+    if (showAddModal) return;
     setIsLoading(true);
     try {
       const response = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations');
@@ -427,89 +428,96 @@ const LcpNapLocation: React.FC = () => {
           </View>
 
           <View style={styles.mapContainer}>
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={{
-                latitude: 12.8797,
-                longitude: 121.7740,
-                latitudeDelta: 12,
-                longitudeDelta: 12
-              }}
-              minZoomLevel={5.8}
-              maxZoomLevel={20}
-              rotateEnabled={false}
-              pitchEnabled={false}
-              showsUserLocation={true}
-              showsMyLocationButton={true}
-              onUserLocationChange={(event) => {
-                const { coordinate } = event.nativeEvent;
-                if (coordinate) {
-                  setUserLocation({
-                    latitude: coordinate.latitude,
-                    longitude: coordinate.longitude
+            {!showAddModal ? (
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={{
+                  latitude: 12.8797,
+                  longitude: 121.7740,
+                  latitudeDelta: 12,
+                  longitudeDelta: 12
+                }}
+                minZoomLevel={5.8}
+                maxZoomLevel={20}
+                rotateEnabled={false}
+                pitchEnabled={false}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+                onUserLocationChange={(event: any) => {
+                  const { coordinate } = event.nativeEvent;
+                  if (coordinate) {
+                    setUserLocation({
+                      latitude: coordinate.latitude,
+                      longitude: coordinate.longitude
+                    });
+                  }
+                }}
+                onRegionChangeComplete={(region: any) => {
+                  setCurrentDelta(region.latitudeDelta);
+                  setMapCenter({
+                    latitude: region.latitude,
+                    longitude: region.longitude
                   });
-                }
-              }}
-              onRegionChangeComplete={(region) => {
-                setCurrentDelta(region.latitudeDelta);
-                setMapCenter({
-                  latitude: region.latitude,
-                  longitude: region.longitude
-                });
-              }}
-              onMapReady={handleMapReady}
-              customMapStyle={[
-                {
-                  featureType: 'poi',
-                  elementType: 'labels',
-                  stylers: [{ visibility: 'off' }],
-                },
-                {
-                  featureType: 'poi',
-                  elementType: 'geometry',
-                  stylers: [{ visibility: 'off' }],
-                },
-              ]}
-            >
-              {userLocation && (
-                <Circle
-                  key="user-location-circle"
-                  center={userLocation}
-                  radius={100}
-                  fillColor="rgba(59, 130, 246, 0.2)"
-                  strokeColor="rgba(59, 130, 246, 0.5)"
-                  strokeWidth={2}
-                />
-              )}
-              {markersToDisplay.map((location) => (
-                <Marker
-                  key={location.id}
-                  coordinate={{
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                  }}
-                  title={location.lcpnap_name}
-                  description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name}`}
-                  onPress={() => handleLocationSelect(location)}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                >
-                  <View style={{
-                    width: getPinSize(currentDelta),
-                    height: getPinSize(currentDelta),
-                    borderRadius: getPinSize(currentDelta) / 2,
-                    backgroundColor: '#22c55e',
-                    borderWidth: getPinSize(currentDelta) > 10 ? 1.5 : 0.5,
-                    borderColor: 'white',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: getPinSize(currentDelta) > 10 ? 0.2 : 0,
-                    shadowRadius: 2,
-                    elevation: getPinSize(currentDelta) > 10 ? 3 : 0,
-                  }} />
-                </Marker>
-              ))}
-            </MapView>
+                }}
+                onMapReady={handleMapReady}
+                customMapStyle={[
+                  {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'off' }],
+                  },
+                  {
+                    featureType: 'poi',
+                    elementType: 'geometry',
+                    stylers: [{ visibility: 'off' }],
+                  },
+                ]}
+              >
+                {userLocation && (
+                  <Circle
+                    key="user-location-circle"
+                    center={userLocation}
+                    radius={100}
+                    fillColor="rgba(59, 130, 246, 0.2)"
+                    strokeColor="rgba(59, 130, 246, 0.5)"
+                    strokeWidth={2}
+                  />
+                )}
+                {markersToDisplay.map((location) => (
+                  <Marker
+                    key={location.id}
+                    coordinate={{
+                      latitude: location.latitude,
+                      longitude: location.longitude
+                    }}
+                    title={location.lcpnap_name}
+                    description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name}`}
+                    onPress={() => handleLocationSelect(location)}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                  >
+                    <View style={{
+                      width: getPinSize(currentDelta),
+                      height: getPinSize(currentDelta),
+                      borderRadius: getPinSize(currentDelta) / 2,
+                      backgroundColor: '#22c55e',
+                      borderWidth: getPinSize(currentDelta) > 10 ? 1.5 : 0.5,
+                      borderColor: 'white',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: getPinSize(currentDelta) > 10 ? 0.2 : 0,
+                      shadowRadius: 2,
+                      elevation: getPinSize(currentDelta) > 10 ? 3 : 0,
+                    }} />
+                  </Marker>
+                ))}
+              </MapView>
+            ) : (
+              <View style={[styles.map, { backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', alignItems: 'center', justifyContent: 'center' }]}>
+                <ActivityIndicator size="large" color={colorPalette?.primary || '#7c3aed'} />
+                <Text style={{ marginTop: 12, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Map paused while adding new location...</Text>
+              </View>
+            )}
 
             <View style={styles.mapActionButtons}>
               <Pressable
@@ -573,7 +581,7 @@ const LcpNapLocation: React.FC = () => {
         isTablet ? (
           <View style={styles.detailsContainer}>
             <LcpNapLocationDetails
-              location={selectedLocation}
+              location={selectedLocation!}
               onClose={() => setSelectedLocation(null)}
               isMobile={false}
             />
@@ -588,7 +596,7 @@ const LcpNapLocation: React.FC = () => {
             <View style={styles.modalOverlay}>
               <View style={styles.mobileDetailsContainer}>
                 <LcpNapLocationDetails
-                  location={selectedLocation}
+                  location={selectedLocation!}
                   onClose={() => setSelectedLocation(null)}
                   isMobile={true}
                 />

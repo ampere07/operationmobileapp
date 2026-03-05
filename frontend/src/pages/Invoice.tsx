@@ -65,7 +65,7 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
 
 const Invoice: React.FC = () => {
   const { invoiceRecords, isLoading, error, silentRefresh } = useInvoiceContext();
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [selectedDate, setSelectedDate] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
@@ -145,25 +145,7 @@ const Invoice: React.FC = () => {
     return [{ date: 'All', id: '' }, ...Array.from(dates).sort().reverse().map(d => ({ date: d, id: d }))];
   }, [invoiceRecords]);
 
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     const authData = localStorage.getItem('authData');

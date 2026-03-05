@@ -418,7 +418,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   serviceOrderData
 }) => {
   const serviceOrderId = serviceOrderData?.id;
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
@@ -537,15 +537,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     let cancelled = false;
     const loadSettings = async () => {
-      const [themeResult, authResult, paletteResult] = await Promise.allSettled([
-        AsyncStorage.getItem('theme'),
+      const [authResult, paletteResult] = await Promise.allSettled([
         AsyncStorage.getItem('authData'),
         settingsColorPaletteService.getActive(),
       ]);
       if (cancelled) return;
-      if (themeResult.status === 'fulfilled') {
-        setIsDarkMode(themeResult.value !== 'light');
-      }
+
       if (authResult.status === 'fulfilled' && authResult.value) {
         try {
           setCurrentUser(JSON.parse(authResult.value));
@@ -761,7 +758,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           }
         }
 
-        const usedRes = await getUsedPorts(formData.newLcpnap, serviceOrderId);
+        const usedRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
 
         if (!isMounted) return;
 
@@ -1047,11 +1044,17 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         // Technical fields for specific relocation categories
         const relocationCategories = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'];
         if (relocationCategories.includes(formData.repairCategory)) {
-          if (formData.repairCategory === 'Migrate' && !formData.newRouterModemSN) {
+          if ((formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate') && !formData.newRouterModemSN) {
             newErrors.newRouterModemSN = 'New Router Modem SN is required';
           }
           if (!formData.newLcpnap) newErrors.newLcpnap = 'New LCP-NAP is required';
-          if (!formData.newPort) newErrors.newPort = 'New Port is required';
+
+          if (!formData.newPort) {
+            newErrors.newPort = 'New Port is required';
+          } else if (usedPorts.some(p => p.toUpperCase() === formData.newPort.toUpperCase())) {
+            newErrors.newPort = 'This port is already taken';
+          }
+
           if (!formData.routerModel) newErrors.routerModel = 'Router Model is required';
         }
 
@@ -1105,7 +1108,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       if (updatedFormData.connectionType === 'Fiber') {
         // Validate New Router Modem SN if provided
         const isNewModemSnVisible = updatedFormData.visitStatus === 'Done' &&
-          (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router');
+          (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router' || updatedFormData.repairCategory === 'Relocate');
 
         if (isNewModemSnVisible && updatedFormData.newRouterModemSN?.trim()) {
           // 1. SmartOLT Validation Logic (Check if exists first)
@@ -1477,8 +1480,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             <Picker.Item label="Select Port" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
             {availablePorts.map((port) => {
               const isUsed = usedPorts.some(up => up.toUpperCase() === port.toUpperCase());
-              const isSelected = formData.newPort.toUpperCase() === port.toUpperCase();
-              if (isUsed && !isSelected) return null; // Hide used ports unless selected
+              if (isUsed) return null; // Hide used ports strictly, even if selected in draft, because they are taken by someone else
               return <Picker.Item key={port} label={port} value={port} color={isDarkMode ? '#fff' : '#000'} />;
             })}
           </Picker>
@@ -1641,7 +1643,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                           {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
                             <>
-                              {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
+                              {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate') && renderInput('newRouterModemSN', 'New Router SN')}
                               {renderLcpNapPicker()}
                               {renderNewPortPicker()}
                               {renderPicker('newVlan', vlans, 'New VLAN')}

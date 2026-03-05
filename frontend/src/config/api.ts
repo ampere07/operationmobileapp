@@ -3,7 +3,31 @@ import { Platform } from 'react-native';
 
 // In React Native, we don't have document.cookie. 
 // We'll store cookies in memory or you could use a persistent store/CookieManager.
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 let cookieStore: string = '';
+
+export const loadCookies = async (): Promise<void> => {
+  try {
+    const savedCookies = await AsyncStorage.getItem('authCookies');
+    if (savedCookies) {
+      cookieStore = savedCookies;
+      csrfInitialized = true;
+    }
+  } catch (error) {
+    console.error('Failed to load cookies', error);
+  }
+};
+
+export const clearCookies = async (): Promise<void> => {
+  cookieStore = '';
+  csrfInitialized = false;
+  try {
+    await AsyncStorage.removeItem('authCookies');
+  } catch (error) {
+    console.error('Failed to clear cookies', error);
+  }
+};
 
 const getCookie = (name: string): string | null => {
   const match = cookieStore.match(new RegExp('(^|;\\s*)' + name + '=([^;]+)'));
@@ -50,6 +74,7 @@ export const initializeCsrf = async (): Promise<void> => {
       } else {
         cookieStore = response.headers['set-cookie'];
       }
+      AsyncStorage.setItem('authCookies', cookieStore).catch(e => console.error('Failed to save cookies', e));
     }
 
     csrfInitialized = true;
@@ -97,6 +122,7 @@ apiClient.interceptors.response.use(
       } else {
         cookieStore = response.headers['set-cookie'];
       }
+      AsyncStorage.setItem('authCookies', cookieStore).catch(e => console.error('Failed to save cookies', e));
     }
     return response;
   },

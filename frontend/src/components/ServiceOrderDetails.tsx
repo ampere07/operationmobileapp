@@ -63,7 +63,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh } = useServiceOrderContext();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
@@ -123,9 +123,6 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
 
   useEffect(() => {
     const loadSettings = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-
       const savedVisibility = await AsyncStorage.getItem(FIELD_VISIBILITY_KEY);
       if (savedVisibility) {
         setFieldVisibility(JSON.parse(savedVisibility));
@@ -287,11 +284,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     }
   };
 
-  const dynamicValueColor = isDarkMode ? '#ffffff' : '#111827';
+  const dynamicValueColor = '#111827';
 
   const renderField = (label: string, content: React.ReactNode) => (
-    <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
-      <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
+    <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>
+      <Text style={[styles.fieldLabel, { color: '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
         {(typeof content === 'string' || typeof content === 'number') ? (
           <Text style={[styles.valueText, { color: dynamicValueColor }]} selectable={true}>
@@ -312,7 +309,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         </Text>
         {url && (
           <Pressable onPress={() => Linking.openURL(url)}>
-            <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <ExternalLink width={16} height={16} color="#4b5563" />
           </Pressable>
         )}
       </View>
@@ -423,16 +420,16 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
       styles.container,
       {
         borderLeftWidth: !isMobile ? 1 : 0,
-        backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
-        borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db'
+        backgroundColor: '#f9fafb',
+        borderLeftColor: '#d1d5db'
       }
     ]}>
       {/* Header */}
       <View style={[
         styles.header,
         {
-          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+          backgroundColor: '#ffffff',
+          borderBottomColor: '#e5e7eb',
           paddingTop: isMobile ? 60 : 12
         }
       ]}>
@@ -440,7 +437,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
           <Text
             style={[
               styles.headerTitle,
-              { fontSize: isMobile ? 14 : 18, color: isDarkMode ? '#ffffff' : '#111827' }
+              { fontSize: isMobile ? 14 : 18, color: '#111827' }
             ]}
             numberOfLines={1}
             selectable={true}
@@ -464,13 +461,13 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
                 onPress={() => setShowFieldSettings(!showFieldSettings)}
                 style={styles.settingsButton}
               >
-                <Settings width={20} height={20} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                <Settings width={20} height={20} color="#4b5563" />
               </Pressable>
             </>
           )}
 
           <Pressable onPress={onClose}>
-            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <X width={28} height={28} color="#4b5563" />
           </Pressable>
         </View>
       </View>
@@ -500,23 +497,23 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
               style={[
                 styles.modalContent,
                 {
-                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                  backgroundColor: '#ffffff',
+                  borderColor: '#e5e7eb'
                 }
               ]}
               onPress={(e) => e.stopPropagation()}
             >
-              <View style={[styles.modalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-                <Text style={[styles.modalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Field Visibility</Text>
+              <View style={[styles.modalHeader, { borderBottomColor: '#e5e7eb' }]}>
+                <Text style={[styles.modalTitle, { color: '#111827' }]}>Field Visibility</Text>
                 <View style={styles.modalHeaderActions}>
                   <Pressable onPress={selectAllFields}>
                     <Text style={styles.modalActionText}>Show All</Text>
                   </Pressable>
-                  <Text style={[styles.separatorText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>|</Text>
+                  <Text style={[styles.separatorText, { color: '#9ca3af' }]}>|</Text>
                   <Pressable onPress={deselectAllFields}>
                     <Text style={styles.modalActionText}>Hide All</Text>
                   </Pressable>
-                  <Text style={[styles.separatorText, { color: isDarkMode ? '#6b7280' : '#9ca3af' }]}>|</Text>
+                  <Text style={[styles.separatorText, { color: '#9ca3af' }]}>|</Text>
                   <Pressable onPress={resetFieldSettings}>
                     <Text style={styles.modalActionText}>Reset</Text>
                   </Pressable>
@@ -533,12 +530,12 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
                       styles.checkbox,
                       {
                         backgroundColor: fieldVisibility[fieldKey] ? (colorPalette?.primary || '#2563eb') : 'transparent',
-                        borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                        borderColor: '#d1d5db'
                       }
                     ]}>
                       {fieldVisibility[fieldKey] && <Text style={styles.checkboxTick}>✓</Text>}
                     </View>
-                    <Text style={[styles.modalItemText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                    <Text style={[styles.modalItemText, { color: '#374151' }]}>
                       {getFieldLabel(fieldKey)}
                     </Text>
                   </Pressable>

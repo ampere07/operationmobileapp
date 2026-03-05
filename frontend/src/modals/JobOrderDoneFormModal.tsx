@@ -89,18 +89,10 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
   onSave,
   jobOrderData
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-    // WEB-ONLY: MutationObserver removed for RN
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {

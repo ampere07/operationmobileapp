@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, FlatList, InteractionManager } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, InteractionManager } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -96,21 +97,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   onSave,
   jobOrderData
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      try {
-        const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme === 'dark' || theme === null);
-      } catch (e) {
-        setIsDarkMode(true);
-      }
-    };
 
-    checkDarkMode();
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -1747,8 +1737,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlatList
+              <FlashList
                 data={filteredLcpnaps}
+                // @ts-ignore
+                estimatedItemSize={60}
                 keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />
@@ -1835,8 +1827,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlatList
+              <FlashList
                 data={filteredRouterModels}
+                // @ts-ignore
+                estimatedItemSize={60}
                 keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />
@@ -1922,11 +1916,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlatList
+              <FlashList
                 data={[
                   ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
                   ...filteredInventoryItems
                 ]}
+                // @ts-ignore
+                estimatedItemSize={60}
                 keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />

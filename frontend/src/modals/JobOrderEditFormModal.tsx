@@ -56,6 +56,7 @@ interface JobOrderEditFormData {
   barangay: string;
   city: string;
   region: string;
+  location: string;
   addressCoordinates: string;
   choosePlan: string;
   status: string;
@@ -119,7 +120,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
   onSave,
   jobOrderData
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   // const currentUser = getCurrentUser(); // Removed synchronous call
@@ -163,6 +164,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     barangay: '',
     city: '',
     region: '',
+    location: '',
     addressCoordinates: '',
     choosePlan: '',
     status: 'Confirmed',
@@ -252,31 +254,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     speedTestImage: null
   });
 
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-
-    // MutationObserver is for web DOM changes, might not be relevant/working in RN context depending on setup
-    // but leaving it commented out or removed if strictly RN. 
-    // Assuming this might still be running in a webview or hybrid, I'll update it to check safely.
-    if (typeof MutationObserver !== 'undefined') {
-      const observer = new MutationObserver(() => {
-        checkDarkMode();
-      });
-
-      if (document.documentElement) {
-        observer.observe(document.documentElement, {
-          attributes: true,
-          attributeFilter: ['class']
-        });
-      }
-      return () => observer.disconnect();
-    }
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -1348,26 +1326,19 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
         </div>
       )}
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-        <div className={`h-full w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'
-          }`}>
-          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            }`}>
+        <div className="h-full w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col bg-white">
+          <div className="px-6 py-4 flex items-center justify-between border-b bg-gray-100 border-gray-200">
             <div className="flex items-center space-x-3">
 
-              <h2 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+              <h2 className="text-xl font-semibold text-gray-900">
                 {formData.firstName} {formData.middleInitial} {formData.lastName}
               </h2>
             </div>
             <div className="flex items-center space-x-3">
-              <button onClick={onClose} className={`px-4 py-2 border rounded text-sm transition-colors ${isDarkMode
-                ? 'border-orange-600 text-orange-600 hover:bg-orange-600 hover:text-white'
-                : 'border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white'
-                }`}>
+              <button onClick={onClose} className="px-4 py-2 border rounded text-sm transition-colors border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white">
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={loading} className={`px-4 py-2 rounded text-sm transition-colors ${isDarkMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-500 hover:bg-orange-600'
-                } disabled:opacity-50 text-white`}>
+              <button onClick={handleSave} disabled={loading} className="px-4 py-2 rounded text-sm transition-colors bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white">
                 {loading ? 'Saving...' : 'Save'}
               </button>
             </div>
@@ -1375,10 +1346,8 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
 
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             <div>
-              <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>Referred By</label>
-              <input type="text" value={formData.referredBy} onChange={(e) => handleInputChange('referredBy', e.target.value)} className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`} />
+              <label className="block text-sm font-medium mb-2 text-gray-700">Referred By</label>
+              <input type="text" value={formData.referredBy} onChange={(e) => handleInputChange('referredBy', e.target.value)} className="w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 bg-white border-gray-300 text-gray-900" />
             </div>
 
             {formData.status === 'Confirmed' && formData.onsiteStatus === 'Done' && (

@@ -24,7 +24,7 @@ import WorkOrderDetails from '../components/WorkOrderDetails';
 import AssignWorkOrderModal from '../modals/AssignWorkOrderModal';
 
 const WorkOrderPage: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [searchQuery, setSearchQuery] = useState('');
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
@@ -70,17 +70,7 @@ const WorkOrderPage: React.FC = () => {
     fetchColorPalette();
   }, []);
 
-  useEffect(() => {
-    const loadTheme = async () => {
-      try {
-        const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme !== 'light');
-      } catch (e) {
-        console.error('Error loading theme:', e);
-      }
-    };
-    loadTheme();
-  }, []);
+  // Dark mode loading removed as per user request
 
   useEffect(() => {
     fetchWorkOrders(1, 1000, '', '');
@@ -154,9 +144,9 @@ const WorkOrderPage: React.FC = () => {
     if (totalPages <= 1) return null;
 
     return (
-      <View style={[st.pagination, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
+      <View style={[st.pagination, { backgroundColor: '#ffffff', borderColor: '#e5e7eb' }]}>
         <View style={st.paginationInfo}>
-          <Text style={[st.paginationText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+          <Text style={[st.paginationText, { color: '#6b7280' }]}>
             Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredWorkOrders.length)} of {filteredWorkOrders.length}
           </Text>
         </View>
@@ -165,15 +155,15 @@ const WorkOrderPage: React.FC = () => {
             onPress={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
             style={[st.pageBtn, {
-              backgroundColor: currentPage === 1 ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
-              borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+              backgroundColor: currentPage === 1 ? '#f3f4f6' : '#ffffff',
+              borderColor: '#d1d5db',
               borderWidth: currentPage === 1 ? 0 : 1
             }]}
           >
-            <Text style={[st.pageBtnText, { color: currentPage === 1 ? '#4b5563' : isDarkMode ? '#ffffff' : '#374151' }]}>Prev</Text>
+            <Text style={[st.pageBtnText, { color: currentPage === 1 ? '#4b5563' : '#374151' }]}>Prev</Text>
           </TouchableOpacity>
 
-          <Text style={[st.pageCountText, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+          <Text style={[st.pageCountText, { color: '#111827' }]}>
             {currentPage}/{totalPages}
           </Text>
 
@@ -181,12 +171,12 @@ const WorkOrderPage: React.FC = () => {
             onPress={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
             style={[st.pageBtn, {
-              backgroundColor: currentPage === totalPages ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
-              borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+              backgroundColor: currentPage === totalPages ? '#f3f4f6' : '#ffffff',
+              borderColor: '#d1d5db',
               borderWidth: currentPage === totalPages ? 0 : 1
             }]}
           >
-            <Text style={[st.pageBtnText, { color: currentPage === totalPages ? '#4b5563' : isDarkMode ? '#ffffff' : '#374151' }]}>Next</Text>
+            <Text style={[st.pageBtnText, { color: currentPage === totalPages ? '#4b5563' : '#374151' }]}>Next</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -212,24 +202,24 @@ const WorkOrderPage: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={[st.container, { backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }]}>
+    <SafeAreaView style={[st.container, { backgroundColor: '#f9fafb' }]}>
       <View style={[st.header, {
-        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-        borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+        backgroundColor: '#ffffff',
+        borderBottomColor: '#e5e7eb',
         paddingTop: isTablet ? 16 : 60
       }]}>
         <View style={st.toolbarRow}>
           <View style={st.searchBarContainer}>
-            <Search size={20} color={isDarkMode ? '#6b7280' : '#9ca3af'} style={st.searchIcon} />
+            <Search size={20} color="#9ca3af" style={st.searchIcon} />
             <TextInput
               placeholder="Search work orders..."
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+              placeholderTextColor="#9ca3af"
               value={searchQuery}
               onChangeText={setSearchQuery}
               style={[st.searchInput, {
-                backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-                color: isDarkMode ? '#ffffff' : '#111827',
-                borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                backgroundColor: '#f3f4f6',
+                color: '#111827',
+                borderColor: '#d1d5db'
               }]}
             />
           </View>
@@ -238,7 +228,7 @@ const WorkOrderPage: React.FC = () => {
             <TouchableOpacity
               onPress={() => fetchWorkOrders(1, 1000, '', '')}
               disabled={isLoading}
-              style={[st.actionIconBtn, { backgroundColor: isLoading ? (isDarkMode ? '#4b5563' : '#d1d5db') : (colorPalette?.primary || '#7c3aed') }]}
+              style={[st.actionIconBtn, { backgroundColor: isLoading ? '#d1d5db' : (colorPalette?.primary || '#7c3aed') }]}
             >
               <RefreshCw size={20} color="white" />
             </TouchableOpacity>
@@ -262,7 +252,7 @@ const WorkOrderPage: React.FC = () => {
           <RefreshControl
             refreshing={isLoading && workOrders.length > 0}
             onRefresh={() => fetchWorkOrders(1, 1000, '', '')}
-            tintColor={isDarkMode ? 'white' : 'black'}
+            tintColor="black"
           />
         }
       >
@@ -280,20 +270,20 @@ const WorkOrderPage: React.FC = () => {
                   key={wo.id}
                   onPress={() => handleCardPress(wo)}
                   style={[st.cardRow, {
-                    backgroundColor: selectedWorkOrder?.id === wo.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
-                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                    backgroundColor: selectedWorkOrder?.id === wo.id ? '#f3f4f6' : 'transparent',
+                    borderColor: '#e5e7eb'
                   }]}
                 >
                   <View style={st.cardInner}>
                     <View style={st.cardLeft}>
                       <Text
-                        style={[st.cardName, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                        style={[st.cardName, { color: '#111827' }]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
                       >
                         {wo.instructions || 'No Instructions'}
                       </Text>
-                      <Text style={[st.cardSub, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
+                      <Text style={[st.cardSub, { color: '#4b5563' }]}>
                         {formatDate(wo.requested_date)}
                       </Text>
                     </View>
@@ -309,7 +299,7 @@ const WorkOrderPage: React.FC = () => {
           </>
         ) : (
           <View style={st.emptyState}>
-            <Text style={[st.emptyText, { color: isDarkMode ? '#4b5563' : '#9ca3af' }]}>
+            <Text style={[st.emptyText, { color: '#9ca3af' }]}>
               No work orders found
             </Text>
           </View>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet } from 'react-native';
 import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
+import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
 import JobOrderFunnelFilter, { FilterValues } from '../components/filters/JobOrderFunnelFilter';
@@ -127,7 +128,7 @@ const jo = StyleSheet.create({
 });
 
 const JobOrderPage: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrder | null>(null);
@@ -164,8 +165,7 @@ const JobOrderPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const initLoad = async () => {
-      const [themeResult, authResult, paletteResult, billingResult] = await Promise.allSettled([
-        AsyncStorage.getItem('theme'),
+      const [authResult, paletteResult, billingResult] = await Promise.allSettled([
         AsyncStorage.getItem('authData'),
         settingsColorPaletteService.getActive(),
         getBillingStatuses(),
@@ -173,9 +173,6 @@ const JobOrderPage: React.FC = () => {
 
       if (cancelled) return;
 
-      if (themeResult.status === 'fulfilled') {
-        setIsDarkMode(themeResult.value !== 'light');
-      }
       if (authResult.status === 'fulfilled' && authResult.value) {
         try {
           const userData = JSON.parse(authResult.value);
@@ -183,7 +180,7 @@ const JobOrderPage: React.FC = () => {
           setUserEmail(userData.email || '');
           setUserRoleId(userData.role_id || null);
           setUserFullName(userData.full_name || '');
-        } catch (error) {}
+        } catch (error) { }
       }
       if (paletteResult.status === 'fulfilled') {
         setColorPalette(paletteResult.value);
@@ -268,111 +265,111 @@ const JobOrderPage: React.FC = () => {
   const filteredJobOrders = useMemo(() => {
     const lowerSearch = debouncedSearch.toLowerCase();
     return jobOrders.filter(jobOrder => {
-    const fullName = getClientFullName(jobOrder).toLowerCase();
-    const matchesSearch = debouncedSearch === '' ||
-      fullName.includes(lowerSearch) ||
-      ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(lowerSearch) ||
-      ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(lowerSearch);
+      const fullName = getClientFullName(jobOrder).toLowerCase();
+      const matchesSearch = debouncedSearch === '' ||
+        fullName.includes(lowerSearch) ||
+        ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(lowerSearch) ||
+        ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(lowerSearch);
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    // Role-based filtering: Agents (role_id 4) only see their own referrals
-    if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
-      const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
-      // Only match if referredBy contains user's full name or email
-      const matchesAgent =
-        (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
-        (userEmail && referredBy.includes(userEmail.toLowerCase()));
+      // Role-based filtering: Agents (role_id 4) only see their own referrals
+      if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+        const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
+        // Only match if referredBy contains user's full name or email
+        const matchesAgent =
+          (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+          (userEmail && referredBy.includes(userEmail.toLowerCase()));
 
-      if (!matchesAgent) return false;
-    }
-
-    // Apply funnel filters
-    for (const key in filterValues) {
-      const filter = filterValues[key];
-      let itemValue: any = '';
-
-      // Determine item value based on key
-      switch (key) {
-        case 'id': itemValue = jobOrder.id; break;
-        case 'application_id': itemValue = jobOrder.application_id; break;
-        case 'timestamp': itemValue = jobOrder.Timestamp || jobOrder.timestamp; break;
-        case 'date_installed': itemValue = jobOrder.Date_Installed || jobOrder.date_installed; break;
-        case 'installation_fee': itemValue = jobOrder.Installation_Fee || jobOrder.installation_fee; break;
-        case 'billing_day': itemValue = jobOrder.Billing_Day || jobOrder.billing_day; break;
-        case 'billing_status_id': itemValue = jobOrder.billing_status_id || jobOrder.Billing_Status_ID; break;
-        case 'modem_router_sn': itemValue = jobOrder.Modem_Router_SN || jobOrder.modem_router_sn; break;
-        case 'router_model': itemValue = jobOrder.Router_Model || jobOrder.router_model; break;
-        case 'group_name': itemValue = jobOrder.group_name || jobOrder.Group_Name; break;
-        case 'lcpnap': itemValue = jobOrder.LCPNAP || jobOrder.lcpnap; break;
-        case 'port': itemValue = jobOrder.PORT || jobOrder.Port || jobOrder.port; break;
-        case 'vlan': itemValue = jobOrder.VLAN || jobOrder.vlan; break;
-        case 'username': itemValue = jobOrder.Username || jobOrder.username; break;
-        case 'ip_address': itemValue = jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip; break;
-        case 'connection_type': itemValue = jobOrder.Connection_Type || jobOrder.connection_type; break;
-        case 'usage_type': itemValue = jobOrder.Usage_Type || jobOrder.usage_type; break;
-        case 'username_status': itemValue = jobOrder.username_status || jobOrder.Username_Status; break;
-        case 'visit_by': itemValue = jobOrder.Visit_By || jobOrder.visit_by; break;
-        case 'visit_with': itemValue = jobOrder.Visit_With || jobOrder.visit_with; break;
-        case 'visit_with_other': itemValue = jobOrder.Visit_With_Other || jobOrder.visit_with_other; break;
-        case 'onsite_status': itemValue = jobOrder.Onsite_Status || jobOrder.onsite_status; break;
-        case 'onsite_remarks': itemValue = jobOrder.Onsite_Remarks || jobOrder.onsite_remarks; break;
-        case 'status_remarks': itemValue = jobOrder.Status_Remarks || jobOrder.status_remarks; break;
-        case 'address_coordinates': itemValue = jobOrder.Address_Coordinates || jobOrder.address_coordinates; break;
-        case 'contract_link': itemValue = jobOrder.Contract_Link || jobOrder.contract_link; break;
-        case 'client_signature_url': itemValue = jobOrder.client_signature_url || jobOrder.Client_Signature_URL || jobOrder.client_signature_image_url || jobOrder.Client_Signature_Image_URL; break;
-        case 'setup_image_url': itemValue = jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url; break;
-        case 'speedtest_image_url': itemValue = jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image; break;
-        case 'signed_contract_image_url': itemValue = jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL; break;
-        case 'box_reading_image_url': itemValue = jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL; break;
-        case 'router_reading_image_url': itemValue = jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL; break;
-        case 'port_label_image_url': itemValue = jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL; break;
-        case 'house_front_picture_url': itemValue = jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture; break;
-        case 'created_at': itemValue = jobOrder.created_at || jobOrder.Created_At; break;
-        case 'created_by_user_email': itemValue = jobOrder.created_by_user_email || jobOrder.Created_By_User_Email; break;
-        case 'updated_at': itemValue = jobOrder.updated_at || jobOrder.Updated_At; break;
-        case 'updated_by_user_email': itemValue = jobOrder.updated_by_user_email || jobOrder.Updated_By_User_Email; break;
-        case 'assigned_email': itemValue = jobOrder.Assigned_Email || jobOrder.assigned_email; break;
-        case 'pppoe_username': itemValue = jobOrder.PPPoE_Username || jobOrder.pppoe_username; break;
-        case 'pppoe_password': itemValue = jobOrder.PPPoE_Password || jobOrder.pppoe_password; break;
-        case 'full_name': itemValue = getClientFullName(jobOrder); break;
-        case 'address': itemValue = getClientFullAddress(jobOrder); break;
-        case 'contract_template': itemValue = jobOrder.Contract_Template || jobOrder.contract_template; break;
-        case 'first_name': itemValue = jobOrder.First_Name || jobOrder.first_name; break;
-        case 'middle_initial': itemValue = jobOrder.Middle_Initial || jobOrder.middle_initial; break;
-        case 'last_name': itemValue = jobOrder.Last_Name || jobOrder.last_name; break;
-        case 'contact_number': itemValue = jobOrder.Contact_Number || jobOrder.Mobile_Number || jobOrder.contact_number || jobOrder.mobile_number; break;
-        case 'second_contact_number': itemValue = jobOrder.Second_Contact_Number || jobOrder.Secondary_Mobile_Number || jobOrder.second_contact_number || jobOrder.secondary_mobile_number; break;
-        case 'email_address': itemValue = jobOrder.Email_Address || jobOrder.Applicant_Email_Address || jobOrder.email_address || jobOrder.applicant_email_address; break;
-        case 'region': itemValue = jobOrder.Region || jobOrder.region; break;
-        case 'city': itemValue = jobOrder.City || jobOrder.city; break;
-        case 'barangay': itemValue = jobOrder.Barangay || jobOrder.barangay; break;
-        case 'location': itemValue = jobOrder.Region || jobOrder.region; break; // Approximating location as Region for now, usually it's a specific field but 'Location' was in columns
-        case 'choose_plan': itemValue = jobOrder.Choose_Plan || jobOrder.Desired_Plan || jobOrder.choose_plan || jobOrder.desired_plan; break;
-        case 'referred_by': itemValue = jobOrder.Referred_By || jobOrder.referred_by; break;
-        case 'start_timestamp': itemValue = jobOrder.StartTimeStamp || jobOrder.start_timestamp; break;
-        case 'end_timestamp': itemValue = jobOrder.EndTimeStamp || jobOrder.end_timestamp; break;
-        case 'duration': itemValue = jobOrder.Duration || jobOrder.duration; break;
-        default: itemValue = '';
+        if (!matchesAgent) return false;
       }
 
-      if (filter.type === 'text' && filter.value) {
-        if (!String(itemValue || '').toLowerCase().includes(filter.value.toLowerCase())) {
-          return false;
+      // Apply funnel filters
+      for (const key in filterValues) {
+        const filter = filterValues[key];
+        let itemValue: any = '';
+
+        // Determine item value based on key
+        switch (key) {
+          case 'id': itemValue = jobOrder.id; break;
+          case 'application_id': itemValue = jobOrder.application_id; break;
+          case 'timestamp': itemValue = jobOrder.Timestamp || jobOrder.timestamp; break;
+          case 'date_installed': itemValue = jobOrder.Date_Installed || jobOrder.date_installed; break;
+          case 'installation_fee': itemValue = jobOrder.Installation_Fee || jobOrder.installation_fee; break;
+          case 'billing_day': itemValue = jobOrder.Billing_Day || jobOrder.billing_day; break;
+          case 'billing_status_id': itemValue = jobOrder.billing_status_id || jobOrder.Billing_Status_ID; break;
+          case 'modem_router_sn': itemValue = jobOrder.Modem_Router_SN || jobOrder.modem_router_sn; break;
+          case 'router_model': itemValue = jobOrder.Router_Model || jobOrder.router_model; break;
+          case 'group_name': itemValue = jobOrder.group_name || jobOrder.Group_Name; break;
+          case 'lcpnap': itemValue = jobOrder.LCPNAP || jobOrder.lcpnap; break;
+          case 'port': itemValue = jobOrder.PORT || jobOrder.Port || jobOrder.port; break;
+          case 'vlan': itemValue = jobOrder.VLAN || jobOrder.vlan; break;
+          case 'username': itemValue = jobOrder.Username || jobOrder.username; break;
+          case 'ip_address': itemValue = jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip; break;
+          case 'connection_type': itemValue = jobOrder.Connection_Type || jobOrder.connection_type; break;
+          case 'usage_type': itemValue = jobOrder.Usage_Type || jobOrder.usage_type; break;
+          case 'username_status': itemValue = jobOrder.username_status || jobOrder.Username_Status; break;
+          case 'visit_by': itemValue = jobOrder.Visit_By || jobOrder.visit_by; break;
+          case 'visit_with': itemValue = jobOrder.Visit_With || jobOrder.visit_with; break;
+          case 'visit_with_other': itemValue = jobOrder.Visit_With_Other || jobOrder.visit_with_other; break;
+          case 'onsite_status': itemValue = jobOrder.Onsite_Status || jobOrder.onsite_status; break;
+          case 'onsite_remarks': itemValue = jobOrder.Onsite_Remarks || jobOrder.onsite_remarks; break;
+          case 'status_remarks': itemValue = jobOrder.Status_Remarks || jobOrder.status_remarks; break;
+          case 'address_coordinates': itemValue = jobOrder.Address_Coordinates || jobOrder.address_coordinates; break;
+          case 'contract_link': itemValue = jobOrder.Contract_Link || jobOrder.contract_link; break;
+          case 'client_signature_url': itemValue = jobOrder.client_signature_url || jobOrder.Client_Signature_URL || jobOrder.client_signature_image_url || jobOrder.Client_Signature_Image_URL; break;
+          case 'setup_image_url': itemValue = jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url; break;
+          case 'speedtest_image_url': itemValue = jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image; break;
+          case 'signed_contract_image_url': itemValue = jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL; break;
+          case 'box_reading_image_url': itemValue = jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL; break;
+          case 'router_reading_image_url': itemValue = jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL; break;
+          case 'port_label_image_url': itemValue = jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL; break;
+          case 'house_front_picture_url': itemValue = jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture; break;
+          case 'created_at': itemValue = jobOrder.created_at || jobOrder.Created_At; break;
+          case 'created_by_user_email': itemValue = jobOrder.created_by_user_email || jobOrder.Created_By_User_Email; break;
+          case 'updated_at': itemValue = jobOrder.updated_at || jobOrder.Updated_At; break;
+          case 'updated_by_user_email': itemValue = jobOrder.updated_by_user_email || jobOrder.Updated_By_User_Email; break;
+          case 'assigned_email': itemValue = jobOrder.Assigned_Email || jobOrder.assigned_email; break;
+          case 'pppoe_username': itemValue = jobOrder.PPPoE_Username || jobOrder.pppoe_username; break;
+          case 'pppoe_password': itemValue = jobOrder.PPPoE_Password || jobOrder.pppoe_password; break;
+          case 'full_name': itemValue = getClientFullName(jobOrder); break;
+          case 'address': itemValue = getClientFullAddress(jobOrder); break;
+          case 'contract_template': itemValue = jobOrder.Contract_Template || jobOrder.contract_template; break;
+          case 'first_name': itemValue = jobOrder.First_Name || jobOrder.first_name; break;
+          case 'middle_initial': itemValue = jobOrder.Middle_Initial || jobOrder.middle_initial; break;
+          case 'last_name': itemValue = jobOrder.Last_Name || jobOrder.last_name; break;
+          case 'contact_number': itemValue = jobOrder.Contact_Number || jobOrder.Mobile_Number || jobOrder.contact_number || jobOrder.mobile_number; break;
+          case 'second_contact_number': itemValue = jobOrder.Second_Contact_Number || jobOrder.Secondary_Mobile_Number || jobOrder.second_contact_number || jobOrder.secondary_mobile_number; break;
+          case 'email_address': itemValue = jobOrder.Email_Address || jobOrder.Applicant_Email_Address || jobOrder.email_address || jobOrder.applicant_email_address; break;
+          case 'region': itemValue = jobOrder.Region || jobOrder.region; break;
+          case 'city': itemValue = jobOrder.City || jobOrder.city; break;
+          case 'barangay': itemValue = jobOrder.Barangay || jobOrder.barangay; break;
+          case 'location': itemValue = jobOrder.Region || jobOrder.region; break; // Approximating location as Region for now, usually it's a specific field but 'Location' was in columns
+          case 'choose_plan': itemValue = jobOrder.Choose_Plan || jobOrder.Desired_Plan || jobOrder.choose_plan || jobOrder.desired_plan; break;
+          case 'referred_by': itemValue = jobOrder.Referred_By || jobOrder.referred_by; break;
+          case 'start_timestamp': itemValue = jobOrder.StartTimeStamp || jobOrder.start_timestamp; break;
+          case 'end_timestamp': itemValue = jobOrder.EndTimeStamp || jobOrder.end_timestamp; break;
+          case 'duration': itemValue = jobOrder.Duration || jobOrder.duration; break;
+          default: itemValue = '';
         }
-      } else if (filter.type === 'number') {
-        const numValue = parseFloat(itemValue);
-        if (filter.from !== undefined && numValue < Number(filter.from)) return false;
-        if (filter.to !== undefined && numValue > Number(filter.to)) return false;
-      } else if (filter.type === 'date') {
-        const dateValue = new Date(itemValue).getTime();
-        if (filter.from && dateValue < new Date(String(filter.from)).getTime()) return false;
-        if (filter.to && dateValue > new Date(String(filter.to)).getTime()) return false;
-      }
-    }
 
-    return true;
-  });
+        if (filter.type === 'text' && filter.value) {
+          if (!String(itemValue || '').toLowerCase().includes(filter.value.toLowerCase())) {
+            return false;
+          }
+        } else if (filter.type === 'number') {
+          const numValue = parseFloat(itemValue);
+          if (filter.from !== undefined && numValue < Number(filter.from)) return false;
+          if (filter.to !== undefined && numValue > Number(filter.to)) return false;
+        } else if (filter.type === 'date') {
+          const dateValue = new Date(itemValue).getTime();
+          if (filter.from && dateValue < new Date(String(filter.from)).getTime()) return false;
+          if (filter.to && dateValue > new Date(String(filter.to)).getTime()) return false;
+        }
+      }
+
+      return true;
+    });
   }, [jobOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail, filterValues, getClientFullName, getClientFullAddress]);
 
   const sortedJobOrders = useMemo(() => {
@@ -430,22 +427,22 @@ const JobOrderPage: React.FC = () => {
   return (
     <View style={[jo.container, {
       flexDirection: isTablet ? 'row' : 'column',
-      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
+      backgroundColor: '#f9fafb'
     }]}>
 
 
       {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
         <View style={jo.mobileOverlay}>
           <Pressable style={jo.mobileBackdrop} onPress={() => setMobileMenuOpen(false)} />
-          <View style={[jo.mobileSidebar, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
-            <View style={[jo.mobileSidebarHeader, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[jo.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Filters</Text>
+          <View style={[jo.mobileSidebar, { backgroundColor: '#ffffff' }]}>
+            <View style={[jo.mobileSidebarHeader, { borderColor: '#e5e7eb' }]}>
+              <Text style={[jo.sidebarTitle, { color: '#111827' }]}>Filters</Text>
               <Pressable onPress={() => setMobileMenuOpen(false)}>
-                <X size={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                <X size={24} color={'#4b5563'} />
               </Pressable>
             </View>
             <View style={jo.pad16}>
-              <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
+              <Text style={{ color: '#6b7280' }}>No filters available</Text>
             </View>
           </View>
         </View>
@@ -454,34 +451,34 @@ const JobOrderPage: React.FC = () => {
       {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
         <View style={[jo.sidebar, {
           width: 256,
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-          borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+          backgroundColor: '#ffffff',
+          borderColor: '#e5e7eb'
         }]}>
-          <View style={[jo.sidebarHeaderBox, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+          <View style={[jo.sidebarHeaderBox, { borderColor: '#e5e7eb' }]}>
             <View style={jo.sidebarTitleRow}>
-              <Text style={[jo.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Job Orders</Text>
+              <Text style={[jo.sidebarTitle, { color: '#111827' }]}>Job Orders</Text>
             </View>
           </View>
           <View style={jo.pad16}>
-            <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>No filters available</Text>
+            <Text style={{ color: '#6b7280' }}>No filters available</Text>
           </View>
         </View>
       )}
 
       <View style={[jo.mainContent, {
-        backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+        backgroundColor: '#ffffff',
         display: mobileView === 'details' && !isTablet ? 'none' : 'flex'
       }]}>
         <View style={jo.mainInner}>
           <View style={[jo.toolbar, {
             paddingTop: isTablet ? 16 : 60,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-            borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+            backgroundColor: '#ffffff',
+            borderColor: '#e5e7eb'
           }]}>
             <View style={jo.toolbarRow}>
               {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
                 <Pressable onPress={handleMobileBack} style={jo.iconBtn}>
-                  <ArrowLeft size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
+                  <ArrowLeft size={24} color={'#111827'} />
                 </Pressable>
               )}
               {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
@@ -492,26 +489,26 @@ const JobOrderPage: React.FC = () => {
               <View style={jo.searchWrap}>
                 <TextInput
                   placeholder="Search job orders..."
-                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  placeholderTextColor={'#6b7280'}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   style={[jo.searchInput, {
-                    backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-                    color: isDarkMode ? '#ffffff' : '#111827',
-                    borderColor: isDarkMode ? '#374151' : '#d1d5db'
+                    backgroundColor: '#f3f4f6',
+                    color: '#111827',
+                    borderColor: '#d1d5db'
                   }]}
                 />
                 <View style={jo.searchIcon}>
-                  <Search size={16} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                  <Search size={16} color={'#6b7280'} />
                 </View>
               </View>
               <View style={jo.actionsRow}>
                 {userRole.toLowerCase() !== 'agent' && userRoleId !== 4 && (
                   <Pressable
                     onPress={() => setIsFunnelFilterOpen(true)}
-                    style={[jo.actionBtn, { backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }]}
+                    style={[jo.actionBtn, { backgroundColor: '#e5e7eb' }]}
                   >
-                    <ListFilter size={20} color={isDarkMode ? '#ffffff' : '#374151'} />
+                    <ListFilter size={20} color={'#374151'} />
                   </Pressable>
                 )}
 
@@ -527,148 +524,173 @@ const JobOrderPage: React.FC = () => {
           </View>
 
           <View style={jo.listArea}>
-            <ScrollView
-              style={jo.flex1}
-              refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={colorPalette?.primary || '#7c3aed'}
-                  colors={[colorPalette?.primary || '#7c3aed']}
-                />
-              }
-            >
-              {isLoading ? (
+            {isLoading ? (
+              <ScrollView
+                style={jo.flex1}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={colorPalette?.primary || '#7c3aed'}
+                    colors={[colorPalette?.primary || '#7c3aed']}
+                  />
+                }
+              >
                 <View style={jo.loadingWrap}>
                   <View style={jo.skeletonCol}>
-                    <View style={[jo.skeletonBar1, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
-                    <View style={[jo.skeletonBar2, { backgroundColor: isDarkMode ? '#374151' : '#d1d5db' }]} />
+                    <View style={[jo.skeletonBar1, { backgroundColor: '#d1d5db' }]} />
+                    <View style={[jo.skeletonBar2, { backgroundColor: '#d1d5db' }]} />
                   </View>
-                  <Text style={[jo.loadingText, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>Loading job orders...</Text>
+                  <Text style={[jo.loadingText, { color: '#4b5563' }]}>Loading job orders...</Text>
                 </View>
-              ) : error ? (
+              </ScrollView>
+            ) : error ? (
+              <ScrollView
+                style={jo.flex1}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isRefreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={colorPalette?.primary || '#7c3aed'}
+                    colors={[colorPalette?.primary || '#7c3aed']}
+                  />
+                }
+              >
                 <View style={jo.loadingWrap}>
-                  <Text style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                  <Text style={{ color: '#dc2626' }}>{error}</Text>
                   <Pressable
                     onPress={() => Alert.alert('Retry', 'Reload the application')}
-                    style={[jo.retryBtn, { backgroundColor: isDarkMode ? '#374151' : '#9ca3af' }]}
+                    style={[jo.retryBtn, { backgroundColor: '#9ca3af' }]}
                   >
                     <Text style={jo.retryText}>Retry</Text>
                   </Pressable>
                 </View>
-              ) : (
-                paginatedJobOrders.length > 0 ? (
-                  <View>
-                    {paginatedJobOrders.map((jobOrder) => (
-                      <Pressable
-                        key={jobOrder.id}
-                        onPress={() => !isTablet ? handleMobileRowClick(jobOrder) : handleRowClick(jobOrder)}
-                        style={[jo.cardRow, {
-                          backgroundColor: selectedJobOrder?.id === jobOrder.id ? (isDarkMode ? '#1f2937' : '#f3f4f6') : 'transparent',
-                          borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
-                        }]}
-                      >
-                        <View style={jo.cardInner}>
-                          <View style={jo.cardLeft}>
-                            <Text style={[jo.cardName, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
-                              {getClientFullName(jobOrder)}
-                            </Text>
-                            <Text style={[jo.cardSub, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
-                              {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)} | Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
-                            </Text>
-                          </View>
-                          <View style={jo.cardRight}>
-                            <StatusText status={jobOrder.Onsite_Status || jobOrder.onsite_status} type="onsite" />
-                          </View>
+              </ScrollView>
+            ) : (
+              <View style={jo.flex1}>
+                <FlashList
+                  data={paginatedJobOrders}
+                  keyExtractor={(item) => String(item.id)}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={isRefreshing}
+                      onRefresh={handleRefresh}
+                      tintColor={colorPalette?.primary || '#7c3aed'}
+                      colors={[colorPalette?.primary || '#7c3aed']}
+                    />
+                  }
+                  ListEmptyComponent={
+                    <View style={jo.emptyWrap}>
+                      <Text style={{ color: '#4b5563' }}>No job orders found matching your filters</Text>
+                    </View>
+                  }
+                  renderItem={({ item: jobOrder }) => (
+                    <Pressable
+                      onPress={() => !isTablet ? handleMobileRowClick(jobOrder) : handleRowClick(jobOrder)}
+                      style={[jo.cardRow, {
+                        backgroundColor: selectedJobOrder?.id === jobOrder.id ? '#f3f4f6' : 'transparent',
+                        borderColor: '#e5e7eb'
+                      }]}
+                    >
+                      <View style={jo.cardInner}>
+                        <View style={jo.cardLeft}>
+                          <Text style={[jo.cardName, { color: '#111827' }]}>
+                            {getClientFullName(jobOrder)}
+                          </Text>
+                          <Text style={[jo.cardSub, { color: '#4b5563' }]}>
+                            {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)} | Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
+                          </Text>
                         </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={jo.emptyWrap}>
-                    <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>No job orders found matching your filters</Text>
-                  </View>
-                )
-              )}
-            </ScrollView>
-
-            {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && totalPages > 1 && (
-              <View style={[jo.paginationBar, {
-                backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <View>
-                  <Text style={[jo.paginationInfo, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>
-                    Showing <Text style={jo.bold500}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={jo.bold500}>{Math.min(currentPage * itemsPerPage, sortedJobOrders.length)}</Text> of <Text style={jo.bold500}>{sortedJobOrders.length}</Text> results
-                  </Text>
-                </View>
-                <View style={jo.paginationBtns}>
-                  <Pressable
-                    onPress={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    style={[jo.pageBtn, {
-                      backgroundColor: currentPage === 1 ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
-                      borderWidth: currentPage === 1 ? 0 : 1,
-                      borderColor: '#d1d5db'
-                    }]}
-                  >
-                    <Text style={[jo.pageBtnText, {
-                      color: currentPage === 1 ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151')
-                    }]}>Previous</Text>
-                  </Pressable>
-
-                  <View style={jo.pageIndicatorWrap}>
-                    <Text style={[jo.pageIndicator, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
-                      Page {currentPage} of {totalPages}
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    onPress={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    style={[jo.pageBtn, {
-                      backgroundColor: currentPage === totalPages ? (isDarkMode ? '#1f2937' : '#f3f4f6') : (isDarkMode ? '#374151' : '#ffffff'),
-                      borderWidth: currentPage === totalPages ? 0 : 1,
-                      borderColor: '#d1d5db'
-                    }]}
-                  >
-                    <Text style={[jo.pageBtnText, {
-                      color: currentPage === totalPages ? (isDarkMode ? '#4b5563' : '#9ca3af') : (isDarkMode ? '#ffffff' : '#374151')
-                    }]}>Next</Text>
-                  </Pressable>
-                </View>
+                        <View style={jo.cardRight}>
+                          <StatusText status={jobOrder.Onsite_Status || jobOrder.onsite_status} type="onsite" />
+                        </View>
+                      </View>
+                    </Pressable>
+                  )}
+                />
               </View>
             )}
           </View>
+
+          {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && totalPages > 1 && (
+            <View style={[jo.paginationBar, {
+              backgroundColor: '#ffffff',
+              borderColor: '#e5e7eb'
+            }]}>
+              <View>
+                <Text style={[jo.paginationInfo, { color: '#4b5563' }]}>
+                  Showing <Text style={jo.bold500}>{(currentPage - 1) * itemsPerPage + 1}</Text> to <Text style={jo.bold500}>{Math.min(currentPage * itemsPerPage, sortedJobOrders.length)}</Text> of <Text style={jo.bold500}>{sortedJobOrders.length}</Text> results
+                </Text>
+              </View>
+              <View style={jo.paginationBtns}>
+                <Pressable
+                  onPress={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  style={[jo.pageBtn, {
+                    backgroundColor: currentPage === 1 ? '#f3f4f6' : '#ffffff',
+                    borderWidth: currentPage === 1 ? 0 : 1,
+                    borderColor: '#d1d5db'
+                  }]}
+                >
+                  <Text style={[jo.pageBtnText, {
+                    color: currentPage === 1 ? '#9ca3af' : '#374151'
+                  }]}>Previous</Text>
+                </Pressable>
+
+                <View style={jo.pageIndicatorWrap}>
+                  <Text style={[jo.pageIndicator, { color: '#111827' }]}>
+                    Page {currentPage} of {totalPages}
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  style={[jo.pageBtn, {
+                    backgroundColor: currentPage === totalPages ? '#f3f4f6' : '#ffffff',
+                    borderWidth: currentPage === totalPages ? 0 : 1,
+                    borderColor: '#d1d5db'
+                  }]}
+                >
+                  <Text style={[jo.pageBtnText, {
+                    color: currentPage === totalPages ? '#9ca3af' : '#374151'
+                  }]}>Next</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
         </View>
       </View>
 
-      {selectedJobOrder && mobileView === 'details' && (
-        <View style={[jo.mobileDetail, {
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
-          display: isTablet ? 'none' : 'flex'
-        }]}>
-          <JobOrderDetails
-            jobOrder={selectedJobOrder}
-            onClose={handleMobileBack}
-            onRefresh={refreshJobOrders}
-            isMobile={true}
-          />
-        </View>
-      )}
+      {
+        selectedJobOrder && mobileView === 'details' && (
+          <View style={[jo.mobileDetail, {
+            backgroundColor: '#f9fafb',
+            display: isTablet ? 'none' : 'flex'
+          }]}>
+            <JobOrderDetails
+              jobOrder={selectedJobOrder as JobOrder}
+              onClose={handleMobileBack}
+              onRefresh={refreshJobOrders}
+              isMobile={true}
+            />
+          </View>
+        )
+      }
 
-      {selectedJobOrder && (mobileView !== 'details' || isTablet) && (
-        <View style={[jo.tabletDetail, { display: isTablet ? 'flex' : 'none' }]}>
-          <JobOrderDetails
-            jobOrder={selectedJobOrder}
-            onClose={() => setSelectedJobOrder(null)}
-            onRefresh={refreshJobOrders}
-            isMobile={false}
-          />
-        </View>
-      )}
-
-
+      {
+        selectedJobOrder && (mobileView !== 'details' || isTablet) && (
+          <View style={[jo.tabletDetail, { display: isTablet ? 'flex' : 'none' }]}>
+            <JobOrderDetails
+              jobOrder={selectedJobOrder as JobOrder}
+              onClose={() => setSelectedJobOrder(null)}
+              onRefresh={refreshJobOrders}
+              isMobile={false}
+            />
+          </View>
+        )
+      }
 
       <JobOrderFunnelFilter
         isOpen={isFunnelFilterOpen}
@@ -676,7 +698,7 @@ const JobOrderPage: React.FC = () => {
         onApplyFilters={handleApplyFilters}
         currentFilters={filterValues}
       />
-    </View>
+    </View >
   );
 };
 

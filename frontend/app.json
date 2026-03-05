@@ -8,6 +8,7 @@
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "jsEngine": "hermes",
     "splash": {
       "image": "./assets/applogo.png",
       "resizeMode": "contain",
@@ -42,7 +43,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "fa56b827-6f01-45a6-96b2-f5b07927296b"
+        "projectId": "585740f2-be7f-4266-9fc9-9559fba379d9"
       }
     }
   }

@@ -10,8 +10,6 @@ import {
     HelpCircle,
     ChevronRight,
     LogOut,
-    Moon,
-    Sun,
     Info,
     Mail
 } from 'lucide-react-native';

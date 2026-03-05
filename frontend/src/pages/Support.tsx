@@ -33,7 +33,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const isMobile = width < 768;
   const { customerDetail, serviceOrders: requests, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
   const userAccountNo = customerDetail?.billingAccount?.accountNo || '';
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(forceLightMode ? false : true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
   const [details, setDetails] = useState<string>('');
@@ -102,19 +102,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     }
   }, [showNewRequestModal]);
 
-  useEffect(() => {
-    if (forceLightMode) {
-      setIsDarkMode(false);
-      return;
-    }
 
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
-
-    checkDarkMode();
-  }, [forceLightMode]);
 
   const [userEmail, setUserEmail] = useState<string>('');
 

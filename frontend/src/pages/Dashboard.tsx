@@ -86,7 +86,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const [billsInitialTab, setBillsInitialTab] = useState<'soa' | 'invoices' | 'payments'>('soa');
     // const [customerInitialSearch, setCustomerInitialSearch] = useState('');
     // const [customerAutoOpenAccountNo, setCustomerAutoOpenAccountNo] = useState('');
-    const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+    const isDarkMode = false; // Forced light mode as per user request
 
     useEffect(() => {
         const initializeUserData = async () => {
@@ -109,12 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                         setActiveSection('inventory');
                     }
 
-                    if (user.role === 'customer' || String(user.role_id) === '3') {
-                        setIsDarkMode(false);
-                    } else {
-                        const theme = await AsyncStorage.getItem('theme');
-                        setIsDarkMode(theme === 'dark' || theme === null);
-                    }
+
                 }
             } catch (error) {
                 console.error('Error parsing user data:', error);
@@ -126,15 +121,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         initializeUserData();
     }, []);
 
-    // Track dark mode changes
-    useEffect(() => {
-        const checkDarkMode = async () => {
-            const theme = await AsyncStorage.getItem('theme');
-            setIsDarkMode(theme === 'dark' || theme === null);
-        };
 
-        checkDarkMode();
-    }, []);
 
     useEffect(() => {
         const fetchColorPalette = async () => {

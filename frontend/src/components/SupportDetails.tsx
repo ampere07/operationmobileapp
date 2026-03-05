@@ -42,13 +42,12 @@ interface SupportRequest {
 
 interface SupportDetailsProps {
     request: SupportRequest;
-    isDarkMode?: boolean;
+
     onClose: () => void;
 }
 
 const SupportDetails: React.FC<SupportDetailsProps> = ({
     request,
-    isDarkMode = false,
     onClose,
 }) => {
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
@@ -67,13 +66,14 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
         fetchColorPalette();
     }, []);
 
+    const isDarkMode = false;
     const primaryColor = colorPalette?.primary || '#ef4444';
-    const iconColor = isDarkMode ? '#9ca3af' : '#4b5563';
-    const borderColor = isDarkMode ? '#374151' : '#e5e7eb';
-    const cardBg = isDarkMode ? '#1f2937' : '#ffffff';
-    const labelColor = isDarkMode ? '#9ca3af' : '#4b5563';
-    const valueColor = isDarkMode ? '#ffffff' : '#111827';
-    const headerBg = isDarkMode ? '#1f2937' : '#f3f4f6';
+    const iconColor = '#4b5563';
+    const borderColor = '#e5e7eb';
+    const cardBg = '#ffffff';
+    const labelColor = '#4b5563';
+    const valueColor = '#111827';
+    const headerBg = '#f3f4f6';
 
     const DetailRow = ({
         label,
@@ -151,7 +151,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }}>
+        <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
             {/* Header */}
             <View style={{
                 flexDirection: 'row',
@@ -169,7 +169,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                         width: 40,
                         height: 40,
                         borderRadius: 20,
-                        backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                        backgroundColor: '#ffffff',
                         justifyContent: 'center',
                         alignItems: 'center',
                         marginRight: 16,
@@ -223,7 +223,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                         <Text style={{ fontSize: 14, fontWeight: '600', color: labelColor, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
                             <MessageSquare size={14} color={labelColor} /> Issue Details
                         </Text>
-                        <View style={{ backgroundColor: isDarkMode ? '#030712' : '#f9fafb', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: borderColor }}>
+                        <View style={{ backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: borderColor }}>
                             <Text style={{ fontSize: 15, lineHeight: 22, color: valueColor }}>
                                 {request.issueDetails || 'No additional details provided.'}
                             </Text>

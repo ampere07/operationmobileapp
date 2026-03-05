@@ -87,17 +87,13 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
   onApplyFilters,
   currentFilters
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<Column | null>(null);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
 
   useEffect(() => {
-    const loadTheme = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-    loadTheme();
+    // Dark mode loading removed as per user request
   }, []);
 
   useEffect(() => {
@@ -213,7 +209,7 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
       return (
         <View style={{ gap: 16 }}>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               From
             </Text>
             <TextInput
@@ -221,12 +217,12 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
               value={currentValue?.from?.toString() || ''}
               onChangeText={(value) => handleRangeChange(selectedColumn.key, 'from', value)}
               placeholder="Minimum value"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor="#9ca3af"
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
               To
             </Text>
             <TextInput
@@ -234,8 +230,8 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
               value={currentValue?.to?.toString() || ''}
               onChangeText={(value) => handleRangeChange(selectedColumn.key, 'to', value)}
               placeholder="Maximum value"
-              placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+              placeholderTextColor="#9ca3af"
+              style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
             />
           </View>
         </View>
@@ -275,15 +271,15 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
 
     return (
       <View>
-        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#d1d5db' : '#374151' }}>
+        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#374151' }}>
           Search Value
         </Text>
         <TextInput
           value={typeof currentValue?.value === 'string' ? currentValue.value : ''}
           onChangeText={(value) => handleTextChange(selectedColumn.key, value)}
           placeholder={`Enter ${selectedColumn.label.toLowerCase()}`}
-          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-          style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: isDarkMode ? '#374151' : '#d1d5db', backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }}
+          placeholderTextColor="#9ca3af"
+          style={{ width: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#ffffff', color: '#111827' }}
         />
       </View>
     );
@@ -305,11 +301,11 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
           style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)' }}
           onPress={onClose}
         />
-        
+
         <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, maxWidth: 448, width: '100%', flexDirection: 'row' }}>
-          <View style={{ width: '100%', maxWidth: 448, backgroundColor: isDarkMode ? '#111827' : '#ffffff' }}>
+          <View style={{ width: '100%', maxWidth: 448, backgroundColor: '#ffffff' }}>
             <View style={{ height: '100%', flexDirection: 'column' }}>
-              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     {selectedColumn && (
@@ -321,7 +317,7 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                       </Pressable>
                     )}
                     <View>
-                      <Text style={{ fontSize: 18, fontWeight: '600', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '600', color: '#111827' }}>
                         {selectedColumn ? selectedColumn.label : 'Filter'}
                       </Text>
                       {!selectedColumn && activeFilterCount > 0 && (
@@ -346,14 +342,14 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                 ) : (
                   <View style={{ gap: 24 }}>
                     <View>
-                      <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#4b5563' }}>
                         Service Order Details
                       </Text>
                       <View style={{ flexDirection: 'column', gap: 8, width: '100%' }}>
                         {groupedColumns.service_orders.map(column => {
                           const hasFilter = filterValues[column.key] && (
-                            filterValues[column.key].value || 
-                            filterValues[column.key].from !== undefined || 
+                            filterValues[column.key].value ||
+                            filterValues[column.key].from !== undefined ||
                             filterValues[column.key].to !== undefined
                           );
 
@@ -361,10 +357,10 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                             <Pressable
                               key={column.key}
                               onPress={() => handleColumnClick(column)}
-                              style={{ width: '100%', padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }}
+                              style={{ width: '100%', padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' }}
                             >
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#ffffff' : '#111827' }}>
+                                <Text style={{ fontSize: 14, fontWeight: '500', color: '#111827' }}>
                                   {column.label}
                                 </Text>
                                 {hasFilter && (
@@ -381,13 +377,13 @@ const ServiceOrderFunnelFilter: React.FC<ServiceOrderFunnelFilterProps> = ({
                 )}
               </ScrollView>
 
-              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }}>
+              <View style={{ paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#e5e7eb' }}>
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                   <Pressable
                     onPress={handleReset}
-                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: isDarkMode ? '#1f2937' : '#e5e7eb' }}
+                    style={{ flex: 1, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, backgroundColor: '#e5e7eb' }}
                   >
-                    <Text style={{ color: isDarkMode ? '#ffffff' : '#111827', textAlign: 'center', fontWeight: '500' }}>Clear All</Text>
+                    <Text style={{ color: '#111827', textAlign: 'center', fontWeight: '500' }}>Clear All</Text>
                   </Pressable>
                   <Pressable
                     onPress={handleApply}

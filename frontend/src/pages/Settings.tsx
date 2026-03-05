@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Palette, Sun, Moon, Plus, Image, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import AddColorPaletteModal from '../modals/AddColorPaletteModal';
+// import AddColorPaletteModal from '../modals/AddColorPaletteModal';
 import { settingsImageSizeService, ImageSize } from '../services/settingsImageSizeService';
 import { settingsColorPaletteService, ColorPalette as DbColorPalette } from '../services/settingsColorPaletteService';
 import { userSettingsService } from '../services/userSettingsService';
@@ -15,7 +15,7 @@ interface ColorPalette {
 }
 
 const Settings: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [isLoadingPreferences, setIsLoadingPreferences] = useState<boolean>(true);
   const [showAddPaletteModal, setShowAddPaletteModal] = useState<boolean>(false);
   const [dbPalettes, setDbPalettes] = useState<DbColorPalette[]>([]);
@@ -25,7 +25,7 @@ const Settings: React.FC = () => {
   const [isEditingImageSize, setIsEditingImageSize] = useState<boolean>(false);
   const [isSavingImageSize, setIsSavingImageSize] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<DbColorPalette | null>(null);
-  
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isTogglingDarkMode, setIsTogglingDarkMode] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
@@ -63,57 +63,19 @@ const Settings: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadUserPreferences = async () => {
+    const loadData = async () => {
       setIsLoadingPreferences(true);
       try {
-        const authData = localStorage.getItem('authData');
-        console.log('[Settings] Loading preferences, authData:', authData);
-        
-        if (authData) {
-          const userData = JSON.parse(authData);
-          // User ID is at root level, not under user property
-          const userId = userData.id;
-          console.log('[Settings] User ID:', userId);
-          
-          if (userId) {
-            console.log('[Settings] Fetching dark mode from API...');
-            const response = await userSettingsService.getDarkMode(userId);
-            console.log('[Settings] API response:', response);
-            
-            if (response.success && response.data) {
-              const darkmodeValue = response.data.darkmode;
-              const isDark = darkmodeValue === 'active';
-              
-              console.log('[Settings] Darkmode value from DB:', darkmodeValue);
-              console.log('[Settings] Setting isDark to:', isDark);
-              
-              setIsDarkMode(isDark);
-              localStorage.setItem('theme', isDark ? 'dark' : 'light');
-              
-              if (isDark) {
-                document.documentElement.classList.add('dark');
-              } else {
-                document.documentElement.classList.remove('dark');
-              }
-              
-              console.log('[Settings] Theme applied:', isDark ? 'dark' : 'light');
-            }
-          }
-        }
+        await loadImageSizes();
+        await loadColorPalettes();
       } catch (error) {
-        console.error('[Settings] Failed to load dark mode preference:', error);
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) {
-          setIsDarkMode(savedTheme === 'dark');
-        }
+        console.error('[Settings] Failed to load data:', error);
       } finally {
         setIsLoadingPreferences(false);
       }
     };
 
-    loadUserPreferences();
-    loadImageSizes();
-    loadColorPalettes();
+    loadData();
   }, []);
 
   const loadColorPalettes = async () => {
@@ -139,73 +101,6 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleThemeToggle = async () => {
-    const newTheme = !isDarkMode;
-    const darkmodeValue = newTheme ? 'active' : 'inactive';
-    
-    console.log('Toggle dark mode started', { newTheme, darkmodeValue });
-    setIsTogglingDarkMode(true);
-    
-    try {
-      const authData = localStorage.getItem('authData');
-      console.log('Auth data:', authData);
-      
-      if (authData) {
-        const userData = JSON.parse(authData);
-        console.log('Parsed user data:', userData);
-        
-        // User ID is at root level, not under user property
-        const userId = userData.id;
-        console.log('User ID:', userId);
-        
-        if (userId) {
-          console.log('Making API call with:', { userId, darkmodeValue });
-          
-          const response = await userSettingsService.updateDarkMode(userId, darkmodeValue);
-          console.log('API response:', response);
-          
-          setIsDarkMode(newTheme);
-          localStorage.setItem('theme', newTheme ? 'dark' : 'light');
-          
-          if (newTheme) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-          
-          setIsTogglingDarkMode(false);
-          setSuccessMessage('Theme updated successfully');
-          setShowSuccess(true);
-          
-          setTimeout(() => {
-            setShowSuccess(false);
-          }, 1500);
-        } else {
-          console.error('No user ID found');
-          throw new Error('User ID not found');
-        }
-      } else {
-        console.error('No auth data found');
-        throw new Error('Not authenticated');
-      }
-    } catch (error) {
-      console.error('Failed to update dark mode:', error);
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        response: (error as any)?.response?.data,
-        status: (error as any)?.response?.status
-      });
-      
-      setIsTogglingDarkMode(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to update theme preference');
-      setShowError(true);
-      
-      setTimeout(() => {
-        setShowError(false);
-      }, 3000);
-    }
-  };
-
   const handlePaletteStatusChange = async (id: number, status: 'active' | 'inactive') => {
     setIsLoading(true);
     setLoadingMessage('Activating color palette...');
@@ -214,7 +109,7 @@ const Settings: React.FC = () => {
     try {
       await settingsColorPaletteService.updateStatus(id, status);
       await loadColorPalettes();
-      
+
       if (status === 'active') {
         const palette = dbPalettes.find(p => p.id === id);
         if (palette) {
@@ -289,7 +184,7 @@ const Settings: React.FC = () => {
       accent: newPalette.accent,
       updated_by: 'system'
     });
-    
+
     await loadColorPalettes();
   };
 
@@ -327,7 +222,7 @@ const Settings: React.FC = () => {
       const updatedBy = userData?.username || 'system';
 
       const result = await systemConfigService.uploadLogo(logoFile, updatedBy);
-      
+
       if (result.success && result.data) {
         setLogoUrl(result.data.logo_url);
         setLogoFile(null);
@@ -374,41 +269,35 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <div className={`p-6 min-h-screen ${
-      isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-    }`}>
-      <div className={`mb-6 pb-6 border-b ${
-        isDarkMode ? 'border-gray-700' : 'border-gray-300'
+    <div className={`p-6 min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
       }`}>
-        <h2 className={`text-2xl font-semibold ${
-          isDarkMode ? 'text-white' : 'text-gray-900'
-        } mb-2`}>
+      <div className={`mb-6 pb-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
+        }`}>
+        <h2 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+          } mb-2`}>
           Settings
         </h2>
       </div>
 
       <div className="space-y-6">
-        <div className={`pb-6 border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-300'
-        }`}>
+        <div className={`pb-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
+          }`}>
           <div className="flex items-center gap-3 mb-4">
             <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
               System Logo
             </h3>
           </div>
-          
-          <div className={`p-6 rounded border ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-          }`}>
+
+          <div className={`p-6 rounded border ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
+            }`}>
             {logoUrl ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-center p-4 bg-white rounded">
-                  <img 
-                    src={logoUrl} 
-                    alt="System Logo" 
+                  <img
+                    src={logoUrl}
+                    alt="System Logo"
                     className="max-h-32 object-contain"
                     onError={(e) => {
                       console.error('Failed to load logo image');
@@ -449,28 +338,23 @@ const Settings: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded ${
-                  isDarkMode ? 'border-gray-600' : 'border-gray-400'
-                }`}>
-                  <Image className={`h-12 w-12 mb-4 ${
-                    isDarkMode ? 'text-gray-600' : 'text-gray-400'
-                  }`} />
-                  <p className={`text-sm mb-2 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                <div className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded ${isDarkMode ? 'border-gray-600' : 'border-gray-400'
                   }`}>
+                  <Image className={`h-12 w-12 mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                    }`} />
+                  <p className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
                     No logo uploaded
                   </p>
-                  <p className={`text-xs ${
-                    isDarkMode ? 'text-gray-500' : 'text-gray-500'
-                  }`}>
+                  <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'
+                    }`}>
                     Supported formats: JPEG, PNG, GIF, SVG (Max 5MB)
                   </p>
                 </div>
                 {logoFile ? (
                   <div className="space-y-2">
-                    <p className={`text-sm ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}>
+                    <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>
                       Selected: {logoFile.name}
                     </p>
                     <div className="flex gap-2">
@@ -532,85 +416,33 @@ const Settings: React.FC = () => {
           </div>
         </div>
 
-        <div className={`pb-6 border-b ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-300'
-        }`}>
-          <div className="flex items-center gap-3 mb-4">
-            <Sun className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
-              Theme Mode
-            </h3>
-          </div>
-          
-          <div className={`flex items-center justify-between p-6 rounded border ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-          }`}>
-            <div>
-              <p className={`font-medium mb-1 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
-              </p>
-              <p className={`text-sm ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
-                Switch between light and dark theme
-              </p>
-            </div>
-            
-            <button
-              onClick={handleThemeToggle}
-              disabled={isTogglingDarkMode}
-              className="relative inline-flex h-8 w-14 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{
-                backgroundColor: isDarkMode ? (colorPalette?.primary || '#7c3aed') : '#4b5563'
-              }}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  isDarkMode ? 'translate-x-7' : 'translate-x-1'
-                }`}
-              >
-                {isDarkMode ? (
-                  <Moon className="h-4 w-4 m-1" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-                ) : (
-                  <Sun className="h-4 w-4 text-gray-600 m-1" />
-                )}
-              </span>
-            </button>
-          </div>
-        </div>
+
 
         <div className="pt-6">
           <div className="flex items-center gap-3 mb-4">
             <Palette className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
               Color Palette
             </h3>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {dbPalettes.map((palette) => {
               const isDefault = palette.palette_name.toLowerCase() === 'default';
               return (
                 <div
                   key={palette.id}
-                  className={`p-4 rounded border transition-all relative ${
-                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                  }`}
+                  className={`p-4 rounded border transition-all relative ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
+                    }`}
                   style={{
                     borderColor: palette.status === 'active' ? (colorPalette?.primary || '#7c3aed') : undefined,
                     boxShadow: palette.status === 'active' ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)' : undefined
                   }}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className={`font-medium text-sm ${
-                      isDarkMode ? 'text-white' : 'text-gray-900'
-                    }`}>
+                    <h4 className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                      }`}>
                       {palette.palette_name}
                     </h4>
                     <div className="flex items-center gap-2">
@@ -624,11 +456,10 @@ const Settings: React.FC = () => {
                       {palette.status === 'inactive' && (
                         <button
                           onClick={() => handlePaletteStatusChange(palette.id, 'active')}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${
-                            isDarkMode 
-                              ? 'bg-gray-700 text-white hover:bg-gray-600' 
-                              : 'bg-gray-300 text-gray-900 hover:bg-gray-400'
-                          }`}
+                          className={`px-2 py-1 text-xs rounded transition-colors ${isDarkMode
+                            ? 'bg-gray-700 text-white hover:bg-gray-600'
+                            : 'bg-gray-300 text-gray-900 hover:bg-gray-400'
+                            }`}
                         >
                           Activate
                         </button>
@@ -650,102 +481,91 @@ const Settings: React.FC = () => {
                       )}
                     </div>
                   </div>
-                
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <div
-                      className="h-10 rounded"
-                      style={{ backgroundColor: palette.primary }}
-                    />
-                    <p className={`text-xs mt-1 text-center ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                      Primary
-                    </p>
-                  </div>
-                  <div className="flex-1">
-                    <div
-                      className="h-10 rounded"
-                      style={{ backgroundColor: palette.secondary }}
-                    />
-                    <p className="text-xs text-gray-400 mt-1 text-center">
-                      Secondary
-                    </p>
-                  </div>
-                  <div className="flex-1">
-                    <div
-                      className="h-10 rounded"
-                      style={{ backgroundColor: palette.accent }}
-                    />
-                    <p className="text-xs text-gray-400 mt-1 text-center">
-                      Accent
-                    </p>
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <div
+                        className="h-10 rounded"
+                        style={{ backgroundColor: palette.primary }}
+                      />
+                      <p className={`text-xs mt-1 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}>
+                        Primary
+                      </p>
+                    </div>
+                    <div className="flex-1">
+                      <div
+                        className="h-10 rounded"
+                        style={{ backgroundColor: palette.secondary }}
+                      />
+                      <p className="text-xs text-gray-400 mt-1 text-center">
+                        Secondary
+                      </p>
+                    </div>
+                    <div className="flex-1">
+                      <div
+                        className="h-10 rounded"
+                        style={{ backgroundColor: palette.accent }}
+                      />
+                      <p className="text-xs text-gray-400 mt-1 text-center">
+                        Accent
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
               );
             })}
-            
+
             <button
               onClick={() => setShowAddPaletteModal(true)}
-              className={`p-4 rounded border border-dashed transition-all flex flex-col items-center justify-center gap-2 min-h-[140px] ${
-                isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-              }`}
+              className={`p-4 rounded border border-dashed transition-all flex flex-col items-center justify-center gap-2 min-h-[140px] ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
+                }`}
             >
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
-              }`}>
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
+                }`}>
                 <Plus className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
               </div>
-              <p className={`font-medium text-sm ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Add Custom Palette</p>
-              <p className={`text-xs text-center ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
+              <p className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>Add Custom Palette</p>
+              <p className={`text-xs text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
                 Create your own color scheme
               </p>
             </button>
           </div>
         </div>
 
-        <div className={`pt-6 border-t ${
-          isDarkMode ? 'border-gray-700' : 'border-gray-300'
-        }`}>
+        <div className={`pt-6 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
+          }`}>
           <div className="flex items-center gap-3 mb-4">
             <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
               Image Upload Size
             </h3>
           </div>
 
-          <div className={`p-4 rounded border ${
-            isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-          }`}>
+          <div className={`p-4 rounded border ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
+            }`}>
             <div className="space-y-2 mb-4">
               {imageSizes.map((size) => (
                 <div
                   key={size.id}
                   onClick={() => isEditingImageSize && setSelectedImageSizeId(size.id)}
-                  className={`flex items-center justify-between p-3 rounded border transition-all ${
-                    isEditingImageSize ? 'cursor-pointer' : ''
-                  }`}
+                  className={`flex items-center justify-between p-3 rounded border transition-all ${isEditingImageSize ? 'cursor-pointer' : ''
+                    }`}
                   style={{
                     borderColor: selectedImageSizeId === size.id ? (colorPalette?.primary || '#7c3aed') : undefined,
                     backgroundColor: selectedImageSizeId === size.id ? `${colorPalette?.primary || '#7c3aed'}1A` : undefined
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`font-medium ${
-                      isDarkMode ? 'text-white' : 'text-gray-900'
-                    }`}>
+                    <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
+                      }`}>
                       {size.image_size}
                     </span>
-                    <span className={`text-sm ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
+                    <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>
                       -{size.image_size_value}% maximum size
                     </span>
                   </div>
@@ -821,12 +641,12 @@ const Settings: React.FC = () => {
           </div>
         </div>
       </div>
-
+      {/* 
       <AddColorPaletteModal
         isOpen={showAddPaletteModal}
         onClose={() => setShowAddPaletteModal(false)}
         onSave={handleAddPalette}
-      />
+      /> */}
 
       {isLoading && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">

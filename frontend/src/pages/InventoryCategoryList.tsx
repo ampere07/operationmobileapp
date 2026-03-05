@@ -23,7 +23,7 @@ import { useInventoryContext, InventoryCategory } from '../contexts/InventoryCon
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
 const InventoryCategoryList: React.FC = () => {
-  const isDarkMode = false;
+
   const { dbCategories: categories, isLoading: contextLoading, refreshInventory } = useInventoryContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -167,11 +167,11 @@ const InventoryCategoryList: React.FC = () => {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          backgroundColor: '#f9fafb',
         }}
       >
         <ActivityIndicator size="large" color="#7c3aed" style={{ marginBottom: 16 }} />
-        <Text style={{ fontSize: 18, color: isDarkMode ? '#ffffff' : '#111827' }}>
+        <Text style={{ fontSize: 18, color: '#111827' }}>
           Loading categories...
         </Text>
       </View>
@@ -185,14 +185,14 @@ const InventoryCategoryList: React.FC = () => {
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+          backgroundColor: '#f9fafb',
         }}
       >
         <Text
           style={{
             fontSize: 18,
             marginBottom: 8,
-            color: isDarkMode ? '#ffffff' : '#111827',
+            color: '#111827',
           }}
         >
           Error Loading Categories
@@ -200,7 +200,7 @@ const InventoryCategoryList: React.FC = () => {
         <Text
           style={{
             marginBottom: 16,
-            color: isDarkMode ? '#9ca3af' : '#4b5563',
+            color: '#4b5563',
           }}
         >
           {error}
@@ -224,7 +224,7 @@ const InventoryCategoryList: React.FC = () => {
     <View
       style={{
         flex: 1,
-        backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
+        backgroundColor: '#f9fafb',
       }}
     >
       {/* Search and Add Section */}
@@ -234,8 +234,8 @@ const InventoryCategoryList: React.FC = () => {
           paddingTop: isTablet ? 16 : 60,
           paddingBottom: 16,
           borderBottomWidth: 1,
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+          borderBottomColor: '#e5e7eb',
+          backgroundColor: '#ffffff',
           flexDirection: 'row',
           alignItems: 'center',
           gap: 12,
@@ -244,12 +244,12 @@ const InventoryCategoryList: React.FC = () => {
         <View style={{ flex: 1, position: 'relative', justifyContent: 'center' }}>
           <Search
             size={16}
-            color={isDarkMode ? '#9ca3af' : '#6b7280'}
+            color={'#6b7280'}
             style={{ position: 'absolute', left: 10, zIndex: 1 }}
           />
           <TextInput
             placeholder="Search Inventory Category List"
-            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            placeholderTextColor={'#9ca3af'}
             value={searchQuery}
             onChangeText={(text) => setSearchQuery(text)}
             style={{
@@ -259,9 +259,9 @@ const InventoryCategoryList: React.FC = () => {
               paddingRight: 16,
               paddingVertical: 8,
               borderWidth: 1,
-              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-              color: isDarkMode ? '#ffffff' : '#111827',
-              borderColor: isDarkMode ? '#4b5563' : '#d1d5db',
+              backgroundColor: '#f3f4f6',
+              color: '#111827',
+              borderColor: '#d1d5db',
             }}
           />
         </View>
@@ -370,7 +370,7 @@ const InventoryCategoryList: React.FC = () => {
               style={{
                 fontSize: 18,
                 marginBottom: 8,
-                color: isDarkMode ? '#9ca3af' : '#4b5563',
+                color: '#4b5563',
               }}
             >
               No categories found
@@ -378,7 +378,7 @@ const InventoryCategoryList: React.FC = () => {
             <Text
               style={{
                 fontSize: 14,
-                color: isDarkMode ? '#9ca3af' : '#4b5563',
+                color: '#4b5563',
                 textAlign: 'center',
               }}
             >

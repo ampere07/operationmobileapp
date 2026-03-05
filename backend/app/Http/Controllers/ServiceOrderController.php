@@ -500,10 +500,9 @@ class ServiceOrderController extends Controller
 
             if ($technicalDetails) {
                 // Preservation and update logic
-                $hasTechUpdate = $request->filled('new_lcp') || $request->filled('new_nap') || 
+                $hasTechUpdate = $request->filled('new_lcp') || $request->filled('new_nap') || $request->filled('new_lcpnap') || 
                                 $request->filled('new_port') || $request->filled('new_vlan') || 
-                                $request->filled('new_router_modem_sn') || $request->filled('router_modem_sn') ||
-                                $request->filled('lcp') || $request->filled('nap') || $request->filled('port') || $request->filled('vlan');
+                                $request->filled('new_router_modem_sn');
 
                 if ($hasTechUpdate) {
                     Log::info('Technical details update detected in ServiceOrderController');
@@ -516,12 +515,31 @@ class ServiceOrderController extends Controller
                     $updateData['old_router_modem_sn'] = $technicalDetails->router_modem_sn;
                     $updateData['old_lcpnap'] = $technicalDetails->lcpnap;
 
-                    // New values (checking both 'new_lcp' and legacy 'lcp' fields)
-                    $newLcp = $request->input('new_lcp') ?? $request->input('lcp') ?? $technicalDetails->lcp;
-                    $newNap = $request->input('new_nap') ?? $request->input('nap') ?? $technicalDetails->nap;
-                    $newPort = $request->input('new_port') ?? $request->input('port') ?? $technicalDetails->port;
-                    $newVlan = $request->input('new_vlan') ?? $request->input('vlan') ?? $technicalDetails->vlan;
-                    $newSN = $request->input('new_router_modem_sn') ?? $request->input('router_modem_sn') ?? $technicalDetails->router_modem_sn;
+                    // New values
+                    $newLcp = $request->input('new_lcp');
+                    $newNap = $request->input('new_nap');
+                    
+                    if ($request->filled('new_lcpnap')) {
+                        $lcpnapValue = $request->input('new_lcpnap');
+                        $parts = explode(' - ', $lcpnapValue);
+                        if (count($parts) === 2) {
+                            $newLcp = trim($parts[0]);
+                            $newNap = trim($parts[1]);
+                        } else {
+                            $parts = explode('-', $lcpnapValue);
+                            if (count($parts) === 2) {
+                                $newLcp = trim($parts[0]);
+                                $newNap = trim($parts[1]);
+                            }
+                        }
+                    }
+
+                    if (!$newLcp) $newLcp = $technicalDetails->lcp;
+                    if (!$newNap) $newNap = $technicalDetails->nap;
+                    
+                    $newPort = $request->filled('new_port') ? $request->input('new_port') : $technicalDetails->port;
+                    $newVlan = $request->filled('new_vlan') ? $request->input('new_vlan') : $technicalDetails->vlan;
+                    $newSN = $request->filled('new_router_modem_sn') ? $request->input('new_router_modem_sn') : $technicalDetails->router_modem_sn;
                     
                     // Calculate LCPNAP
                     $newLcpNap = trim(($newLcp ?? '') . ' - ' . ($newNap ?? ''), ' - ');

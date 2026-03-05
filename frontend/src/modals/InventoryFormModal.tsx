@@ -46,7 +46,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
   editData,
   initialCategory = '',
 }) => {
-  const isDarkMode = false;
+
   const [formData, setFormData] = useState<InventoryFormData>({
     itemName: '',
     itemDescription: '',
@@ -248,7 +248,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     fontSize: 14,
     fontWeight: '500' as const,
     marginBottom: 8,
-    color: isDarkMode ? '#d1d5db' : '#374151',
+    color: '#374151',
   };
 
   const inputStyle = (hasError?: boolean) => ({
@@ -257,9 +257,9 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     paddingVertical: 8,
     borderWidth: 1,
     borderRadius: 6,
-    borderColor: hasError ? '#ef4444' : isDarkMode ? '#374151' : '#d1d5db',
-    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-    color: isDarkMode ? '#ffffff' : '#111827',
+    borderColor: hasError ? '#ef4444' : '#d1d5db',
+    backgroundColor: '#ffffff',
+    color: '#111827',
   });
 
   return (
@@ -283,7 +283,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
               alignItems: 'center',
               gap: 24,
               minWidth: 280,
-              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+              backgroundColor: '#ffffff',
             }}
           >
             <ActivityIndicator size="large" color="#f97316" />
@@ -291,7 +291,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
               style={{
                 fontSize: 36,
                 fontWeight: '700',
-                color: isDarkMode ? '#ffffff' : '#111827',
+                color: '#111827',
               }}
             >
               {loadingPercentage}%
@@ -315,7 +315,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
             height: '100%',
             width: '100%',
             maxWidth: 672,
-            backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+            backgroundColor: '#ffffff',
             shadowColor: '#000',
             shadowOpacity: 0.4,
             shadowRadius: 20,
@@ -332,15 +332,15 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               borderBottomWidth: 1,
-              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+              borderBottomColor: '#e5e7eb',
+              backgroundColor: '#f3f4f6',
             }}
           >
             <Text
               style={{
                 fontSize: 20,
                 fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827',
+                color: '#111827',
               }}
             >
               {editData ? 'Edit Inventory Item' : 'Add Inventory Item'}
@@ -353,10 +353,10 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   paddingHorizontal: 16,
                   paddingVertical: 8,
                   borderRadius: 6,
-                  backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
+                  backgroundColor: '#e5e7eb',
                 }}
               >
-                <Text style={{ fontSize: 14, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                <Text style={{ fontSize: 14, color: '#111827' }}>
                   Cancel
                 </Text>
               </TouchableOpacity>
@@ -390,7 +390,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                 value={formData.itemName}
                 onChangeText={(val) => handleInputChange('itemName', val)}
                 placeholder="Enter item name"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                placeholderTextColor={'#9ca3af'}
                 style={inputStyle(!!errors.itemName)}
               />
               {errors.itemName ? (
@@ -409,7 +409,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                 value={formData.itemDescription}
                 onChangeText={(val) => handleInputChange('itemDescription', val)}
                 placeholder="Enter item description"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                placeholderTextColor={'#9ca3af'}
                 multiline
                 numberOfLines={3}
                 style={[inputStyle(!!errors.itemDescription), { height: 80, textAlignVertical: 'top' }]}
@@ -432,8 +432,8 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   alignItems: 'center',
                   borderWidth: 1,
                   borderRadius: 6,
-                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  borderColor: '#d1d5db',
+                  backgroundColor: '#ffffff',
                   overflow: 'hidden',
                 }}
               >
@@ -445,7 +445,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                     flex: 1,
                     paddingHorizontal: 12,
                     paddingVertical: 8,
-                    color: isDarkMode ? '#ffffff' : '#111827',
+                    color: '#111827',
                   }}
                 />
                 <TouchableOpacity
@@ -454,10 +454,10 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     borderLeftWidth: 1,
-                    borderLeftColor: isDarkMode ? '#374151' : '#d1d5db',
+                    borderLeftColor: '#d1d5db',
                   }}
                 >
-                  <Minus size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  <Minus size={16} color={'#4b5563'} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleQuantityChange('quantityAlert', true)}
@@ -465,10 +465,10 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                     paddingHorizontal: 12,
                     paddingVertical: 10,
                     borderLeftWidth: 1,
-                    borderLeftColor: isDarkMode ? '#374151' : '#d1d5db',
+                    borderLeftColor: '#d1d5db',
                   }}
                 >
-                  <Plus size={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+                  <Plus size={16} color={'#4b5563'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -484,16 +484,16 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   borderWidth: 2,
                   borderStyle: 'dashed',
                   borderRadius: 6,
-                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb',
+                  borderColor: '#d1d5db',
+                  backgroundColor: '#f9fafb',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Camera size={24} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                <Camera size={24} color={'#6b7280'} />
               </TouchableOpacity>
               {selectedImageName && (
-                <Text style={{ fontSize: 12, marginTop: 8, color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                <Text style={{ fontSize: 12, marginTop: 8, color: '#4b5563' }}>
                   Selected: {selectedImageName}
                 </Text>
               )}
@@ -508,11 +508,11 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   paddingVertical: 8,
                   borderWidth: 1,
                   borderRadius: 6,
-                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                  backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
+                  borderColor: '#d1d5db',
+                  backgroundColor: '#f3f4f6',
                 }}
               >
-                <Text style={{ color: isDarkMode ? '#9ca3af' : '#4b5563' }}>
+                <Text style={{ color: '#4b5563' }}>
                   {formData.modifiedBy}
                 </Text>
               </View>
@@ -528,12 +528,12 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   value={formData.modifiedDate}
                   onChangeText={(val) => handleInputChange('modifiedDate', val)}
                   placeholder="YYYY-MM-DDTHH:MM"
-                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  placeholderTextColor={'#9ca3af'}
                   style={[inputStyle(!!errors.modifiedDate), { paddingRight: 44 }]}
                 />
                 <Calendar
                   size={20}
-                  color={isDarkMode ? '#9ca3af' : '#6b7280'}
+                  color={'#6b7280'}
                   style={{ position: 'absolute', right: 12 }}
                 />
               </View>
@@ -553,7 +553,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                 value={formData.userEmail}
                 onChangeText={(val) => handleInputChange('userEmail', val)}
                 placeholder="Enter user email"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                placeholderTextColor={'#9ca3af'}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 style={inputStyle(!!errors.userEmail)}
@@ -577,10 +577,10 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   justifyContent: 'space-between',
                 }}
               >
-                <Text style={{ color: formData.category ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af') }}>
+                <Text style={{ color: formData.category ? '#111827' : '#9ca3af' }}>
                   {formData.category || 'Select category'}
                 </Text>
-                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>▾</Text>
+                <Text style={{ color: '#6b7280' }}>▾</Text>
               </TouchableOpacity>
 
               {showCategoryDropdown && (
@@ -588,8 +588,8 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                   style={{
                     borderWidth: 1,
                     borderRadius: 6,
-                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    borderColor: '#d1d5db',
+                    backgroundColor: '#ffffff',
                     marginTop: 4,
                     maxHeight: 200,
                     overflow: 'hidden',
@@ -603,7 +603,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                       }}
                       style={{ paddingHorizontal: 12, paddingVertical: 10 }}
                     >
-                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                      <Text style={{ color: '#6b7280' }}>
                         Select category
                       </Text>
                     </Pressable>
@@ -618,11 +618,11 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                           paddingHorizontal: 12,
                           paddingVertical: 10,
                           backgroundColor: pressed
-                            ? isDarkMode ? '#374151' : '#f3f4f6'
+                            ? '#f3f4f6'
                             : 'transparent',
                         })}
                       >
-                        <Text style={{ color: isDarkMode ? '#ffffff' : '#111827' }}>
+                        <Text style={{ color: '#111827' }}>
                           {category}
                         </Text>
                       </Pressable>
@@ -639,7 +639,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                 value={String(formData.totalStockAvailable)}
                 onChangeText={(val) => handleInputChange('totalStockAvailable', parseInt(val) || 0)}
                 placeholder="0"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                placeholderTextColor={'#9ca3af'}
                 keyboardType="numeric"
                 style={inputStyle()}
               />
@@ -652,7 +652,7 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
                 value={String(formData.totalStockIn)}
                 onChangeText={(val) => handleInputChange('totalStockIn', parseInt(val) || 0)}
                 placeholder="0"
-                placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                placeholderTextColor={'#9ca3af'}
                 keyboardType="numeric"
                 style={inputStyle()}
               />

@@ -50,7 +50,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   isEditMode = false,
   workOrder
 }) => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [technicians, setTechnicians] = useState<User[]>([]);
   const [assignees, setAssignees] = useState<User[]>([]);
@@ -95,8 +95,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
   useEffect(() => {
     const init = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme !== 'light');
+      // Dark mode logic removed as per user request
 
       const palette = await settingsColorPaletteService.getActive();
       setColorPalette(palette);
@@ -374,15 +373,15 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
         style={{ flex: 1 }}
       >
         <View style={st.modalOverlay}>
-          <View style={[st.modalContainer, { backgroundColor: isDarkMode ? '#030712' : '#ffffff' }]}>
+          <View style={[st.modalContainer, { backgroundColor: '#ffffff' }]}>
             {/* Loading Overlay Removed */}
 
             {/* Header */}
             <View style={[st.header, {
-              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
-              borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+              backgroundColor: '#ffffff',
+              borderBottomColor: '#e5e7eb',
             }]}>
-              <Text style={[st.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+              <Text style={[st.headerTitle, { color: '#111827' }]}>
                 {isEditMode ? 'Edit Work Order' : 'New Work Order'}
               </Text>
               <View style={st.headerActions}>
@@ -390,11 +389,11 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                   onPress={loading ? undefined : onClose}
                   disabled={loading}
                   style={[st.cancelButton, {
-                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    borderColor: '#d1d5db',
                     opacity: loading ? 0.5 : 1
                   }]}
                 >
-                  <Text style={[st.cancelButtonText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Cancel</Text>
+                  <Text style={[st.cancelButtonText, { color: '#374151' }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleSave}
@@ -416,17 +415,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               contentContainerStyle={st.scrollViewContent}
             >
               <View style={st.inputGroup}>
-                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Instructions <Text style={st.required}>*</Text></Text>
+                <Text style={[st.label, { color: '#374151' }]}>Instructions <Text style={st.required}>*</Text></Text>
                 <TextInput
                   value={formData.instructions}
                   onChangeText={(text) => handleInputChange('instructions', text)}
                   placeholder="Enter detailed instructions"
-                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  placeholderTextColor="#9ca3af"
                   editable={!isAssignedToMe}
                   style={[st.textInput, {
-                    borderColor: errors.instructions ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                    backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-                    color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+                    borderColor: errors.instructions ? '#ef4444' : '#e5e7eb',
+                    backgroundColor: isAssignedToMe ? '#f3f4f6' : '#ffffff',
+                    color: isAssignedToMe ? '#6b7280' : '#111827',
                     opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
@@ -441,17 +440,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               </View>
 
               <View style={st.inputGroup}>
-                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Category <Text style={st.required}>*</Text></Text>
+                <Text style={[st.label, { color: '#374151' }]}>Work Category <Text style={st.required}>*</Text></Text>
                 <View style={[st.pickerContainer, {
-                  backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-                  borderColor: errors.work_category ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                  backgroundColor: isAssignedToMe ? '#f3f4f6' : '#ffffff',
+                  borderColor: errors.work_category ? '#ef4444' : '#e5e7eb',
                   opacity: isAssignedToMe ? 0.8 : 1
                 }]}>
                   <Picker
                     selectedValue={formData.work_category}
                     onValueChange={(val) => handleInputChange('work_category', val)}
-                    style={{ color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? 'white' : 'black') }}
-                    dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                    style={{ color: isAssignedToMe ? '#6b7280' : 'black' }}
+                    dropdownIconColor="black"
                     enabled={!isAssignedToMe}
                   >
                     <Picker.Item
@@ -474,17 +473,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               </View>
 
               <View style={st.inputGroup}>
-                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Report To <Text style={st.required}>*</Text></Text>
+                <Text style={[st.label, { color: '#374151' }]}>Report To <Text style={st.required}>*</Text></Text>
                 <TextInput
                   value={formData.report_to}
                   onChangeText={(text) => handleInputChange('report_to', text)}
                   placeholder="Person name"
-                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  placeholderTextColor="#9ca3af"
                   editable={!isAssignedToMe}
                   style={[st.textInput, {
-                    borderColor: errors.report_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
-                    backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-                    color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+                    borderColor: errors.report_to ? '#ef4444' : '#e5e7eb',
+                    backgroundColor: isAssignedToMe ? '#f3f4f6' : '#ffffff',
+                    color: isAssignedToMe ? '#6b7280' : '#111827',
                     opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
@@ -499,17 +498,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               </View>
 
               <View style={st.inputGroup}>
-                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Assign To <Text style={st.required}>*</Text></Text>
+                <Text style={[st.label, { color: '#374151' }]}>Assign To <Text style={st.required}>*</Text></Text>
                 <View style={[st.pickerContainer, {
-                  backgroundColor: isAssignedToMe ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-                  borderColor: errors.assign_to ? '#ef4444' : isDarkMode ? '#1f2937' : '#e5e7eb',
+                  backgroundColor: isAssignedToMe ? '#f3f4f6' : '#ffffff',
+                  borderColor: errors.assign_to ? '#ef4444' : '#e5e7eb',
                   opacity: isAssignedToMe ? 0.8 : 1
                 }]}>
                   <Picker
                     selectedValue={formData.assign_to}
                     onValueChange={(val) => handleInputChange('assign_to', val)}
-                    style={{ color: isAssignedToMe ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? 'white' : 'black') }}
-                    dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                    style={{ color: isAssignedToMe ? '#6b7280' : 'black' }}
+                    dropdownIconColor="black"
                     enabled={!isAssignedToMe}
                   >
                     <Picker.Item label="Select User" value="" />
@@ -528,16 +527,16 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
               {((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) && (
                 <View style={st.inputGroup}>
-                  <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Work Status</Text>
+                  <Text style={[st.label, { color: '#374151' }]}>Work Status</Text>
                   <View style={[st.pickerContainer, {
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb'
+                    backgroundColor: '#ffffff',
+                    borderColor: '#e5e7eb'
                   }]}>
                     <Picker
                       selectedValue={formData.work_status}
                       onValueChange={(val) => handleInputChange('work_status', val)}
-                      style={{ color: isDarkMode ? 'white' : 'black' }}
-                      dropdownIconColor={isDarkMode ? 'white' : 'black'}
+                      style={{ color: 'black' }}
+                      dropdownIconColor="black"
                     >
                       <Picker.Item label="Pending" value="Pending" />
                       <Picker.Item label="In Progress" value="In Progress" />
@@ -549,7 +548,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
               )}
 
               <View style={st.inputGroup}>
-                <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Remarks</Text>
+                <Text style={[st.label, { color: '#374151' }]}>Remarks</Text>
                 <TextInput
                   value={formData.remarks}
                   onChangeText={(text) => handleInputChange('remarks', text)}
@@ -557,11 +556,11 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                   numberOfLines={4}
                   textAlignVertical="top"
                   placeholder="Internal notes..."
-                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                  placeholderTextColor="#9ca3af"
                   style={[st.textInput, st.textArea, {
-                    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    color: isDarkMode ? '#ffffff' : '#111827'
+                    borderColor: '#e5e7eb',
+                    backgroundColor: '#ffffff',
+                    color: '#111827'
                   }]}
                 />
               </View>
@@ -594,14 +593,14 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                   />
 
                   <View style={st.inputGroup}>
-                    <Text style={[st.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature</Text>
+                    <Text style={[st.label, { color: '#374151' }]}>Client Signature</Text>
                     {!isDrawingSignature ? (
                       <View>
                         <Pressable
                           onPress={() => setIsDrawingSignature(true)}
                           style={[st.signatureContainer, {
-                            borderColor: errors.signature ? '#ef4444' : (isDarkMode ? '#374151' : '#e5e7eb'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                            borderColor: errors.signature ? '#ef4444' : '#e5e7eb',
+                            backgroundColor: '#f9fafb'
                           }]}
                         >
                           {imagePreviews.signature ? (
@@ -614,7 +613,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                               <View style={[st.signatureIconCircle, { backgroundColor: (colorPalette?.primary || '#7c3aed') + '20' }]}>
                                 <Camera size={24} color={colorPalette?.primary || '#7c3aed'} />
                               </View>
-                              <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap to Draw Signature</Text>
+                              <Text style={{ color: '#6b7280' }}>Tap to Draw Signature</Text>
                             </View>
                           )}
                         </Pressable>
@@ -640,7 +639,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                         )}
                       </View>
                     ) : (
-                      <View style={[st.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}>
+                      <View style={[st.signatureCanvasContainer, { borderColor: '#d1d5db' }]}>
                         <SignatureScreen
                           ref={sigCanvas}
                           onOK={handleSignature}

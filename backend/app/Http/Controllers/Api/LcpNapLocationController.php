@@ -190,7 +190,6 @@ class LcpNapLocationController extends Controller
                 'region' => 'required|string|max:255',
                 'city' => 'required|string|max:255',
                 'barangay' => 'required|string|max:255',
-                'location' => 'required|string|max:255',
                 'lcp_id' => 'required|string|max:255',
                 'nap_id' => 'required|string|max:255',
                 'port_total' => 'required|integer|min:1',
@@ -255,7 +254,6 @@ class LcpNapLocationController extends Controller
             $lcpnap->region = $request->region;
             $lcpnap->city = $request->city;
             $lcpnap->barangay = $request->barangay;
-            $lcpnap->location = $request->location;
             $lcpnap->lcp = $request->lcp_id;
             $lcpnap->nap = $request->nap_id;
             $lcpnap->port_total = $request->port_total;
@@ -324,7 +322,6 @@ class LcpNapLocationController extends Controller
                 'region' => 'required|string|max:255',
                 'city' => 'required|string|max:255',
                 'barangay' => 'required|string|max:255',
-                'location' => 'required|string|max:255',
                 'lcp_id' => 'required|string|max:255',
                 'nap_id' => 'required|string|max:255',
                 'port_total' => 'required|integer|min:1',
@@ -393,7 +390,6 @@ class LcpNapLocationController extends Controller
             $lcpnap->region = $request->region;
             $lcpnap->city = $request->city;
             $lcpnap->barangay = $request->barangay;
-            $lcpnap->location = $request->location;
             $lcpnap->lcp = $request->lcp_id;
             $lcpnap->nap = $request->nap_id;
             $lcpnap->port_total = $request->port_total;

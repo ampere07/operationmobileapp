@@ -69,7 +69,7 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
 
 const PaymentPortal: React.FC = () => {
   const { paymentPortalRecords: records, isLoading: loading, error, silentRefresh } = usePaymentPortalContext();
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRecord, setSelectedRecord] = useState<PaymentPortalRecord | null>(null);
@@ -98,25 +98,7 @@ const PaymentPortal: React.FC = () => {
   };
 
   // Fetch data from API (placeholder for now)
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     const fetchColorPalette = async () => {

@@ -72,7 +72,7 @@ interface TransactionListProps {
 
 const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
   const { transactions, isLoading: loading, error, silentRefresh } = useTransactionContext();
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode as per user request
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
@@ -101,25 +101,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
 
 
   // Dark mode synchronization logic
-  useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark' || theme === null);
-    };
 
-    checkDarkMode();
-
-    const observer = new MutationObserver(() => {
-      checkDarkMode();
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   // Fetch color palette
   useEffect(() => {

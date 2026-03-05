@@ -20,7 +20,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh } = useJobOrderContext();
-  const [isDarkMode, setIsDarkMode] = useState(false);
+
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,8 +90,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
   useEffect(() => {
     const loadSettings = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
+
 
       const authData = await AsyncStorage.getItem('authData');
       if (authData) {
@@ -544,7 +543,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
 
 
-  const dynamicValueColor = isDarkMode ? '#ffffff' : '#111827';
+  const dynamicValueColor = '#111827';
 
   const renderImageLink = (url: string | undefined | null) => (
     <View style={st.imageLinkRow}>
@@ -553,7 +552,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       </Text>
       {url && (
         <Pressable onPress={() => Linking.openURL(url || '')}>
-          <ExternalLink width={16} height={16} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          <ExternalLink width={16} height={16} color={'#4b5563'} />
         </Pressable>
       )}
     </View>
@@ -625,8 +624,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     if (!renderer) return null;
 
     return (
-      <View style={[st.fieldRow, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
-        <Text style={[st.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
+      <View style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>
+        <Text style={[st.fieldLabel, { color: '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
         <View style={st.fieldValueWrap}>
           {renderer()}
         </View>
@@ -637,17 +636,17 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   return (
     <View style={[st.container, {
       borderLeftWidth: !isMobile ? 1 : 0,
-      backgroundColor: isDarkMode ? '#030712' : '#f9fafb',
-      borderLeftColor: isDarkMode ? 'rgba(255,255,255,0.3)' : '#d1d5db'
+      backgroundColor: '#f9fafb',
+      borderLeftColor: '#d1d5db'
     }]}>
       <View style={[st.header, {
         paddingTop: isMobile ? 60 : 12,
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-        borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+        backgroundColor: '#ffffff',
+        borderBottomColor: '#e5e7eb'
       }]}>
         <View style={st.headerLeft}>
-          <Text style={[st.headerName, { maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
-          {loading && <Text style={[st.loadingLabel, { color: isDarkMode ? '#fb923c' : '#7c3aed' }]}>Loading...</Text>}
+          <Text style={[st.headerName, { maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
+          {loading && <Text style={[st.loadingLabel, { color: '#7c3aed' }]}>Loading...</Text>}
         </View>
 
         <View style={st.headerActions}>
@@ -667,22 +666,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
           )}
 
           <Pressable onPress={onClose}>
-            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            <X width={28} height={28} color={'#4b5563'} />
           </Pressable>
         </View>
       </View>
 
       {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && (
         <View style={[st.editBar, {
-          backgroundColor: isDarkMode ? '#111827' : '#f3f4f6',
-          borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
+          backgroundColor: '#f3f4f6',
+          borderBottomColor: '#e5e7eb'
         }]}>
           <View style={st.editBarInner}>
             <Pressable onPress={handleEditClick} disabled={loading} style={st.editBtnWrap}>
-              <View style={[st.editIconCircle, { backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed') }]}>
+              <View style={[st.editIconCircle, { backgroundColor: loading ? '#9ca3af' : (colorPalette?.primary || '#7c3aed') }]}>
                 <Edit width={18} height={18} color="#ffffff" />
               </View>
-              <Text style={[st.editLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Edit</Text>
+              <Text style={[st.editLabel, { color: '#374151' }]}>Edit</Text>
             </Pressable>
           </View>
         </View>
@@ -690,15 +689,15 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
       {error && (
         <View style={[st.errorBox, {
-          backgroundColor: isDarkMode ? 'rgba(127, 29, 29, 0.2)' : '#fef2f2',
-          borderColor: isDarkMode ? '#991b1b' : '#fca5a5'
+          backgroundColor: '#fef2f2',
+          borderColor: '#fca5a5'
         }]}>
-          <Text style={{ color: isDarkMode ? '#fca5a5' : '#991b1b' }}>{error}</Text>
+          <Text style={{ color: '#991b1b' }}>{error}</Text>
         </View>
       )}
 
       <ScrollView style={st.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={st.scrollContent}>
-        <View style={[st.fieldsContainer, { backgroundColor: isDarkMode ? '#030712' : '#f9fafb' }]}>
+        <View style={[st.fieldsContainer, { backgroundColor: '#f9fafb' }]}>
           <View>
             {defaultFields.map((fieldKey) => (
               <React.Fragment key={fieldKey}>
