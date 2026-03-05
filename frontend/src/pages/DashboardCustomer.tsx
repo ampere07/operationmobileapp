@@ -302,7 +302,8 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         setErrorMessage('');
 
         try {
-            const response = await paymentService.createPayment(accountNo, paymentAmount);
+            const redirectUrl = LinkingExpo.createURL('payment-success');
+            const response = await paymentService.createPayment(accountNo, paymentAmount, redirectUrl);
 
             if (response.status === 'success' && response.payment_url) {
                 setShowPaymentVerifyModal(false);
@@ -325,34 +326,34 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
     const handleOpenPaymentLink = async () => {
         const url = paymentLinkData?.paymentUrl || pendingPayment?.payment_url;
+        const refNo = paymentLinkData?.referenceNo || pendingPayment?.reference_no || '';
         if (url) {
             try {
-                // Create a redirect URL for the app
                 const redirectUrl = LinkingExpo.createURL('payment-success');
+                await WebBrowser.openAuthSessionAsync(url, redirectUrl);
 
-                // Open in-app browser as a session that can catch redirects
-                const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
-
-                // Refresh data to see if balance updated
                 await silentRefresh();
 
-                // Also specifically refresh pending payment status
                 if (accountNo && accountNo !== 'N/A') {
                     const updatedPending = await paymentService.checkPendingPayment(accountNo);
                     setPendingPayment(updatedPending);
                 }
 
-                // Close modals
                 setShowPaymentLinkModal(false);
                 setShowPendingPaymentModal(false);
                 setPaymentLinkData(null);
                 setPendingPayment(null);
 
-                // If result type is success, or if the browser was closed (even manually)
-                // we'll show the success modal. On mobile, openAuthSessionAsync helps 
-                // the browser close automatically if the redirectUrl is hit.
-                if (result.type === 'success' || result.type === 'dismiss') {
-                    setShowSuccessModal(true);
+                // Verify actual payment status from Xendit before showing success
+                if (refNo) {
+                    try {
+                        const statusRes = await paymentService.checkPaymentStatus(refNo);
+                        if (statusRes.status === 'success' && statusRes.payment?.status === 'PAID') {
+                            setShowSuccessModal(true);
+                        }
+                    } catch (err) {
+                        console.error('Error checking payment status:', err);
+                    }
                 }
             } catch (error) {
                 console.error('Error opening browser:', error);

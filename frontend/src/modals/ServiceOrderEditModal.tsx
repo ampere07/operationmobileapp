@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, StyleSheet, FlatList } from 'react-native';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, StyleSheet, FlatList, InteractionManager } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import { X, Calendar, ChevronDown, Minus, Plus, Upload, Eraser, CheckCircle, Search, Check } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { X, ChevronDown, Search, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
@@ -94,6 +93,323 @@ interface ImageFiles {
   timeOutFile: ImagePicker.ImagePickerAsset | null;
   clientSignatureFile: ImagePicker.ImagePickerAsset | null;
 }
+
+const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileIdMatch && fileIdMatch[1]) {
+    return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+  }
+  const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
+  }
+  return url;
+};
+
+const isGoogleDriveUrl = (url: string | null): boolean => {
+  if (!url) return false;
+  return url.includes('drive.google.com') || url.includes('docs.google.com');
+};
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '95%',
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  saveButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#ef4444',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  connectionTypeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  connectionTypeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  signatureContainer: {
+    height: 160,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  signaturePlaceholder: {
+    alignItems: 'center',
+  },
+  signatureText: {
+    fontSize: 14,
+  },
+  signatureImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  clearSignatureButton: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: '#ef4444',
+    borderRadius: 6,
+  },
+  clearSignatureText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  signatureCanvasContainer: {
+    height: 240,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    marginBottom: 8,
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  signatureCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 9999,
+    zIndex: 10,
+  },
+  itemRow: {
+    zIndex: 10,
+    marginBottom: 16,
+  },
+  itemRowContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  itemSearchContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  itemSelectText: {
+    fontSize: 16,
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    zIndex: 999,
+    overflow: 'hidden',
+    elevation: 1000,
+  },
+  dropdownSearchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+  },
+  dropdownItemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    resizeMode: 'cover',
+  },
+  dropdownSelectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f97316',
+  },
+  emptyDropdown: {
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyDropdownText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  itemQtyContainer: {
+    width: 96,
+  },
+  itemRemoveButton: {
+    padding: 12,
+  },
+  miniModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  miniModalContent_mini: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  miniModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  miniModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  miniModalClose: {
+    padding: 4,
+  },
+  miniModalSearchContainer: {
+    padding: 12,
+  },
+  miniModalSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 12,
+  },
+  miniModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  miniModalItemText: {
+    fontSize: 24,
+    textAlign: 'left',
+  },
+  miniModalEmpty: {
+    padding: 24,
+    alignItems: 'center',
+  },
+});
 
 const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   isOpen,
@@ -199,47 +515,47 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isRouterModelMiniModalVisible, setIsRouterModelMiniModalVisible] = useState(false);
   const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
 
-  const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
-    if (!url) return null;
+  // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
+  const [isContentReady, setIsContentReady] = useState(false);
+  const initialDataLoadedRef = useRef(false);
 
-    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (fileIdMatch && fileIdMatch[1]) {
-      return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
-    }
-
-    const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (idMatch && idMatch[1]) {
-      return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
-    }
-
-    return url;
-  };
-
-  const isGoogleDriveUrl = (url: string | null): boolean => {
-    if (!url) return false;
-    return url.includes('drive.google.com') || url.includes('docs.google.com');
-  };
-
-  // Load User Data and Theme
   useEffect(() => {
+    if (isOpen) {
+      initialDataLoadedRef.current = false;
+      const handle = InteractionManager.runAfterInteractions(() => {
+        setIsContentReady(true);
+      });
+      return () => handle.cancel();
+    } else {
+      setIsContentReady(false);
+      initialDataLoadedRef.current = false;
+    }
+  }, [isOpen]);
+
+  // Load User Data and Theme - batched with Promise.allSettled
+  useEffect(() => {
+    let cancelled = false;
     const loadSettings = async () => {
-      try {
-        const theme = await AsyncStorage.getItem('theme');
-        setIsDarkMode(theme !== 'light');
-
-        const authData = await AsyncStorage.getItem('authData');
-        if (authData) {
-          const user = JSON.parse(authData);
-          setCurrentUser(user);
-        }
-
-        const palette = await settingsColorPaletteService.getActive();
-        setColorPalette(palette);
-      } catch (error) {
-        console.error('Error loading settings:', error);
+      const [themeResult, authResult, paletteResult] = await Promise.allSettled([
+        AsyncStorage.getItem('theme'),
+        AsyncStorage.getItem('authData'),
+        settingsColorPaletteService.getActive(),
+      ]);
+      if (cancelled) return;
+      if (themeResult.status === 'fulfilled') {
+        setIsDarkMode(themeResult.value !== 'light');
+      }
+      if (authResult.status === 'fulfilled' && authResult.value) {
+        try {
+          setCurrentUser(JSON.parse(authResult.value));
+        } catch (error) {}
+      }
+      if (paletteResult.status === 'fulfilled') {
+        setColorPalette(paletteResult.value);
       }
     };
     loadSettings();
+    return () => { cancelled = true; };
   }, []);
 
   // Consolidated data fetching - all independent API calls batched into one effect
@@ -536,70 +852,63 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
   }, [serviceOrderData, isOpen, currentUserEmail]);
 
-  // Save draft to AsyncStorage whenever formData changes
+  // Save draft to AsyncStorage - debounced to prevent async storm on every keystroke
   useEffect(() => {
-    const saveDraft = async () => {
-      if (isOpen && serviceOrderData) {
-        if (serviceOrderId) {
-          try {
-            await AsyncStorage.setItem(`serviceOrderDraft_${serviceOrderId}`, JSON.stringify(formData));
-          } catch (error) {
-            console.error('Failed to save draft:', error);
-          }
-        }
+    if (!isOpen || !serviceOrderData || !serviceOrderId || !initialDataLoadedRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await AsyncStorage.setItem(`serviceOrderDraft_${serviceOrderId}`, JSON.stringify(formData));
+      } catch (error) {
+        console.error('Failed to save draft:', error);
       }
-    };
-    saveDraft();
-  }, [formData, isOpen, serviceOrderData]);
-
-  // Save order items draft
-  useEffect(() => {
-    const saveOrderItemsDraft = async () => {
-      if (isOpen && serviceOrderData) {
-        if (serviceOrderId) {
-          try {
-            await AsyncStorage.setItem(`serviceOrderItemsDraft_${serviceOrderId}`, JSON.stringify(orderItems));
-          } catch (error) {
-            console.error('Failed to save order items draft:', error);
-          }
-        }
-      }
-    };
-    saveOrderItemsDraft();
-  }, [orderItems, isOpen, serviceOrderData]);
-
-  // Load draft on open
-  useEffect(() => {
-    const loadDraft = async () => {
-      if (isOpen && serviceOrderData) {
-        if (serviceOrderId) {
-          try {
-            const savedDraft = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
-            const savedItemsDraft = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
-
-            if (savedDraft) {
-              const parsedDraft = JSON.parse(savedDraft);
-              setFormData(prev => ({
-                ...prev,
-                ...parsedDraft
-              }));
-            }
-
-            if (savedItemsDraft) {
-              setOrderItems(JSON.parse(savedItemsDraft));
-            }
-          } catch (error) {
-            console.error('Failed to load draft:', error);
-          }
-        }
-      }
-    };
-    // Timer to run after initial DB load
-    const timer = setTimeout(() => {
-      loadDraft();
-    }, 500);
+    }, 1500);
     return () => clearTimeout(timer);
-  }, [isOpen, serviceOrderData]);
+  }, [formData, isOpen, serviceOrderData, serviceOrderId]);
+
+  // Save order items draft - debounced
+  useEffect(() => {
+    if (!isOpen || !serviceOrderData || !serviceOrderId || !initialDataLoadedRef.current) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await AsyncStorage.setItem(`serviceOrderItemsDraft_${serviceOrderId}`, JSON.stringify(orderItems));
+      } catch (error) {
+        console.error('Failed to save order items draft:', error);
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [orderItems, isOpen, serviceOrderData, serviceOrderId]);
+
+  // Load draft on open - runs after initial form data is set
+  useEffect(() => {
+    if (!isOpen || !serviceOrderData || !serviceOrderId) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const savedDraft = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
+        const savedItemsDraft = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
+
+        if (savedDraft) {
+          const parsedDraft = JSON.parse(savedDraft);
+          setFormData(prev => ({
+            ...prev,
+            ...parsedDraft
+          }));
+        }
+
+        if (savedItemsDraft) {
+          setOrderItems(JSON.parse(savedItemsDraft));
+        }
+      } catch (error) {
+        console.error('Failed to load draft:', error);
+      } finally {
+        // Mark initial load done so draft saves can start
+        initialDataLoadedRef.current = true;
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [isOpen, serviceOrderData, serviceOrderId]);
 
   const handleInputChange = useCallback((field: keyof ServiceOrderEditFormData, value: string) => {
     setFormData(prev => {
@@ -618,7 +927,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     });
   }, []);
 
-  const handleImageChange = async (field: keyof ImageFiles) => {
+  const handleImageChange = useCallback(async (field: keyof ImageFiles) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -633,7 +942,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
     }
-  };
+  }, [errors]);
 
   const uploadImageToGoogleDrive = async (asset: ImagePicker.ImagePickerAsset | { uri: string; mimeType?: string }): Promise<string> => {
     const formData = new FormData();
@@ -690,14 +999,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     }
   };
 
-  const handleSignatureClear = () => {
+  const handleSignatureClear = useCallback(() => {
     if (signatureRef.current) {
       signatureRef.current.clearSignature();
     }
-    // Also clear stored file
     setImageFiles(prev => ({ ...prev, clientSignatureFile: null }));
     setFormData(prev => ({ ...prev, clientSignature: '' }));
-  };
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -1042,6 +1350,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       .slice(0, 50);
   }, [routerModels, routerModelSearch]);
 
+  // Memoize ports array to avoid recreating on every render
+  const availablePorts = useMemo(() => {
+    return Array.from({ length: totalPorts }, (_, i) => {
+      return `P${(i + 1).toString().padStart(2, '0')}`;
+    });
+  }, [totalPorts]);
+
   // Render Helpers
   const activeColor = colorPalette?.primary || '#7c3aed';
 
@@ -1145,12 +1460,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   );
 
   const renderNewPortPicker = () => {
-    // Generate ports based on totalPorts
-    const ports = Array.from({ length: totalPorts }, (_, i) => {
-      const portVal = `P${(i + 1).toString().padStart(2, '0')}`;
-      return portVal;
-    });
-
     return (
       <View style={styles.inputGroup}>
         {renderLabel('New Port', true)}
@@ -1165,7 +1474,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             style={{ color: isDarkMode ? '#fff' : '#000' }}
           >
             <Picker.Item label="Select Port" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-            {ports.map((port) => {
+            {availablePorts.map((port) => {
               const isUsed = usedPorts.some(up => up.toUpperCase() === port.toUpperCase());
               const isSelected = formData.newPort.toUpperCase() === port.toUpperCase();
               if (isUsed && !isSelected) return null; // Hide used ports unless selected
@@ -1230,11 +1539,18 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           </View>
 
           <View style={styles.contentContainer}>
+            {!isContentReady ? (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+                <ActivityIndicator size="large" color={activeColor} />
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280', marginTop: 12, fontSize: 14 }}>Loading form...</Text>
+              </View>
+            ) : (
             <ScrollView
               style={styles.contentContainer}
               contentContainerStyle={styles.scrollViewContent}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={true}
             >
               <View style={styles.inputGroup}>
 
@@ -1547,6 +1863,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                         style={{ maxHeight: 250 }}
                                         keyboardShouldPersistTaps="always"
                                         nestedScrollEnabled={true}
+                                        onScrollBeginDrag={() => setScrollEnabled(false)}
+                                        onScrollEndDrag={() => setScrollEnabled(true)}
+                                        onMomentumScrollBegin={() => setScrollEnabled(false)}
+                                        onMomentumScrollEnd={() => setScrollEnabled(true)}
                                       >
                                         <Pressable
                                           style={[styles.dropdownItem, {
@@ -1846,6 +2166,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
               </View>
             </ScrollView>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -2026,304 +2347,5 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    height: '95%',
-    width: '100%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-  },
-  headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  saveButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  required: {
-    color: '#ef4444',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  connectionTypeContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  connectionTypeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  signatureContainer: {
-    height: 160,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  signaturePlaceholder: {
-    alignItems: 'center',
-  },
-  signatureText: {
-    fontSize: 14,
-  },
-  signatureImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  clearSignatureButton: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  clearSignatureText: {
-    color: '#ffffff',
-    fontSize: 12,
-  },
-  signatureCanvasContainer: {
-    height: 240,
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    marginBottom: 8,
-    overflow: 'hidden',
-    borderRadius: 8,
-  },
-  signatureCloseButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 4,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 9999,
-    zIndex: 10,
-  },
-  itemRow: {
-    zIndex: 10,
-    marginBottom: 16,
-  },
-  itemRowContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  itemSearchContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  itemSelectText: {
-    fontSize: 16,
-  },
-  dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    zIndex: 999,
-    overflow: 'hidden',
-    elevation: 1000,
-  },
-  dropdownSearchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dropdownSearchInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
-  },
-  dropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  dropdownItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-  },
-  dropdownItemImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-    resizeMode: 'cover',
-  },
-  dropdownSelectedIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#f97316',
-  },
-  emptyDropdown: {
-    paddingHorizontal: 16,
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
-  emptyDropdownText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  itemQtyContainer: {
-    width: 96,
-  },
-  itemRemoveButton: {
-    padding: 12,
-  },
-  miniModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  miniModalContent_mini: {
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '80%',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  miniModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  miniModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  miniModalClose: {
-    padding: 4,
-  },
-  miniModalSearchContainer: {
-    padding: 12,
-  },
-  miniModalSearchInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingHorizontal: 12,
-  },
-  miniModalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
-  },
-  miniModalItemText: {
-    fontSize: 24,
-    textAlign: 'left',
-  },
-  miniModalEmpty: {
-    padding: 24,
-    alignItems: 'center',
-  },
-});
 
 export default ServiceOrderEditModal;

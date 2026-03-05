@@ -1,135 +1,199 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet } from 'react-native';
-import { FileText, Search, ChevronDown, ListFilter, ArrowUp, ArrowDown, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
+import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
 import JobOrderFunnelFilter, { FilterValues } from '../components/filters/JobOrderFunnelFilter';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
-import { getCities, City } from '../services/cityService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrder } from '../types/jobOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
-type DisplayMode = 'card' | 'table';
+const StatusText = React.memo(({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
+  if (!status) return <Text style={{ color: '#9ca3af' }}>-</Text>;
 
-const allColumns = [
-  { key: 'timestamp', label: 'Timestamp', width: 'min-w-40' },
-  { key: 'billingStatusId', label: 'Billing Status ID', width: 'min-w-32' },
-  { key: 'onsiteStatus', label: 'Onsite Status', width: 'min-w-32' },
-  { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-36' },
-  { key: 'installation_fee', label: 'Installation Fee', width: 'min-w-32' },
-  { key: 'billingDay', label: 'Billing Day', width: 'min-w-28' },
-  { key: 'modemRouterSN', label: 'Modem/Router SN', width: 'min-w-36' },
-  { key: 'routerModel', label: 'Router Model', width: 'min-w-32' },
-  { key: 'groupName', label: 'Group Name', width: 'min-w-32' },
-  { key: 'lcpnap', label: 'LCPNAP', width: 'min-w-28' },
-  { key: 'port', label: 'PORT', width: 'min-w-24' },
-  { key: 'vlan', label: 'VLAN', width: 'min-w-24' },
-  { key: 'username', label: 'Username', width: 'min-w-32' },
-  { key: 'ipAddress', label: 'IP Address', width: 'min-w-32' },
-  { key: 'connectionType', label: 'Connection Type', width: 'min-w-36' },
-  { key: 'usageType', label: 'Usage Type', width: 'min-w-32' },
-  { key: 'usernameStatus', label: 'Username Status', width: 'min-w-32' },
-  { key: 'visitBy', label: 'Visit By', width: 'min-w-32' },
-  { key: 'visitWith', label: 'Visit With', width: 'min-w-32' },
-  { key: 'visitWithOther', label: 'Visit With Other', width: 'min-w-32' },
-  { key: 'onsiteRemarks', label: 'Onsite Remarks', width: 'min-w-40' },
-  { key: 'statusRemarks', label: 'Status Remarks', width: 'min-w-40' },
-  { key: 'addressCoordinates', label: 'Address Coordinates', width: 'min-w-40' },
-  { key: 'contractLink', label: 'Contract Link', width: 'min-w-48' },
-  { key: 'clientSignatureUrl', label: 'Client Signature URL', width: 'min-w-48' },
-  { key: 'setupImageUrl', label: 'Setup Image URL', width: 'min-w-48' },
-  { key: 'speedtestImageUrl', label: 'Speedtest Image URL', width: 'min-w-48' },
-  { key: 'signedContractImageUrl', label: 'Signed Contract Image URL', width: 'min-w-48' },
-  { key: 'boxReadingImageUrl', label: 'Box Reading Image URL', width: 'min-w-48' },
-  { key: 'routerReadingImageUrl', label: 'Router Reading Image URL', width: 'min-w-48' },
-  { key: 'portLabelImageUrl', label: 'Port Label Image URL', width: 'min-w-48' },
-  { key: 'houseFrontPictureUrl', label: 'House Front Picture URL', width: 'min-w-48' },
-  { key: 'createdAt', label: 'Created At', width: 'min-w-40' },
-  { key: 'createdByUserEmail', label: 'Created By User Email', width: 'min-w-48' },
-  { key: 'updatedAt', label: 'Updated At', width: 'min-w-40' },
-  { key: 'updatedByUserEmail', label: 'Updated By User Email', width: 'min-w-48' },
-  { key: 'assignedEmail', label: 'Assigned Email', width: 'min-w-48' },
-  { key: 'pppoeUsername', label: 'PPPoE Username', width: 'min-w-36' },
-  { key: 'pppoePassword', label: 'PPPoE Password', width: 'min-w-36' },
-  { key: 'fullName', label: 'Full Name of Client', width: 'min-w-48' },
-  { key: 'address', label: 'Full Address of Client', width: 'min-w-56' },
-  { key: 'contractTemplate', label: 'Contract Template', width: 'min-w-36' },
-  { key: 'modifiedBy', label: 'Modified By', width: 'min-w-32' },
-  { key: 'modifiedDate', label: 'Modified Date', width: 'min-w-40' },
-  { key: 'firstName', label: 'First Name', width: 'min-w-32' },
-  { key: 'middleInitial', label: 'Middle Initial', width: 'min-w-28' },
-  { key: 'lastName', label: 'Last Name', width: 'min-w-32' },
-  { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-  { key: 'secondContactNumber', label: 'Second Contact Number', width: 'min-w-40' },
-  { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-  { key: 'region', label: 'Region', width: 'min-w-28' },
-  { key: 'city', label: 'City', width: 'min-w-28' },
-  { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-  { key: 'choosePlan', label: 'Choose Plan', width: 'min-w-36' },
-  { key: 'referredBy', label: 'Referred By', width: 'min-w-32' },
-  { key: 'startTimestamp', label: 'Start Timestamp', width: 'min-w-40' },
-  { key: 'endTimestamp', label: 'End Timestamp', width: 'min-w-40' },
-  { key: 'duration', label: 'Duration', width: 'min-w-28' }
-];
+  let textColor = '';
+
+  if (type === 'onsite') {
+    switch (status.toLowerCase()) {
+      case 'done':
+      case 'completed':
+        textColor = '#4ade80';
+        break;
+      case 'reschedule':
+        textColor = '#60a5fa';
+        break;
+      case 'inprogress':
+      case 'in progress':
+        textColor = '#60a5fa';
+        break;
+      case 'pending':
+        textColor = '#fb923c';
+        break;
+      case 'failed':
+      case 'cancelled':
+        textColor = '#ef4444';
+        break;
+      default:
+        textColor = '#9ca3af';
+    }
+  } else {
+    switch (status.toLowerCase()) {
+      case 'done':
+      case 'active':
+      case 'completed':
+        textColor = '#4ade80';
+        break;
+      case 'pending':
+      case 'in progress':
+        textColor = '#fb923c';
+        break;
+      case 'suspended':
+      case 'overdue':
+        textColor = '#ef4444';
+        break;
+      case 'cancelled':
+        textColor = '#ef4444';
+        break;
+      default:
+        textColor = '#9ca3af';
+    }
+  }
+
+  return (
+    <Text style={{ fontWeight: 'bold', textTransform: 'uppercase', color: textColor }}>
+      {status === 'inprogress' ? 'In Progress' : status}
+    </Text>
+  );
+});
+
+const jo = StyleSheet.create({
+  container: { height: '100%', overflow: 'hidden' },
+  // Mobile overlay
+  mobileOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
+  mobileBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+  mobileSidebar: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 256, flexDirection: 'column' },
+  mobileSidebarHeader: { padding: 16, paddingTop: 60, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Sidebar
+  sidebar: { borderRightWidth: 1, flexShrink: 0, flexDirection: 'column', position: 'relative' },
+  sidebarHeaderBox: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
+  sidebarTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  sidebarTitle: { fontSize: 18, fontWeight: '600' },
+  pad16: { padding: 16 },
+  // Main content
+  mainContent: { overflow: 'hidden', flex: 1, flexDirection: 'column' },
+  mainInner: { flexDirection: 'column', height: '100%' },
+  // Toolbar
+  toolbar: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
+  toolbarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBtn: { padding: 8, borderRadius: 4 },
+  menuBtn: { backgroundColor: '#374151', padding: 8, borderRadius: 4 },
+  searchWrap: { position: 'relative', flex: 1 },
+  searchInput: { width: '100%', borderRadius: 4, paddingLeft: 40, paddingRight: 16, paddingVertical: 8, borderWidth: 1 },
+  searchIcon: { position: 'absolute', left: 12, top: 10 },
+  actionsRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
+  // List area
+  listArea: { flex: 1, overflow: 'hidden', flexDirection: 'column' },
+  flex1: { flex: 1 },
+  // Loading
+  loadingWrap: { paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' },
+  skeletonCol: { flexDirection: 'column', alignItems: 'center' },
+  skeletonBar1: { height: 16, width: '33%', borderRadius: 4, marginBottom: 16 },
+  skeletonBar2: { height: 16, width: '50%', borderRadius: 4 },
+  loadingText: { marginTop: 16 },
+  retryBtn: { marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
+  retryText: { color: 'white' },
+  // Cards
+  cardRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  cardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  cardLeft: { flex: 1, minWidth: 0 },
+  cardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
+  cardSub: { fontSize: 12 },
+  cardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
+  // Pagination
+  paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  paginationInfo: { fontSize: 14 },
+  bold500: { fontWeight: '500' },
+  paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtnText: { fontSize: 14 },
+  pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
+  // Detail panels
+  mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
+  tabletDetail: { flexShrink: 0, overflow: 'hidden' },
+});
 
 const JobOrderPage: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrder | null>(null);
   const { jobOrders, isLoading, error, refreshJobOrders, silentRefresh } = useJobOrderContext();
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>([]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [userRole, setUserRole] = useState<string>('');
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('card');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(allColumns.map(col => col.key));
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
-  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const [columnOrder, setColumnOrder] = useState<string[]>(allColumns.map(col => col.key));
-  const [sidebarWidth, setSidebarWidth] = useState<number>(256);
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [mobileView, setMobileView] = useState<'orders' | 'details'>('orders');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
-  const dropdownRef = useRef<View>(null);
-  const filterDropdownRef = useRef<View>(null);
-  const tableRef = useRef<ScrollView>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const sidebarStartXRef = useRef<number>(0);
-  const sidebarStartWidthRef = useRef<number>(0);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
-  const handleApplyFilters = (filters: FilterValues) => {
+  const handleApplyFilters = useCallback((filters: FilterValues) => {
     setFilterValues(filters);
     setCurrentPage(1);
     setIsFunnelFilterOpen(false);
-  };
+  }, []);
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 15;
 
-
-
+  // Debounce search input to avoid recomputing heavy filter on every keystroke
   useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+
+
+  // Batch all mount-time async loads into a single effect
+  useEffect(() => {
+    let cancelled = false;
+    const initLoad = async () => {
+      const [themeResult, authResult, paletteResult, billingResult] = await Promise.allSettled([
+        AsyncStorage.getItem('theme'),
+        AsyncStorage.getItem('authData'),
+        settingsColorPaletteService.getActive(),
+        getBillingStatuses(),
+      ]);
+
+      if (cancelled) return;
+
+      if (themeResult.status === 'fulfilled') {
+        setIsDarkMode(themeResult.value !== 'light');
+      }
+      if (authResult.status === 'fulfilled' && authResult.value) {
+        try {
+          const userData = JSON.parse(authResult.value);
+          setUserRole(userData.role || '');
+          setUserEmail(userData.email || '');
+          setUserRoleId(userData.role_id || null);
+          setUserFullName(userData.full_name || '');
+        } catch (error) {}
+      }
+      if (paletteResult.status === 'fulfilled') {
+        setColorPalette(paletteResult.value);
+      }
+      if (billingResult.status === 'fulfilled') {
+        setBillingStatuses(billingResult.value);
       }
     };
-
-    fetchColorPalette();
+    initLoad();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -146,7 +210,7 @@ const JobOrderPage: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortColumn, sortDirection]);
+  }, [debouncedSearch]);
 
   const formatDate = (dateStr?: string | null): string => {
     if (!dateStr) return '-';
@@ -157,97 +221,36 @@ const JobOrderPage: React.FC = () => {
     }
   };
 
-  const getLastDayOfMonth = (): number => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return lastDay.getDate();
-  };
-
   const formatPrice = (price?: number | null): string => {
     if (price === null || price === undefined || price === 0) return '-';
     return `₱${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const getBillingStatusName = (statusId?: number | null): string => {
-    if (!statusId) return '-';
-
-    if (billingStatuses.length === 0) {
-      const defaultStatuses: { [key: number]: string } = {
-        1: 'In Progress',
-        2: 'Active',
-        3: 'Suspended',
-        4: 'Cancelled',
-        5: 'Overdue'
-      };
-      return defaultStatuses[statusId] || '-';
-    }
-
-    const status = billingStatuses.find(s => s.id === statusId);
-    return status ? status.status_name : '-';
   };
 
   const [userEmail, setUserEmail] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [userFullName, setUserFullName] = useState<string>('');
 
-  useEffect(() => {
-    const checkDarkMode = async () => {
-      const theme = await AsyncStorage.getItem('theme');
-      setIsDarkMode(theme !== 'light');
-    };
-
-    checkDarkMode();
-  }, []);
-
-  useEffect(() => {
-    const loadAuthData = async () => {
-      const authData = await AsyncStorage.getItem('authData');
-      if (authData) {
-        try {
-          const userData = JSON.parse(authData);
-          setUserRole(userData.role || '');
-          setUserEmail(userData.email || '');
-          setUserRoleId(userData.role_id || null);
-          setUserFullName(userData.full_name || '');
-        } catch (error) {
-        }
-      }
-    };
-    loadAuthData();
-  }, []);
-
-  useEffect(() => {
-    const fetchLookupData = async () => {
-      try {
-        const billingStatusesData = await getBillingStatuses();
-        setBillingStatuses(billingStatusesData);
-      } catch (err) {
-        console.error('Failed to fetch lookup data:', err);
-      }
-    };
-
-    fetchLookupData();
-  }, []);
+  // Dark mode, auth data, and billing statuses are all loaded in the batched init effect above
 
   useEffect(() => {
     silentRefresh();
   }, [silentRefresh]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await refreshJobOrders();
     setIsRefreshing(false);
-  };
+  }, [refreshJobOrders]);
 
-  const getClientFullName = (jobOrder: JobOrder): string => {
+  const getClientFullName = useCallback((jobOrder: JobOrder): string => {
     return [
       jobOrder.First_Name || jobOrder.first_name || '',
       jobOrder.Middle_Initial || jobOrder.middle_initial ? (jobOrder.Middle_Initial || jobOrder.middle_initial) + '.' : '',
       jobOrder.Last_Name || jobOrder.last_name || ''
     ].filter(Boolean).join(' ').trim() || '-';
-  };
+  }, []);
 
-  const getClientFullAddress = (jobOrder: JobOrder): string => {
+  const getClientFullAddress = useCallback((jobOrder: JobOrder): string => {
     const addressParts = [
       jobOrder.Installation_Address || jobOrder.installation_address || jobOrder.Address || jobOrder.address,
       jobOrder.Barangay || jobOrder.barangay,
@@ -256,18 +259,20 @@ const JobOrderPage: React.FC = () => {
     ].filter(Boolean);
 
     return addressParts.length > 0 ? addressParts.join(', ') : '-';
-  };
+  }, []);
 
 
 
 
 
-  const filteredJobOrders = jobOrders.filter(jobOrder => {
+  const filteredJobOrders = useMemo(() => {
+    const lowerSearch = debouncedSearch.toLowerCase();
+    return jobOrders.filter(jobOrder => {
     const fullName = getClientFullName(jobOrder).toLowerCase();
-    const matchesSearch = searchQuery === '' ||
-      fullName.includes(searchQuery.toLowerCase()) ||
-      ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = debouncedSearch === '' ||
+      fullName.includes(lowerSearch) ||
+      ((jobOrder.Address || jobOrder.address) || '').toLowerCase().includes(lowerSearch) ||
+      ((jobOrder.Assigned_Email || jobOrder.assigned_email) || '').toLowerCase().includes(lowerSearch);
 
     if (!matchesSearch) return false;
 
@@ -368,419 +373,59 @@ const JobOrderPage: React.FC = () => {
 
     return true;
   });
+  }, [jobOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail, filterValues, getClientFullName, getClientFullAddress]);
 
-  const presortedJobOrders = [...filteredJobOrders].sort((a, b) => {
-    const idA = parseInt(String(a.id)) || 0;
-    const idB = parseInt(String(b.id)) || 0;
-    return idB - idA;
-  });
+  const sortedJobOrders = useMemo(() => {
+    return [...filteredJobOrders].sort((a, b) => {
+      const idA = parseInt(String(a.id)) || 0;
+      const idB = parseInt(String(b.id)) || 0;
+      return idB - idA;
+    });
+  }, [filteredJobOrders]);
 
-  const sortedJobOrders = [...presortedJobOrders].sort((a, b) => {
-    if (!sortColumn) return 0;
+  const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
 
-    let aValue: any = '';
-    let bValue: any = '';
-
-    const getVal = (jo: JobOrder, key: string) => {
-      switch (key) {
-        case 'timestamp': return jo.Timestamp || jo.timestamp || '';
-        case 'billingStatusId': return jo.billing_status_id || jo.Billing_Status_ID || '';
-        case 'onsiteStatus': return jo.Onsite_Status || jo.onsite_status || '';
-        case 'dateInstalled': return jo.Date_Installed || jo.date_installed || '';
-        case 'installation_fee': return jo.Installation_Fee || jo.installation_fee || 0;
-        case 'billingDay': return jo.Billing_Day ?? jo.billing_day ?? 0;
-        case 'modemRouterSN': return jo.Modem_Router_SN || jo.modem_router_sn || '';
-        case 'routerModel': return jo.Router_Model || jo.router_model || '';
-        case 'groupName': return jo.group_name || jo.Group_Name || '';
-        case 'lcpnap': return jo.LCPNAP || jo.lcpnap || '';
-        case 'port': return jo.PORT || jo.Port || jo.port || '';
-        case 'vlan': return jo.VLAN || jo.vlan || '';
-        case 'username': return jo.Username || jo.username || '';
-        case 'ipAddress': return jo.IP_Address || jo.ip_address || jo.IP || jo.ip || '';
-        case 'connectionType': return jo.Connection_Type || jo.connection_type || '';
-        case 'usageType': return jo.Usage_Type || jo.usage_type || '';
-        case 'usernameStatus': return jo.username_status || jo.Username_Status || '';
-        case 'visitBy': return jo.Visit_By || jo.visit_by || '';
-        case 'visitWith': return jo.Visit_With || jo.visit_with || '';
-        case 'visitWithOther': return jo.Visit_With_Other || jo.visit_with_other || '';
-        case 'onsiteRemarks': return jo.Onsite_Remarks || jo.onsite_remarks || '';
-        case 'statusRemarks': return jo.Status_Remarks || jo.status_remarks || '';
-        case 'fullName': return getClientFullName(jo);
-        case 'address': return getClientFullAddress(jo);
-        case 'assignedEmail': return jo.Assigned_Email || jo.assigned_email || '';
-        case 'createdAt': return jo.created_at || jo.Created_At || '';
-        case 'updatedAt': return jo.updated_at || jo.Updated_At || '';
-        default: return '';
-      }
-    };
-
-    aValue = getVal(a, sortColumn);
-    bValue = getVal(b, sortColumn);
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      aValue = aValue.toLowerCase();
-      bValue = bValue.toLowerCase();
-    }
-
-    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  const paginatedJobOrders = React.useMemo(() => {
+  const paginatedJobOrders = useMemo(() => {
+    if (!shouldPaginate) return sortedJobOrders;
     const startIndex = (currentPage - 1) * itemsPerPage;
     return sortedJobOrders.slice(startIndex, startIndex + itemsPerPage);
-  }, [sortedJobOrders, currentPage]);
+  }, [sortedJobOrders, currentPage, shouldPaginate]);
 
-  const totalPages = Math.ceil(sortedJobOrders.length / itemsPerPage);
+  const totalPages = useMemo(() => {
+    if (!shouldPaginate) return 1;
+    return Math.ceil(sortedJobOrders.length / itemsPerPage);
+  }, [sortedJobOrders.length, shouldPaginate]);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  };
+  const handlePageChange = useCallback((newPage: number) => {
+    setCurrentPage(prev => {
+      const maxPage = totalPages;
+      if (newPage >= 1 && newPage <= maxPage) return newPage;
+      return prev;
+    });
+  }, [totalPages]);
 
   const { width } = Dimensions.get('window');
   const isTablet = width >= 768;
 
-  const StatusText = ({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
-    if (!status) return <Text style={jo.statusDash}>-</Text>;
-
-    let textColor = '';
-
-    if (type === 'onsite') {
-      switch (status.toLowerCase()) {
-        case 'done':
-        case 'completed':
-          textColor = '#4ade80';
-          break;
-        case 'reschedule':
-          textColor = '#60a5fa';
-          break;
-        case 'inprogress':
-        case 'in progress':
-          textColor = '#60a5fa';
-          break;
-        case 'pending':
-          textColor = '#fb923c';
-          break;
-        case 'failed':
-        case 'cancelled':
-          textColor = '#ef4444';
-          break;
-        default:
-          textColor = '#9ca3af';
-      }
-    } else {
-      switch (status.toLowerCase()) {
-        case 'done':
-        case 'active':
-        case 'completed':
-          textColor = '#4ade80';
-          break;
-        case 'pending':
-        case 'in progress':
-          textColor = '#fb923c';
-          break;
-        case 'suspended':
-        case 'overdue':
-          textColor = '#ef4444';
-          break;
-        case 'cancelled':
-          textColor = '#ef4444';
-          break;
-        default:
-          textColor = '#9ca3af';
-      }
-    }
-
-    return (
-      <Text style={[jo.statusLabel, { color: textColor }]}>
-        {status === 'inprogress' ? 'In Progress' : status}
-      </Text>
-    );
-  };
-
-  const handleMobileBack = () => {
+  const handleMobileBack = useCallback(() => {
     if (mobileView === 'details') {
       setSelectedJobOrder(null);
       setMobileView('orders');
     }
-  };
+  }, [mobileView]);
 
-  const handleMobileRowClick = (jobOrder: JobOrder) => {
+  const handleMobileRowClick = useCallback((jobOrder: JobOrder) => {
     setSelectedJobOrder(jobOrder);
     setMobileView('details');
-  };
+  }, []);
 
-  const handleRowClick = (jobOrder: JobOrder) => {
+  const handleRowClick = useCallback((jobOrder: JobOrder) => {
     setSelectedJobOrder(jobOrder);
     if (width >= 768) {
       setMobileView('orders');
     }
-  };
+  }, [width]);
 
-  const handleToggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev => {
-      if (prev.includes(columnKey)) {
-        return prev.filter(key => key !== columnKey);
-      } else {
-        return [...prev, columnKey];
-      }
-    });
-  };
-
-  const handleSelectAllColumns = () => {
-    setVisibleColumns(allColumns.map(col => col.key));
-  };
-
-  const handleDeselectAllColumns = () => {
-    setVisibleColumns([]);
-  };
-
-  const handleSort = (columnKey: string) => {
-    if (sortColumn === columnKey) {
-      if (sortDirection === 'desc') {
-        setSortColumn(null);
-        setSortDirection('asc');
-      } else {
-        setSortDirection('desc');
-      }
-    } else {
-      setSortColumn(columnKey);
-      setSortDirection('asc');
-    }
-  };
-
-  const filteredColumns = allColumns
-    .filter(col => visibleColumns.includes(col.key))
-    .sort((a, b) => {
-      const indexA = columnOrder.indexOf(a.key);
-      const indexB = columnOrder.indexOf(b.key);
-      return indexA - indexB;
-    });
-
-  const handleDragStart = (e: any, columnKey: string) => {
-    setDraggedColumn(columnKey);
-  };
-
-  const handleDragOver = (e: any, columnKey: string) => {
-    if (draggedColumn && draggedColumn !== columnKey) {
-      setDragOverColumn(columnKey);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverColumn(null);
-  };
-
-  const handleDrop = (e: any, targetColumnKey: string) => {
-    if (!draggedColumn || draggedColumn === targetColumnKey) {
-      setDraggedColumn(null);
-      setDragOverColumn(null);
-      return;
-    }
-
-    const newOrder = [...columnOrder];
-    const draggedIndex = newOrder.indexOf(draggedColumn);
-    const targetIndex = newOrder.indexOf(targetColumnKey);
-
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedColumn);
-
-    setColumnOrder(newOrder);
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedColumn(null);
-    setDragOverColumn(null);
-  };
-
-  const handleMouseDownResize = (e: any, columnKey: string) => {
-    setResizingColumn(columnKey);
-    startXRef.current = e.nativeEvent.pageX;
-    startWidthRef.current = columnWidths[columnKey] || 100;
-  };
-
-  const handleMouseDownSidebarResize = (e: any) => {
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.nativeEvent.pageX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
-  const getValue = (value: any): string => {
-    if (value === null || value === undefined || value === '') return '-';
-    if (typeof value === 'string' && value.trim().toLowerCase() === 'null') return '-';
-    return value;
-  };
-
-  const renderCellValue = (jobOrder: JobOrder, columnKey: string): string => {
-    switch (columnKey) {
-      case 'timestamp':
-        return formatDate(jobOrder.Timestamp || jobOrder.timestamp);
-      case 'dateInstalled':
-        return formatDate(jobOrder.Date_Installed || jobOrder.date_installed);
-      case 'installation_fee':
-        return formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee);
-      case 'billingDay':
-        const billingDay = jobOrder.Billing_Day ?? jobOrder.billing_day;
-        if (billingDay === null || billingDay === undefined) return '-';
-        const dayValue = Number(billingDay);
-        if (isNaN(dayValue)) return '-';
-        return dayValue === 0 ? String(getLastDayOfMonth()) : String(dayValue);
-      case 'billingStatusId':
-        return getValue(jobOrder.billing_status_id || jobOrder.Billing_Status_ID);
-      case 'modemRouterSN':
-        return getValue(jobOrder.Modem_Router_SN || jobOrder.modem_router_sn);
-      case 'routerModel':
-        return getValue(jobOrder.Router_Model || jobOrder.router_model);
-      case 'groupName':
-        return getValue(jobOrder.group_name || jobOrder.Group_Name);
-      case 'lcpnap':
-        return getValue(jobOrder.LCPNAP || jobOrder.lcpnap);
-      case 'port':
-        return getValue(jobOrder.PORT || jobOrder.Port || jobOrder.port);
-      case 'vlan':
-        return getValue(jobOrder.VLAN || jobOrder.vlan);
-      case 'username':
-        return getValue(jobOrder.Username || jobOrder.username);
-      case 'ipAddress':
-        return getValue(jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip);
-      case 'connectionType':
-        return getValue(jobOrder.Connection_Type || jobOrder.connection_type);
-      case 'usageType':
-        return getValue(jobOrder.Usage_Type || jobOrder.usage_type);
-      case 'usernameStatus':
-        return getValue(jobOrder.username_status || jobOrder.Username_Status);
-      case 'visitBy':
-        return getValue(jobOrder.Visit_By || jobOrder.visit_by);
-      case 'visitWith':
-        return getValue(jobOrder.Visit_With || jobOrder.visit_with);
-      case 'visitWithOther':
-        return getValue(jobOrder.Visit_With_Other || jobOrder.visit_with_other);
-      case 'onsiteStatus':
-        return jobOrder.Onsite_Status || jobOrder.onsite_status || '-';
-      case 'onsiteRemarks':
-        return getValue(jobOrder.Onsite_Remarks || jobOrder.onsite_remarks);
-      case 'statusRemarks':
-        return getValue(jobOrder.Status_Remarks || jobOrder.status_remarks);
-      case 'addressCoordinates':
-        return getValue(jobOrder.Address_Coordinates || jobOrder.address_coordinates);
-      case 'contractLink':
-        return getValue(jobOrder.Contract_Link || jobOrder.contract_link);
-      case 'clientSignatureUrl':
-        return getValue(
-          jobOrder.client_signature_url ||
-          jobOrder.Client_Signature_URL ||
-          jobOrder.client_signature_image_url ||
-          jobOrder.Client_Signature_Image_URL
-        );
-      case 'setupImageUrl':
-        return getValue(
-          jobOrder.setup_image_url ||
-          jobOrder.Setup_Image_URL ||
-          jobOrder.Setup_Image_Url
-        );
-      case 'speedtestImageUrl':
-        return getValue(
-          jobOrder.speedtest_image_url ||
-          jobOrder.Speedtest_Image_URL ||
-          jobOrder.speedtest_image ||
-          jobOrder.Speedtest_Image
-        );
-      case 'signedContractImageUrl':
-        return getValue(
-          jobOrder.signed_contract_image_url ||
-          jobOrder.Signed_Contract_Image_URL ||
-          jobOrder.signed_contract_url ||
-          jobOrder.Signed_Contract_URL
-        );
-      case 'boxReadingImageUrl':
-        return getValue(
-          jobOrder.box_reading_image_url ||
-          jobOrder.Box_Reading_Image_URL ||
-          jobOrder.box_reading_url ||
-          jobOrder.Box_Reading_URL
-        );
-      case 'routerReadingImageUrl':
-        return getValue(
-          jobOrder.router_reading_image_url ||
-          jobOrder.Router_Reading_Image_URL ||
-          jobOrder.router_reading_url ||
-          jobOrder.Router_Reading_URL
-        );
-      case 'portLabelImageUrl':
-        return getValue(
-          jobOrder.port_label_image_url ||
-          jobOrder.Port_Label_Image_URL ||
-          jobOrder.port_label_url ||
-          jobOrder.Port_Label_URL
-        );
-      case 'houseFrontPictureUrl':
-        return getValue(
-          jobOrder.house_front_picture_url ||
-          jobOrder.House_Front_Picture_URL ||
-          jobOrder.house_front_picture ||
-          jobOrder.House_Front_Picture
-        );
-      case 'createdAt':
-        return formatDate(jobOrder.created_at || jobOrder.Created_At);
-      case 'createdByUserEmail':
-        return getValue(jobOrder.created_by_user_email || jobOrder.Created_By_User_Email);
-      case 'updatedAt':
-        return formatDate(jobOrder.updated_at || jobOrder.Updated_At);
-      case 'updatedByUserEmail':
-        return getValue(jobOrder.updated_by_user_email || jobOrder.Updated_By_User_Email);
-      case 'assignedEmail':
-        return getValue(jobOrder.Assigned_Email || jobOrder.assigned_email);
-      case 'pppoeUsername':
-        return getValue(jobOrder.PPPoE_Username || jobOrder.pppoe_username);
-      case 'pppoePassword':
-        return getValue(jobOrder.PPPoE_Password || jobOrder.pppoe_password);
-      case 'fullName':
-        return getClientFullName(jobOrder);
-      case 'address':
-        return getClientFullAddress(jobOrder);
-      case 'contractTemplate':
-        return getValue(jobOrder.Contract_Template || jobOrder.contract_template);
-      case 'modifiedBy':
-        return getValue(jobOrder.Modified_By || jobOrder.modified_by);
-      case 'modifiedDate':
-        return formatDate(jobOrder.Modified_Date || jobOrder.modified_date);
-      case 'firstName':
-        return getValue(jobOrder.First_Name || jobOrder.first_name);
-      case 'middleInitial':
-        return getValue(jobOrder.Middle_Initial || jobOrder.middle_initial);
-      case 'lastName':
-        return getValue(jobOrder.Last_Name || jobOrder.last_name);
-      case 'contactNumber':
-        return getValue(jobOrder.Contact_Number || jobOrder.Mobile_Number || jobOrder.contact_number || jobOrder.mobile_number);
-      case 'secondContactNumber':
-        return getValue(jobOrder.Second_Contact_Number || jobOrder.Secondary_Mobile_Number || jobOrder.second_contact_number || jobOrder.secondary_mobile_number);
-      case 'emailAddress':
-        return getValue(jobOrder.Email_Address || jobOrder.Applicant_Email_Address || jobOrder.email_address || jobOrder.applicant_email_address);
-      case 'region':
-        return getValue(jobOrder.Region || jobOrder.region);
-      case 'city':
-        return getValue(jobOrder.City || jobOrder.city);
-      case 'barangay':
-        return getValue(jobOrder.Barangay || jobOrder.barangay);
-      case 'choosePlan':
-        return getValue(jobOrder.Choose_Plan || jobOrder.Desired_Plan || jobOrder.choose_plan || jobOrder.desired_plan);
-      case 'referredBy':
-        return getValue(jobOrder.Referred_By || jobOrder.referred_by);
-      case 'startTimestamp':
-        return formatDate(jobOrder.StartTimeStamp || jobOrder.start_timestamp);
-      case 'endTimestamp':
-        return formatDate(jobOrder.EndTimeStamp || jobOrder.end_timestamp);
-      case 'duration':
-        return getValue(jobOrder.Duration || jobOrder.duration);
-      default:
-        return '-';
-    }
-  };
 
   return (
     <View style={[jo.container, {
@@ -808,7 +453,7 @@ const JobOrderPage: React.FC = () => {
 
       {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
         <View style={[jo.sidebar, {
-          width: sidebarWidth,
+          width: 256,
           backgroundColor: isDarkMode ? '#111827' : '#ffffff',
           borderColor: isDarkMode ? '#374151' : '#e5e7eb'
         }]}>
@@ -947,7 +592,7 @@ const JobOrderPage: React.FC = () => {
               )}
             </ScrollView>
 
-            {!isLoading && sortedJobOrders.length > 0 && totalPages > 1 && (
+            {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && totalPages > 1 && (
               <View style={[jo.paginationBar, {
                 backgroundColor: isDarkMode ? '#111827' : '#ffffff',
                 borderColor: isDarkMode ? '#374151' : '#e5e7eb'
@@ -1034,67 +679,5 @@ const JobOrderPage: React.FC = () => {
     </View>
   );
 };
-
-const jo = StyleSheet.create({
-  container: { height: '100%', overflow: 'hidden' },
-  // Mobile overlay
-  mobileOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 },
-  mobileBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  mobileSidebar: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 256, flexDirection: 'column' },
-  mobileSidebarHeader: { padding: 16, paddingTop: 60, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  // Sidebar
-  sidebar: { borderRightWidth: 1, flexShrink: 0, flexDirection: 'column', position: 'relative' },
-  sidebarHeaderBox: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
-  sidebarTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  sidebarTitle: { fontSize: 18, fontWeight: '600' },
-  pad16: { padding: 16 },
-  // Main content
-  mainContent: { overflow: 'hidden', flex: 1, flexDirection: 'column' },
-  mainInner: { flexDirection: 'column', height: '100%' },
-  // Toolbar
-  toolbar: { padding: 16, borderBottomWidth: 1, flexShrink: 0 },
-  toolbarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBtn: { padding: 8, borderRadius: 4 },
-  menuBtn: { backgroundColor: '#374151', padding: 8, borderRadius: 4 },
-  searchWrap: { position: 'relative', flex: 1 },
-  searchInput: { width: '100%', borderRadius: 4, paddingLeft: 40, paddingRight: 16, paddingVertical: 8, borderWidth: 1 },
-  searchIcon: { position: 'absolute', left: 12, top: 10 },
-  actionsRow: { flexDirection: 'row', gap: 8 },
-  actionBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
-  // List area
-  listArea: { flex: 1, overflow: 'hidden', flexDirection: 'column' },
-  flex1: { flex: 1 },
-  // Loading
-  loadingWrap: { paddingHorizontal: 16, paddingVertical: 48, alignItems: 'center' },
-  skeletonCol: { flexDirection: 'column', alignItems: 'center' },
-  skeletonBar1: { height: 16, width: '33%', borderRadius: 4, marginBottom: 16 },
-  skeletonBar2: { height: 16, width: '50%', borderRadius: 4 },
-  loadingText: { marginTop: 16 },
-  retryBtn: { marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4 },
-  retryText: { color: 'white' },
-  // Cards
-  cardRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  cardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  cardLeft: { flex: 1, minWidth: 0 },
-  cardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
-  cardSub: { fontSize: 12 },
-  cardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
-  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
-  // Pagination
-  paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  paginationInfo: { fontSize: 14 },
-  bold500: { fontWeight: '500' },
-  paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
-  pageBtnText: { fontSize: 14 },
-  pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
-  // Detail panels
-  mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
-  tabletDetail: { flexShrink: 0, overflow: 'hidden' },
-  // StatusText
-  statusDash: { color: '#9ca3af' },
-  statusLabel: { fontWeight: 'bold', textTransform: 'uppercase' },
-});
 
 export default JobOrderPage;

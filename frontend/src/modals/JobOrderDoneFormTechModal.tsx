@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Linking, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, FlatList, InteractionManager } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -235,6 +235,20 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
   const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
+  const [isContentReady, setIsContentReady] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const handle = InteractionManager.runAfterInteractions(() => {
+        setIsContentReady(true);
+      });
+      return () => handle.cancel();
+    } else {
+      setIsContentReady(false);
+    }
+  }, [isOpen]);
 
   // Signature State
   const signatureRef = useRef<any>(null);
@@ -1154,34 +1168,21 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
         console.log('[UPLOAD START] Preparing images for upload...');
 
-        if (formData.signedContractImage) {
-          console.log(`[APPEND] Signed Contract: ${(formData.signedContractImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('signed_contract_image', formData.signedContractImage, formData.signedContractImage.name);
-        }
-        if (formData.setupImage) {
-          console.log(`[APPEND] Setup: ${(formData.setupImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('setup_image', formData.setupImage, formData.setupImage.name);
-        }
-        if (formData.boxReadingImage) {
-          console.log(`[APPEND] Box Reading: ${(formData.boxReadingImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('box_reading_image', formData.boxReadingImage, formData.boxReadingImage.name);
-        }
-        if (formData.routerReadingImage) {
-          console.log(`[APPEND] Router Reading: ${(formData.routerReadingImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('router_reading_image', formData.routerReadingImage, formData.routerReadingImage.name);
-        }
-        if (formData.portLabelImage) {
-          console.log(`[APPEND] Port Label: ${(formData.portLabelImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('port_label_image', formData.portLabelImage, formData.portLabelImage.name);
-        }
-        if (formData.clientSignatureImage) {
-          console.log(`[APPEND] Client Signature: ${(formData.clientSignatureImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('client_signature_image', formData.clientSignatureImage, formData.clientSignatureImage.name);
-        }
-        if (formData.speedTestImage) {
-          console.log(`[APPEND] Speed Test: ${(formData.speedTestImage.size / 1024 / 1024).toFixed(2)}MB`);
-          imageFormData.append('speed_test_image', formData.speedTestImage, formData.speedTestImage.name);
-        }
+        const safeAppendImage = (fieldName: string, fileObj: any) => {
+          if (!fileObj) return;
+          const sizeKB = fileObj.size ? ((fileObj.size / 1024 / 1024).toFixed(2) + 'MB') : 'unknown size';
+          console.log(`[APPEND] ${fieldName}: ${sizeKB}`);
+          const fileName = fileObj.name || `${fieldName}_${Date.now()}.jpg`;
+          imageFormData.append(fieldName, fileObj, fileName);
+        };
+
+        safeAppendImage('signed_contract_image', formData.signedContractImage);
+        safeAppendImage('setup_image', formData.setupImage);
+        safeAppendImage('box_reading_image', formData.boxReadingImage);
+        safeAppendImage('router_reading_image', formData.routerReadingImage);
+        safeAppendImage('port_label_image', formData.portLabelImage);
+        safeAppendImage('client_signature_image', formData.clientSignatureImage);
+        safeAppendImage('speed_test_image', formData.speedTestImage);
 
         console.log('[UPLOAD] FormData prepared, sending to backend...');
 
@@ -1916,11 +1917,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           </View>
 
           <View style={[styles.contentContainer, { flex: 1 }]}>
+            {!isContentReady ? (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+                <ActivityIndicator size="large" color={colorPalette?.primary || '#7c3aed'} />
+                <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280', marginTop: 12, fontSize: 14 }}>Loading form...</Text>
+              </View>
+            ) : (
             <ScrollView
               style={styles.contentContainer}
               contentContainerStyle={styles.scrollViewContent}
               scrollEnabled={scrollEnabled}
               keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={true}
             >
               <View style={styles.inputGroup}>
                 <View style={styles.inputGroup}>
@@ -3126,6 +3134,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 )}
               </View>
             </ScrollView>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>

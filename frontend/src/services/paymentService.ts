@@ -92,7 +92,7 @@ export const paymentService = {
     }
   },
 
-  createPayment: async (accountNo: string, amount: number): Promise<PaymentResponse> => {
+  createPayment: async (accountNo: string, amount: number, redirectUrl?: string): Promise<PaymentResponse> => {
     try {
       console.log('Payment Service - Creating payment:', { accountNo, amount });
 
@@ -113,10 +113,14 @@ export const paymentService = {
         });
       }
 
-      const payload = {
+      const payload: any = {
         account_no: accountNo,
         amount: amount
       };
+
+      if (redirectUrl) {
+        payload.redirect_url = redirectUrl;
+      }
 
       console.log('Payment payload:', payload);
 
