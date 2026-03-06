@@ -967,20 +967,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
       if (!formData.addressCoordinates.trim()) newErrors.addressCoordinates = 'Address Coordinates is required';
 
-      const validItems = orderItems.filter(item => item.itemId && item.quantity && item.itemId !== 'None');
+      const selectedItems = orderItems.filter(item => item.itemId && item.itemId !== 'None');
       const hasNoneItem = orderItems.some(item => item.itemId === 'None');
 
-      if (validItems.length === 0 && !hasNoneItem) {
-        newErrors.items = 'At least one item with quantity is required';
+      if (selectedItems.length === 0 && !hasNoneItem) {
+        newErrors.items = 'At least one item or "None" is required';
       } else {
-        for (let i = 0; i < validItems.length; i++) {
-          if (!validItems[i].itemId) {
-            newErrors[`item_${i}`] = 'Item is required';
+        selectedItems.forEach((item, idx) => {
+          if (!item.quantity || parseInt(item.quantity) <= 0) {
+            newErrors[`quantity_${idx}`] = 'Valid quantity is required';
+            // Also set a general error message if it's the first problem found
+            if (!newErrors.items) newErrors.items = `Quantity required for ${item.itemId}`;
           }
-          if (!validItems[i].quantity || parseInt(validItems[i].quantity) <= 0) {
-            newErrors[`quantity_${i}`] = 'Valid quantity is required';
-          }
-        }
+        });
       }
 
 

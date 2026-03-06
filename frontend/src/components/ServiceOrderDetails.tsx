@@ -331,7 +331,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
           </Text>
         ));
       case 'dateInstalled':
-        return renderField('Date Installed', serviceOrder.dateInstalled);
+        return renderField('Date Installed', serviceOrder.dateInstalled ? serviceOrder.dateInstalled.split(/[ T]/)[0] : '-');
       case 'fullName':
         return renderField('Full Name', serviceOrder.fullName);
       case 'contactNumber':

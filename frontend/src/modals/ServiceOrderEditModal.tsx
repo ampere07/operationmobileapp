@@ -802,9 +802,14 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         if (!dateStr) return '';
         try {
           const date = new Date(dateStr);
-          if (isNaN(date.getTime())) return '';
-          return date.toISOString().split('T')[0];
-        } catch (e) { return ''; }
+          if (isNaN(date.getTime())) return dateStr.split(' ')[0].split('T')[0];
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        } catch (e) {
+          return dateStr ? dateStr.split(' ')[0].split('T')[0] : '';
+        }
       };
 
       const normalizePort = (rawPort: any) => {
@@ -1044,10 +1049,19 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
       // Logic matches conditional rendering in the ScrollView
       if (formData.visitStatus === 'Done') {
-        const validItems = orderItems.filter(item => item.itemId && item.quantity);
-        if (validItems.length === 0) {
-          newErrors.items = 'At least one item required';
+        const validItems = orderItems.filter(item => item.itemId && item.quantity && item.itemId !== 'None');
+        const hasNoneItem = orderItems.some(item => item.itemId === 'None');
+
+        if (validItems.length === 0 && !hasNoneItem) {
+          newErrors.items = 'At least one item or "None" is required';
         }
+
+        // Additional row-level validation
+        orderItems.forEach((item, idx) => {
+          if (item.itemId && item.itemId !== 'None' && !item.quantity) {
+            newErrors.items = `Quantity required for ${item.itemId}`;
+          }
+        });
 
         if (!formData.visitBy) {
           newErrors.visitBy = 'Visit By is required';
@@ -1056,7 +1070,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         // Technical fields for specific relocation categories
         const relocationCategories = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'];
         if (relocationCategories.includes(formData.repairCategory)) {
-          if ((formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate') && !formData.newRouterModemSN) {
+          if (formData.repairCategory === 'Migrate' && !formData.newRouterModemSN) {
             newErrors.newRouterModemSN = 'New Router Modem SN is required';
           }
           if (!formData.newLcpnap) newErrors.newLcpnap = 'New LCP-NAP is required';
@@ -1655,7 +1669,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                           {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
                             <>
-                              {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate') && renderInput('newRouterModemSN', 'New Router SN')}
+                              {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
                               {renderLcpNapPicker()}
                               {renderNewPortPicker()}
                               {renderPicker('newVlan', vlans, 'New VLAN')}
