@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
-import { FileText, Upload, Clock, Info, CheckCircle, XCircle, AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { FileText, Upload, Clock, CheckCircle, Plus, X, ChevronLeft, ChevronRight, MessageSquare, AlertCircle } from 'lucide-react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
+import { FlashList } from '@shopify/flash-list';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { createServiceOrder } from '../services/serviceOrderService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
@@ -28,13 +30,62 @@ interface SupportProps {
   forceLightMode?: boolean;
 }
 
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
+const SupportCard = React.memo<{
+  request: SupportRequest;
+  primaryColor: string;
+  onPress: (request: SupportRequest) => void;
+}>(({ request, primaryColor, onPress }) => {
+  return (
+    <View style={s.card}>
+      {/* Header Row */}
+      <View style={s.cardHeaderRow}>
+        <View style={s.cardHeaderLeft}>
+          <Text style={s.ticketId}>#{request.requestId}</Text>
+          <View style={[s.dateBadge, { backgroundColor: primaryColor + '10' }]}>
+            <Text style={[s.dateText, { color: primaryColor }]}>{request.date}</Text>
+          </View>
+        </View>
+        <View style={s.statusBadge}>
+          <Text style={s.statusText}>{request.status}</Text>
+        </View>
+      </View>
+
+      {/* Issue Section */}
+      <View style={s.issueSection}>
+        <Text style={s.issueTitle}>{request.issue}</Text>
+        <Text style={s.issueDetails} numberOfLines={2}>
+          {request.issueDetails}
+        </Text>
+      </View>
+
+      <View style={s.cardFooterRow}>
+        <View style={s.visitRow}>
+          <CheckCircle size={14} color={request.visitInfo.status === 'Done' ? '#10b981' : '#9ca3af'} />
+          <Text style={s.visitText}>
+            Visit: {request.visitInfo.status}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => onPress(request)}
+          style={[s.detailsBtn, { borderColor: primaryColor + '40' }]}
+        >
+          <Text style={[s.detailsBtnText, { color: primaryColor }]}>Details</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
 const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const { customerDetail, serviceOrders: requests, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
   const userAccountNo = customerDetail?.billingAccount?.accountNo || '';
-  const isDarkMode = false; // Forced light mode as per user request
+  const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const primaryColor = colorPalette?.primary || '#ef4444';
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
   const [details, setDetails] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -48,6 +99,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const ITEMS_PER_PAGE = 5;
   const [currentPage, setCurrentPage] = useState(0);
+  const [user, setUser] = useState<any>(null);
   const [selectedRequest, setSelectedRequest] = useState<SupportRequest | null>(null);
 
   const concernOptions = [
@@ -107,31 +159,23 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
-    const loadAuthData = async () => {
-      const authData = await AsyncStorage.getItem('authData');
-      if (authData) {
-        try {
-          const user = JSON.parse(authData);
-          setUserEmail(user.email || '');
-        } catch (error) {
-          console.error('Error parsing auth data:', error);
-        }
-      }
-    };
-    loadAuthData();
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
+    const initPage = async () => {
       try {
-        const activePalette = await settingsColorPaletteService.getActive();
+        const [activePalette, authData] = await Promise.all([
+          settingsColorPaletteService.getActive(),
+          AsyncStorage.getItem('authData')
+        ]);
         setColorPalette(activePalette);
+        if (authData) {
+          const user = JSON.parse(authData);
+          setUser(user);
+          setUserEmail(user.email || '');
+        }
       } catch (err) {
-        console.error('Failed to fetch color palette:', err);
+        console.error('Support page init error:', err);
       }
     };
-
-    fetchColorPalette();
+    initPage();
   }, []);
 
   const onRefresh = React.useCallback(async () => {
@@ -206,25 +250,22 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     }
   };
 
-  const handleRequestPlanUpdate = async () => {
+  const handleOpenChat = async () => {
     const webUrl = 'https://m.me/atssfiber2022';
-    const messengerAppUrl = 'fb-messenger://user-thread/'; // This will open Messenger app
-
+    const messengerAppUrl = 'fb-messenger://user-thread/';
     try {
-      // Try to open Messenger app first
       const canOpenMessenger = await Linking.canOpenURL(messengerAppUrl);
       if (canOpenMessenger) {
-        // Open Messenger app with the specific page
         await Linking.openURL(webUrl);
       } else {
-        // Fallback to web browser
         await WebBrowser.openBrowserAsync(webUrl);
       }
     } catch (error) {
-      // Fallback to web browser if anything fails
       await WebBrowser.openBrowserAsync(webUrl);
     }
   };
+
+  const handleRequestPlanUpdate = handleOpenChat;
 
   const paginatedRequests = useMemo(() => {
     const start = currentPage * ITEMS_PER_PAGE;
@@ -262,133 +303,54 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   }, [colorPalette, currentPage, totalPages, requests.length]);
 
   return (
-    <View style={{
-      flex: 1,
-      backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
-    }}>
-      <ScrollView
-        style={{ flex: 1, width: '100%' }}
-        showsVerticalScrollIndicator={false}
+    <View style={s.container}>
+      <View style={[s.header, { paddingTop: !isMobile ? 20 : 60 }]}>
+        <View style={s.titleContainer}>
+          <Text style={s.title}>Support Center</Text>
+        </View>
+        <Text style={s.subtitle}>Track and manage your service requests</Text>
+      </View>
+
+      <FlashList
+        data={paginatedRequests}
+        keyExtractor={(item: any) => item.id}
         contentContainerStyle={{
-          paddingTop: !isMobile ? 16 : 60,
           paddingHorizontal: isMobile ? 16 : 24,
-          paddingBottom: 100,
-          alignItems: 'center'
+          paddingBottom: 120,
         }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colorPalette?.primary || '#ef4444']} // Android
-            tintColor={colorPalette?.primary || '#ef4444'} // iOS
-            progressViewOffset={80}
+            colors={[primaryColor]}
+            tintColor={primaryColor}
           />
         }
-      >
-        <View style={{ width: '100%' }}>
-          <Text style={{
-            fontSize: 24,
-            fontWeight: 'bold',
-            color: isDarkMode ? '#ffffff' : '#111827',
-            marginBottom: 24,
-            textAlign: 'center'
-          }}>Support</Text>
-          {contextLoading && requests.length === 0 ? (
-            <View style={{
-              paddingVertical: 48,
-              alignItems: 'center',
-              width: '100%'
-            }}>
-              <View style={{ flexDirection: 'column', alignItems: 'center' }}>
-                <View style={{
-                  height: 16,
-                  width: 100,
-                  borderRadius: 4,
-                  marginBottom: 16,
-                  backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                }} />
-                <View style={{
-                  height: 16,
-                  width: 150,
-                  borderRadius: 4,
-                  backgroundColor: isDarkMode ? '#374151' : '#d1d5db'
-                }} />
-              </View>
-              <Text style={{
-                marginTop: 16,
-                color: isDarkMode ? '#9ca3af' : '#4b5563'
-              }}>Loading support requests...</Text>
+        ListEmptyComponent={() => (
+          contextLoading ? (
+            <View style={s.emptyState}>
+              <ActivityIndicator size="large" color={primaryColor} />
+              <Text style={s.emptyText}>Loading records...</Text>
             </View>
           ) : (
-            <>
-              {paginatedRequests.map((request) => (
-                <View
-                  key={request.id}
-                  style={[s.card, {
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    borderWidth: isDarkMode ? 1 : 0,
-                  }]}
-                >
-                  {/* Header Row */}
-                  <View style={s.cardHeaderRow}>
-                    <View style={s.cardHeaderLeft}>
-                      <Text style={[s.ticketId, { color: isDarkMode ? '#ffffff' : '#111827' }]}>#{request.requestId}</Text>
-                      <View style={[s.dateBadge, { backgroundColor: (colorPalette?.primary || '#ef4444') + '15' }]}>
-                        <Text style={[s.dateText, { color: colorPalette?.primary || '#ef4444' }]}>{request.date}</Text>
-                      </View>
-                    </View>
-                    <View style={[s.statusBadge, { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6' }]}>
-                      <Text style={[s.statusText, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>{request.status}</Text>
-                    </View>
-                  </View>
-
-                  {/* Issue Section */}
-                  <View style={s.issueSection}>
-                    <Text style={[s.issueTitle, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>{request.issue}</Text>
-                    <Text style={[s.issueDetails, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]} numberOfLines={2}>{request.issueDetails}</Text>
-                  </View>
-
-                  <View style={s.cardFooterRow}>
-                    <View style={s.visitRow}>
-                      <CheckCircle size={14} color={request.visitInfo.status === 'Done' ? '#10b981' : '#9ca3af'} />
-                      <Text style={[s.visitText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
-                        Visit: {request.visitInfo.status}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => setSelectedRequest(request)}
-                      style={[s.detailsBtn, { borderColor: (colorPalette?.primary || '#3b82f6') + '80' }]}
-                    >
-                      <Text style={[s.detailsBtnText, { color: colorPalette?.primary || '#3b82f6' }]}>Details</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-              {renderPagination()}
-
-              {requests.length === 0 && (
-                <View style={{
-                  paddingVertical: 48,
-                  alignItems: 'center',
-                  width: '100%'
-                }}>
-                  <FileText size={48} color={isDarkMode ? '#9ca3af80' : '#4b556380'} strokeWidth={1} style={{ marginBottom: 16 }} />
-                  <Text style={{
-                    fontSize: 18,
-                    fontWeight: '500',
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>No support requests</Text>
-                  <Text style={{
-                    fontSize: 14,
-                    marginTop: 4,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
-                  }}>Submit a ticket to get started</Text>
-                </View>
-              )}
-            </>
-          )}
-        </View>
-      </ScrollView>
+            <View style={s.emptyState}>
+              <View style={[s.emptyIconContainer, { backgroundColor: primaryColor + '10' }]}>
+                <FileText size={48} color={primaryColor} strokeWidth={1} />
+              </View>
+              <Text style={s.emptyTitle}>No Requests Yet</Text>
+              <Text style={s.emptySubtitle}>If you have any issues with your connection, please submit a ticket.</Text>
+            </View>
+          )
+        )}
+        renderItem={({ item }) => (
+          <SupportCard
+            request={item}
+            primaryColor={primaryColor}
+            onPress={setSelectedRequest}
+          />
+        )}
+        ListFooterComponent={renderPagination}
+      />
 
       {/* Support Details Modal */}
       <Modal
@@ -399,7 +361,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         {selectedRequest && (
           <SupportDetails
             request={selectedRequest}
-            isDarkMode={isDarkMode}
             onClose={() => setSelectedRequest(null)}
           />
         )}
@@ -446,14 +407,14 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         >
           <Animated.View
             style={{
-              backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+              backgroundColor: '#ffffff',
               borderTopLeftRadius: 32,
               borderTopRightRadius: 32,
               maxHeight: '90%',
               padding: 24,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: -10 },
-              shadowOpacity: 0.15,
+              shadowOpacity: 0.1,
               shadowRadius: 15,
               elevation: 20,
               transform: [{ translateY: pan.y }]
@@ -866,31 +827,41 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
 };
 
 const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  header: { paddingHorizontal: 24, paddingBottom: 20, alignItems: 'center' },
+  titleContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  title: { fontSize: 26, fontWeight: '800', color: '#111827' },
+  subtitle: { fontSize: 14, color: '#6b7280', fontWeight: '500' },
   card: {
-    borderRadius: 12, padding: 12, marginBottom: 12, width: '100%',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 3,
-    borderColor: '#374151',
+    backgroundColor: '#ffffff', borderRadius: 16, padding: 18, marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 4,
   },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ticketId: { fontSize: 14, fontWeight: 'bold' },
-  dateBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  dateText: { fontSize: 10, fontWeight: 'bold' },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-  issueSection: { marginBottom: 10 },
-  issueTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  issueDetails: { fontSize: 12, lineHeight: 16 },
-  cardFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  visitRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  visitText: { fontSize: 11 },
-  detailsBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, borderWidth: 1 },
-  detailsBtnText: { fontSize: 12, fontWeight: '600' },
-  paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 20, paddingBottom: 8, gap: 16 },
-  paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ticketId: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  dateBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  dateText: { fontSize: 11, fontWeight: '700' },
+  statusBadge: { backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  statusText: { fontSize: 11, fontWeight: '700', color: '#374151' },
+  issueSection: { marginBottom: 16 },
+  issueTitle: { fontSize: 15, fontWeight: '700', color: '#1f2937', marginBottom: 4 },
+  issueDetails: { fontSize: 13, color: '#4b5563', lineHeight: 20 },
+  cardFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 14 },
+  visitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  visitText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  detailsBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1.5 },
+  detailsBtnText: { fontSize: 12, fontWeight: '700' },
+  emptyState: { paddingVertical: 80, alignItems: 'center', width: '100%', paddingHorizontal: 40 },
+  emptyIconContainer: { padding: 24, borderRadius: 32, marginBottom: 20 },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
+  emptyText: { marginTop: 16, color: '#6b7280', fontSize: 14 },
+  paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 10, paddingBottom: 40, gap: 16 },
+  paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
   paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
-  paginationText: { fontSize: 13, fontWeight: '600' },
-  pageIndicator: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+  paginationText: { fontSize: 14, fontWeight: '700' },
+  pageIndicator: { fontSize: 14, color: '#111827', fontWeight: '700' },
 });
+
 
 export default Support;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,64 @@ import { WorkOrder } from '../types/workOrder';
 import WorkOrderDetails from '../components/WorkOrderDetails';
 import AssignWorkOrderModal from '../modals/AssignWorkOrderModal';
 
+// --- Static Helpers & Components ---
+const ITEMS_PER_PAGE = 50;
+
+const StatusText = React.memo(({ status }: { status?: string | null }) => {
+  if (!status) return <Text style={st.statusDash}>-</Text>;
+
+  let textColor = '#9ca3af';
+  const s = status.toLowerCase();
+
+  if (s === 'completed' || s === 'done') textColor = '#4ade80';
+  else if (s === 'in progress' || s === 'inprogress') textColor = '#60a5fa';
+  else if (s === 'pending') textColor = '#fb923c';
+  else if (s === 'failed' || s === 'cancelled') textColor = '#ef4444';
+
+  return (
+    <Text style={[st.statusLabel, { color: textColor }]}>
+      {s === 'inprogress' ? 'In Progress' : status}
+    </Text>
+  );
+});
+
+const WorkOrderCard = React.memo(({
+  wo,
+  onPress,
+  isSelected,
+  formatDate
+}: {
+  wo: WorkOrder;
+  onPress: (wo: WorkOrder) => void;
+  isSelected: boolean;
+  formatDate: (d?: string) => string;
+}) => (
+  <TouchableOpacity
+    onPress={() => onPress(wo)}
+    style={[st.cardRow, {
+      backgroundColor: isSelected ? '#f3f4f6' : 'transparent',
+      borderColor: '#e5e7eb'
+    }]}
+  >
+    <View style={st.cardInner}>
+      <View style={st.cardLeft}>
+        <Text style={[st.cardName, { color: '#111827' }]} numberOfLines={1} ellipsizeMode="tail">
+          {wo.instructions || 'No Instructions'}
+        </Text>
+        <Text style={[st.cardSub, { color: '#4b5563' }]}>
+          {formatDate(wo.requested_date)}
+        </Text>
+        <Text style={[st.cardSub, { color: '#6b7280', marginTop: 4, fontStyle: 'italic' }]}>
+          {wo.assign_to ? `Assigned to: ${wo.assign_to}` : 'Unassigned'}
+        </Text>
+      </View>
+      <View style={st.cardRight}>
+        <StatusText status={wo.work_status} />
+      </View>
+    </View>
+  </TouchableOpacity>
+));
+
 const WorkOrderPage: React.FC = () => {
   const isDarkMode = false; // Forced light mode as per user request
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,7 +92,6 @@ const WorkOrderPage: React.FC = () => {
   const [showAssignModal, setShowAssignModal] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
   const [userRole, setUserRole] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
@@ -49,7 +106,8 @@ const WorkOrderPage: React.FC = () => {
           const parsed = JSON.parse(authData);
           setUserRole(parsed.role_id || parsed.roleId || null);
           setUserEmail(parsed.email_address || parsed.email || '');
-          setUserName(`${parsed.first_name || ''} ${parsed.last_name || ''}`.trim() || parsed.username || '');
+          const fullName = parsed.full_name || `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim();
+          setUserName(fullName || parsed.username || '');
         }
       } catch (e) {
         console.error('Error loading auth data:', e);
@@ -76,69 +134,82 @@ const WorkOrderPage: React.FC = () => {
     fetchWorkOrders(1, 1000, '', '');
   }, [fetchWorkOrders]);
 
-  const handleCardPress = (workOrder: WorkOrder) => {
-    setSelectedWorkOrder(workOrder);
-    setShowDetailsModal(true);
-  };
-
-  const handleAddNew = () => {
-    setSelectedWorkOrder(null);
-    setShowAssignModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowDetailsModal(false);
-    setSelectedWorkOrder(null);
-    fetchWorkOrders(1, 1000, '', ''); // Refresh after close
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('en-PH', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: true
-    });
-  };
-
-  const getFilteredWorkOrders = () => {
+  const filteredWorkOrders = useMemo(() => {
     let filtered = workOrders;
 
     // Apply role-based filtering for OSP (6), Agent (4), and Technician (2)
-    if (userRole === 6 || userRole === 4 || userRole === 2) {
+    const roleIdNum = Number(userRole);
+    if (roleIdNum === 6 || roleIdNum === 4 || roleIdNum === 2) {
+      const meEmail = userEmail.toLowerCase().trim();
+      const meName = userName.toLowerCase().trim();
       filtered = filtered.filter((wo: WorkOrder) => {
-        const targetAssign = (wo.assign_to || '').toLowerCase();
-        return targetAssign === userEmail.toLowerCase() || targetAssign === userName.toLowerCase();
+        const targetAssign = (wo.assign_to || '').toLowerCase().trim();
+        return (meEmail && targetAssign === meEmail) || (meName && targetAssign === meName);
       });
     }
 
     if (!searchQuery) return filtered;
 
+    const query = searchQuery.toLowerCase();
     return filtered.filter((wo: WorkOrder) =>
-      (wo.instructions || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (wo.report_to || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (wo.assign_to || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (wo.requested_by || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (wo.instructions || '').toLowerCase().includes(query) ||
+      (wo.report_to || '').toLowerCase().includes(query) ||
+      (wo.assign_to || '').toLowerCase().includes(query) ||
+      (wo.requested_by || '').toLowerCase().includes(query)
     );
-  };
+  }, [workOrders, searchQuery, userRole, userEmail, userName]);
 
-  const filteredWorkOrders = getFilteredWorkOrders();
+  const totalPages = useMemo(() => Math.ceil(filteredWorkOrders.length / ITEMS_PER_PAGE), [filteredWorkOrders.length]);
+
+  const paginatedWorkOrders = useMemo(() => {
+    return filteredWorkOrders.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
+  }, [filteredWorkOrders, currentPage]);
+
+  const handleCardPress = useCallback((workOrder: WorkOrder) => {
+    setSelectedWorkOrder(workOrder);
+    setShowDetailsModal(true);
+  }, []);
+
+  const handleAddNew = useCallback(() => {
+    setSelectedWorkOrder(null);
+    setShowAssignModal(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setShowDetailsModal(false);
+    setSelectedWorkOrder(null);
+    fetchWorkOrders(1, 1000, '', '');
+  }, [fetchWorkOrders]);
+
+  const handleCloseAssignModal = useCallback(() => {
+    setShowAssignModal(false);
+  }, []);
+
+  const handleSaveAssignModal = useCallback(() => {
+    setShowAssignModal(false);
+    fetchWorkOrders(1, 1000, '', '');
+  }, [fetchWorkOrders]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  }, [totalPages]);
+
+  const formatDate = useCallback((dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-PH', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
-
-  const totalPages = Math.ceil(filteredWorkOrders.length / itemsPerPage);
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  };
-
-  const paginatedWorkOrders = filteredWorkOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
 
   const PaginationControls = () => {
     if (totalPages <= 1) return null;
@@ -147,7 +218,7 @@ const WorkOrderPage: React.FC = () => {
       <View style={[st.pagination, { backgroundColor: '#ffffff', borderColor: '#e5e7eb' }]}>
         <View style={st.paginationInfo}>
           <Text style={[st.paginationText, { color: '#6b7280' }]}>
-            Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredWorkOrders.length)} of {filteredWorkOrders.length}
+            Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredWorkOrders.length)} of {filteredWorkOrders.length}
           </Text>
         </View>
         <View style={st.paginationBtns}>
@@ -183,23 +254,7 @@ const WorkOrderPage: React.FC = () => {
     );
   };
 
-  const StatusText = ({ status }: { status?: string | null }) => {
-    if (!status) return <Text style={st.statusDash}>-</Text>;
-
-    let textColor = '';
-    const s = status.toLowerCase();
-    if (s === 'completed' || s === 'done') textColor = '#4ade80';
-    else if (s === 'in progress' || s === 'inprogress') textColor = '#60a5fa';
-    else if (s === 'pending') textColor = '#fb923c';
-    else if (s === 'failed' || s === 'cancelled') textColor = '#ef4444';
-    else textColor = '#9ca3af';
-
-    return (
-      <Text style={[st.statusLabel, { color: textColor }]}>
-        {s === 'inprogress' ? 'In Progress' : status}
-      </Text>
-    );
-  };
+  // StatusText moved to top for optimization
 
   return (
     <SafeAreaView style={[st.container, { backgroundColor: '#f9fafb' }]}>
@@ -266,32 +321,13 @@ const WorkOrderPage: React.FC = () => {
           <>
             <View style={st.cardList}>
               {paginatedWorkOrders.map((wo: WorkOrder) => (
-                <TouchableOpacity
+                <WorkOrderCard
                   key={wo.id}
-                  onPress={() => handleCardPress(wo)}
-                  style={[st.cardRow, {
-                    backgroundColor: selectedWorkOrder?.id === wo.id ? '#f3f4f6' : 'transparent',
-                    borderColor: '#e5e7eb'
-                  }]}
-                >
-                  <View style={st.cardInner}>
-                    <View style={st.cardLeft}>
-                      <Text
-                        style={[st.cardName, { color: '#111827' }]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {wo.instructions || 'No Instructions'}
-                      </Text>
-                      <Text style={[st.cardSub, { color: '#4b5563' }]}>
-                        {formatDate(wo.requested_date)}
-                      </Text>
-                    </View>
-                    <View style={st.cardRight}>
-                      <StatusText status={wo.work_status} />
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                  wo={wo}
+                  onPress={handleCardPress}
+                  isSelected={selectedWorkOrder?.id === wo.id}
+                  formatDate={formatDate}
+                />
               ))}
             </View>
             <PaginationControls />
@@ -301,6 +337,10 @@ const WorkOrderPage: React.FC = () => {
           <View style={st.emptyState}>
             <Text style={[st.emptyText, { color: '#9ca3af' }]}>
               No work orders found
+            </Text>
+            {/* Helpful Debug Info for the User */}
+            <Text style={[st.emptyText, { color: '#d1d5db', fontSize: 10, marginTop: 10 }]}>
+              Account: {userEmail || 'N/A'} | Role: {userRole || 'N/A'} | Logic: {Number(userRole) === 6 || Number(userRole) === 4 || Number(userRole) === 2 ? 'Personal Only' : 'View All'}
             </Text>
           </View>
         )}
@@ -328,15 +368,8 @@ const WorkOrderPage: React.FC = () => {
       {showAssignModal && (
         <AssignWorkOrderModal
           isOpen={showAssignModal}
-          onClose={() => {
-            setShowAssignModal(false);
-            setSelectedWorkOrder(null);
-          }}
-          onSave={() => {
-            setShowAssignModal(false);
-            setSelectedWorkOrder(null);
-            fetchWorkOrders(1, 1000, '', '');
-          }}
+          onClose={handleCloseAssignModal}
+          onSave={handleSaveAssignModal}
           onRefresh={() => fetchWorkOrders(1, 1000, '', '')}
           isEditMode={!!selectedWorkOrder}
           workOrder={selectedWorkOrder || undefined}

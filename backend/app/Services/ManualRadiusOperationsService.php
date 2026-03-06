@@ -827,6 +827,65 @@ class ManualRadiusOperationsService
         // Also log to Laravel default log
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }
+
+    /**
+     * Delete user account from RADIUS
+     */
+    public function deleteAccount(string $username): array
+    {
+        try {
+            $this->writeLog("=== DELETE ACCOUNT START ===");
+            $this->writeLog("Username: $username");
+
+            if (empty($username)) {
+                throw new Exception("Username is required for delete operation");
+            }
+
+            // Get RADIUS configurations
+            $radiusEndpoints = $this->getRadiusEndpoints();
+            
+            $deleteCount = 0;
+            foreach ($radiusEndpoints as $endpoint) {
+                // Construct path using username directly as requested
+                $targetPath = "/rest/user-manage/user/" . urlencode($username);
+                $targetUrl = $endpoint['url'] . $targetPath;
+                
+                $this->writeLog("[DELETE] Calling endpoint: $targetUrl");
+
+                $delResult = $this->callApiWithRetry(
+                    $targetUrl,
+                    'DELETE',
+                    null, // No payload for delete request
+                    $endpoint['username'],
+                    $endpoint['password']
+                );
+                
+                if ($delResult !== false) {
+                    $this->writeLog("[DELETE] Successfully deleted user '$username' from {$endpoint['url']}");
+                    $deleteCount++;
+                } else {
+                    $this->writeLog("[DELETE] Failed to delete user '$username' from {$endpoint['url']} (or user already deleted)");
+                }
+            }
+
+            $this->writeLog("=== DELETE ACCOUNT END ===");
+
+            return [
+                'status' => 'success',
+                'message' => "Delete operation completed ($deleteCount servers affected)",
+                'delete_count' => $deleteCount
+            ];
+
+        } catch (Throwable $e) {
+            $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("=== DELETE ACCOUNT END ===");
+            
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ];
+        }
+    }
 }
 
 

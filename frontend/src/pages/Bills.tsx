@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated, StyleSheet, Platform } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
-import { Download, FileText, Clock, CheckCircle, File, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Download, FileText, Clock, CheckCircle, File, ChevronLeft, ChevronRight, ReceiptText } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FlashList } from '@shopify/flash-list';
 import { paymentService, PendingPayment } from '../services/paymentService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { API_BASE_URL } from '../config/api';
 
 interface SOARecord {
     id: number;
@@ -52,88 +55,163 @@ const formatCurrency = (amount: number) => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f9fafb' },
     loadingContainer: { padding: 32, flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-    tabRow: { flexDirection: 'row', width: '100%', justifyContent: 'center', gap: 4 },
+    tabRow: { flexDirection: 'row', width: '100%', justifyContent: 'center', gap: 6, marginBottom: 0 },
     tabBase: {
         flex: 1, paddingTop: 14, paddingBottom: 14, paddingHorizontal: 4,
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        borderTopLeftRadius: 12, borderTopRightRadius: 12, position: 'relative',
+        borderRadius: 12, position: 'relative',
     },
-    tabActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 4 },
-    tabInactive: { backgroundColor: 'transparent', shadowColor: 'transparent', shadowOpacity: 0, elevation: 0 },
-    tabText: { fontSize: 13, fontWeight: 'bold' },
+    tabActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+    tabInactive: { backgroundColor: 'transparent' },
+    tabText: { fontSize: 13, fontWeight: '800' },
     tabTextActive: { color: '#111827' },
     tabTextInactive: { color: '#9ca3af' },
-    tabIndicator: { position: 'absolute', bottom: 0, width: '70%', height: 3, borderRadius: 3 },
-    contentScroll: { flex: 1, backgroundColor: '#ffffff' },
-    contentContainer: { padding: 16, paddingBottom: 100 },
-    listGap: { gap: 16 },
-    emptyContainer: { padding: 48, alignItems: 'center' },
-    emptyText: { color: '#6b7280', marginTop: 16, fontSize: 16 },
-    card: { padding: 16, borderRadius: 16, backgroundColor: '#ffffff', gap: 12 },
+    tabIndicator: { position: 'absolute', bottom: 0, width: '40%', height: 3, borderRadius: 3 },
+    contentContainer: {
+        paddingHorizontal: 16, paddingTop: 0, paddingBottom: 120,
+        backgroundColor: '#ffffff',
+    },
+    card: {
+        paddingVertical: 18,
+    },
     cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    divider: { height: 1, backgroundColor: '#f1f5f9' },
-    labelText: { fontSize: 12, color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' },
-    valueText: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
-    amountText: { fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+    divider: { height: 1.5, backgroundColor: '#f1f5f9', marginVertical: 14 },
+    labelText: { fontSize: 11, color: '#6b7280', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+    valueText: { fontSize: 15, fontWeight: '800', color: '#111827', marginTop: 2 },
+    amountText: { fontSize: 18, fontWeight: '900', marginTop: 2 },
     alignEnd: { alignItems: 'flex-end' },
-    pdfBtnBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
+    pdfBtnBase: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5 },
     pdfBtnDisabled: { backgroundColor: '#f9fafb', borderColor: '#f1f5f9', opacity: 0.5 },
-    pdfText: { fontSize: 13, fontWeight: 'bold' },
-    statusBadge: { borderRadius: 20 },
-    statusText: { fontSize: 11, fontWeight: 'bold' },
+    pdfText: { fontSize: 13, fontWeight: '800' },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    statusText: { fontSize: 11, fontWeight: '800' },
     refContainer: { flex: 1, marginRight: 16 },
-    refText: { fontSize: 13, fontFamily: 'monospace', color: '#64748b', marginTop: 2 },
-    paymentAmount: { fontSize: 18, fontWeight: 'bold', color: '#16a34a', marginTop: 2 },
-    paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 20, paddingBottom: 8, gap: 16 },
-    paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+    refText: { fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#64748b', marginTop: 2 },
+    paymentAmount: { fontSize: 18, fontWeight: '900', color: '#16a34a', marginTop: 2 },
+    paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 10, paddingBottom: 40, gap: 16 },
+    paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
     paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
-    paginationText: { fontSize: 13, fontWeight: '600' },
-    pageIndicator: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
+    paginationText: { fontSize: 14, fontWeight: '800' },
+    pageIndicator: { fontSize: 14, color: '#111827', fontWeight: '800' },
+    emptyContainer: { paddingVertical: 80, alignItems: 'center', paddingHorizontal: 40 },
+    emptyIconContainer: { padding: 24, borderRadius: 32, marginBottom: 20 },
+    emptyTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 8 },
+    emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     modalSheet: {
         backgroundColor: '#ffffff', borderTopLeftRadius: 30, borderTopRightRadius: 30,
         width: '100%', maxHeight: '90%',
-        shadowColor: '#000', shadowOffset: { width: 0, height: -15 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 20,
+        shadowColor: '#000', shadowOffset: { width: 0, height: -15 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 20,
     },
-    modalHeader: { paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' },
+    modalHeader: { paddingHorizontal: 24, paddingVertical: 16, alignItems: 'center' },
     modalHandle: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+    modalTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
     modalContent: { padding: 24 },
-    modalContentCenter: { padding: 24, alignItems: 'center' },
-    verifyBox: { backgroundColor: '#f9fafb', padding: 20, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f3f4f6' },
+    modalContentCenter: { padding: 32, alignItems: 'center' },
+    verifyBox: { backgroundColor: '#f9fafb', padding: 20, borderRadius: 20, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' },
     verifyRow: { flexDirection: 'row', justifyContent: 'space-between' },
     verifyRowMb: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-    verifyLabel: { color: '#6b7280', fontSize: 14 },
-    verifyValue: { fontWeight: '600', color: '#111827', fontSize: 14 },
-    errorBox: { backgroundColor: '#fef2f2', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fee2e2' },
-    errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center' },
-    inputLabel: { fontWeight: '600', marginBottom: 10, color: '#374151', fontSize: 15 },
-    inputField: { width: '100%', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: '#d1d5db', color: '#111827', backgroundColor: '#ffffff' },
+    verifyLabel: { color: '#6b7280', fontSize: 14, fontWeight: '600' },
+    verifyValue: { fontWeight: '800', color: '#111827', fontSize: 15 },
+    errorBox: { backgroundColor: '#fef2f2', padding: 14, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#fee2e2' },
+    errorText: { color: '#ef4444', fontSize: 14, textAlign: 'center', fontWeight: '600' },
+    inputLabel: { fontWeight: '700', marginBottom: 10, color: '#374151', fontSize: 15 },
+    inputField: { width: '100%', paddingHorizontal: 16, paddingVertical: 16, borderRadius: 16, fontSize: 18, fontWeight: '700', borderWidth: 2, borderColor: '#e5e7eb', color: '#111827', backgroundColor: '#ffffff' },
     inputWrap: { marginBottom: 32 },
-    primaryBtn: { paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
-    primaryBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
+    primaryBtn: { paddingVertical: 18, borderRadius: 20, alignItems: 'center' },
+    primaryBtnText: { color: '#ffffff', fontWeight: '900', fontSize: 16 },
     spacer: { height: 40 },
-    successCircleLg: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    successCircleLg: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
     successCircleSm: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-    successBox: { backgroundColor: '#f0fdf4', padding: 20, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
-    successTitle: { color: '#166534', fontWeight: '700', fontSize: 16, marginBottom: 4 },
-    successRef: { color: '#166534', opacity: 0.8, fontSize: 14 },
-    paymentDescWrap: { marginBottom: 32 },
-    paymentDesc: { textAlign: 'center', color: '#4b5563', fontSize: 15, lineHeight: 22 },
-    paymentDescBold: { fontWeight: '700', color: '#111827' },
-    openPortalBtn: { paddingVertical: 16, borderRadius: 16, backgroundColor: '#16a34a', alignItems: 'center', marginBottom: 16 },
-    maybeLaterText: { color: '#6b7280', fontSize: 15, textAlign: 'center', fontWeight: '500' },
-    pendingBox: { backgroundColor: '#fffbeb', padding: 20, borderRadius: 16, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#f59e0b' },
-    pendingLabel: { color: '#92400e', fontSize: 14 },
-    pendingAmount: { fontWeight: 'bold', color: '#92400e', fontSize: 16 },
-    pendingDesc: { color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15, lineHeight: 22 },
-    pendingBtns: { gap: 12 },
-    resumeBtn: { paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
-    cancelBtn: { paddingVertical: 16, borderRadius: 16, backgroundColor: '#f3f4f6', alignItems: 'center' },
-    cancelBtnText: { color: '#4b5563', fontWeight: 'bold', fontSize: 16 },
-    successDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 22 },
-    successBtn: { paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' },
+    successBox: { backgroundColor: '#f0fdf4', padding: 24, borderRadius: 20, marginBottom: 24, alignItems: 'center' },
+    successTitle: { color: '#166534', fontWeight: '800', fontSize: 18, marginBottom: 4 },
+    successRef: { color: '#15803d', fontWeight: '700', fontSize: 14 },
+    paymentDescWrap: { marginBottom: 32, paddingHorizontal: 10 },
+    paymentDesc: { textAlign: 'center', color: '#4b5563', fontSize: 15, lineHeight: 24 },
+    paymentDescBold: { fontWeight: '800', color: '#111827' },
+    openPortalBtn: { paddingVertical: 18, borderRadius: 20, backgroundColor: '#16a34a', alignItems: 'center', marginBottom: 16 },
+    maybeLaterText: { color: '#6b7280', fontSize: 15, textAlign: 'center', fontWeight: '700' },
+    pendingBox: { backgroundColor: '#fffbeb', padding: 20, borderRadius: 20, marginBottom: 24, borderLeftWidth: 6, borderLeftColor: '#f59e0b' },
+    pendingLabel: { color: '#92400e', fontSize: 14, fontWeight: '600' },
+    pendingAmount: { fontWeight: '900', color: '#92400e', fontSize: 18 },
+    pendingDesc: { color: '#4b5563', marginBottom: 32, textAlign: 'center', fontSize: 15, lineHeight: 24, paddingHorizontal: 10 },
+    pendingBtns: { gap: 14 },
+    resumeBtn: { paddingVertical: 18, borderRadius: 20, alignItems: 'center' },
+    cancelBtn: { paddingVertical: 18, borderRadius: 20, backgroundColor: '#f3f4f6', alignItems: 'center' },
+    cancelBtnText: { color: '#4b5563', fontWeight: '800', fontSize: 16 },
+    successDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 26, paddingHorizontal: 10 },
+    successBtn: { paddingVertical: 18, borderRadius: 20, width: '100%', alignItems: 'center' },
+});
+
+const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (url?: string) => void }) => {
+    const isSoa = type === 'soa';
+    const date = isSoa ? record.statement_date : record.invoice_date;
+    const amount = isSoa ? record.total_amount_due : record.invoice_balance;
+    const label = isSoa ? 'Statement Date' : 'Invoice Date';
+    const amountLabel = isSoa ? 'Amount Due' : 'Balance';
+
+    return (
+        <View style={styles.card}>
+            <View style={styles.cardRow}>
+                <View>
+                    <Text style={styles.labelText}>{label}</Text>
+                    <Text style={styles.valueText}>{formatDate(date)}</Text>
+                </View>
+                <View style={styles.alignEnd}>
+                    <Text style={styles.labelText}>Ref No.</Text>
+                    <Text style={styles.valueText}>#{record.id}</Text>
+                </View>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.cardRow}>
+                <View>
+                    <Text style={styles.labelText}>{amountLabel}</Text>
+                    <Text style={[styles.amountText, { color: isSoa ? primaryColor : '#111827' }]}>
+                        {formatCurrency(amount || 0)}
+                    </Text>
+                </View>
+                <Pressable
+                    onPress={() => onDownload(record.print_link)}
+                    disabled={!record.print_link}
+                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' } : styles.pdfBtnDisabled]}
+                >
+                    <Download width={14} height={14} color={record.print_link ? primaryColor : '#9ca3af'} />
+                    <Text style={[styles.pdfText, { color: record.print_link ? primaryColor : '#9ca3af' }]}>PDF</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+});
+
+const HistoryCard = React.memo(({ record }: { record: PaymentRecord }) => {
+    const isPositive = record.status === 'Completed' || record.status === 'PAID';
+    return (
+        <View style={styles.card}>
+            <View style={styles.cardRow}>
+                <View>
+                    <Text style={styles.labelText}>Payment Date</Text>
+                    <Text style={styles.valueText}>{formatDate(record.date)}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: isPositive ? '#f0fdf4' : '#f3f4f6' }]}>
+                    <Text style={[styles.statusText, { color: isPositive ? '#15803d' : '#374151' }]}>
+                        {(record.status || 'Posted').toUpperCase()}
+                    </Text>
+                </View>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.cardRow}>
+                <View style={styles.refContainer}>
+                    <Text style={styles.labelText}>Ref: {record.source}</Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.refText}>{record.reference}</Text>
+                </View>
+                <View style={styles.alignEnd}>
+                    <Text style={styles.labelText}>Amount Paid</Text>
+                    <Text style={styles.paymentAmount}>+{formatCurrency(record.amount)}</Text>
+                </View>
+            </View>
+        </View>
+    );
 });
 
 const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
@@ -143,8 +221,30 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const accountNo = customerDetail?.billingAccount?.accountNo || '';
     const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
     const [activeTab, setActiveTab] = useState<'soa' | 'invoices' | 'payments'>(initialTab);
+
+    const [tabMeasurements, setTabMeasurements] = useState<Record<'soa' | 'invoices' | 'payments', { x: number, width: number }>>({
+        soa: { x: 0, width: 0 },
+        invoices: { x: 0, width: 0 },
+        payments: { x: 0, width: 0 },
+    });
+    const slideAnim = React.useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        const measurement = tabMeasurements[activeTab];
+        if (measurement && measurement.width > 0) {
+            Animated.spring(slideAnim, {
+                toValue: measurement.x,
+                useNativeDriver: false,
+                tension: 65,
+                friction: 10
+            }).start();
+        }
+    }, [activeTab, tabMeasurements, slideAnim]);
+
+    const [user, setUser] = useState<any>(null);
     const [displayName, setDisplayName] = useState('');
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+    const primaryColor = colorPalette?.primary || '#ef4444';
     const [refreshing, setRefreshing] = useState(false);
     const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
     const [showPaymentVerifyModal, setShowPaymentVerifyModal] = useState(false);
@@ -156,10 +256,8 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const [errorMessage, setErrorMessage] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    const ITEMS_PER_PAGE = 4;
-    const [soaPage, setSoaPage] = useState(0);
-    const [invoicePage, setInvoicePage] = useState(0);
-    const [paymentPage, setPaymentPage] = useState(0);
+    const ITEMS_PER_PAGE = 5;
+    const [currentPage, setCurrentPage] = useState(0);
 
     const pan = React.useRef(new Animated.ValueXY()).current;
 
@@ -188,7 +286,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         })
     ).current;
 
-    // Batch mount-time async loads into a single effect
     useEffect(() => {
         let cancelled = false;
         const initLoad = async () => {
@@ -200,8 +297,9 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
             if (authResult.status === 'fulfilled' && authResult.value) {
                 try {
                     const parsedUser = JSON.parse(authResult.value);
+                    setUser(parsedUser);
                     setDisplayName(parsedUser.full_name || 'Customer');
-                } catch (error) {}
+                } catch (error) { }
             }
             if (paletteResult.status === 'fulfilled') {
                 setColorPalette(paletteResult.value);
@@ -213,10 +311,8 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     }, []);
 
     useEffect(() => {
-        if (initialTab) {
-            setActiveTab(initialTab);
-        }
-    }, [initialTab]);
+        setCurrentPage(0);
+    }, [activeTab]);
 
     const handleCloseVerifyModal = useCallback(() => {
         setShowPaymentVerifyModal(false);
@@ -263,8 +359,9 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         setIsPaymentProcessing(true);
         setErrorMessage('');
         try {
-            const redirectUrl = LinkingExpo.createURL('payment-success');
-            const response = await paymentService.createPayment(accountNo, paymentAmount, redirectUrl);
+            const deepLink = LinkingExpo.createURL('payment-success');
+            const xenditRedirectUrl = `${API_BASE_URL}/payments/redirect?to=${encodeURIComponent(deepLink)}`;
+            const response = await paymentService.createPayment(accountNo, paymentAmount, xenditRedirectUrl);
             if (response.status === 'success' && response.payment_url) {
                 setShowPaymentVerifyModal(false);
                 setPaymentLinkData({
@@ -288,8 +385,8 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         const refNo = paymentLinkData?.referenceNo || pendingPayment?.reference_no || '';
         if (url) {
             try {
-                const redirectUrl = LinkingExpo.createURL('payment-success');
-                await WebBrowser.openAuthSessionAsync(url, redirectUrl);
+                const deepLink = LinkingExpo.createURL('payment-success');
+                await WebBrowser.openAuthSessionAsync(url, deepLink);
 
                 await silentRefresh();
 
@@ -339,39 +436,32 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         if (url) Linking.openURL(url);
     };
 
-    const paginatedSoa = useMemo(() => {
-        const start = soaPage * ITEMS_PER_PAGE;
-        return soaRecords.slice(start, start + ITEMS_PER_PAGE);
-    }, [soaRecords, soaPage]);
+    const currentRecords = useMemo(() => {
+        if (activeTab === 'soa') return soaRecords;
+        if (activeTab === 'invoices') return invoiceRecords;
+        return paymentRecords;
+    }, [activeTab, soaRecords, invoiceRecords, paymentRecords]);
 
-    const paginatedInvoices = useMemo(() => {
-        const start = invoicePage * ITEMS_PER_PAGE;
-        return invoiceRecords.slice(start, start + ITEMS_PER_PAGE);
-    }, [invoiceRecords, invoicePage]);
+    const paginatedData = useMemo(() => {
+        const start = currentPage * ITEMS_PER_PAGE;
+        return currentRecords.slice(start, start + ITEMS_PER_PAGE);
+    }, [currentRecords, currentPage]);
 
-    const paginatedPayments = useMemo(() => {
-        const start = paymentPage * ITEMS_PER_PAGE;
-        return paymentRecords.slice(start, start + ITEMS_PER_PAGE);
-    }, [paymentRecords, paymentPage]);
+    const totalPages = Math.max(1, Math.ceil(currentRecords.length / ITEMS_PER_PAGE));
 
-    const soaTotalPages = useMemo(() => Math.max(1, Math.ceil(soaRecords.length / ITEMS_PER_PAGE)), [soaRecords.length]);
-    const invoiceTotalPages = useMemo(() => Math.max(1, Math.ceil(invoiceRecords.length / ITEMS_PER_PAGE)), [invoiceRecords.length]);
-    const paymentTotalPages = useMemo(() => Math.max(1, Math.ceil(paymentRecords.length / ITEMS_PER_PAGE)), [paymentRecords.length]);
-
-    const renderPagination = useCallback((currentPage: number, totalPages: number, setPage: (p: number) => void, totalItems: number) => {
-        if (totalItems <= ITEMS_PER_PAGE) return null;
-        const primary = colorPalette?.primary || '#ef4444';
+    const renderPagination = useCallback(() => {
+        if (currentRecords.length <= ITEMS_PER_PAGE) return null;
         const isPrevDisabled = currentPage === 0;
         const isNextDisabled = currentPage >= totalPages - 1;
         return (
             <View style={styles.paginationRow}>
                 <Pressable
-                    onPress={() => setPage(Math.max(0, currentPage - 1))}
+                    onPress={() => setCurrentPage(Math.max(0, currentPage - 1))}
                     disabled={isPrevDisabled}
-                    style={[styles.paginationBtn, isPrevDisabled ? styles.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+                    style={[styles.paginationBtn, isPrevDisabled ? styles.paginationBtnDisabled : { backgroundColor: primaryColor + '10' }]}
                 >
-                    <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primary} />
-                    <Text style={[styles.paginationText, { color: isPrevDisabled ? '#9ca3af' : primary }]}>Previous</Text>
+                    <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primaryColor} />
+                    <Text style={[styles.paginationText, { color: isPrevDisabled ? '#9ca3af' : primaryColor }]}>Previous</Text>
                 </Pressable>
 
                 <Text style={styles.pageIndicator}>
@@ -379,196 +469,103 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 </Text>
 
                 <Pressable
-                    onPress={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
+                    onPress={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
                     disabled={isNextDisabled}
-                    style={[styles.paginationBtn, isNextDisabled ? styles.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+                    style={[styles.paginationBtn, isNextDisabled ? styles.paginationBtnDisabled : { backgroundColor: primaryColor + '10' }]}
                 >
-                    <Text style={[styles.paginationText, { color: isNextDisabled ? '#9ca3af' : primary }]}>Next</Text>
-                    <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primary} />
+                    <Text style={[styles.paginationText, { color: isNextDisabled ? '#9ca3af' : primaryColor }]}>Next</Text>
+                    <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primaryColor} />
                 </Pressable>
             </View>
         );
-    }, [colorPalette]);
+    }, [primaryColor, currentPage, totalPages, currentRecords.length]);
 
     return (
         <View style={styles.container}>
-                <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? 60 : 16 }}>
-                    <View style={styles.tabRow}>
-                        <Pressable
-                            onPress={() => setActiveTab('soa')}
-                            style={[styles.tabBase, activeTab === 'soa' ? styles.tabActive : styles.tabInactive]}
-                        >
-                            <FileText width={16} height={16} color={activeTab === 'soa' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={[styles.tabText, activeTab === 'soa' ? styles.tabTextActive : styles.tabTextInactive]}>SOA</Text>
-                            {activeTab === 'soa' && (
-                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
-                            )}
-                        </Pressable>
-                        <Pressable
-                            onPress={() => setActiveTab('invoices')}
-                            style={[styles.tabBase, activeTab === 'invoices' ? styles.tabActive : styles.tabInactive]}
-                        >
-                            <File width={16} height={16} color={activeTab === 'invoices' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={[styles.tabText, activeTab === 'invoices' ? styles.tabTextActive : styles.tabTextInactive]}>Invoices</Text>
-                            {activeTab === 'invoices' && (
-                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
-                            )}
-                        </Pressable>
-                        <Pressable
-                            onPress={() => setActiveTab('payments')}
-                            style={[styles.tabBase, activeTab === 'payments' ? styles.tabActive : styles.tabInactive]}
-                        >
-                            <Clock width={16} height={16} color={activeTab === 'payments' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                            <Text style={[styles.tabText, activeTab === 'payments' ? styles.tabTextActive : styles.tabTextInactive]}>History</Text>
-                            {activeTab === 'payments' && (
-                                <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
-                            )}
-                        </Pressable>
-                    </View>
+            <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? 60 : 16 }}>
+                <View style={[styles.tabRow, { position: 'relative' }]}>
+                    <Animated.View style={[
+                        styles.tabActive,
+                        {
+                            position: 'absolute',
+                            height: '100%',
+                            width: tabMeasurements[activeTab]?.width || 0,
+                            left: 0,
+                            bottom: 0,
+                            opacity: tabMeasurements[activeTab]?.width > 0 ? 1 : 0,
+                            transform: [{ translateX: slideAnim }],
+                            alignItems: 'center',
+                        }
+                    ]}>
+                        <View style={[styles.tabIndicator, { backgroundColor: colorPalette?.primary || '#ef4444' }]} />
+                    </Animated.View>
+
+                    <Pressable
+                        onLayout={(e) => {
+                            const { x, width } = e.nativeEvent.layout;
+                            setTabMeasurements(prev => ({ ...prev, soa: { x, width } }));
+                        }}
+                        onPress={() => setActiveTab('soa')}
+                        style={[styles.tabBase, { zIndex: 5, backgroundColor: 'transparent' }]}
+                    >
+                        <FileText width={16} height={16} color={activeTab === 'soa' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
+                        <Text style={[styles.tabText, activeTab === 'soa' ? styles.tabTextActive : styles.tabTextInactive]}>SOA</Text>
+                    </Pressable>
+                    <Pressable
+                        onLayout={(e) => {
+                            const { x, width } = e.nativeEvent.layout;
+                            setTabMeasurements(prev => ({ ...prev, invoices: { x, width } }));
+                        }}
+                        onPress={() => setActiveTab('invoices')}
+                        style={[styles.tabBase, { zIndex: 5, backgroundColor: 'transparent' }]}
+                    >
+                        <File width={16} height={16} color={activeTab === 'invoices' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
+                        <Text style={[styles.tabText, activeTab === 'invoices' ? styles.tabTextActive : styles.tabTextInactive]}>Invoices</Text>
+                    </Pressable>
+                    <Pressable
+                        onLayout={(e) => {
+                            const { x, width } = e.nativeEvent.layout;
+                            setTabMeasurements(prev => ({ ...prev, payments: { x, width } }));
+                        }}
+                        onPress={() => setActiveTab('payments')}
+                        style={[styles.tabBase, { zIndex: 5, backgroundColor: 'transparent' }]}
+                    >
+                        <Clock width={16} height={16} color={activeTab === 'payments' ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
+                        <Text style={[styles.tabText, activeTab === 'payments' ? styles.tabTextActive : styles.tabTextInactive]}>History</Text>
+                    </Pressable>
                 </View>
+            </View>
 
-                <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    style={styles.contentScroll}
-                    contentContainerStyle={styles.contentContainer}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            colors={[colorPalette?.primary || '#ef4444']}
-                            tintColor={colorPalette?.primary || '#ef4444'}
-                        />
-                    }
-                >
-                    {activeTab === 'soa' && (
-                        <View style={styles.listGap}>
-                            {soaRecords.length === 0 ? (
-                                <View style={styles.emptyContainer}>
-                                    <FileText size={48} color="#d1d5db" />
-                                    <Text style={styles.emptyText}>No statements found.</Text>
-                                </View>
-                            ) : (
-                                <>
-                                    {paginatedSoa.map((record) => (
-                                        <View key={record.id} style={styles.card}>
-                                            <View style={styles.cardRow}>
-                                                <View>
-                                                    <Text style={styles.labelText}>Statement Date</Text>
-                                                    <Text style={styles.valueText}>{formatDate(record.statement_date)}</Text>
-                                                </View>
-                                                <View style={styles.alignEnd}>
-                                                    <Text style={styles.labelText}>Ref No.</Text>
-                                                    <Text style={styles.valueText}>#{record.id}</Text>
-                                                </View>
-                                            </View>
-                                            <View style={styles.divider} />
-                                            <View style={styles.cardRow}>
-                                                <View>
-                                                    <Text style={styles.labelText}>Amount Due</Text>
-                                                    <Text style={[styles.amountText, { color: colorPalette?.primary || '#ef4444' }]}>{formatCurrency(record.total_amount_due || 0)}</Text>
-                                                </View>
-                                                <Pressable
-                                                    onPress={() => handleDownloadPDF(record.print_link)}
-                                                    disabled={!record.print_link}
-                                                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' } : styles.pdfBtnDisabled]}
-                                                >
-                                                    <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                                                    <Text style={[styles.pdfText, { color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }]}>PDF</Text>
-                                                </Pressable>
-                                            </View>
-                                        </View>
-                                    ))}
-                                    {renderPagination(soaPage, soaTotalPages, setSoaPage, soaRecords.length)}
-                                </>
-                            )}
+            <FlashList
+                data={paginatedData as any[]}
+                style={{ flex: 1, backgroundColor: '#ffffff' }}
+                keyExtractor={(item: any) => String(item.id)}
+                contentContainerStyle={styles.contentContainer}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[primaryColor]}
+                        tintColor={primaryColor}
+                    />
+                }
+                ListEmptyComponent={() => (
+                    <View style={styles.emptyContainer}>
+                        <View style={[styles.emptyIconContainer, { backgroundColor: primaryColor + '10' }]}>
+                            {activeTab === 'payments' ? <Clock size={48} color={primaryColor} strokeWidth={1} /> : <ReceiptText size={48} color={primaryColor} strokeWidth={1} />}
                         </View>
-                    )}
-
-                    {activeTab === 'invoices' && (
-                        <View style={styles.listGap}>
-                            {invoiceRecords.length === 0 ? (
-                                <View style={styles.emptyContainer}>
-                                    <File size={48} color="#d1d5db" />
-                                    <Text style={styles.emptyText}>No invoices found.</Text>
-                                </View>
-                            ) : (
-                                <>
-                                    {paginatedInvoices.map((record) => (
-                                        <View key={record.id} style={styles.card}>
-                                            <View style={styles.cardRow}>
-                                                <View>
-                                                    <Text style={styles.labelText}>Invoice Date</Text>
-                                                    <Text style={styles.valueText}>{formatDate(record.invoice_date)}</Text>
-                                                </View>
-                                                <View style={styles.alignEnd}>
-                                                    <Text style={styles.labelText}>Ref No.</Text>
-                                                    <Text style={styles.valueText}>#{record.id}</Text>
-                                                </View>
-                                            </View>
-                                            <View style={styles.divider} />
-                                            <View style={styles.cardRow}>
-                                                <View>
-                                                    <Text style={styles.labelText}>Balance</Text>
-                                                    <Text style={[styles.amountText, { color: '#111827' }]}>{formatCurrency(record.invoice_balance || 0)}</Text>
-                                                </View>
-                                                <Pressable
-                                                    onPress={() => handleDownloadPDF(record.print_link)}
-                                                    disabled={!record.print_link}
-                                                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' } : styles.pdfBtnDisabled]}
-                                                >
-                                                    <Download width={14} height={14} color={record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af'} />
-                                                    <Text style={[styles.pdfText, { color: record.print_link ? (colorPalette?.primary || '#ef4444') : '#9ca3af' }]}>PDF</Text>
-                                                </Pressable>
-                                            </View>
-                                        </View>
-                                    ))}
-                                    {renderPagination(invoicePage, invoiceTotalPages, setInvoicePage, invoiceRecords.length)}
-                                </>
-                            )}
-                        </View>
-                    )}
-
-                    {activeTab === 'payments' && (
-                        <View style={styles.listGap}>
-                            {paymentRecords.length === 0 ? (
-                                <View style={styles.emptyContainer}>
-                                    <Clock size={48} color="#d1d5db" />
-                                    <Text style={styles.emptyText}>No payment history found.</Text>
-                                </View>
-                            ) : (
-                                <>
-                                    {paginatedPayments.map((record) => (
-                                        <View key={record.id} style={styles.card}>
-                                            <View style={styles.cardRow}>
-                                                <View>
-                                                    <Text style={styles.labelText}>Date</Text>
-                                                    <Text style={styles.valueText}>{formatDate(record.date)}</Text>
-                                                </View>
-                                                <View style={styles.statusBadge}>
-                                                    <Text style={[styles.statusText, { color: (record.status === 'Completed' || record.status === 'PAID') ? '#15803d' : '#374151' }]}>
-                                                        {(record.status || 'Posted').toUpperCase()}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                            <View style={styles.divider} />
-                                            <View style={styles.cardRow}>
-                                                <View style={styles.refContainer}>
-                                                    <Text style={styles.labelText}>Ref: {record.source}</Text>
-                                                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.refText}>{record.reference}</Text>
-                                                </View>
-                                                <View style={styles.alignEnd}>
-                                                    <Text style={styles.labelText}>Amount</Text>
-                                                    <Text style={styles.paymentAmount}>+{formatCurrency(record.amount)}</Text>
-                                                </View>
-                                            </View>
-                                        </View>
-                                    ))}
-                                    {renderPagination(paymentPage, paymentTotalPages, setPaymentPage, paymentRecords.length)}
-                                </>
-                            )}
-                        </View>
-                    )}
-                </ScrollView>
+                        <Text style={styles.emptyTitle}>
+                            {activeTab === 'soa' ? 'No Statements' : activeTab === 'invoices' ? 'No Invoices' : 'No History'}
+                        </Text>
+                    </View>
+                )}
+                renderItem={({ item }) => (
+                    activeTab === 'payments'
+                        ? <HistoryCard record={item as any} />
+                        : <BillCard record={item} type={activeTab === 'soa' ? 'soa' : 'invoice'} primaryColor={primaryColor} onDownload={handleDownloadPDF} />
+                )}
+                ListFooterComponent={renderPagination}
+            />
 
             <Modal
                 visible={showPaymentVerifyModal}
@@ -739,10 +736,10 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 transparent={true}
                 animationType="slide"
                 statusBarTranslucent={true}
-                onRequestClose={() => setShowSuccessModal(false)}
+                onRequestClose={() => { }} // User must explicitly close via button
             >
                 <View style={styles.modalOverlay}>
-                    <Pressable style={styles.modalBackdrop} onPress={() => setShowSuccessModal(false)} />
+                    <Pressable style={styles.modalBackdrop} />
                     <Animated.View
                         {...panResponder.panHandlers}
                         style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}
@@ -769,7 +766,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                     </Animated.View>
                 </View>
             </Modal>
-
         </View>
     );
 };

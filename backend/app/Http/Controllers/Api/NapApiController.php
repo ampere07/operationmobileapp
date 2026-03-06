@@ -36,7 +36,7 @@ class NapApiController extends Controller
 
             // Get pagination parameters
             $page = (int) $request->get('page', 1);
-            $limit = min((int) $request->get('limit', 10), 100); // Max 100 items per page
+            $limit = min((int) $request->get('limit', 10), 10000); // Max 10000 items per page
             $search = $request->get('search', '');
             
             $offset = ($page - 1) * $limit;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -93,17 +93,16 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const isAssignedToMe =
-    (userEmail && formData.assign_to === userEmail) ||
-    (userName && formData.assign_to === userName) ||
-    assignees.some(a => a.email === userEmail && (a.name === formData.assign_to || a.email === formData.assign_to));
+  const isAssignedToMe = useMemo(() => {
+    const assignTo = formData.assign_to?.toLowerCase().trim();
+    if (!assignTo) return false;
+    return (userEmail?.toLowerCase().trim() === assignTo) || (userName?.toLowerCase().trim() === assignTo);
+  }, [formData.assign_to, userEmail, userName]);
 
   useEffect(() => {
     const init = async () => {
-      // Dark mode logic removed as per user request
-
       const palette = await settingsColorPaletteService.getActive();
-      setColorPalette(palette);
+      if (palette) setColorPalette(palette);
 
       const authData = await AsyncStorage.getItem('authData');
       if (authData) {
@@ -111,52 +110,45 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
           const parsed = JSON.parse(authData);
           setUserRole(parsed.role_id || parsed.roleId || null);
           setUserEmail(parsed.email_address || parsed.email || null);
-          setUserName(`${parsed.first_name || ''} ${parsed.last_name || ''}`.trim() || parsed.username || null);
-        } catch (e) { }
+          setUserName(parsed.full_name || `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim() || parsed.username || null);
+        } catch (e) {
+          console.error('Failed to parse authData', e);
+        }
       }
     };
-    init();
-  }, []);
+    if (isOpen) init();
+  }, [isOpen]);
 
   useEffect(() => {
-    const fetchTechnicians = async () => {
+    const fetchDropdownData = async () => {
       if (!isOpen) return;
-      let techList: User[] = [];
+
       try {
-        const response = await userService.getUsersByRole('technician');
-        if (response.success && response.data) {
-          techList = response.data
-            .map((user: any) => ({
-              email: user.email_address || user.email || '',
-              name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username
-            }))
-            .filter((t: User) => t.name && t.email);
-          setTechnicians(techList);
-        }
-      } catch (error) {
-        setTechnicians([]);
-      }
-      try {
-        // We fetch role by role since the service currently only supports single roleId
-        const rolesToFetch = [1, 4, 5, 6];
-        const allUsers: User[] = [...techList];
+        const rolesToFetch = [1, 2, 4, 5, 6];
+        const allUsers: User[] = [];
+
         for (const roleId of rolesToFetch) {
-          const response = await userService.getUsersByRoleId(roleId);
-          if (response.success && response.data) {
-            const list = response.data
-              .map((user: any) => ({
-                email: user.email_address || user.email || '',
-                name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username
-              }))
-              .filter((t: User) => t.name && t.email);
-            allUsers.push(...list);
+          try {
+            const response = await userService.getUsersByRoleId(roleId);
+            if (response.success && Array.isArray(response.data)) {
+              response.data.forEach((user: any) => {
+                const email = user.email_address || user.email || '';
+                const name = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+                if (email && name) {
+                  allUsers.push({ email, name });
+                }
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to fetch users for role ${roleId}`, err);
           }
         }
-        // Remove duplicates if any
-        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.email, u])).values());
+
+        // Remove duplicates by email
+        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.email.toLowerCase(), u])).values());
         setAssignees(uniqueUsers);
       } catch (error) {
-        setAssignees([]);
+        console.error('Error in fetchDropdownData:', error);
       }
     };
     const fetchCategories = async () => {
@@ -171,11 +163,13 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
         setCategories([]);
       }
     };
-    fetchTechnicians();
+    fetchDropdownData();
     fetchCategories();
 
     if (isOpen) {
-      if (!isEditMode || !workOrder) {
+      if (isEditMode && workOrder) {
+        hasInitializedEditRef.current = false;
+      } else {
         setFormData({
           instructions: '',
           work_category: '',
@@ -185,8 +179,6 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
           work_status: 'Pending'
         });
         hasInitializedEditRef.current = false;
-      } else {
-        hasInitializedEditRef.current = false; // Reset when opening in edit mode
       }
       setImagePreviews({ image_1: '', image_2: '', image_3: '', signature: '' });
       setImages({ image_1: null, image_2: null, image_3: null, signature: null });
@@ -195,34 +187,32 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
   // Handle prepopulating Assign To dynamically after assignees resolve
   useEffect(() => {
-    if (isOpen && isEditMode && workOrder && assignees.length > 0 && !hasInitializedEditRef.current) {
+    if (isOpen && isEditMode && workOrder && !hasInitializedEditRef.current) {
       hasInitializedEditRef.current = true;
-      const initialAssignTo = workOrder.assign_to || '';
-      let mappedAssignToName = initialAssignTo;
-
-      const matchingUser = assignees.find((u: User) => u.email === initialAssignTo || u.name === initialAssignTo);
-      if (matchingUser) {
-        mappedAssignToName = matchingUser.name;
-      }
-
-      setFormData(prev => ({
-        ...prev,
+      setFormData({
         instructions: workOrder.instructions || '',
         work_category: workOrder.work_category || '',
         report_to: workOrder.report_to || '',
-        assign_to: mappedAssignToName,
+        assign_to: workOrder.assign_to || '',
         remarks: workOrder.remarks || '',
         work_status: workOrder.work_status || 'Pending'
-      }));
+      });
     }
-  }, [isOpen, isEditMode, workOrder, assignees]);
+  }, [isOpen, isEditMode, workOrder]);
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = useCallback((field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-  };
+    setErrors(prev => {
+      if (prev[field]) {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      }
+      return prev;
+    });
+  }, []);
 
-  const handleImageUpload = (field: string, file: any) => {
+  const handleImageUpload = useCallback((field: string, file: any) => {
     if (file) {
       setImages(prev => ({ ...prev, [field]: file }));
       setImagePreviews(prev => ({ ...prev, [field]: file.uri }));
@@ -230,10 +220,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
       setImages(prev => ({ ...prev, [field]: null }));
       setImagePreviews(prev => ({ ...prev, [field]: '' }));
     }
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-  };
+    setErrors(prev => {
+      if (prev[field]) {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      }
+      return prev;
+    });
+  }, []);
 
-  const handleSignature = async (signature: string) => {
+  const handleSignature = useCallback(async (signature: string) => {
     setIsDrawingSignature(false);
     setScrollEnabled(true);
     try {
@@ -255,20 +252,23 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
       console.error('Error handling signature:', e);
       Alert.alert('Error', 'Failed to save signature');
     }
-  };
+  }, []);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const newErrors: Record<string, string> = {};
-    if (!formData.instructions.trim()) newErrors.instructions = 'Instructions are required';
-    if (!formData.work_category) newErrors.work_category = 'Work Category is required';
-    if (!formData.report_to.trim()) newErrors.report_to = 'Report To is required';
-    if (!formData.assign_to.trim()) newErrors.assign_to = 'Assign To is required';
+    const requiredFields: (keyof typeof formData)[] = ['instructions', 'work_category', 'report_to', 'assign_to'];
+
+    requiredFields.forEach(field => {
+      if (!formData[field]?.trim()) {
+        newErrors[field] = `${field.replace('_', ' ')} is required`;
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!validateForm()) {
       Alert.alert('Missing Info', 'Please fill in all required fields.');
       return;
@@ -374,13 +374,6 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
     } catch (error: any) {
       if (progressInterval) clearInterval(progressInterval);
-      console.error('[SAVE ERROR] Full Error Object:', error);
-      if (error.response) {
-        console.error('[SAVE ERROR] Data:', error.response.data);
-        console.error('[SAVE ERROR] Status:', error.response.status);
-      } else {
-        console.error('[SAVE ERROR] Message:', error.message);
-      }
       Alert.alert('Error', error.response?.data?.message || error.message || 'An error occurred');
     } finally {
       setTimeout(() => {
@@ -388,8 +381,21 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
         setLoadingPercentage(0);
       }, 800);
     }
-  };
+  }, [formData, images, isEditMode, workOrder, userRole, userEmail, onClose, onSave, onRefresh]);
 
+
+  // Render Helpers
+  const renderError = useCallback((field: string) => {
+    if (!errors[field]) return null;
+    return (
+      <View style={st.errorContainer}>
+        <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+          <Text style={st.errorIconText}>!</Text>
+        </View>
+        <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors[field]}</Text>
+      </View>
+    );
+  }, [errors, colorPalette]);
 
   return (
     <Modal visible={isOpen} animationType="slide" transparent={true} onRequestClose={onClose}>
@@ -428,7 +434,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     opacity: loading ? 0.5 : 1
                   }]}
                 >
-                  <Text style={st.submitButtonText}>{loading ? 'Submitting...' : 'Save'}</Text>
+                  <Text style={st.submitButtonText}>{loading ? 'Saving..' : 'Save'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -454,14 +460,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
-                {errors.instructions && (
-                  <View style={st.errorContainer}>
-                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                      <Text style={st.errorIconText}>!</Text>
-                    </View>
-                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.instructions}</Text>
-                  </View>
-                )}
+                {renderError('instructions')}
               </View>
 
               <View style={st.inputGroup}>
@@ -478,23 +477,13 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     dropdownIconColor="black"
                     enabled={!isAssignedToMe}
                   >
-                    <Picker.Item
-                      label={formData.work_category || "Select Category"}
-                      value={formData.work_category || ""}
-                    />
-                    {categories
-                      .filter(c => c.category !== formData.work_category)
-                      .map(c => <Picker.Item key={c.id} label={c.category} value={c.category} />)}
+                    <Picker.Item label={formData.work_category || "Select Category"} value={formData.work_category || ""} />
+                    {categories.filter(c => c.category !== formData.work_category).map(c => (
+                      <Picker.Item key={c.id} label={c.category} value={c.category} />
+                    ))}
                   </Picker>
                 </View>
-                {errors.work_category && (
-                  <View style={st.errorContainer}>
-                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                      <Text style={st.errorIconText}>!</Text>
-                    </View>
-                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.work_category}</Text>
-                  </View>
-                )}
+                {renderError('work_category')}
               </View>
 
               <View style={st.inputGroup}>
@@ -512,14 +501,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     opacity: isAssignedToMe ? 0.8 : 1
                   }]}
                 />
-                {errors.report_to && (
-                  <View style={st.errorContainer}>
-                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                      <Text style={st.errorIconText}>!</Text>
-                    </View>
-                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.report_to}</Text>
-                  </View>
-                )}
+                {renderError('report_to')}
               </View>
 
               <View style={st.inputGroup}>
@@ -537,17 +519,15 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     enabled={!isAssignedToMe}
                   >
                     <Picker.Item label="Select User" value="" />
-                    {assignees.map(t => <Picker.Item key={t.email} label={t.name} value={t.name} />)}
+                    {assignees.map(t => (
+                      <Picker.Item key={t.email} label={t.email} value={t.email} />
+                    ))}
+                    {formData.assign_to && !assignees.some(t => t.email === formData.assign_to) && (
+                      <Picker.Item label={formData.assign_to} value={formData.assign_to} />
+                    )}
                   </Picker>
                 </View>
-                {errors.assign_to && (
-                  <View style={st.errorContainer}>
-                    <View style={[st.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                      <Text style={st.errorIconText}>!</Text>
-                    </View>
-                    <Text style={[st.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.assign_to}</Text>
-                  </View>
-                )}
+                {renderError('assign_to')}
               </View>
 
               {((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) && (
@@ -592,30 +572,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
               {(isEditMode || (userEmail && formData.assign_to === userEmail)) && (
                 <>
-                  <ImagePreview
-                    label="Project Photo 1"
-                    imageUrl={imagePreviews.image_1}
-                    onUpload={(file) => handleImageUpload('image_1', file)}
-                    error={errors.image_1}
-                    isDarkMode={isDarkMode}
-                    colorPrimary={colorPalette?.primary}
-                  />
-                  <ImagePreview
-                    label="Project Photo 2"
-                    imageUrl={imagePreviews.image_2}
-                    onUpload={(file) => handleImageUpload('image_2', file)}
-                    error={errors.image_2}
-                    isDarkMode={isDarkMode}
-                    colorPrimary={colorPalette?.primary}
-                  />
-                  <ImagePreview
-                    label="Project Photo 3"
-                    imageUrl={imagePreviews.image_3}
-                    onUpload={(file) => handleImageUpload('image_3', file)}
-                    error={errors.image_3}
-                    isDarkMode={isDarkMode}
-                    colorPrimary={colorPalette?.primary}
-                  />
+                  {(['image_1', 'image_2', 'image_3'] as const).map((field, index) => (
+                    <ImagePreview
+                      key={field}
+                      label={`Project Photo ${index + 1}`}
+                      imageUrl={imagePreviews[field]}
+                      onUpload={(file) => handleImageUpload(field, file)}
+                      error={errors[field]}
+                      isDarkMode={isDarkMode}
+                      colorPrimary={colorPalette?.primary}
+                    />
+                  ))}
 
                   <View style={st.inputGroup}>
                     <Text style={[st.label, { color: '#374151' }]}>Client Signature</Text>

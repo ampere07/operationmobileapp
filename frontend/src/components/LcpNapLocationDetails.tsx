@@ -28,6 +28,7 @@ interface LocationMarker {
   offline_sessions?: number;
   blocked_sessions?: number;
   not_found_sessions?: number;
+  total_technical_details?: number;
 }
 
 interface LcpNapLocationDetailsProps {
@@ -151,7 +152,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
         {
           backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
           borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-          paddingTop: isMobile ? 60 : 12
+          paddingTop: isMobile ? 16 : 12
         }
       ]}>
         <View style={styles.headerTitleContainer}>
@@ -180,7 +181,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
           {location.barangay && renderField('Barangay', location.barangay)}
           {location.city && renderField('City', location.city)}
           {location.region && renderField('Region', location.region)}
-          {location.port_total !== undefined && renderField('Port Total', String(location.port_total))}
+          {location.port_total !== undefined && renderField('Port Usage', `${location.total_technical_details || 0} / ${location.port_total}`)}
 
           {renderField('Session Status', (
             <View style={styles.sessionGrid}>
@@ -247,7 +248,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
                           <style>
                               body { margin: 0; padding: 0; background: ${isDarkMode ? '#1f2937' : '#f3f4f6'}; }
                               #map { height: 100vh; width: 100vw; }
-                              .leaflet-marker-icon { border: 2px solid white; border-radius: 50%; background: #22c55e !important; width: 12px !important; height: 12px !important; margin-left: -8px !important; margin-top: -8px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+                              .leaflet-marker-icon { border: 2px solid white; border-radius: 50%; background: ${(location.total_technical_details || 0) >= (location.port_total || 0) && (location.port_total || 0) > 0 ? '#ef4444' : '#22c55e'} !important; width: 12px !important; height: 12px !important; margin-left: -8px !important; margin-top: -8px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
                               .leaflet-marker-shadow { display: none; }
                           </style>
                       </head>

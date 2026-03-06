@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, useWindowDimensions, ActivityIndicator, TextInput, StyleSheet, Modal, Alert } from 'react-native';
+import { View, Text, Pressable, useWindowDimensions, ActivityIndicator, TextInput, StyleSheet, Modal, Alert, ScrollView } from 'react-native';
 import { MapPin, Search, Plus, Navigation } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoLocation from 'expo-location';
 import MapView, { Marker, Circle } from 'react-native-maps';
+import { FlashList } from '@shopify/flash-list';
 import AddLcpNapLocationModal from '../modals/AddLcpNapLocationModal';
 import LcpNapLocationDetails from '../components/LcpNapLocationDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import apiClient from '../config/api';
+
+import axios from 'axios';
+import { GOOGLE_MAPS_API_KEY } from '../config/maps';
+
+// ─── Interfaces ────────────────────────────────────────────────────────────────
 
 interface LocationMarker {
   id: number;
@@ -32,6 +38,8 @@ interface LocationMarker {
   offline_sessions?: number;
   blocked_sessions?: number;
   not_found_sessions?: number;
+  total_technical_details?: number;
+  _dist?: number;
 }
 
 interface LcpNapGroup {
@@ -53,54 +61,140 @@ interface ApiResponse<T = any> {
   message?: string;
 }
 
+// ─── Constants & Pure Helpers ──────────────────────────────────────────────────
+
 const parseCoordinates = (coordString: string): { latitude: number; longitude: number } | null => {
   if (!coordString) return null;
-
   const coords = coordString.split(',').map(c => c.trim());
   if (coords.length !== 2) return null;
-
   const latitude = parseFloat(coords[0]);
   const longitude = parseFloat(coords[1]);
-
-  if (isNaN(latitude) || isNaN(longitude)) return null;
-
-  return { latitude, longitude };
+  return (isNaN(latitude) || isNaN(longitude)) ? null : { latitude, longitude };
 };
 
+const getPinSize = (delta: number) => {
+  if (delta < 0.005) return 26;
+  if (delta < 0.02) return 22;
+  if (delta < 0.1) return 18;
+  if (delta < 0.5) return 15;
+  if (delta < 2) return 12;
+  return 10;
+};
+
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
+const CustomMarker = React.memo<{
+  location: LocationMarker;
+  pinSize: number;
+  onPress: (location: LocationMarker) => void;
+}>(({ location, pinSize, onPress }) => {
+  const isFull = (location.total_technical_details || 0) >= (location.port_total || 0) && (location.port_total || 0) > 0;
+
+  // Optimization: track changes only when necessary
+  const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
+
+  React.useEffect(() => {
+    // Stop tracking after initial render to boost performance
+    const timer = setTimeout(() => setTracksViewChanges(false), 300);
+    return () => clearTimeout(timer);
+  }, [pinSize]);
+
+  return (
+    <Marker
+      coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+      title={location.lcpnap_name}
+      description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name} | Used: ${location.total_technical_details || 0}/${location.port_total || 0}`}
+      onPress={() => onPress(location)}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={tracksViewChanges}
+    >
+      <View style={[styles.markerPin, {
+        width: pinSize,
+        height: pinSize,
+        borderRadius: pinSize / 2,
+        borderWidth: pinSize > 10 ? 1.5 : 0.5,
+        backgroundColor: isFull ? '#ef4444' : '#22c55e',
+      }]} />
+    </Marker>
+  );
+});
+
+const LcpNapSidebarItem = React.memo<{
+  item: LcpNapItem;
+  isSelected: boolean;
+  primaryColor: string;
+  onPress: (id: number | string) => void;
+}>(({ item, isSelected, primaryColor, onPress }) => {
+  const textColor = isSelected ? primaryColor : '#374151';
+  return (
+    <Pressable
+      onPress={() => onPress(item.id === 0 ? 'all' : item.id)}
+      style={[
+        styles.locationItem,
+        isSelected && { backgroundColor: `${primaryColor}15` }
+      ]}
+    >
+      <View style={styles.locationItemContent}>
+        <MapPin size={16} color={textColor} style={styles.iconMargin} />
+        <Text style={[styles.locationItemText, { color: textColor, fontWeight: isSelected ? '600' : '400' }]}>
+          {item.name}
+        </Text>
+      </View>
+      {item.count > 0 && (
+        <View style={[styles.badge, { backgroundColor: isSelected ? primaryColor : '#e5e7eb' }]}>
+          <Text style={[styles.badgeText, { color: isSelected ? 'white' : '#374151' }]}>
+            {item.count}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+});
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
 const LcpNapLocation: React.FC = () => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const isDarkMode = false;
   const [markers, setMarkers] = useState<LocationMarker[]>([]);
   const [selectedLcpNapId, setSelectedLcpNapId] = useState<number | string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [sidebarWidth] = useState<number>(256);
+  const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
+  const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationMarker | null>(null);
   const [userRole, setUserRole] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentDelta, setCurrentDelta] = useState(12);
-  const [pinLimit, setPinLimit] = useState<string>('50');
+  const [pinLimit, setPinLimit] = useState<string>('25');
+  const [currentRegion, setCurrentRegion] = useState({
+    latitude: 12.8797,
+    longitude: 121.7740,
+    latitudeDelta: 12,
+    longitudeDelta: 12
+  });
   const [mapCenter, setMapCenter] = useState<{ latitude: number, longitude: number }>({
     latitude: 12.8797,
     longitude: 121.7740
   });
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   const mapRef = useRef<MapView>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
-  // Consolidate initialization logic
+  // Initialization
   useEffect(() => {
     const initData = async () => {
       try {
-        const [theme, activePalette, authData] = await Promise.all([
-          AsyncStorage.getItem('theme'),
+        const [activePalette, authData] = await Promise.all([
           settingsColorPaletteService.getActive(),
           AsyncStorage.getItem('authData')
         ]);
-
-        setIsDarkMode(theme !== 'light');
         setColorPalette(activePalette);
         if (authData) {
           const parsedUser = JSON.parse(authData);
@@ -110,316 +204,304 @@ const LcpNapLocation: React.FC = () => {
         console.error('Initialization error:', err);
       }
     };
-
     initData();
+    ExpoLocation.requestForegroundPermissionsAsync().catch(() => { });
   }, []);
 
-  // Request location permissions
+  // Combined search for markers and places
   useEffect(() => {
-    (async () => {
-      let { status } = await ExpoLocation.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.warn('Permission to access location was denied');
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+      setDebouncedSearch(query);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      setIsSearchingSuggestions(true);
+      setShowSuggestions(true);
+
+      // Local markers search
+      const localMatches = markers
+        .filter(m =>
+          m.lcpnap_name.toLowerCase().includes(query.toLowerCase()) ||
+          (m.lcp_name || '').toLowerCase().includes(query.toLowerCase()) ||
+          (m.nap_name || '').toLowerCase().includes(query.toLowerCase())
+        )
+        .slice(0, 5)
+        .map(m => ({
+          type: 'lcpnap',
+          id: `marker-${m.id}`,
+          title: m.lcpnap_name,
+          subtitle: `LCP: ${m.lcp_name} | NAP: ${m.nap_name}`,
+          data: m
+        }));
+
+      // Google Places search
+      let placeMatches: any[] = [];
+      try {
+        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ph`;
+        const response = await axios.get(url);
+        if (response.data && response.data.predictions) {
+          placeMatches = response.data.predictions.map((p: any) => ({
+            type: 'place',
+            id: p.place_id,
+            title: p.structured_formatting.main_text,
+            subtitle: p.structured_formatting.secondary_text,
+            place_id: p.place_id
+          }));
+        }
+      } catch (err) {
+        console.error('Places API error:', err);
       }
-    })();
-  }, []);
+
+      const results = [];
+      if (localMatches.length > 0) {
+        results.push({ type: 'header', id: 'h-local', title: 'LCP/NAP Matches' });
+        results.push(...localMatches);
+      }
+      if (placeMatches.length > 0) {
+        results.push({ type: 'header', id: 'h-places', title: 'Nearby Places' });
+        results.push(...placeMatches);
+      }
+
+      setSearchSuggestions(results);
+      setIsSearchingSuggestions(false);
+      setDebouncedSearch(query);
+    };
+
+    const handler = setTimeout(fetchSuggestions, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery, markers]);
 
   const loadLocations = useCallback(async () => {
     if (showAddModal) return;
     setIsLoading(true);
     try {
       const response = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations');
-      const data = response.data;
-
-      if (data.success && data.data) {
-        const locationData = data.data
+      if (response.data.success && response.data.data) {
+        const locationData = response.data.data
           .map((item: any) => {
             const coords = parseCoordinates(item.coordinates);
             if (!coords) return null;
-
             return {
-              id: item.id,
-              lcpnap_name: item.lcpnap_name || 'Unnamed',
-              lcp_name: item.lcp_name || 'N/A',
-              nap_name: item.nap_name || 'N/A',
-              coordinates: item.coordinates,
+              ...item,
               latitude: coords.latitude,
               longitude: coords.longitude,
-              street: item.street,
-              city: item.city,
-              region: item.region,
-              barangay: item.barangay,
-              port_total: item.port_total,
-              reading_image_url: item.reading_image_url,
-              image1_url: item.image1_url,
-              image2_url: item.image2_url,
-              modified_by: item.modified_by,
-              modified_date: item.modified_date,
-              active_sessions: item.active_sessions,
-              inactive_sessions: item.inactive_sessions,
-              offline_sessions: item.offline_sessions,
-              blocked_sessions: item.blocked_sessions,
-              not_found_sessions: item.not_found_sessions
+              lcpnap_name: item.lcpnap_name || 'Unnamed',
             } as LocationMarker;
           })
-          .filter((marker): marker is LocationMarker => marker !== null);
+          .filter((m): m is LocationMarker => m !== null);
 
         setMarkers(locationData);
 
         if (locationData.length > 0 && mapRef.current) {
-          const coordinates = locationData.map(loc => ({
-            latitude: loc.latitude,
-            longitude: loc.longitude
-          }));
-
-          try {
-            mapRef.current.fitToCoordinates(coordinates, {
-              edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-              animated: true
-            });
-          } catch (e) {
-            console.warn('fitToCoordinates failed:', e);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading locations:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLocations();
-  }, [loadLocations]);
-
-  // Memoize grouping logic to avoid unnecessary re-calculations
-  const lcpNapGroups = useMemo(() => {
-    const grouped: { [key: string]: LcpNapGroup } = {};
-
-    markers.forEach(marker => {
-      const groupName = marker.lcpnap_name || 'Unnamed';
-      if (!grouped[groupName]) {
-        grouped[groupName] = {
-          lcpnap_id: marker.id,
-          lcpnap_name: groupName,
-          locations: [],
-          count: 0
-        };
-      }
-      grouped[groupName].locations.push(marker);
-      grouped[groupName].count++;
-    });
-
-    return Object.values(grouped).sort((a, b) =>
-      (a.lcpnap_name || '').localeCompare(b.lcpnap_name || '')
-    );
-  }, [markers]);
-
-  const lcpNapItems = useMemo(() => [
-    {
-      id: 0,
-      name: 'All',
-      count: markers.length
-    },
-    ...lcpNapGroups.map(group => ({
-      id: group.lcpnap_id,
-      name: group.lcpnap_name,
-      count: group.count
-    }))
-  ], [markers.length, lcpNapGroups]);
-
-  const getMarkersToDisplay = useMemo((): LocationMarker[] => {
-    let displayedMarkers = markers;
-
-    if (selectedLcpNapId !== 'all') {
-      const group = lcpNapGroups.find(g => g.lcpnap_id === selectedLcpNapId);
-      displayedMarkers = group ? group.locations : [];
-    }
-
-    const query = searchQuery.trim().toLowerCase();
-    if (query) {
-      displayedMarkers = displayedMarkers.filter(marker =>
-        (marker.lcpnap_name || '').toLowerCase().includes(query) ||
-        (marker.lcp_name || '').toLowerCase().includes(query) ||
-        (marker.nap_name || '').toLowerCase().includes(query)
-      );
-    }
-
-    // Sort by distance to map center and apply limit
-    const limit = parseInt(pinLimit) || 0;
-
-    if (limit <= 0) return displayedMarkers;
-
-    return displayedMarkers
-      .map(marker => {
-        const dist = Math.pow(marker.latitude - mapCenter.latitude, 2) +
-          Math.pow(marker.longitude - mapCenter.longitude, 2);
-        return { ...marker, _dist: dist };
-      })
-      .sort((a, b) => a._dist - b._dist)
-      .slice(0, limit);
-  }, [markers, selectedLcpNapId, lcpNapGroups, searchQuery, mapCenter, pinLimit]);
-
-  const handleMapReady = useCallback(() => {
-    if (mapRef.current) {
-      try {
-        mapRef.current.setMapBoundaries(
-          { latitude: 21.1, longitude: 126.6 }, // North East
-          { latitude: 4.4, longitude: 114.1 }   // South West
-        );
-      } catch (e) {
-        console.warn('setMapBoundaries failed:', e);
-      }
-    }
-  }, []);
-
-  const handleLcpNapSelect = useCallback((lcpNapId: number | string) => {
-    setSelectedLcpNapId(lcpNapId);
-
-    const targetMarkers = lcpNapId === 'all'
-      ? markers
-      : lcpNapGroups.find(g => g.lcpnap_id === lcpNapId)?.locations || [];
-
-    if (targetMarkers.length > 0 && mapRef.current) {
-      const coordinates = targetMarkers.map(loc => ({
-        latitude: loc.latitude,
-        longitude: loc.longitude
-      })).filter(coord =>
-        !isNaN(coord.latitude) && !isNaN(coord.longitude) &&
-        coord.latitude >= -90 && coord.latitude <= 90 &&
-        coord.longitude >= -180 && coord.longitude <= 180
-      );
-
-      if (coordinates.length > 0) {
-        try {
+          const coordinates = locationData.map(loc => ({ latitude: loc.latitude, longitude: loc.longitude }));
           mapRef.current.fitToCoordinates(coordinates, {
             edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
             animated: true
           });
-        } catch (e) {
-          console.warn('fitToCoordinates failed in selection:', e);
         }
       }
+    } catch (e) {
+      console.error('Error loading locations:', e);
+    } finally {
+      setIsLoading(false);
     }
-  }, [markers, lcpNapGroups, selectedLcpNapId]);
+  }, [showAddModal]);
 
-  const handleLocationSelect = useCallback((location: LocationMarker) => {
-    if (!mapRef.current) return;
+  useEffect(() => { loadLocations(); }, [loadLocations]);
 
+  const lcpNapGroups = useMemo(() => {
+    const grouped: { [key: string]: LcpNapGroup } = {};
+    markers.forEach(marker => {
+      const name = marker.lcpnap_name;
+      if (!grouped[name]) grouped[name] = { lcpnap_id: marker.id, lcpnap_name: name, locations: [], count: 0 };
+      grouped[name].locations.push(marker);
+      grouped[name].count++;
+    });
+    return Object.values(grouped).sort((a, b) => a.lcpnap_name.localeCompare(b.lcpnap_name));
+  }, [markers]);
+
+  const lcpNapItems = useMemo(() => [
+    { id: 0, name: 'All', count: markers.length },
+    ...lcpNapGroups.map(g => ({ id: g.lcpnap_id, name: g.lcpnap_name, count: g.count }))
+  ], [markers.length, lcpNapGroups]);
+
+  const markersToDisplay = useMemo((): LocationMarker[] => {
+    // 1. Initial filter by selected group
+    let filtered = markers;
+    if (selectedLcpNapId !== 'all') {
+      const group = lcpNapGroups.find(g => g.lcpnap_id === selectedLcpNapId);
+      filtered = group ? group.locations : [];
+    }
+
+    // 2. Filter by search query
+    const query = debouncedSearch.trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter(m =>
+        m.lcpnap_name.toLowerCase().includes(query) ||
+        (m.lcp_name || '').toLowerCase().includes(query) ||
+        (m.nap_name || '').toLowerCase().includes(query)
+      );
+      // When searching, show all matches regardless of viewport
+      return filtered.slice(0, 100);
+    }
+
+    // 3. Viewport Culling - Crucial for performance with 10k+ markers
+    // Filter markers that are within our current view plus a small buffer (0.1 delta)
+    const latSpan = currentRegion.latitudeDelta * 1.5;
+    const lngSpan = currentRegion.longitudeDelta * 1.5;
+    const latMin = currentRegion.latitude - latSpan / 2;
+    const latMax = currentRegion.latitude + latSpan / 2;
+    const lngMin = currentRegion.longitude - lngSpan / 2;
+    const lngMax = currentRegion.longitude + lngSpan / 2;
+
+    const visible = filtered.filter(m =>
+      m.latitude >= latMin && m.latitude <= latMax &&
+      m.longitude >= lngMin && m.longitude <= lngMax
+    );
+
+    // 4. Limit the number of pins rendered near the center to prevent clutter
+    const limit = parseInt(pinLimit) || 50;
+    if (visible.length <= limit) return visible;
+
+    return visible
+      .map(m => ({
+        ...m,
+        _dist: Math.abs(m.latitude - mapCenter.latitude) + Math.abs(m.longitude - mapCenter.longitude)
+      }))
+      .sort((a, b) => a._dist! - b._dist!)
+      .slice(0, limit);
+  }, [markers, selectedLcpNapId, lcpNapGroups, debouncedSearch, mapCenter, pinLimit, currentRegion]);
+
+  const handleLcpNapSelect = useCallback((id: number | string) => {
+    setSelectedLcpNapId(id);
+    const target = id === 'all' ? markers : lcpNapGroups.find(g => g.lcpnap_id === id)?.locations || [];
+    if (target.length > 0 && mapRef.current) {
+      mapRef.current.fitToCoordinates(target.map(l => ({ latitude: l.latitude, longitude: l.longitude })), {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        animated: true
+      });
+    }
+  }, [markers, lcpNapGroups]);
+
+  const handleLocationSelect = useCallback((loc: LocationMarker) => {
+    mapRef.current?.animateToRegion({
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005
+    }, 1000);
+    setSelectedLocation(loc);
+  }, []);
+
+  const handleGetMyLocation = useCallback(async () => {
     try {
-      mapRef.current.animateToRegion({
-        latitude: location.latitude,
-        longitude: location.longitude,
+      const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return Alert.alert('Permission denied', 'Location permission is required.');
+      const loc = await ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced });
+      mapRef.current?.animateToRegion({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01
       }, 1000);
     } catch (e) {
-      console.warn('animateToRegion failed:', e);
+      Alert.alert('Error', 'Unable to get location.');
     }
-
-    setSelectedLocation(location);
   }, []);
 
-  const handleSaveLocation = useCallback(() => {
-    loadLocations();
-  }, [loadLocations]);
+  const handleSuggestionSelect = async (suggestion: any) => {
+    setSearchQuery(suggestion.title);
+    setShowSuggestions(false);
 
-  const renderLocationItem = useCallback((item: LcpNapItem, isHorizontal: boolean = false) => {
-    const isSelected = (item.id === 0 && selectedLcpNapId === 'all') || (item.id !== 0 && selectedLcpNapId === item.id);
-    const primaryColor = colorPalette?.primary || '#7c3aed';
-    const textColor = isSelected ? primaryColor : (isDarkMode ? '#d1d5db' : '#374151');
-
-    return (
-      <Pressable
-        key={item.id === 0 ? 'all' : item.id}
-        onPress={() => handleLcpNapSelect(item.id === 0 ? 'all' : item.id)}
-        style={[
-          styles.locationItem,
-          isHorizontal && styles.locationItemHorizontal,
-          isSelected && {
-            backgroundColor: `${primaryColor}33`,
-            borderBottomWidth: isHorizontal ? 3 : 0,
-            borderColor: primaryColor,
-          }
-        ]}
-      >
-        <View style={styles.locationItemContent}>
-          <MapPin
-            size={16}
-            color={textColor}
-            style={styles.iconMargin}
-          />
-          <Text style={[styles.locationItemText, { color: textColor, fontWeight: isSelected ? '500' : 'normal' }]}>
-            {item.name}
-          </Text>
-        </View>
-        {item.count > 0 && !isHorizontal && (
-          <View style={[styles.badge, { backgroundColor: isSelected ? primaryColor : (isDarkMode ? '#374151' : '#e5e7eb') }]}>
-            <Text style={[styles.badgeText, { color: isSelected ? 'white' : (isDarkMode ? '#d1d5db' : '#374151') }]}>
-              {item.count}
-            </Text>
-          </View>
-        )}
-        {item.count > 0 && isHorizontal && (
-          <Text style={[styles.countText, { color: isSelected ? primaryColor : (isDarkMode ? '#9ca3af' : '#6b7280') }]}>
-            ({item.count})
-          </Text>
-        )}
-      </Pressable>
-    );
-  }, [selectedLcpNapId, colorPalette, isDarkMode, handleLcpNapSelect]);
-
-  const getPinSize = (delta: number) => {
-    if (delta < 0.005) return 20;
-    if (delta < 0.02) return 17;
-    if (delta < 0.1) return 14;
-    if (delta < 0.5) return 12;
-    if (delta < 2) return 10;
-    return 8;
+    if (suggestion.type === 'lcpnap') {
+      handleLocationSelect(suggestion.data);
+    } else {
+      setIsLoading(true);
+      try {
+        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&fields=geometry&key=${GOOGLE_MAPS_API_KEY}`;
+        const response = await axios.get(url);
+        if (response.data && response.data.result && response.data.result.geometry) {
+          const { lat, lng } = response.data.result.geometry.location;
+          mapRef.current?.animateToRegion({
+            latitude: lat,
+            longitude: lng,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01
+          }, 1000);
+          setMapCenter({ latitude: lat, longitude: lng });
+        }
+      } catch (err) {
+        console.error('Place details error:', err);
+        Alert.alert('Error', 'Could not get location details');
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
-  const markersToDisplay = getMarkersToDisplay;
+  const pinSize = getPinSize(currentDelta);
 
   return (
-    <View style={[styles.container, { backgroundColor: isDarkMode ? '#030712' : '#f9fafb', flexDirection: isTablet ? 'row' : 'column' }]}>
-      {/* Desktop Sidebar */}
+    <View style={[styles.container, { backgroundColor: '#f9fafb', flexDirection: isTablet ? 'row' : 'column' }]}>
       {isTablet && userRole !== 2 && (
-        <View style={[styles.sidebar, { width: sidebarWidth, backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-          <View style={[styles.sidebarHeader, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-            <Text style={[styles.sidebarTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>LCP/NAP Locations</Text>
+        <View style={[styles.sidebar, { backgroundColor: '#ffffff', borderColor: '#e5e7eb' }]}>
+          <View style={[styles.sidebarHeader, { borderColor: '#e5e7eb' }]}>
+            <Text style={[styles.sidebarTitle, { color: '#111827' }]}>LCP/NAP Locations</Text>
           </View>
-
-          <ScrollView style={styles.flex1}>
-            {lcpNapItems.map((item) => renderLocationItem(item, false))}
-          </ScrollView>
+          <View style={styles.flex1}>
+            <FlashList
+              data={lcpNapItems}
+              keyExtractor={i => String(i.id)}
+              renderItem={({ item }) => (
+                <LcpNapSidebarItem
+                  item={item}
+                  isSelected={(item.id === 0 && selectedLcpNapId === 'all') || (item.id !== 0 && selectedLcpNapId === item.id)}
+                  primaryColor={primaryColor}
+                  onPress={handleLcpNapSelect}
+                />
+              )}
+            />
+          </View>
         </View>
       )}
 
-      {/* Map View Area */}
-      <View style={[styles.flex1, { backgroundColor: isDarkMode ? '#111827' : '#ffffff' }]}>
+      <View style={[styles.flex1, { backgroundColor: '#ffffff' }]}>
         <View style={styles.flexColumnFull}>
-          <View style={[styles.searchContainer, { backgroundColor: isDarkMode ? '#111827' : '#ffffff', borderColor: isDarkMode ? '#374151' : '#e5e7eb', paddingTop: isTablet ? 16 : 60 }]}>
+          <View
+            style={[styles.searchContainer, { backgroundColor: '#ffffff', borderColor: '#e5e7eb', paddingTop: isTablet ? 16 : 60 }]}
+            onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+          >
             <View style={styles.headerInputsRow}>
-              <View style={[styles.searchWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb', flex: 1 }]}>
-                <Search size={20} color={isDarkMode ? '#9ca3af' : '#6b7280'} style={styles.iconMargin} />
-                <TextInput
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  placeholder="Search locations..."
-                  placeholderTextColor="#9ca3af"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
+              <View style={[styles.searchWrapper, { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb', flex: 1 }]}>
+                <View style={styles.flex1}>
+                  <TextInput
+                    style={[styles.searchInput, { color: '#111827' }]}
+                    placeholder="Search Lcpnap or Places..."
+                    placeholderTextColor="#9ca3af"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
+                  />
+                  {isSearchingSuggestions && (
+                    <View style={styles.searchingLoader}>
+                      <ActivityIndicator size="small" color={primaryColor} />
+                    </View>
+                  )}
+                </View>
               </View>
 
-              <View style={[styles.limitWrapper, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-                <MapPin size={18} color={colorPalette?.primary || '#7c3aed'} style={styles.iconMargin} />
+              <View style={[styles.limitWrapper, { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' }]}>
+                <MapPin size={18} color={primaryColor} style={styles.iconMargin} />
                 <TextInput
-                  style={[styles.limitInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  style={[styles.limitInput, { color: '#111827' }]}
                   placeholder="Limit"
                   placeholderTextColor="#9ca3af"
                   value={pinLimit}
-                  onChangeText={(val) => setPinLimit(val.replace(/[^0-9]/g, ''))}
+                  onChangeText={v => setPinLimit(v.replace(/[^0-9]/g, ''))}
                   keyboardType="numeric"
                   maxLength={4}
                 />
@@ -432,138 +514,95 @@ const LcpNapLocation: React.FC = () => {
               <MapView
                 ref={mapRef}
                 style={styles.map}
-                initialRegion={{
-                  latitude: 12.8797,
-                  longitude: 121.7740,
-                  latitudeDelta: 12,
-                  longitudeDelta: 12
-                }}
+                initialRegion={{ latitude: 12.8797, longitude: 121.7740, latitudeDelta: 12, longitudeDelta: 12 }}
                 minZoomLevel={5.8}
                 maxZoomLevel={20}
-                rotateEnabled={false}
-                pitchEnabled={false}
-                showsUserLocation={true}
-                showsMyLocationButton={true}
-                onUserLocationChange={(event: any) => {
-                  const { coordinate } = event.nativeEvent;
-                  if (coordinate) {
-                    setUserLocation({
-                      latitude: coordinate.latitude,
-                      longitude: coordinate.longitude
-                    });
-                  }
+                showsUserLocation
+                showsMyLocationButton
+                onUserLocationChange={e => e.nativeEvent.coordinate && setUserLocation(e.nativeEvent.coordinate)}
+                onRegionChangeComplete={r => {
+                  setCurrentDelta(r.latitudeDelta);
+                  setMapCenter({ latitude: r.latitude, longitude: r.longitude });
+                  setCurrentRegion(r);
                 }}
-                onRegionChangeComplete={(region: any) => {
-                  setCurrentDelta(region.latitudeDelta);
-                  setMapCenter({
-                    latitude: region.latitude,
-                    longitude: region.longitude
-                  });
-                }}
-                onMapReady={handleMapReady}
-                customMapStyle={[
-                  {
-                    featureType: 'poi',
-                    elementType: 'labels',
-                    stylers: [{ visibility: 'off' }],
-                  },
-                  {
-                    featureType: 'poi',
-                    elementType: 'geometry',
-                    stylers: [{ visibility: 'off' }],
-                  },
-                ]}
+                onMapReady={() => mapRef.current?.setMapBoundaries({ latitude: 21.1, longitude: 126.6 }, { latitude: 4.4, longitude: 114.1 })}
+                customMapStyle={[{ featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] }]}
               >
-                {userLocation && (
-                  <Circle
-                    key="user-location-circle"
-                    center={userLocation}
-                    radius={100}
-                    fillColor="rgba(59, 130, 246, 0.2)"
-                    strokeColor="rgba(59, 130, 246, 0.5)"
-                    strokeWidth={2}
-                  />
-                )}
-                {markersToDisplay.map((location) => (
-                  <Marker
-                    key={location.id}
-                    coordinate={{
-                      latitude: location.latitude,
-                      longitude: location.longitude
-                    }}
-                    title={location.lcpnap_name}
-                    description={`LCP: ${location.lcp_name} | NAP: ${location.nap_name}`}
-                    onPress={() => handleLocationSelect(location)}
-                    anchor={{ x: 0.5, y: 0.5 }}
-                  >
-                    <View style={{
-                      width: getPinSize(currentDelta),
-                      height: getPinSize(currentDelta),
-                      borderRadius: getPinSize(currentDelta) / 2,
-                      backgroundColor: '#22c55e',
-                      borderWidth: getPinSize(currentDelta) > 10 ? 1.5 : 0.5,
-                      borderColor: 'white',
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 1 },
-                      shadowOpacity: getPinSize(currentDelta) > 10 ? 0.2 : 0,
-                      shadowRadius: 2,
-                      elevation: getPinSize(currentDelta) > 10 ? 3 : 0,
-                    }} />
-                  </Marker>
+                {userLocation && <Circle center={userLocation} radius={100} fillColor="rgba(59, 130, 246, 0.1)" strokeColor="rgba(59, 130, 246, 0.4)" strokeWidth={2} />}
+                {markersToDisplay.map(loc => (
+                  <CustomMarker key={loc.id} location={loc} pinSize={pinSize} onPress={handleLocationSelect} />
                 ))}
               </MapView>
             ) : (
-              <View style={[styles.map, { backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', alignItems: 'center', justifyContent: 'center' }]}>
-                <ActivityIndicator size="large" color={colorPalette?.primary || '#7c3aed'} />
-                <Text style={{ marginTop: 12, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Map paused while adding new location...</Text>
+              <View style={[styles.map, styles.pausedMap, { backgroundColor: '#f3f4f6' }]}>
+                <ActivityIndicator size="large" color={primaryColor} />
+                <Text style={{ marginTop: 12, color: '#6b7280' }}>Map paused...</Text>
               </View>
             )}
 
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <>
+                <Pressable
+                  style={styles.dropdownBackdrop}
+                  onPress={() => setShowSuggestions(false)}
+                />
+                <View style={[styles.suggestionsDropdown, { top: 0, backgroundColor: '#ffffff', borderColor: '#e5e7eb' }]}>
+                  <ScrollView keyboardShouldPersistTaps="always">
+                    {searchSuggestions.map((item) => {
+                      if (item.type === 'header') {
+                        return (
+                          <View key={item.id} style={[styles.suggestionHeader, { backgroundColor: '#f9fafb', borderBottomColor: '#f3f4f6' }]}>
+                            <Text style={[styles.suggestionHeaderText, { color: '#6b7280' }]}>
+                              {item.title}
+                            </Text>
+                          </View>
+                        );
+                      }
+                      return (
+                        <Pressable
+                          key={item.id}
+                          style={[styles.suggestionItem, { borderBottomColor: '#f3f4f6' }]}
+                          onPress={() => handleSuggestionSelect(item)}
+                        >
+                          <View style={styles.suggestionIcon}>
+                            {item.type === 'lcpnap' ? (
+                              <MapPin size={18} color={primaryColor} />
+                            ) : (
+                              <Navigation size={18} color="#9ca3af" />
+                            )}
+                          </View>
+                          <View style={styles.suggestionText}>
+                            <Text style={[styles.suggestionTitle, { color: '#111827' }]} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            {item.subtitle && (
+                              <Text style={[styles.suggestionSubtitle, { color: '#6b7280' }]} numberOfLines={1}>
+                                {item.subtitle}
+                              </Text>
+                            )}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </>
+            )}
+
             <View style={styles.mapActionButtons}>
-              <Pressable
-                onPress={() => setShowAddModal(true)}
-                style={[styles.mapActionButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
-              >
+              <Pressable onPress={() => setShowAddModal(true)} style={[styles.mapActionButton, { backgroundColor: primaryColor }]}>
                 <Plus size={24} color="white" />
               </Pressable>
-
-              <Pressable
-                onPress={async () => {
-                  try {
-                    const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
-                    if (status !== 'granted') {
-                      Alert.alert('Permission denied', 'Permission to access location was denied');
-                      return;
-                    }
-
-                    const location = await ExpoLocation.getCurrentPositionAsync({
-                      accuracy: ExpoLocation.Accuracy.Balanced,
-                    });
-
-                    if (mapRef.current) {
-                      mapRef.current.animateToRegion({
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                        latitudeDelta: 0.01,
-                        longitudeDelta: 0.01
-                      }, 1000);
-                    }
-                  } catch (error) {
-                    console.error('Error getting my location:', error);
-                    Alert.alert('Error', 'Unable to get your current location. Make sure location services are enabled.');
-                  }
-                }}
-                style={[styles.mapActionButton, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', marginTop: 12 }]}
-              >
-                <Navigation size={24} color={isDarkMode ? '#ffffff' : '#111827'} />
+              <Pressable onPress={handleGetMyLocation} style={[styles.mapActionButton, { backgroundColor: '#ffffff', marginTop: 12 }]}>
+                <Navigation size={24} color={'#111827'} />
               </Pressable>
             </View>
 
             {isLoading && (
-              <View style={[styles.loaderOverlay, { backgroundColor: isDarkMode ? 'rgba(17, 24, 39, 0.75)' : 'rgba(243, 244, 246, 0.75)' }]}>
+              <View style={[styles.loaderOverlay, { backgroundColor: 'rgba(243, 244, 246, 0.7)' }]}>
                 <View style={styles.loaderContent}>
                   <ActivityIndicator size="large" color="#f97316" />
-                  <Text style={{ fontSize: 14, color: isDarkMode ? '#ffffff' : '#111827' }}>Loading map...</Text>
+                  <Text style={{ fontSize: 14, color: '#111827' }}>Loading map data...</Text>
                 </View>
               </View>
             )}
@@ -571,200 +610,60 @@ const LcpNapLocation: React.FC = () => {
         </View>
       </View>
 
-      <AddLcpNapLocationModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSave={handleSaveLocation}
-      />
+      <AddLcpNapLocationModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={() => loadLocations()} />
 
       {selectedLocation && (
-        isTablet ? (
-          <View style={styles.detailsContainer}>
-            <LcpNapLocationDetails
-              location={selectedLocation!}
-              onClose={() => setSelectedLocation(null)}
-              isMobile={false}
-            />
-          </View>
-        ) : (
-          <Modal
-            visible={!!selectedLocation}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={() => setSelectedLocation(null)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.mobileDetailsContainer}>
-                <LcpNapLocationDetails
-                  location={selectedLocation!}
-                  onClose={() => setSelectedLocation(null)}
-                  isMobile={true}
-                />
-              </View>
+        <Modal visible={!!selectedLocation} animationType="slide" transparent onRequestClose={() => setSelectedLocation(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.mobileDetailsContainer, isTablet && { width: 500, alignSelf: 'center', marginBottom: 40, borderRadius: 20 }]}>
+              <LcpNapLocationDetails location={selectedLocation!} onClose={() => setSelectedLocation(null)} isMobile={!isTablet} />
             </View>
-          </Modal>
-        )
+          </View>
+        </Modal>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    overflow: 'hidden',
-  },
-  flex1: {
-    flex: 1,
-  },
-  flexColumnFull: {
-    flexDirection: 'column',
-    flex: 1,
-  },
-  sidebar: {
-    borderRightWidth: 1,
-    flexShrink: 0,
-    flexDirection: 'column',
-    position: 'relative',
-  },
-  sidebarHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    flexShrink: 0,
-  },
-  sidebarTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  locationItemHorizontal: {
-    justifyContent: 'center',
-    minWidth: 100,
-  },
-  locationItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationItemText: {
-    fontSize: 14,
-  },
-  iconMargin: {
-    marginRight: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9999,
-  },
-  badgeText: {
-    fontSize: 12,
-  },
-  countText: {
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  searchContainer: {
-    padding: 16,
-    borderBottomWidth: 1,
-    flexShrink: 0,
-  },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  headerInputsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  limitWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    width: 90,
-  },
-  limitInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
-    textAlign: 'center',
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
-  },
-  mapContainer: {
-    flex: 1,
-    position: 'relative',
-    zIndex: 0,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  mapActionButtons: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    flexDirection: 'column',
-    alignItems: 'center',
-    zIndex: 1001,
-  },
-  mapActionButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  loaderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  loaderContent: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 12,
-  },
-  detailsContainer: {
-    flexShrink: 0,
-    overflow: 'hidden',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  mobileDetailsContainer: {
-    height: '80%',
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-  },
+  container: { flex: 1, overflow: 'hidden' },
+  flex1: { flex: 1 },
+  flexColumnFull: { flexDirection: 'column', flex: 1 },
+  sidebar: { width: 256, borderRightWidth: 1, flexShrink: 0 },
+  sidebarHeader: { padding: 16, borderBottomWidth: 1 },
+  sidebarTitle: { fontSize: 18, fontWeight: '700' },
+  locationItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
+  locationItemContent: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  locationItemText: { fontSize: 14, flex: 1 },
+  iconMargin: { marginRight: 8 },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  searchContainer: { padding: 16, borderBottomWidth: 1, zIndex: 100 },
+  searchWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
+  headerInputsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  limitWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, width: 100 },
+  limitInput: { flex: 1, fontSize: 14, padding: 0, textAlign: 'center' },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
+  mapContainer: { flex: 1, position: 'relative' },
+  map: { ...StyleSheet.absoluteFillObject },
+  pausedMap: { alignItems: 'center', justifyContent: 'center' },
+  mapActionButtons: { position: 'absolute', bottom: 24, right: 24, alignItems: 'center' },
+  mapActionButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
+  loaderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  loaderContent: { alignItems: 'center', gap: 12 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'flex-end' },
+  mobileDetailsContainer: { height: '85%', backgroundColor: '#ffffff', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  markerPin: { backgroundColor: '#22c55e', borderColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 3 },
+  suggestionsDropdown: { position: 'absolute', top: 68, left: 16, right: 16, maxHeight: 400, borderRadius: 12, borderWidth: 1, zIndex: 1000, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, overflow: 'hidden' },
+  dropdownBackdrop: { position: 'absolute', top: -100, left: -100, right: -100, bottom: -2000, zIndex: 999 },
+  suggestionItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1 },
+  suggestionHeader: { paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1 },
+  suggestionHeaderText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  suggestionIcon: { marginRight: 12 },
+  suggestionText: { flex: 1 },
+  suggestionTitle: { fontSize: 14, fontWeight: '600' },
+  suggestionSubtitle: { fontSize: 12, marginTop: 2 },
+  searchingLoader: { position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' },
 });
 
 export default LcpNapLocation;

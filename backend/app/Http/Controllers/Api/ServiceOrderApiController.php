@@ -9,8 +9,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use App\Models\BillingAccount;
-use App\Services\ManualRadiusOperationsService;
 use App\Services\PppoeUsernameService;
+use App\Services\ManualRadiusOperationsService;
+use App\Models\RadiusConfig;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Auth;
 
 class ServiceOrderApiController extends Controller
@@ -748,7 +750,7 @@ class ServiceOrderApiController extends Controller
                     \Log::info('Triggering auto-migration for Service Order', [
                         'account_no' => $serviceOrder->account_no
                     ]);
-                    $migrationStatus = $this->attemptMigration($billingAccount);
+                    $migrationStatus = $this->attemptMigration($billingAccount, $repairCategory);
 
                     // Update job_orders table with new LCPNAP, port, and vlan for relocation categories
                     $newLcpnap = $request->input('new_lcpnap');
@@ -870,24 +872,7 @@ class ServiceOrderApiController extends Controller
             
             \Log::info('[API SERVICE ORDER RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
 
-            // Step 5: Prepare parameters for ManualRadiusOperationsService
-            $params = [
-                'accountNumber' => $accountNo,
-                'username' => $username,
-                'plan' => $plan,
-                'updatedBy' => Auth::user()->email_address ?? 'API Service Order Auto-Reconnect',
-                'serviceOrderId' => $serviceOrderId,
-                'remarks' => 'Service Order Auto-Reconnect'
-            ];
-
-            // Step 6: Call ManualRadiusOperationsService reconnectUser
-            \Log::info('[API SERVICE ORDER RECONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
-            
-            $manualRadiusService = new ManualRadiusOperationsService();
-            $result = $manualRadiusService->reconnectUser($params);
-
-            if ($result['status'] === 'success') {
-                \Log::info('[API SERVICE ORDER RECONNECT SUCCESS] Reconnection completed successfully');
+            \Log::info('[API SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
                 // Send SMS Notification
                 try {
@@ -932,13 +917,26 @@ class ServiceOrderApiController extends Controller
                     \Log::error('[API SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
 
-                // Email Notification is now handled by ManualRadiusOperationsService
-
-                return 'success';
-            } else {
-                \Log::info('[API SERVICE ORDER RECONNECT FAILED] ' . $result['message']);
-                return 'failed';
+            // Email Notification
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+                
+                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                    $emailService = app(\App\Services\EmailQueueService::class);
+                    $emailData = [
+                        'customer_name' => $customerInfo->full_name,
+                        'account_no' => $accountNo,
+                        'plan_name' => $customerInfo->plan_name,
+                        'recipient_email' => $customerInfo->email_address,
+                    ];
+                    $emailService->queueFromTemplate('RECONNECT', $emailData);
+                    \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
+                }
+            } catch (\Exception $e) {
+                \Log::error('[API SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
             }
+
+            return 'success';
 
         } catch (\Exception $e) {
             \Log::error('[API SERVICE ORDER RECONNECT EXCEPTION] ' . $e->getMessage());
@@ -972,30 +970,15 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER DISCONNECT PROCEED] Disconnecting user for account: ' . $accountNo);
 
-            // Prepare parameters for ManualRadiusOperationsService
-            $params = [
-                'accountNumber' => $accountNo,
-                'username' => $username,
-                'remarks' => 'Disconnect',
-                'updatedBy' => 'API Service Order Auto-Disconnect'
-            ];
+            \Log::info('[API SERVICE ORDER DISCONNECT SUCCESS] Disconnection (Local Status) completed successfully');
 
-            // Call ManualRadiusOperationsService disconnectUser
-            \Log::info('[API SERVICE ORDER DISCONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            // Update billing_status_id to 4 (Disconnected)
+            $billingAccount->billing_status_id = 4;
+            $billingAccount->updated_at = now();
+            $billingAccount->updated_by = Auth::id();
+            $billingAccount->save();
             
-            $manualRadiusService = new ManualRadiusOperationsService();
-            $result = $manualRadiusService->disconnectUser($params);
-
-            if ($result['status'] === 'success') {
-                \Log::info('[API SERVICE ORDER DISCONNECT SUCCESS] Disconnection completed successfully');
-
-                // Update billing_status_id to 4 (Disconnected) AFTER successful RADIUS disconnect
-                $billingAccount->billing_status_id = 4;
-                $billingAccount->updated_at = now();
-                $billingAccount->updated_by = Auth::id();
-                $billingAccount->save();
-                
-                \Log::info('[API SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
+            \Log::info('[API SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
 
                 // Send SMS Notification
                 try {
@@ -1063,11 +1046,7 @@ class ServiceOrderApiController extends Controller
                     \Log::error('[API SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
                 }
 
-                return 'success';
-            } else {
-                \Log::info('[API SERVICE ORDER DISCONNECT FAILED] ' . $result['message']);
-                return 'failed';
-            }
+            return 'success';
 
         } catch (\Exception $e) {
             \Log::error('[API SERVICE ORDER DISCONNECT EXCEPTION] ' . $e->getMessage());
@@ -1101,30 +1080,15 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER PULLOUT PROCEED] Executing pullout for account: ' . $accountNo);
 
-            // Prepare parameters for ManualRadiusOperationsService
-            $params = [
-                'accountNumber' => $accountNo,
-                'username' => $username,
-                'remarks' => 'Pullout',
-                'updatedBy' => 'API Service Order Auto-Pullout'
-            ];
+            \Log::info('[API SERVICE ORDER PULLOUT SUCCESS] Disconnection (Local Status) completed successfully');
 
-            // Call ManualRadiusOperationsService disconnectUser
-            \Log::info('[API SERVICE ORDER PULLOUT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
+            // Update billing_status_id to 5 (Pullout)
+            $billingAccount->billing_status_id = 5;
+            $billingAccount->updated_at = now();
+            $billingAccount->updated_by = Auth::id();
+            $billingAccount->save();
             
-            $manualRadiusService = new ManualRadiusOperationsService();
-            $result = $manualRadiusService->disconnectUser($params);
-
-            if ($result['status'] === 'success') {
-                \Log::info('[API SERVICE ORDER PULLOUT SUCCESS] Disconnection completed successfully');
-
-                // Update billing_status_id to 5 (Pullout) AFTER successful RADIUS disconnect
-                $billingAccount->billing_status_id = 5;
-                $billingAccount->updated_at = now();
-                $billingAccount->updated_by = Auth::id();
-                $billingAccount->save();
-                
-                \Log::info('[API SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
+            \Log::info('[API SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
 
                 // Clear technical details
                 DB::table('technical_details')
@@ -1221,11 +1185,7 @@ class ServiceOrderApiController extends Controller
                     \Log::error('[API SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
                 }
 
-                return 'success';
-            } else {
-                \Log::info('[API SERVICE ORDER PULLOUT FAILED] ' . $result['message']);
-                return 'failed';
-            }
+            return 'success';
 
         } catch (\Exception $e) {
             \Log::error('[API SERVICE ORDER PULLOUT EXCEPTION] ' . $e->getMessage());
@@ -1233,7 +1193,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptMigration($billingAccount): string
+    private function attemptMigration($billingAccount, $repairCategory = null): string
     {
         try {
             $accountNo = $billingAccount->account_no;
@@ -1250,6 +1210,7 @@ class ServiceOrderApiController extends Controller
                     'customers.middle_initial',
                     'customers.last_name',
                     'customers.contact_number_primary as mobile_number',
+                    'customers.desired_plan',
                     'technical_details.lcp',
                     'technical_details.nap',
                     'technical_details.port',
@@ -1279,27 +1240,117 @@ class ServiceOrderApiController extends Controller
                 return 'no_change';
             }
 
-            // Prepare parameters for ManualRadiusOperationsService
-            // Password is NOT changed during migration
-            $params = [
-                'accountNumber' => $accountNo,
-                'username' => $oldUsername,
-                'newUsername' => $newUsername,
-                'updatedBy' => 'API Service Order Auto-Migration'
-            ];
-
-            \Log::info('[API SERVICE ORDER MIGRATION EXECUTE] Calling ManualRadiusOperationsService for ' . $oldUsername);
+            // RADIUS ACCOUNT CREATION LOGIC
+            $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
+            $targetCategories = ['relocate', 'transfer lcp/nap/port', 'relocate router', 'transfer lcp nap vlan'];
             
-            $manualRadiusService = new ManualRadiusOperationsService();
-            $result = $manualRadiusService->updateCredentials($params);
+            if (in_array($normalizedCategory, $targetCategories)) {
+                \Log::info('[API SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
+                
+                // STEP 1: DELETE THE OLD ACCOUNT
+                try {
+                    $radiusOps = app(ManualRadiusOperationsService::class);
+                    \Log::info('Triggering deleteAccount for old username: ' . $oldUsername);
+                    $radiusOps->deleteAccount($oldUsername);
+                } catch (\Exception $delEx) {
+                    \Log::error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
+                    // We continue anyway so the new account can be created
+                }
 
-            if ($result['status'] === 'success') {
-                \Log::info('[API SERVICE ORDER MIGRATION SUCCESS] Migration completed successfully');
-                return 'success';
+                $radiusConfig = RadiusConfig::first();
+                if ($radiusConfig) {
+                    $radiusUrl = $radiusConfig->ssl_type . '://' . $radiusConfig->ip . ':' . $radiusConfig->port . '/rest/user-manage/user';
+                    
+                    // Generate new password for relocation/transfer
+                    $newPassword = $pppoeService->generatePassword($customerData);
+                    
+                    // Get plan
+                    $desiredPlan = $fullInfo->desired_plan ?? '';
+                    $planName = $desiredPlan;
+                    if ($desiredPlan && strpos($desiredPlan, ' - ') !== false) {
+                        $planName = trim(explode(' - ', $desiredPlan)[0]);
+                    }
+
+                    $payload = [
+                        'name' => $newUsername,
+                        'group' => $planName,
+                        'password' => $newPassword
+                    ];
+
+                    \Log::info('Submitting to RADIUS API via Service Order (Relocate/Transfer)', [
+                        'url' => $radiusUrl,
+                        'name' => $newUsername,
+                        'group' => $planName
+                    ]);
+
+                    try {
+                        $response = Http::withOptions(['verify' => false])
+                            ->withBasicAuth($radiusConfig->username, $radiusConfig->password)
+                            ->put($radiusUrl, $payload);
+
+                        if ($response->status() === 204 || $response->successful()) {
+                            \Log::info('RADIUS account created successfully. Proceeding with DB updates.');
+                            
+                            // Update technical_details
+                            DB::table('technical_details')
+                                ->where('account_id', $billingAccount->id)
+                                ->update([
+                                    'username' => $newUsername,
+                                    'updated_at' => now(),
+                                    'updated_by' => Auth::user()->name ?? 'System'
+                                ]);
+                            
+                            // Update job_orders: username, pppoe_username, and pppoe_password
+                            DB::table('job_orders')
+                                ->where('account_id', $billingAccount->id)
+                                ->update([
+                                    'pppoe_username' => $newUsername,
+                                    'username' => $newUsername,
+                                    'pppoe_password' => $newPassword,
+                                    'updated_at' => now()
+                                ]);
+
+                            \Log::info('[API SERVICE ORDER MIGRATION SUCCESS] Migration synced successfully after RADIUS success');
+                            return 'success';
+                        } else {
+                            \Log::error('RADIUS account creation failed. DB will NOT be updated for relocation.', [
+                                'status' => $response->status(),
+                                'body' => $response->body()
+                            ]);
+                            return 'radius_failed';
+                        }
+                    } catch (\Exception $radiusEx) {
+                        \Log::error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
+                        return 'exception';
+                    }
+                } else {
+                    \Log::error('Radius config not found');
+                    return 'radius_config_missing';
+                }
             } else {
-                \Log::info('[API SERVICE ORDER MIGRATION FAILED] ' . $result['message']);
-                return 'failed';
+                // For other categories like plain 'migrate', we update DB without RADIUS as before
+                \Log::info('[API SERVICE ORDER MIGRATION PROCEED] Updating database credentials (DB ONLY) for ' . $oldUsername);
+
+                DB::table('technical_details')
+                    ->where('account_id', $billingAccount->id)
+                    ->update([
+                        'username' => $newUsername,
+                        'updated_at' => now(),
+                        'updated_by' => Auth::user()->name ?? 'System'
+                    ]);
+                
+                DB::table('job_orders')
+                    ->where('account_id', $billingAccount->id)
+                    ->update([
+                        'pppoe_username' => $newUsername,
+                        'username' => $newUsername,
+                        'updated_at' => now()
+                    ]);
+
+                \Log::info('[API SERVICE ORDER MIGRATION SUCCESS] DB Only migration completed');
+                return 'success';
             }
+
 
         } catch (\Exception $e) {
             \Log::error('[API SERVICE ORDER MIGRATION EXCEPTION] ' . $e->getMessage());

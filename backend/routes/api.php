@@ -2835,8 +2835,16 @@ Route::prefix('payments')->group(function () {
     Route::post('/status', [\App\Http\Controllers\Api\XenditPaymentController::class, 'checkPaymentStatus']);
     Route::post('/check-pending', [\App\Http\Controllers\Api\XenditPaymentController::class, 'checkPendingPayment']);
     Route::post('/account-balance', [\App\Http\Controllers\Api\XenditPaymentController::class, 'getAccountBalance']);
+    Route::get('/redirect', function(\Illuminate\Http\Request $request) {
+        $to = $request->query('to');
+        if ($to) {
+            return redirect()->away($to);
+        }
+        return response('Missing destination', 400);
+    });
     
     // Test endpoint to verify webhook configuration
+
     Route::get('/webhook-info', function() {
         return response()->json([
             'status' => 'success',

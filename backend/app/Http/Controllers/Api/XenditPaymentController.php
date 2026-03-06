@@ -70,13 +70,32 @@ class XenditPaymentController extends Controller
             // Note: Duplicate check now handled by frontend via check-pending endpoint
             // This allows better UX with resume option
 
+            $redirectUrl = $request->input('redirect_url');
+
             // Generate unique reference number
             $randomSuffix = bin2hex(random_bytes(10));
             $referenceNo = $accountNo . '-' . $randomSuffix;
 
-            // Create redirect URLs - redirect back to portal with success/failure indicators
-            $redirectSuccess = $this->portalLink . '/?payment=success&ref=' . $referenceNo;
-            $redirectFail = $this->portalLink . '/?payment=failed&ref=' . $referenceNo;
+            // Create redirect URLs
+            if ($redirectUrl) {
+                // If the mobile app provides an Expo deep link (e.g., exp://.../--/payment-success)
+                // Use it directly so the in-app browser can intercept and close automatically
+                $redirectSuccess = $redirectUrl;
+                // For failure, we can just replace success with failed or just use the same URL
+                // The mobile app will check the status anyway upon returning
+                $redirectFail = str_replace('payment-success', 'payment-failed', $redirectUrl);
+            } else {
+                // Determine portal URL from request host
+                $requestHost = $request->getHost();
+                if (strpos($requestHost, 'admin.') === 0 || strpos($requestHost, 'localhost') !== false) {
+                    $portalUrl = $this->portalLink; // default from env
+                } else {
+                    $portalUrl = 'https://' . $requestHost;
+                }
+
+                $redirectSuccess = rtrim($portalUrl, '/') . '/?payment=success&ref=' . $referenceNo;
+                $redirectFail = rtrim($portalUrl, '/') . '/?payment=failed&ref=' . $referenceNo;
+            }
 
             // Parse customer name
             $fullNameParts = explode(' ', trim($account->full_name ?? 'Customer'));

@@ -552,7 +552,8 @@ class RelatedDataController extends Controller
                     'payment_received_previous',
                     'remaining_balance_previous',
                     'amount_due',
-                    'total_amount_due'
+                    'total_amount_due',
+                    'print_link'
                 ])
                 ->orderBy('statement_date', 'desc')
                 ->get();

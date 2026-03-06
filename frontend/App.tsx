@@ -8,6 +8,7 @@ import { userSettingsService } from './src/services/userSettingsService';
 import PaymentResultModal from './src/components/PaymentResultModal';
 import SplashScreen from './src/components/SplashScreen';
 import { settingsColorPaletteService } from './src/services/settingsColorPaletteService';
+import { PaymentSuccessProvider } from './src/contexts/PaymentSuccessContext';
 
 import { View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -112,7 +113,7 @@ function App() {
 
   if (isLoggedIn) {
     return (
-      <>
+      <PaymentSuccessProvider>
         <Dashboard onLogout={handleLogout} />
         <PaymentResultModal
           isOpen={showPaymentResult}
@@ -121,7 +122,7 @@ function App() {
           referenceNo={paymentRef}
           isDarkMode={false}
         />
-      </>
+      </PaymentSuccessProvider>
     );
   }
 

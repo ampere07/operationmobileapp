@@ -43,7 +43,7 @@ export const getLCPs = async (
 };
 
 export const getAllLCPs = async (): Promise<LcpApiResponse<LCP[]>> => {
-  return getLCPs(1, 1000);
+  return getLCPs(1, 10000);
 };
 
 export const getLCPById = async (id: number): Promise<LcpApiResponse<LCP>> => {

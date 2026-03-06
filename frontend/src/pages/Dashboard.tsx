@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Dimensions, useWindowDimensions, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Dimensions, useWindowDimensions, ActivityIndicator, Linking, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 // import { InvoiceProvider } from '../contexts/InvoiceContext';
 // import { OverdueProvider } from '../contexts/OverdueContext';
 // import { DCNoticeProvider } from '../contexts/DCNoticeContext';
@@ -141,7 +143,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         console.log('Active section changed to:', activeSection);
     }, [activeSection]);
 
-    const renderContent = () => {
+    const content = useMemo(() => {
         switch (activeSection) {
             // Customer Routes
             case 'customer-dashboard':
@@ -150,105 +152,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <Bills initialTab={billsInitialTab} />;
             case 'customer-support':
                 return <Support forceLightMode={true} />;
-
-            // case 'live-monitor':
-            //     return <LiveMonitor />;
             case 'support':
                 return <Support />;
-            // case 'soa':
-            //     return <SOA />;
-            // case 'invoice':
-            //     return <Invoice />;
-            // case 'overdue':
-            //     return <Overdue />;
-            // case 'dc-notice':
-            //     return <DCNotice />;
-            // case 'discounts':
-            //     return <Discounts />;
-            // case 'billing-config':
-            //     return <BillingConfig />;
-            // case 'radius-config':
-            //     return <RadiusConfig />;
-            // case 'sms-config':
-            //     return <SmsConfig />;
-            // case 'sms-template':
-            //     return <SMSTemplate />;
-            // case 'email-templates':
-            //     return <EmailTemplates />;
-            // case 'pppoe-setup':
-            //     return <PPPoESetup />;
-            // case 'concern-config':
-            //     return <ConcernConfig />;
-
-
-            // case 'staggered-payment':
-            //     return <StaggeredPayment />;
-            // case 'mass-rebate':
-            //     return <MassRebate />;
-            // case 'sms-blast':
-            //     return <SMSBlast />;
-            // case 'sms-blast-logs':
-            //     return <SMSBlastLogs />;
-            // case 'disconnected-logs':
-            //     return <DisconnectionLogs />;
-            // case 'reconnection-logs':
-            //     return <ReconnectionLogs />;
-            // case 'user-management':
-            //     return <UserManagement />;
-            // case 'organization-management':
-            //     return <OrganizationManagement />;
-            // case 'group-management':
-            //     return <GroupManagement />;
-            // case 'application-management':
-            //     return <ApplicationManagement />;
-            // case 'customer':
-            //     return <Customer initialSearchQuery={customerInitialSearch} autoOpenAccountNo={customerAutoOpenAccountNo} />;
-            // case 'transaction-list':
-            //     return (
-            //         <TransactionList onNavigate={(section, search) => handleSectionChange(section, search)} />
-            //     );
-            // case 'payment-portal':
-            //     return <PaymentPortal />;
             case 'job-order':
                 return <JobOrder />;
             case 'service-order':
                 return <ServiceOrder />;
             case 'work-order':
                 return <WorkOrder />;
-            // case 'application-visit':
-            //     return <ApplicationVisit />;
-            // case 'location-list':
-            //     return <LocationList />;
-            // case 'plan-list':
-            //     return <PlanList />;
-            // case 'promo-list':
-            //     return <PromoList />;
-            // case 'router-models':
-            //     return <RouterModelList />;
-            // case 'lcp':
-            //     return <LcpList />;
-            // case 'nap':
-            //     return <NapList />;
             case 'lcp-nap-location':
                 return <LcpNapLocation />;
-            // case 'usage-type':
-            //     return <UsageTypeList />;
-            // case 'ports':
-            //     return <Ports />;
-            // case 'status-remarks-list':
-            //     return <StatusRemarksList />;
             case 'inventory':
                 return <Inventory />;
             case 'inventory-category-list':
                 return <InventoryCategoryList />;
-            // case 'expenses-log':
-            //     return <ExpensesLog />;
-            // case 'logs':
-            //     return <Logs />;
-            // case 'soa-generation':
-            //     return <SOAGeneration />;
-            // case 'settings':
-            //     return <Settings />;
             case 'menu':
                 return <Menu onLogout={onLogout} />;
             case 'dashboard':
@@ -261,7 +178,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 }
                 return <DashboardContent />;
         }
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSection, billsInitialTab, userData?.role_id, onLogout]);
 
     const handleSearch = (query: string) => {
         setSearchQuery(query);
@@ -278,6 +196,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
     const closeMobileMenu = () => {
         setIsMobileMenuOpen(false);
+    };
+
+    const handleOpenChat = async () => {
+        const webUrl = 'https://m.me/atssfiber2022';
+        const messengerAppUrl = 'fb-messenger://user-thread/';
+        try {
+            const canOpenMessenger = await Linking.canOpenURL(messengerAppUrl);
+            if (canOpenMessenger) {
+                await Linking.openURL(webUrl);
+            } else {
+                await WebBrowser.openBrowserAsync(webUrl);
+            }
+        } catch (error) {
+            await WebBrowser.openBrowserAsync(webUrl);
+        }
     };
 
     const handleSectionChange = (section: string, extra?: string) => {
@@ -334,7 +267,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                     backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
                                 }}>
                                     <View style={{ height: '100%', overflow: 'scroll' }}>
-                                        {renderContent()}
+                                        {content}
                                     </View>
                                 </View>
 
@@ -350,6 +283,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                         />
                                     </View>
                                 )}
+
+                                {/* Persistent Floating Messenger Button for Customers (role_id 3) */}
+                                {String(userData?.role_id) === '3' && activeSection !== 'menu' && (
+                                    <View style={{
+                                        position: 'absolute',
+                                        bottom: 95,
+                                        left: 20,
+                                        zIndex: 99999,
+                                        elevation: 10,
+                                    }}>
+                                        <Pressable
+                                            onPress={handleOpenChat}
+                                            style={({ pressed }) => ({
+                                                transform: [{ scale: pressed ? 0.9 : 1 }],
+                                            })}
+                                        >
+                                            <View style={{
+                                                width: 56,
+                                                height: 56,
+                                                borderRadius: 28,
+                                                backgroundColor: colorPalette?.primary || '#ef4444',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                shadowColor: '#000',
+                                                shadowOffset: { width: 0, height: 4 },
+                                                shadowOpacity: 0.3,
+                                                shadowRadius: 5,
+                                                elevation: 8,
+                                            }}>
+                                                <MaterialCommunityIcons name="facebook-messenger" size={30} color="#fff" />
+                                            </View>
+                                        </Pressable>
+                                    </View>
+                                )}
+
                             </View>
                         </InventoryProvider>
                     </ServiceOrderProvider>

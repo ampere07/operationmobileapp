@@ -41,7 +41,7 @@ export const getNAPs = async (
 };
 
 export const getAllNAPs = async (): Promise<NapApiResponse<NAP[]>> => {
-    return getNAPs(1, 1000);
+    return getNAPs(1, 10000);
 };
 
 export const getNAPById = async (id: number): Promise<NapApiResponse<NAP>> => {

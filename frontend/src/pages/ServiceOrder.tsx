@@ -11,15 +11,18 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 
 type MobileView = 'orders' | 'details';
 
+// Utility functions outside component to avoid recreation
 const StatusText = React.memo(({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
 
   let textColor = '';
+  const lowerStatus = status.toLowerCase().trim();
 
   if (type === 'support') {
-    switch (status.toLowerCase()) {
+    switch (lowerStatus) {
       case 'resolved':
       case 'completed':
+      case 'done':
         textColor = '#4ade80';
         break;
       case 'in-progress':
@@ -37,8 +40,9 @@ const StatusText = React.memo(({ status, type }: { status?: string, type: 'suppo
         textColor = '#9ca3af';
     }
   } else {
-    switch (status.toLowerCase()) {
+    switch (lowerStatus) {
       case 'completed':
+      case 'done':
         textColor = '#4ade80';
         break;
       case 'scheduled':
@@ -64,6 +68,43 @@ const StatusText = React.memo(({ status, type }: { status?: string, type: 'suppo
     </Text>
   );
 });
+
+const ServiceOrderCard = React.memo(({
+  serviceOrder,
+  isSelected,
+  onPress,
+  userRole,
+  userRoleId
+}: {
+  serviceOrder: ServiceOrder,
+  isSelected: boolean,
+  onPress: (so: ServiceOrder) => void,
+  userRole: string,
+  userRoleId: number | null
+}) => (
+  <Pressable
+    onPress={() => onPress(serviceOrder)}
+    style={[so.cardRow, {
+      backgroundColor: isSelected ? '#f3f4f6' : 'transparent',
+      borderColor: '#e5e7eb'
+    }]}
+  >
+    <View style={so.cardInner}>
+      <View style={so.cardLeft}>
+        <Text style={[so.cardName, { color: '#111827' }]}>{serviceOrder.fullName}</Text>
+        <Text style={[so.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
+          {serviceOrder.timestamp} | {serviceOrder.fullAddress}
+        </Text>
+      </View>
+      <View style={so.cardRight}>
+        <StatusText
+          status={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? serviceOrder.visitStatus : serviceOrder.supportStatus}
+          type={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? 'visit' : 'support'}
+        />
+      </View>
+    </View>
+  </Pressable>
+));
 
 const so = StyleSheet.create({
   container: { height: '100%', overflow: 'hidden' },
@@ -182,7 +223,7 @@ const ServiceOrderPage: React.FC = () => {
         try {
           const userData = JSON.parse(authResult.value);
           const role = userData.role || '';
-          const roleId = userData.role_id || null;
+          const roleId = userData.role_id ? Number(userData.role_id) : null;
           setUserRole(role);
           setUserRoleId(roleId);
           setUserEmail(userData.email || '');
@@ -216,62 +257,57 @@ const ServiceOrderPage: React.FC = () => {
 
   // locationItems removed
 
+  const itemExtractorMap: Record<string, (item: ServiceOrder) => string> = {
+    fullName: item => item.fullName,
+    fullAddress: item => item.fullAddress,
+    concern: item => item.concern || '',
+  };
+
   const filteredServiceOrders = useMemo(() => {
     const isTechnician = userRole.toLowerCase() === 'technician' || userRoleId === 2 ||
       userRole.toLowerCase() === 'agent' || userRoleId === 4;
 
     const lowerSearch = debouncedSearch.toLowerCase();
+    const isSearchEmpty = lowerSearch === '';
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    let filtered = serviceOrders.filter(serviceOrder => {
-      // 1. Technician 7-Day Filter for 'Resolved' tickets
-      if (isTechnician) {
-        const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
-
-        if (supportStatus === 'resolved') {
-          const updatedAt = serviceOrder.rawUpdatedAt;
-
-          if (updatedAt) {
-            const updatedDate = new Date(updatedAt);
-            if (!isNaN(updatedDate.getTime())) {
-              const sevenDaysAgo = new Date();
-              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-              if (updatedDate < sevenDaysAgo) {
+    return serviceOrders
+      .filter(serviceOrder => {
+        // 1. Technician 7-Day Filter for 'Resolved' tickets
+        if (isTechnician) {
+          const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
+          if (supportStatus === 'resolved') {
+            const updatedAt = serviceOrder.rawUpdatedAt;
+            if (updatedAt) {
+              const updatedDate = new Date(updatedAt);
+              if (!isNaN(updatedDate.getTime()) && updatedDate < sevenDaysAgo) {
                 return false;
               }
             }
           }
         }
-      }
 
-      const matchesSearch = debouncedSearch === '' ||
-        serviceOrder.fullName.toLowerCase().includes(lowerSearch) ||
-        serviceOrder.fullAddress.toLowerCase().includes(lowerSearch) ||
-        (serviceOrder.concern && serviceOrder.concern.toLowerCase().includes(lowerSearch));
+        const matchesSearch = isSearchEmpty ||
+          itemExtractorMap.fullName(serviceOrder).toLowerCase().includes(lowerSearch) ||
+          itemExtractorMap.fullAddress(serviceOrder).toLowerCase().includes(lowerSearch) ||
+          itemExtractorMap.concern(serviceOrder).toLowerCase().includes(lowerSearch);
 
-      if (!matchesSearch) return false;
+        if (!matchesSearch) return false;
 
-      // Role-based filtering: Agents (role_id 4) only see their own referrals
-      if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
-        const referredBy = (serviceOrder.referredBy || '').toLowerCase();
-        const matchesAgent =
-          (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
-          (userEmail && referredBy.includes(userEmail.toLowerCase()));
+        // Role-based filtering: Agents (role_id 4) only see their own referrals
+        if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+          const referredBy = (serviceOrder.referredBy || '').toLowerCase();
+          const matchesAgent =
+            (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+            (userEmail && referredBy.includes(userEmail.toLowerCase()));
 
-        if (!matchesAgent) return false;
-      }
+          if (!matchesAgent) return false;
+        }
 
-      return true;
-    });
-
-    // Sort by ID descending
-    filtered.sort((a, b) => {
-      const idA = parseInt(a.id) || 0;
-      const idB = parseInt(b.id) || 0;
-      return idB - idA;
-    });
-
-    return filtered;
+        return true;
+      })
+      .sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
   }, [serviceOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail]);
 
   const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
@@ -441,28 +477,13 @@ const ServiceOrderPage: React.FC = () => {
                     </View>
                   }
                   renderItem={({ item: serviceOrder }) => (
-                    <Pressable
-                      onPress={() => !isTablet ? handleMobileRowClick(serviceOrder) : handleRowClick(serviceOrder)}
-                      style={[so.cardRow, {
-                        backgroundColor: selectedServiceOrder?.id === serviceOrder.id ? '#f3f4f6' : 'transparent',
-                        borderColor: '#e5e7eb'
-                      }]}
-                    >
-                      <View style={so.cardInner}>
-                        <View style={so.cardLeft}>
-                          <Text style={[so.cardName, { color: '#111827' }]}>{serviceOrder.fullName}</Text>
-                          <Text style={[so.cardSub, { color: '#4b5563' }]}>
-                            {serviceOrder.timestamp} | {serviceOrder.fullAddress}
-                          </Text>
-                        </View>
-                        <View style={so.cardRight}>
-                          <StatusText
-                            status={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? serviceOrder.visitStatus : serviceOrder.supportStatus}
-                            type={(userRole.toLowerCase() === 'technician' || userRoleId === 2) ? 'visit' : 'support'}
-                          />
-                        </View>
-                      </View>
-                    </Pressable>
+                    <ServiceOrderCard
+                      serviceOrder={serviceOrder}
+                      isSelected={selectedServiceOrder?.id === serviceOrder.id}
+                      onPress={!isTablet ? handleMobileRowClick : handleRowClick}
+                      userRole={userRole}
+                      userRoleId={userRoleId}
+                    />
                   )}
                 />
               </View>
@@ -521,6 +542,8 @@ const ServiceOrderPage: React.FC = () => {
               serviceOrder={selectedServiceOrder as ServiceOrder}
               onClose={handleMobileBack}
               isMobile={true}
+              userRoleProp={userRole}
+              userRoleIdProp={userRoleId === null ? null : Number(userRoleId)}
             />
           </View>
         )
@@ -533,6 +556,8 @@ const ServiceOrderPage: React.FC = () => {
               serviceOrder={selectedServiceOrder as ServiceOrder}
               onClose={() => setSelectedServiceOrderRaw(null)}
               isMobile={false}
+              userRoleProp={userRole}
+              userRoleIdProp={userRoleId === null ? null : Number(userRoleId)}
             />
           </View>
         )

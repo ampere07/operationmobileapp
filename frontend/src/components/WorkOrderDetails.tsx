@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,74 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WorkOrderDetailsProps } from '../types/workOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
+const formatDate = (dateStr?: string | null): string => {
+  if (!dateStr) return 'Not set';
+  try {
+    return new Date(dateStr).toLocaleString();
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+const getStatusColor = (status: string | undefined | null): string => {
+  if (!status) return '#9ca3af';
+  const s = status.toLowerCase().trim();
+  switch (s) {
+    case 'completed':
+    case 'done':
+      return '#4ade80';
+    case 'in progress':
+    case 'inprogress':
+      return '#60a5fa';
+    case 'pending':
+      return '#fb923c';
+    case 'failed':
+    case 'cancelled':
+      return '#ef4444';
+    case 'on hold':
+      return '#a78bfa';
+    default:
+      return '#9ca3af';
+  }
+};
+
+const getFieldLabel = (fieldKey: string): string => {
+  const labels: Record<string, string> = {
+    workOrderId: 'Work Order ID',
+    instructions: 'Instructions / Brief Description',
+    reportTo: 'Report To',
+    assignTo: 'Assign To',
+    workStatus: 'Work Status',
+    remarks: 'Remarks',
+    requestedBy: 'Requested By',
+    requestedDate: 'Requested Date',
+    updatedBy: 'Updated By',
+    updatedDate: 'Updated Date',
+    image1: 'Image 1',
+    image2: 'Image 2',
+    image3: 'Image 3',
+    signature: 'Signature',
+  };
+  return labels[fieldKey] || fieldKey;
+};
+
+const defaultFields = [
+  'workOrderId',
+  'instructions',
+  'reportTo',
+  'assignTo',
+  'workStatus',
+  'remarks',
+  'requestedBy',
+  'requestedDate',
+  'updatedBy',
+  'updatedDate',
+  'image1',
+  'image2',
+  'image3',
+  'signature',
+];
+
 const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean; colorPalette?: ColorPalette | null }> = ({
   workOrder,
   onClose,
@@ -22,105 +90,34 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
 }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => propColorPalette ?? settingsColorPaletteService.getActiveSync());
-  const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
-      try {
-        // Dark mode logic removed as per user request
-
-        // Color palette is now loaded synchronously
-
-        const authData = await AsyncStorage.getItem('authData');
-        if (authData) {
-          try {
-            const parsed = JSON.parse(authData);
-            const rId = parsed.role_id || parsed.roleId || null;
-            setUserRoleId(rId);
-            setUserRole(parsed.role?.toLowerCase() || parsed.roleName?.toLowerCase() || '');
-          } catch (error) {
-            console.error('Error parsing auth data:', error);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading settings:', error);
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          setUserRoleId(parsed.role_id || parsed.roleId || null);
+          setUserRole(parsed.role?.toLowerCase() || parsed.roleName?.toLowerCase() || '');
+        } catch (error) { }
       }
     };
     loadSettings();
   }, []);
 
-  // Dark mode effect removed as per user request
-
   useEffect(() => {
     if (propColorPalette) setColorPalette(propColorPalette);
   }, [propColorPalette]);
 
-  const handleDoneClick = () => {
-    // Placeholder for future implementation
-    console.log('Done clicked');
-  };
-
-
-
   if (!workOrder) return null;
-
-  const formatDate = (dateStr?: string | null): string => {
-    if (!dateStr) return 'Not set';
-    try {
-      return new Date(dateStr).toLocaleString();
-    } catch (e) {
-      return dateStr;
-    }
-  };
-
-  const getStatusColor = (status: string | undefined | null): string => {
-    if (!status) return '#9ca3af';
-    switch (status.toLowerCase()) {
-      case 'completed':
-      case 'done':
-        return '#4ade80';
-      case 'in progress':
-        return '#60a5fa';
-      case 'pending':
-        return '#fb923c';
-      case 'failed':
-      case 'cancelled':
-        return '#ef4444';
-      case 'on hold':
-        return '#a78bfa';
-      default:
-        return '#9ca3af';
-    }
-  };
-
-  const getStatusBgColor = (status: string | undefined | null): string => {
-    if (!status) return 'rgba(156, 163, 175, 0.1)';
-    switch (status.toLowerCase()) {
-      case 'completed':
-      case 'done':
-        return 'rgba(74, 222, 128, 0.1)';
-      case 'in progress':
-        return 'rgba(96, 165, 250, 0.1)';
-      case 'pending':
-        return 'rgba(251, 146, 60, 0.1)';
-      case 'failed':
-      case 'cancelled':
-        return 'rgba(239, 68, 68, 0.1)';
-      case 'on hold':
-        return 'rgba(167, 139, 250, 0.1)';
-      default:
-        return 'rgba(156, 163, 175, 0.1)';
-    }
-  };
 
   const dynamicValueColor = '#111827';
   const valStyle = [st.valueText, { color: dynamicValueColor }];
 
-  const renderImageLink = (url: string | undefined | null, label: string) => (
+  const renderImageLink = useCallback((url: string | undefined | null) => (
     <View style={st.imageLinkRow}>
       <Text style={[st.imageLinkText, { color: dynamicValueColor }]} numberOfLines={1} selectable={true}>
         {url || 'No image available'}
@@ -131,47 +128,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         </Pressable>
       )}
     </View>
-  );
+  ), []);
 
-  // Define all fields to display
-  const defaultFields = [
-    'workOrderId',
-    'instructions',
-    'reportTo',
-    'assignTo',
-    'workStatus',
-    'remarks',
-    'requestedBy',
-    'requestedDate',
-    'updatedBy',
-    'updatedDate',
-    'image1',
-    'image2',
-    'image3',
-    'signature',
-  ];
-
-  const getFieldLabel = (fieldKey: string): string => {
-    const labels: Record<string, string> = {
-      workOrderId: 'Work Order ID',
-      instructions: 'Instructions / Brief Description',
-      reportTo: 'Report To',
-      assignTo: 'Assign To',
-      workStatus: 'Work Status',
-      remarks: 'Remarks',
-      requestedBy: 'Requested By',
-      requestedDate: 'Requested Date',
-      updatedBy: 'Updated By',
-      updatedDate: 'Updated Date',
-      image1: 'Image 1',
-      image2: 'Image 2',
-      image3: 'Image 3',
-      signature: 'Signature',
-    };
-    return labels[fieldKey] || fieldKey;
-  };
-
-  const fieldRenderers: Record<string, () => React.ReactNode> = {
+  const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
     workOrderId: () => <Text style={valStyle} selectable={true}>{workOrder.id || 'N/A'}</Text>,
     instructions: () => <Text style={valStyle} selectable={true}>{workOrder.instructions || 'No instructions'}</Text>,
     reportTo: () => <Text style={valStyle} selectable={true}>{workOrder.report_to || 'Not specified'}</Text>,
@@ -186,37 +145,31 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     requestedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.requested_date)}</Text>,
     updatedBy: () => <Text style={valStyle} selectable={true}>{workOrder.updated_by || 'Not updated'}</Text>,
     updatedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.updated_date)}</Text>,
-    image1: () => renderImageLink(workOrder.image_1, 'Image 1'),
-    image2: () => renderImageLink(workOrder.image_2, 'Image 2'),
-    image3: () => renderImageLink(workOrder.image_3, 'Image 3'),
-    signature: () => renderImageLink(workOrder.signature, 'Signature'),
-  };
+    image1: () => renderImageLink(workOrder.image_1),
+    image2: () => renderImageLink(workOrder.image_2),
+    image3: () => renderImageLink(workOrder.image_3),
+    signature: () => renderImageLink(workOrder.signature),
+  }), [workOrder, renderImageLink]);
 
-  const renderFieldContent = (fieldKey: string) => {
+  const renderFieldContent = useCallback((fieldKey: string) => {
     const renderer = fieldRenderers[fieldKey];
     if (!renderer) return null;
 
-    // Skip image/signature fields if no data
     const imageFields = ['image1', 'image2', 'image3', 'signature'];
     if (imageFields.includes(fieldKey)) {
-      const fieldMap: Record<string, string | undefined> = {
-        image1: workOrder.image_1,
-        image2: workOrder.image_2,
-        image3: workOrder.image_3,
-        signature: workOrder.signature,
-      };
-      if (!fieldMap[fieldKey]) return null;
+      const val = (workOrder as any)[fieldKey === 'signature' ? 'signature' : `image_${fieldKey.slice(-1)}`];
+      if (!val) return null;
     }
 
     return (
-      <View style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>
+      <View key={fieldKey} style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>
         <Text style={[st.fieldLabel, { color: '#6b7280' }]}>{getFieldLabel(fieldKey)}</Text>
         <View style={st.fieldValueWrap}>
           {renderer()}
         </View>
       </View>
     );
-  };
+  }, [fieldRenderers, workOrder]);
 
   return (
     <View style={[st.container, {
@@ -224,7 +177,6 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       backgroundColor: '#f9fafb',
       borderLeftColor: '#d1d5db'
     }]}>
-      {/* Header */}
       <View style={[st.header, {
         paddingTop: isMobile ? 60 : 12,
         backgroundColor: '#ffffff',
@@ -241,18 +193,17 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
           >
             Work Order #{workOrder.id}
           </Text>
-          {loading && <Text style={[st.loadingLabel, { color: '#7c3aed' }]}>Loading...</Text>}
         </View>
 
         <View style={st.headerActions}>
-          {workOrder.work_status?.toLowerCase().includes('pending') || workOrder.work_status?.toLowerCase().includes('in progress') ? (
+          {(workOrder.work_status?.toLowerCase().includes('pending') || workOrder.work_status?.toLowerCase().includes('in progress')) && (
             <Pressable
               style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed', marginRight: 8 }]}
               onPress={onEdit}
             >
               <Text style={[st.actionBtnText, { color: '#ffffff', fontSize: isMobile ? 14 : 16 }]}>Edit</Text>
             </Pressable>
-          ) : null}
+          )}
 
           <Pressable onPress={onClose} style={{ padding: 4 }}>
             <X width={28} height={28} color="#4b5563" />
@@ -260,16 +211,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         </View>
       </View>
 
-      {/* Content */}
       <ScrollView style={st.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={st.scrollContent}>
         <View style={[st.fieldsContainer, { backgroundColor: '#f9fafb' }]}>
-          <View>
-            {defaultFields.map((fieldKey) => (
-              <React.Fragment key={fieldKey}>
-                {renderFieldContent(fieldKey)}
-              </React.Fragment>
-            ))}
-          </View>
+          {defaultFields.map(renderFieldContent)}
         </View>
       </ScrollView>
     </View>
@@ -277,120 +221,23 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
 };
 
 const st = StyleSheet.create({
-  container: {
-    height: '100%',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-  },
-  header: {
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  headerName: {
-    fontWeight: '500',
-  },
-  loadingLabel: {
-    marginLeft: 12,
-    fontSize: 14,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionBtnText: {
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  statusBadgeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 6,
-  },
-  statusTextHeader: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 6,
-    alignSelf: 'flex-start',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  flex1: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  fieldsContainer: {
-    width: '100%',
-    minHeight: '100%',
-    paddingVertical: 8,
-    paddingHorizontal: 0,
-  },
-  fieldRow: {
-    flexDirection: 'column',
-    borderBottomWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 16,
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  fieldValueWrap: {
-    width: '100%',
-  },
-  valueText: {
-    fontSize: 16,
-  },
-  imageLinkRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  imageLinkText: {
-    flex: 1,
-    marginRight: 8,
-    fontSize: 16,
-  },
+  container: { flex: 1, flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%' },
+  header: { padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  headerName: { fontWeight: '500' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  actionBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },
+  actionBtnText: { color: '#ffffff', fontWeight: '500' },
+  statusText: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
+  flex1: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  fieldsContainer: { width: '100%', minHeight: '100%', paddingVertical: 8 },
+  fieldRow: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 16, alignItems: 'flex-start', gap: 2 },
+  fieldLabel: { fontSize: 14, fontWeight: '500' },
+  fieldValueWrap: { width: '100%' },
+  valueText: { fontSize: 16 },
+  imageLinkRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  imageLinkText: { flex: 1, marginRight: 8, fontSize: 16 },
 });
 
 export default WorkOrderDetails;

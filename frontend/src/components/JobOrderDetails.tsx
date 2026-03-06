@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet } from 'react-native';
 import { X, ExternalLink, Edit } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,7 +16,18 @@ import { Application } from '../types/application';
 import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 
-const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false }) => {
+interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
+  userRoleProp?: string;
+  userRoleIdProp?: number | null;
+}
+
+interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
+  userRoleProp?: string;
+  userRoleIdProp?: number | null;
+  billingStatusesProp?: BillingStatus[];
+}
+
+const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false, userRoleProp, userRoleIdProp, billingStatusesProp }) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh } = useJobOrderContext();
@@ -28,9 +39,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   const [isDoneTechModalOpen, setIsDoneTechModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>([]);
-  const [userRole, setUserRole] = useState<string>('');
-  const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>(billingStatusesProp || []);
+  const [userRole, setUserRole] = useState<string>(userRoleProp || '');
+  const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
   const [applicationData, setApplicationData] = useState<Application | null>(null);
   const [jobOrderItems, setJobOrderItems] = useState<JobOrderItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -93,11 +104,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
 
       const authData = await AsyncStorage.getItem('authData');
-      if (authData) {
+      if (authData && (!userRoleProp || userRoleIdProp === null)) {
         try {
           const userData = JSON.parse(authData);
-          setUserRole(userData.role?.toLowerCase() || '');
-          setUserRoleId(userData.role_id);
+          if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
+          if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
         } catch (error) {
           console.error('Error parsing auth data:', error);
         }
@@ -119,6 +130,10 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
   }, []);
 
   useEffect(() => {
+    if (billingStatusesProp && billingStatusesProp.length > 0) {
+      setBillingStatuses(billingStatusesProp);
+      return;
+    }
     const fetchBillingStatuses = async () => {
       try {
         const statuses = await getBillingStatuses();
@@ -128,7 +143,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
       }
     };
     fetchBillingStatuses();
-  }, []);
+  }, [billingStatusesProp]);
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -277,12 +292,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     if (!status) return '#9ca3af';
 
     if (type === 'onsite') {
-      switch (status.toLowerCase()) {
+      switch (status.toLowerCase().trim()) {
         case 'done':
         case 'completed':
           return '#4ade80';
         case 'reschedule':
-          return '#60a5fa';
         case 'inprogress':
         case 'in progress':
           return '#60a5fa';
@@ -295,7 +309,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
           return '#9ca3af';
       }
     } else {
-      switch (status.toLowerCase()) {
+      switch (status.toLowerCase().trim()) {
         case 'done':
         case 'active':
         case 'completed':
@@ -305,7 +319,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
           return '#fb923c';
         case 'suspended':
         case 'overdue':
-          return '#ef4444';
         case 'cancelled':
           return '#ef4444';
         default:
@@ -560,7 +573,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
 
   const valStyle = [st.valueText, { color: dynamicValueColor }];
 
-  const fieldRenderers: Record<string, () => React.ReactNode> = {
+  const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
     timestamp: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp)}</Text>,
     jobOrderNumber: () => <Text style={valStyle} selectable={true}>{jobOrder.id || jobOrder.JobOrder_ID || (applicationData ? 'App-' + applicationData.id : 'N/A')}</Text>,
     referredBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Referred_By || jobOrder.referred_by || (applicationData?.referred_by) || 'None'}</Text>,
@@ -611,13 +624,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
     modifiedDate: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
     assignedEmail: () => <Text style={valStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
     setupImage: () => renderImageLink(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url),
-    speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Speedtest_Image_URL || jobOrder.speedtest_image || jobOrder.Speedtest_Image),
+    speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Setup_Image_URL || jobOrder.setup_image_url || jobOrder.Setup_Image_Url),
     signedContractImage: () => renderImageLink(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL),
     boxReadingImage: () => renderImageLink(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL),
     routerReadingImage: () => renderImageLink(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL),
     portLabelImage: () => renderImageLink(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL),
     houseFrontPicture: () => renderImageLink(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture),
-  };
+  }), [jobOrder, applicationData, jobOrderItems, billingStatuses]);
 
   const renderFieldContent = (fieldKey: string) => {
     const renderer = fieldRenderers[fieldKey];
@@ -655,7 +668,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
               <Text style={st.whiteTxt}>Approve</Text>
             </Pressable>
           )}
-          {!(jobOrder.Onsite_Status && jobOrder.Onsite_Status.toLowerCase() === 'done') && userRole !== 'agent' && userRoleId !== 4 && (
+
+          {!(jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && userRole !== 'agent' && userRoleId !== 4 && (
             <Pressable
               style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
               onPress={handleDoneClick}
@@ -671,7 +685,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsProps> = ({ jobOrder, onClose, on
         </View>
       </View>
 
-      {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && (
+      {userRole !== 'technician' && userRole !== 'agent' && userRoleId !== 4 && userRoleId !== 2 && (
         <View style={[st.editBar, {
           backgroundColor: '#f3f4f6',
           borderBottomColor: '#e5e7eb'

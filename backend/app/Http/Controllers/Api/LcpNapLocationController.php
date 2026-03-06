@@ -22,7 +22,7 @@ class LcpNapLocationController extends Controller
     {
         try {
             $page = (int) $request->get('page', 1);
-            $limit = min((int) $request->get('limit', 1000), 1000);
+            $limit = min((int) $request->get('limit', 1000), 10000);
             $search = $request->get('search', '');
             
             $query = LCPNAPLocation::query();

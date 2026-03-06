@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, Edit, Settings } from 'lucide-react-native';
+import { X, ExternalLink, Edit } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -57,95 +57,167 @@ interface ServiceOrderDetailsProps {
   };
   onClose: () => void;
   isMobile?: boolean;
+  userRoleProp?: string;
+  userRoleIdProp?: number | null;
 }
 
-const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder, onClose, isMobile: propIsMobile = false }) => {
+const FIELD_VISIBILITY_KEY = 'serviceOrderDetailsFieldVisibility';
+const FIELD_ORDER_KEY = 'serviceOrderDetailsFieldOrder';
+
+const defaultFields = [
+  'ticketId',
+  'timestamp',
+  'accountNumber',
+  'dateInstalled',
+  'fullName',
+  'contactNumber',
+  'fullAddress',
+  'houseFrontPicture',
+  'emailAddress',
+  'plan',
+  'username',
+  'connectionType',
+  'routerModemSN',
+  'lcp',
+  'nap',
+  'port',
+  'vlan',
+  'concern',
+  'concernRemarks',
+  'visitStatus',
+  'visitBy',
+  'visitWith',
+  'visitWithOther',
+  'visitRemarks',
+  'modifiedBy',
+  'modifiedDate',
+  'requestedBy',
+  'assignedEmail',
+  'supportRemarks',
+  'supportStatus',
+  'repairCategory',
+  'newRouterSn',
+  'newLcpnap',
+  'newPlan',
+  'image1Url',
+  'image2Url',
+  'image3Url',
+  'clientSignatureUrl',
+  'serviceCharge'
+];
+
+const initialVisibility = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
+
+const formatDate = (dateStr?: string | null): string => {
+  if (!dateStr) return 'Not set';
+  try {
+    return new Date(dateStr).toLocaleString();
+  } catch (e) {
+    return dateStr || 'Not set';
+  }
+};
+
+const getStatusColor = (status: string | undefined, type: 'support' | 'visit'): string => {
+  if (!status) return '#9ca3af';
+  const lower = status.toLowerCase().trim();
+  if (type === 'support') {
+    if (['resolved', 'completed', 'done'].includes(lower)) return '#4ade80';
+    if (['in-progress', 'in progress'].includes(lower)) return '#60a5fa';
+    if (lower === 'pending') return '#fb923c';
+    return '#9ca3af';
+  } else {
+    if (['completed', 'done'].includes(lower)) return '#4ade80';
+    if (['scheduled', 'reschedule', 'in progress'].includes(lower)) return '#60a5fa';
+    if (lower === 'pending') return '#fb923c';
+    if (['cancelled', 'failed'].includes(lower)) return '#ef4444';
+    return '#9ca3af';
+  }
+};
+
+const getFieldLabel = (fieldKey: string): string => {
+  const labels: Record<string, string> = {
+    ticketId: 'Ticket ID',
+    timestamp: 'Timestamp',
+    accountNumber: 'Account No.',
+    dateInstalled: 'Date Installed',
+    fullName: 'Full Name',
+    contactNumber: 'Contact Number',
+    fullAddress: 'Full Address',
+    houseFrontPicture: 'House Front Picture',
+    emailAddress: 'Email Address',
+    plan: 'Plan',
+    username: 'Username',
+    connectionType: 'Connection Type',
+    routerModemSN: 'Router/Modem SN',
+    lcp: 'LCP',
+    nap: 'NAP',
+    port: 'PORT',
+    vlan: 'VLAN',
+    concern: 'Concern',
+    concernRemarks: 'Concern Remarks',
+    visitStatus: 'Visit Status',
+    visitBy: 'Visit By',
+    visitWith: 'Visit With',
+    visitWithOther: 'Visit With Other',
+    visitRemarks: 'Visit Remarks',
+    modifiedBy: 'Modified By',
+    modifiedDate: 'Modified Date',
+    requestedBy: 'Requested by',
+    assignedEmail: 'Assigned Email',
+    supportRemarks: 'Support Remarks',
+    supportStatus: 'Support Status',
+    repairCategory: 'Repair Category',
+    newRouterSn: 'New Router SN',
+    newLcpnap: 'New LCP/NAP',
+    newPlan: 'New Plan',
+    image1Url: 'Time In Image',
+    image2Url: 'Modem Setup Image',
+    image3Url: 'Time Out Image',
+    clientSignatureUrl: 'Client Signature',
+    serviceCharge: 'Service Charge'
+  };
+  return labels[fieldKey] || fieldKey;
+};
+
+const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
+  serviceOrder,
+  onClose,
+  isMobile: propIsMobile = false,
+  userRoleProp,
+  userRoleIdProp
+}) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh } = useServiceOrderContext();
-  const isDarkMode = false; // Forced light mode as per user request
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
-  const [userRole, setUserRole] = useState<string>('');
-  const [userRoleId, setUserRoleId] = useState<number | null>(null);
-
-  const FIELD_VISIBILITY_KEY = 'serviceOrderDetailsFieldVisibility';
-  const FIELD_ORDER_KEY = 'serviceOrderDetailsFieldOrder';
-
-  const defaultFields = [
-    'ticketId',
-    'timestamp',
-    'accountNumber',
-    'dateInstalled',
-    'fullName',
-    'contactNumber',
-    'fullAddress',
-    'houseFrontPicture',
-    'emailAddress',
-    'plan',
-    'username',
-    'connectionType',
-    'routerModemSN',
-    'lcp',
-    'nap',
-    'port',
-    'vlan',
-    'concern',
-    'concernRemarks',
-    'visitStatus',
-    'visitBy',
-    'visitWith',
-    'visitWithOther',
-    'visitRemarks',
-    'modifiedBy',
-    'modifiedDate',
-    'requestedBy',
-    'assignedEmail',
-    'supportRemarks',
-    'supportStatus',
-    'repairCategory',
-    'newRouterSn',
-    'newLcpnap',
-    'newPlan',
-    'image1Url',
-    'image2Url',
-    'image3Url',
-    'clientSignatureUrl',
-    'serviceCharge'
-  ];
-
-  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(() => {
-    return defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-  });
-
+  const [userRole, setUserRole] = useState<string>(userRoleProp || '');
+  const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(initialVisibility);
   const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
 
   useEffect(() => {
     const loadSettings = async () => {
-      const savedVisibility = await AsyncStorage.getItem(FIELD_VISIBILITY_KEY);
-      if (savedVisibility) {
-        setFieldVisibility(JSON.parse(savedVisibility));
-      }
-
-      const savedOrder = await AsyncStorage.getItem(FIELD_ORDER_KEY);
-      if (savedOrder) {
-        setFieldOrder(JSON.parse(savedOrder));
-      }
-
       const authData = await AsyncStorage.getItem('authData');
-      if (authData) {
+      if (authData && (!userRoleProp || userRoleIdProp === null)) {
         try {
           const userData = JSON.parse(authData);
-          setUserRole(userData.role?.toLowerCase() || '');
-          setUserRoleId(Number(userData.role_id));
-        } catch (error) {
-          console.error('Error parsing auth data:', error);
-        }
+          if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
+          if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
+        } catch (error) { }
       }
+
+      const [savedVisibility, savedOrder] = await Promise.all([
+        AsyncStorage.getItem(FIELD_VISIBILITY_KEY),
+        AsyncStorage.getItem(FIELD_ORDER_KEY)
+      ]);
+
+      if (savedVisibility) setFieldVisibility(JSON.parse(savedVisibility));
+      if (savedOrder) setFieldOrder(JSON.parse(savedOrder));
     };
     loadSettings();
-  }, []);
+  }, [userRoleProp, userRoleIdProp]);
 
   useEffect(() => {
     AsyncStorage.setItem(FIELD_VISIBILITY_KEY, JSON.stringify(fieldVisibility));
@@ -155,293 +227,115 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
     AsyncStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
   }, [fieldOrder]);
 
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-    fetchColorPalette();
-  }, []);
-
-  const handleEditClick = () => {
-    setIsEditModalOpen(true);
-  };
-
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-  };
-
-  const handleSaveEdit = (formData: any) => {
-    console.log('Service order updated:', formData);
+  const handleEditClick = useCallback(() => setIsEditModalOpen(true), []);
+  const handleCloseEditModal = useCallback(() => setIsEditModalOpen(false), []);
+  const handleSaveEdit = useCallback(() => {
     setIsEditModalOpen(false);
     silentRefresh();
-  };
+  }, [silentRefresh]);
 
-  const getFieldLabel = (fieldKey: string): string => {
-    const labels: Record<string, string> = {
-      ticketId: 'Ticket ID',
-      timestamp: 'Timestamp',
-      accountNumber: 'Account No.',
-      dateInstalled: 'Date Installed',
-      fullName: 'Full Name',
-      contactNumber: 'Contact Number',
-      fullAddress: 'Full Address',
-      houseFrontPicture: 'House Front Picture',
-      emailAddress: 'Email Address',
-      plan: 'Plan',
-      username: 'Username',
-      connectionType: 'Connection Type',
-      routerModemSN: 'Router/Modem SN',
-      lcp: 'LCP',
-      nap: 'NAP',
-      port: 'PORT',
-      vlan: 'VLAN',
-      concern: 'Concern',
-      concernRemarks: 'Concern Remarks',
-      visitStatus: 'Visit Status',
-      visitBy: 'Visit By',
-      visitWith: 'Visit With',
-      visitWithOther: 'Visit With Other',
-      visitRemarks: 'Visit Remarks',
-      modifiedBy: 'Modified By',
-      modifiedDate: 'Modified Date',
-      requestedBy: 'Requested by',
-      assignedEmail: 'Assigned Email',
-      supportRemarks: 'Support Remarks',
-      supportStatus: 'Support Status',
-      repairCategory: 'Repair Category',
-      newRouterSn: 'New Router SN',
-      newLcpnap: 'New LCP/NAP',
-      newPlan: 'New Plan',
-      image1Url: 'Time In Image',
-      image2Url: 'Modem Setup Image',
-      image3Url: 'Time Out Image',
-      clientSignatureUrl: 'Client Signature',
-      serviceCharge: 'Service Charge'
-    };
-    return labels[fieldKey] || fieldKey;
-  };
+  const toggleFieldVisibility = useCallback((field: string) => {
+    setFieldVisibility(prev => ({ ...prev, [field]: !prev[field] }));
+  }, []);
 
-  const toggleFieldVisibility = (field: string) => {
-    setFieldVisibility((prev: Record<string, boolean>) => ({ ...prev, [field]: !prev[field] }));
-  };
-
-  const selectAllFields = () => {
-    const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
+  const selectAllFields = useCallback(() => {
+    const allVisible = defaultFields.reduce((acc, field) => ({ ...acc, [field]: true }), {});
     setFieldVisibility(allVisible);
-  };
+  }, []);
 
-  const deselectAllFields = () => {
-    const allHidden: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: false }), {});
+  const deselectAllFields = useCallback(() => {
+    const allHidden = defaultFields.reduce((acc, field) => ({ ...acc, [field]: false }), {});
     setFieldVisibility(allHidden);
-  };
+  }, []);
 
-  const resetFieldSettings = () => {
-    const allVisible: Record<string, boolean> = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
-    setFieldVisibility(allVisible);
+  const resetFieldSettings = useCallback(() => {
+    setFieldVisibility(initialVisibility);
     setFieldOrder(defaultFields);
-  };
+  }, []);
 
-  const getStatusColor = (status: string | undefined, type: 'support' | 'visit'): string => {
-    if (!status) return '#9ca3af';
+  const valStyle = [styles.valueText, { color: '#111827' }];
 
-    if (type === 'support') {
-      switch (status.toLowerCase()) {
-        case 'resolved':
-        case 'completed':
-          return '#4ade80';
-        case 'in-progress':
-        case 'in progress':
-          return '#60a5fa';
-        case 'pending':
-          return '#fb923c';
-        case 'closed':
-        case 'cancelled':
-          return '#9ca3af';
-        default:
-          return '#9ca3af';
-      }
-    } else {
-      switch (status.toLowerCase()) {
-        case 'completed':
-          return '#4ade80';
-        case 'scheduled':
-        case 'reschedule':
-        case 'in progress':
-          return '#60a5fa';
-        case 'pending':
-          return '#fb923c';
-        case 'cancelled':
-        case 'failed':
-          return '#ef4444';
-        default:
-          return '#9ca3af';
-      }
-    }
-  };
-
-  const dynamicValueColor = '#111827';
+  const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
+    ticketId: () => <Text style={valStyle}>{serviceOrder.ticketId}</Text>,
+    timestamp: () => <Text style={valStyle}>{serviceOrder.timestamp}</Text>,
+    accountNumber: () => (
+      <Text style={[styles.accountDetailsText, styles.valueText]} selectable={true}>
+        {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
+      </Text>
+    ),
+    dateInstalled: () => <Text style={valStyle}>{serviceOrder.dateInstalled ? serviceOrder.dateInstalled.split(/[ T]/)[0] : '-'}</Text>,
+    fullName: () => <Text style={valStyle}>{serviceOrder.fullName}</Text>,
+    contactNumber: () => <Text style={valStyle}>{serviceOrder.contactNumber}</Text>,
+    fullAddress: () => <Text style={valStyle}>{serviceOrder.fullAddress}</Text>,
+    houseFrontPicture: () => renderImageLinkContent(serviceOrder.houseFrontPicture),
+    emailAddress: () => <Text style={valStyle}>{serviceOrder.emailAddress}</Text>,
+    plan: () => <Text style={valStyle}>{serviceOrder.plan}</Text>,
+    username: () => <Text style={valStyle}>{serviceOrder.username}</Text>,
+    connectionType: () => <Text style={valStyle}>{serviceOrder.connectionType}</Text>,
+    routerModemSN: () => <Text style={valStyle}>{serviceOrder.routerModemSN}</Text>,
+    lcp: () => <Text style={valStyle}>{serviceOrder.lcp}</Text>,
+    nap: () => <Text style={valStyle}>{serviceOrder.nap}</Text>,
+    port: () => <Text style={valStyle}>{serviceOrder.port}</Text>,
+    vlan: () => <Text style={valStyle}>{serviceOrder.vlan}</Text>,
+    concern: () => <Text style={valStyle}>{serviceOrder.concern}</Text>,
+    concernRemarks: () => <Text style={valStyle}>{serviceOrder.concernRemarks}</Text>,
+    visitStatus: () => (
+      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.visitStatus, 'visit') }]}>
+        {serviceOrder.visitStatus === 'inprogress' ? 'In Progress' : (serviceOrder.visitStatus || 'Not set')}
+      </Text>
+    ),
+    visitBy: () => <Text style={valStyle}>{serviceOrder.visitBy || 'Not assigned'}</Text>,
+    visitWith: () => <Text style={valStyle}>{serviceOrder.visitWith || 'None'}</Text>,
+    visitWithOther: () => <Text style={valStyle}>{serviceOrder.visitWithOther || 'None'}</Text>,
+    visitRemarks: () => <Text style={valStyle}>{serviceOrder.visitRemarks || 'No remarks'}</Text>,
+    modifiedBy: () => <Text style={valStyle}>{serviceOrder.modifiedBy || 'System'}</Text>,
+    modifiedDate: () => <Text style={valStyle}>{formatDate(serviceOrder.modifiedDate)}</Text>,
+    requestedBy: () => <Text style={valStyle}>{serviceOrder.requestedBy}</Text>,
+    assignedEmail: () => <Text style={valStyle}>{serviceOrder.assignedEmail || 'Not assigned'}</Text>,
+    supportRemarks: () => <Text style={valStyle}>{serviceOrder.supportRemarks || 'No remarks'}</Text>,
+    supportStatus: () => (
+      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.supportStatus, 'support') }]}>
+        {serviceOrder.supportStatus || 'Not set'}
+      </Text>
+    ),
+    repairCategory: () => <Text style={valStyle}>{serviceOrder.repairCategory || 'None'}</Text>,
+    newRouterSn: () => <Text style={valStyle}>{serviceOrder.newRouterSn || 'None'}</Text>,
+    newLcpnap: () => <Text style={valStyle}>{serviceOrder.newLcpnap || 'None'}</Text>,
+    newPlan: () => <Text style={valStyle}>{serviceOrder.newPlan || 'None'}</Text>,
+    image1Url: () => renderImageLinkContent(serviceOrder.image1Url),
+    image2Url: () => renderImageLinkContent(serviceOrder.image2Url),
+    image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
+    clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
+    serviceCharge: () => <Text style={valStyle}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
+  }), [serviceOrder, userRole, userRoleId]);
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>
       <Text style={[styles.fieldLabel, { color: '#6b7280' }]}>{label}</Text>
       <View style={styles.fieldValueContainer}>
-        {(typeof content === 'string' || typeof content === 'number') ? (
-          <Text style={[styles.valueText, { color: dynamicValueColor }]} selectable={true}>
-            {(content !== null && content !== undefined && content !== '') ? content : '-'}
-          </Text>
-        ) : (
-          content
-        )}
+        {content}
       </View>
     </View>
   );
 
-  const renderImageLink = (label: string, url: string | undefined | null) => {
-    return renderField(label, (
-      <View style={styles.imageLinkContainer}>
-        <Text style={[styles.imageLinkText, styles.valueText, { color: dynamicValueColor }]} numberOfLines={1} selectable={true}>
-          {url || 'No image available'}
-        </Text>
-        {url && (
-          <Pressable onPress={() => Linking.openURL(url)}>
-            <ExternalLink width={16} height={16} color="#4b5563" />
-          </Pressable>
-        )}
-      </View>
-    ));
-  };
-
-  const renderFieldContent = (fieldKey: string) => {
-    if (!fieldVisibility[fieldKey]) return null;
-
-    switch (fieldKey) {
-      case 'ticketId':
-        return renderField('Ticket ID', serviceOrder.ticketId);
-      case 'timestamp':
-        return renderField('Timestamp', serviceOrder.timestamp);
-      case 'accountNumber':
-        return renderField('Account Details', (
-          <Text style={styles.accountDetailsText} selectable={true}>
-            {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
-          </Text>
-        ));
-      case 'dateInstalled':
-        return renderField('Date Installed', serviceOrder.dateInstalled ? serviceOrder.dateInstalled.split(/[ T]/)[0] : '-');
-      case 'fullName':
-        return renderField('Full Name', serviceOrder.fullName);
-      case 'contactNumber':
-        return renderField('Contact Number', serviceOrder.contactNumber);
-      case 'fullAddress':
-        return renderField('Full Address', serviceOrder.fullAddress);
-      case 'houseFrontPicture':
-        return renderImageLink('House Front Picture', serviceOrder.houseFrontPicture);
-      case 'emailAddress':
-        return renderField('Email Address', serviceOrder.emailAddress);
-      case 'plan':
-        return renderField('Plan', serviceOrder.plan);
-      case 'username':
-        return renderField('Username', serviceOrder.username);
-      case 'connectionType':
-        return renderField('Connection Type', serviceOrder.connectionType);
-      case 'routerModemSN':
-        return renderField('Router/Modem SN', serviceOrder.routerModemSN);
-      case 'lcp':
-        return renderField('LCP', serviceOrder.lcp);
-      case 'nap':
-        return renderField('NAP', serviceOrder.nap);
-      case 'port':
-        return renderField('PORT', serviceOrder.port);
-      case 'vlan':
-        return renderField('VLAN', serviceOrder.vlan);
-      case 'concern':
-        return renderField('Concern', serviceOrder.concern);
-      case 'concernRemarks':
-        return renderField('Concern Remarks', serviceOrder.concernRemarks);
-      case 'visitStatus':
-        return renderField('Visit Status', (
-          <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.visitStatus, 'visit') }]} selectable={true}>
-            {serviceOrder.visitStatus || '-'}
-          </Text>
-        ));
-      case 'visitBy':
-        return renderField('Visit By', serviceOrder.visitBy);
-      case 'visitWith':
-        return renderField('Visit With', serviceOrder.visitWith);
-      case 'visitWithOther':
-        return renderField('Visit With Other', serviceOrder.visitWithOther);
-      case 'visitRemarks':
-        return renderField('Visit Remarks', serviceOrder.visitRemarks);
-      case 'modifiedBy':
-        return renderField('Modified By', serviceOrder.modifiedBy);
-      case 'modifiedDate':
-        return renderField('Modified Date', serviceOrder.modifiedDate);
-      case 'requestedBy':
-        return renderField('Requested by', serviceOrder.requestedBy);
-      case 'assignedEmail':
-        return renderField('Assigned Email', serviceOrder.assignedEmail);
-      case 'supportRemarks':
-        return renderField('Support Remarks', serviceOrder.supportRemarks);
-      case 'supportStatus':
-        return renderField('Support Status', (
-          <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.supportStatus, 'support') }]} selectable={true}>
-            {serviceOrder.supportStatus || '-'}
-          </Text>
-        ));
-      case 'repairCategory':
-        return renderField('Repair Category', serviceOrder.repairCategory);
-      case 'newRouterSn':
-        return renderField('New Router SN', serviceOrder.newRouterSn);
-      case 'newLcpnap':
-        return renderField('New LCP/NAP', serviceOrder.newLcpnap);
-      case 'newPlan':
-        return renderField('New Plan', serviceOrder.newPlan);
-      case 'image1Url':
-        return renderImageLink('Time In Image', serviceOrder.image1Url);
-      case 'image2Url':
-        return renderImageLink('Modem Setup Image', serviceOrder.image2Url);
-      case 'image3Url':
-        return renderImageLink('Time Out Image', serviceOrder.image3Url);
-      case 'clientSignatureUrl':
-        return renderImageLink('Client Signature', serviceOrder.clientSignatureUrl);
-      case 'serviceCharge':
-        return renderField('Service Charge', serviceOrder.serviceCharge);
-      default:
-        return null;
-    }
-  };
+  const renderImageLinkContent = (url: string | undefined | null) => (
+    <View style={styles.imageLinkContainer}>
+      <Text style={[styles.imageLinkText, styles.valueText, { color: '#111827' }]} numberOfLines={1} selectable={true}>
+        {url || 'No image available'}
+      </Text>
+      {url && (
+        <Pressable onPress={() => Linking.openURL(url)}>
+          <ExternalLink width={16} height={16} color="#4b5563" />
+        </Pressable>
+      )}
+    </View>
+  );
 
   return (
-    <View style={[
-      styles.container,
-      {
-        borderLeftWidth: !isMobile ? 1 : 0,
-        backgroundColor: '#f9fafb',
-        borderLeftColor: '#d1d5db'
-      }
-    ]}>
-      {/* Header */}
-      <View style={[
-        styles.header,
-        {
-          backgroundColor: '#ffffff',
-          borderBottomColor: '#e5e7eb',
-          paddingTop: isMobile ? 60 : 12
-        }
-      ]}>
+    <View style={[styles.container, { borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: '#f9fafb', borderLeftColor: '#d1d5db' }]}>
+      <View style={[styles.header, { backgroundColor: '#ffffff', borderBottomColor: '#e5e7eb', paddingTop: isMobile ? 60 : 12 }]}>
         <View style={styles.headerTitleContainer}>
-          <Text
-            style={[
-              styles.headerTitle,
-              { fontSize: isMobile ? 14 : 18, color: '#111827' }
-            ]}
-            numberOfLines={1}
-            selectable={true}
-          >
+          <Text style={[styles.headerTitle, { fontSize: isMobile ? 14 : 18, color: '#111827' }]} numberOfLines={1} selectable={true}>
             {serviceOrder.accountNumber} | {serviceOrder.fullName}
           </Text>
         </View>
@@ -449,23 +343,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
         <View style={styles.headerActions}>
           {userRole !== 'agent' && userRoleId !== 4 && (
             <>
-              <Pressable
-                style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
-                onPress={handleEditClick}
-              >
-                <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />
-                <Text style={styles.headerButtonText}>Edit</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setShowFieldSettings(!showFieldSettings)}
-                style={styles.settingsButton}
-              >
-                <Settings width={20} height={20} color="#4b5563" />
-              </Pressable>
+              {!(serviceOrder.visitStatus?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && (
+                <Pressable style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]} onPress={handleEditClick}>
+                  <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />
+                  <Text style={styles.headerButtonText}>Edit</Text>
+                </Pressable>
+              )}
             </>
           )}
-
           <Pressable onPress={onClose}>
             <X width={28} height={28} color="#4b5563" />
           </Pressable>
@@ -474,77 +359,15 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
 
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          {fieldOrder.map((fieldKey) => (
-            <React.Fragment key={fieldKey}>
-              {renderFieldContent(fieldKey)}
-            </React.Fragment>
-          ))}
+          {fieldOrder.map(key => {
+            if (!fieldVisibility[key]) return null;
+            const renderer = fieldRenderers[key];
+            if (!renderer) return null;
+            return <React.Fragment key={key}>{renderField(getFieldLabel(key), renderer())}</React.Fragment>;
+          })}
         </View>
       </ScrollView>
 
-      {showFieldSettings && (
-        <Modal
-          visible={showFieldSettings}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowFieldSettings(false)}
-        >
-          <Pressable
-            style={styles.modalOverlay}
-            onPress={() => setShowFieldSettings(false)}
-          >
-            <Pressable
-              style={[
-                styles.modalContent,
-                {
-                  backgroundColor: '#ffffff',
-                  borderColor: '#e5e7eb'
-                }
-              ]}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={[styles.modalHeader, { borderBottomColor: '#e5e7eb' }]}>
-                <Text style={[styles.modalTitle, { color: '#111827' }]}>Field Visibility</Text>
-                <View style={styles.modalHeaderActions}>
-                  <Pressable onPress={selectAllFields}>
-                    <Text style={styles.modalActionText}>Show All</Text>
-                  </Pressable>
-                  <Text style={[styles.separatorText, { color: '#9ca3af' }]}>|</Text>
-                  <Pressable onPress={deselectAllFields}>
-                    <Text style={styles.modalActionText}>Hide All</Text>
-                  </Pressable>
-                  <Text style={[styles.separatorText, { color: '#9ca3af' }]}>|</Text>
-                  <Pressable onPress={resetFieldSettings}>
-                    <Text style={styles.modalActionText}>Reset</Text>
-                  </Pressable>
-                </View>
-              </View>
-              <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
-                {fieldOrder.map((fieldKey) => (
-                  <Pressable
-                    key={fieldKey}
-                    onPress={() => toggleFieldVisibility(fieldKey)}
-                    style={styles.modalItem}
-                  >
-                    <View style={[
-                      styles.checkbox,
-                      {
-                        backgroundColor: fieldVisibility[fieldKey] ? (colorPalette?.primary || '#2563eb') : 'transparent',
-                        borderColor: '#d1d5db'
-                      }
-                    ]}>
-                      {fieldVisibility[fieldKey] && <Text style={styles.checkboxTick}>✓</Text>}
-                    </View>
-                    <Text style={[styles.modalItemText, { color: '#374151' }]}>
-                      {getFieldLabel(fieldKey)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
 
       {isEditModalOpen && (
         <ServiceOrderEditModal
@@ -559,158 +382,36 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
 };
 
 const styles = StyleSheet.create({
-  container: {
-    height: '100%',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-  },
-  header: {
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-  },
-  headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTitle: {
-    fontWeight: '500',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerButtonText: {
-    color: '#ffffff',
-    fontWeight: '500',
-    fontSize: 14,
-  },
-  settingsButton: {
-    padding: 4,
-  },
-  flex1: {
-    flex: 1,
-  },
-  content: {
-    width: '100%',
-    paddingVertical: 8,
-  },
-  fieldContainer: {
-    flexDirection: 'column',
-    borderBottomWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    gap: 2,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  fieldValueContainer: {
-    width: '100%',
-  },
-  imageLinkContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  imageLinkText: {
-    flex: 1,
-    marginRight: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    maxWidth: 400,
-    borderRadius: 8,
-    borderWidth: 1,
-    maxHeight: '80%',
-    overflow: 'hidden',
-  },
-  modalHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modalTitle: {
-    fontWeight: '600',
-  },
-  modalHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  modalActionText: {
-    color: '#2563eb',
-    fontSize: 12,
-  },
-  modalList: {
-    padding: 8,
-  },
-  modalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  checkbox: {
-    height: 18,
-    width: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxTick: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  modalItemText: {
-    fontSize: 14,
-  },
-  valueText: {
-    fontSize: 16,
-  },
-  accountDetailsText: {
-    color: '#ef4444',
-    fontSize: 16,
-  },
-  statusText: {
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  separatorText: {
-    marginHorizontal: 4,
-  },
-  headerButtonIcon: {
-    marginRight: 4,
-  },
+  container: { height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%' },
+  header: { padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
+  headerTitleContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  headerTitle: { fontWeight: '500' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
+  headerButtonText: { color: '#ffffff', fontWeight: '500', fontSize: 14 },
+  headerButtonIcon: { marginRight: 4 },
+  settingsButton: { padding: 4 },
+  flex1: { flex: 1 },
+  content: { width: '100%', paddingVertical: 8 },
+  fieldContainer: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 8, paddingHorizontal: 16, gap: 2 },
+  fieldLabel: { fontSize: 14, fontWeight: '500' },
+  fieldValueContainer: { width: '100%' },
+  imageLinkContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  imageLinkText: { flex: 1, marginRight: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '90%', maxWidth: 400, borderRadius: 8, borderWidth: 1, maxHeight: '80%', overflow: 'hidden' },
+  modalHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { fontWeight: '600' },
+  modalHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modalActionText: { color: '#2563eb', fontSize: 12 },
+  modalList: { padding: 8 },
+  modalItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 4 },
+  checkbox: { height: 18, width: 18, borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  checkboxTick: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
+  modalItemText: { fontSize: 14 },
+  valueText: { fontSize: 16 },
+  accountDetailsText: { color: '#ef4444' },
+  statusText: { fontWeight: '600', textTransform: 'uppercase' },
 });
 
 export default ServiceOrderDetails;

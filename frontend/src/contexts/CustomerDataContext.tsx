@@ -73,8 +73,13 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+    // Use a ref for the guard check so fetchData doesn't need customerDetail as a dependency.
+    // This prevents a new fetchData/silentRefresh from being created on every data update,
+    // which was causing DashboardCustomer to remount and lose its modal state.
+    const customerDetailRef = React.useRef<CustomerDetailData | null>(null);
+
     const fetchData = useCallback(async (force = false, silent = false) => {
-        if (!force && customerDetail) return;
+        if (!force && customerDetailRef.current) return;
 
         if (!silent) setIsLoading(true);
 
@@ -89,9 +94,9 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
             const detail = await getCustomerDetail(parsedUser.username);
             if (!detail) throw new Error('Could not fetch customer details');
 
+            customerDetailRef.current = detail;
             setCustomerDetail(detail);
             const accNo = detail.billingAccount?.accountNo;
-            const billingId = detail.billingAccount?.id;
 
             if (accNo) {
                 // 2. Fetch everything else in parallel using correct backend routes
@@ -158,7 +163,9 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
         } finally {
             setIsLoading(false);
         }
-    }, [customerDetail]);
+        // Stable dependency array — customerDetailRef.current is used instead of the state
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         fetchData();

@@ -7,16 +7,15 @@ import {
     Bell,
     Shield,
     CreditCard,
-    HelpCircle,
-    ChevronRight,
     LogOut,
     Info,
-    Mail
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { formUIService } from '../services/formUIService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
+import NotificationModal from '../modals/NotificationModal';
+import AboutAppModal from '../modals/AboutAppModal';
 
 interface MenuProps {
     onLogout?: () => void;
@@ -31,6 +30,8 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showNotificationModal, setShowNotificationModal] = useState(false);
+    const [showAboutModal, setShowAboutModal] = useState(false);
 
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
@@ -73,10 +74,8 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
             ]
         },
         {
-            title: 'Support & About',
+            title: 'About',
             items: [
-                { id: 'help', label: 'Help Center', icon: HelpCircle },
-                { id: 'contact', label: 'Contact Support', icon: Mail },
                 { id: 'about', label: 'About App', icon: Info },
             ]
         }
@@ -145,6 +144,13 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                             {group.items.map((item, itemIndex) => (
                                 <Pressable
                                     key={item.id}
+                                    onPress={() => {
+                                        if (item.id === 'notifications') {
+                                            setShowNotificationModal(true);
+                                        } else if (item.id === 'about') {
+                                            setShowAboutModal(true);
+                                        }
+                                    }}
                                     style={({ pressed }) => [
                                         s.menuItem,
                                         { backgroundColor: pressed ? '#f9fafb' : '#ffffff' },
@@ -208,6 +214,16 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                     </View>
                 </View>
             </Modal>
+
+            <NotificationModal
+                visible={showNotificationModal}
+                onClose={() => setShowNotificationModal(false)}
+            />
+
+            <AboutAppModal
+                visible={showAboutModal}
+                onClose={() => setShowAboutModal(false)}
+            />
         </ScrollView>
     );
 };

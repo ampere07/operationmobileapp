@@ -512,77 +512,77 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                     style={styles.kav}
                 >
                     <Pressable style={styles.modalBackdrop} onPress={handleCloseVerifyModal} />
-                        <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
-                            <View {...panResponder.panHandlers} style={styles.modalHeader}>
-                                <Pressable onPress={handleCloseVerifyModal} style={styles.modalHandleBtn}>
-                                    <View style={styles.modalHandle} />
-                                </Pressable>
-                                <Text style={styles.modalTitle}>Confirm Payment</Text>
+                    <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
+                        <View {...panResponder.panHandlers} style={styles.modalHeader}>
+                            <Pressable onPress={handleCloseVerifyModal} style={styles.modalHandleBtn}>
+                                <View style={styles.modalHandle} />
+                            </Pressable>
+                            <Text style={styles.modalTitle}>Confirm Payment</Text>
+                        </View>
+
+                        <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+                            <View style={styles.verifyBox}>
+                                <View style={styles.verifyRowMb}>
+                                    <Text style={styles.verifyLabel}>Account Name</Text>
+                                    <Text style={styles.verifyValue}>{displayName}</Text>
+                                </View>
+                                <View style={styles.verifyRow}>
+                                    <Text style={styles.verifyLabel}>Current Balance</Text>
+                                    <Text style={[styles.verifyValue, { fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a' }]}>
+                                        {formatCurrency(balance)}
+                                    </Text>
+                                </View>
                             </View>
 
-                            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-                                <View style={styles.verifyBox}>
-                                    <View style={styles.verifyRowMb}>
-                                        <Text style={styles.verifyLabel}>Account Name</Text>
-                                        <Text style={styles.verifyValue}>{displayName}</Text>
-                                    </View>
-                                    <View style={styles.verifyRow}>
-                                        <Text style={styles.verifyLabel}>Current Balance</Text>
-                                        <Text style={[styles.verifyValue, { fontWeight: 'bold', color: balance > 0 ? (colorPalette?.primary || '#ef4444') : '#16a34a' }]}>
-                                            {formatCurrency(balance)}
-                                        </Text>
-                                    </View>
+                            {errorMessage && (
+                                <View style={[styles.errorBox, { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' }]}>
+                                    <Text style={[styles.errorText, { color: colorPalette?.primary || '#ef4444' }]}>{errorMessage}</Text>
                                 </View>
+                            )}
 
-                                {errorMessage && (
-                                    <View style={[styles.errorBox, { backgroundColor: (colorPalette?.primary || '#ef4444') + '15', borderColor: (colorPalette?.primary || '#ef4444') + '30' }]}>
-                                        <Text style={[styles.errorText, { color: colorPalette?.primary || '#ef4444' }]}>{errorMessage}</Text>
-                                    </View>
-                                )}
+                            <View style={styles.inputWrap}>
+                                <Text style={styles.inputLabel}>Payment Amount</Text>
+                                <TextInput
+                                    keyboardType="decimal-pad"
+                                    value={paymentAmount !== undefined && paymentAmount !== null ? paymentAmount.toString() : ''}
+                                    onChangeText={(value) => {
+                                        if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+                                            const amount = value === '' || value === '-' ? 0 : parseFloat(value) || 0;
+                                            setPaymentAmount(amount);
 
-                                <View style={styles.inputWrap}>
-                                    <Text style={styles.inputLabel}>Payment Amount</Text>
-                                    <TextInput
-                                        keyboardType="decimal-pad"
-                                        value={paymentAmount !== undefined && paymentAmount !== null ? paymentAmount.toString() : ''}
-                                        onChangeText={(value) => {
-                                            if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
-                                                const amount = value === '' || value === '-' ? 0 : parseFloat(value) || 0;
-                                                setPaymentAmount(amount);
-
-                                                if (balance > 0 && amount < balance) {
-                                                    setErrorMessage(`Payment amount must be at least your current balance of ${formatCurrency(balance)}`);
-                                                } else {
-                                                    setErrorMessage('');
-                                                }
+                                            if (balance > 0 && amount < balance) {
+                                                setErrorMessage(`Payment amount must be at least your current balance of ${formatCurrency(balance)}`);
+                                            } else {
+                                                setErrorMessage('');
                                             }
-                                        }}
-                                        placeholder="0.00"
-                                        style={styles.inputField}
-                                    />
-                                    <View style={styles.inputHint}>
-                                        <Text style={styles.inputHintText}>
-                                            {balance > 0 ? `Outstanding: ${formatCurrency(balance)}` : 'Minimum: ₱1.00'}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <Pressable
-                                    onPress={handleProceedToCheckout}
-                                    disabled={isPaymentProcessing || paymentAmount < 1 || (balance > 0 && paymentAmount < balance)}
-                                    style={[styles.primaryBtn, {
-                                        backgroundColor: colorPalette?.primary || '#ef4444',
-                                        opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1,
-                                    }]}
-                                >
-                                    <Text style={styles.primaryBtnText}>
-                                        {isPaymentProcessing ? 'Processing...' : 'Pay'}
+                                        }
+                                    }}
+                                    placeholder="0.00"
+                                    style={styles.inputField}
+                                />
+                                <View style={styles.inputHint}>
+                                    <Text style={styles.inputHintText}>
+                                        {balance > 0 ? `Outstanding: ${formatCurrency(balance)}` : 'Minimum: ₱1.00'}
                                     </Text>
-                                </Pressable>
+                                </View>
+                            </View>
 
-                                <View style={styles.spacer} />
-                            </ScrollView>
-                        </Animated.View>
+                            <Pressable
+                                onPress={handleProceedToCheckout}
+                                disabled={isPaymentProcessing || paymentAmount < 1 || (balance > 0 && paymentAmount < balance)}
+                                style={[styles.primaryBtn, {
+                                    backgroundColor: colorPalette?.primary || '#ef4444',
+                                    opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1,
+                                }]}
+                            >
+                                <Text style={styles.primaryBtnText}>
+                                    {isPaymentProcessing ? 'Processing...' : 'Pay'}
+                                </Text>
+                            </Pressable>
+
+                            <View style={styles.spacer} />
+                        </ScrollView>
+                    </Animated.View>
                 </KeyboardAvoidingView>
             </Modal>
 
