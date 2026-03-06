@@ -568,14 +568,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       // Fire all independent API calls in parallel with Promise.allSettled
       // so one failure doesn't block the rest
       const [
-        routerModelResult,
         inventoryResult,
         technicianResult,
         technicalDetailsResult,
         concernResult,
       ] = await Promise.allSettled([
-        routerModelService.getAllRouterModels(),
-        getAllInventoryItems(),
+        getAllInventoryItems('', 1, 1000),
         apiClient.get<{ success: boolean; data: any[] }>('/users'),
         Promise.all([
           apiClient.get<{ success: boolean; data: any[] }>('/lcp'),
@@ -589,27 +587,40 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
       if (!isMounted) return;
 
-      // Router Models
-      if (routerModelResult.status === 'fulfilled') {
-        setRouterModels(routerModelResult.value);
-      } else {
-        console.error('Failed to fetch router models:', routerModelResult.reason);
-      }
-
-      // Inventory Items
+      // Inventory Items & Router Models
       if (inventoryResult.status === 'fulfilled') {
         const response = inventoryResult.value;
         if (response.success && Array.isArray(response.data)) {
+          // Normal Items (Category 1)
           const filteredItems = response.data.filter(item => {
-            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
             return catId === 1 || String(catId) === '1';
           });
           setInventoryItems(filteredItems);
+
+          // Router Models (Category 11)
+          const combinedRouterModels = response.data
+            .filter(item => {
+              if (!item) return false;
+              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
+              return (catId === 11 || String(catId) === '11') && item.item_name;
+            })
+            .map((item, index) => ({
+              model: item.item_name,
+              brand: 'Inventory',
+              description: item.item_description || '',
+              id: index
+            }));
+
+          console.log('Processed Router Models from Inventory (Cat 11):', combinedRouterModels.length);
+          setRouterModels(combinedRouterModels);
         } else {
           setInventoryItems([]);
+          setRouterModels([]);
         }
       } else {
         setInventoryItems([]);
+        setRouterModels([]);
       }
 
       // Technicians

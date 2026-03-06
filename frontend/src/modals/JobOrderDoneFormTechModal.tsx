@@ -348,17 +348,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         inventoryResult,
         technicianResult,
         planResult,
-        routerModelResult,
       ] = await Promise.allSettled([
         getActiveImageSize(),
         pppoeService.getPatterns('username'),
         getAllLCPNAPs('', 1, 1000),
         getAllVLANs(),
         getAllUsageTypes(),
-        getAllInventoryItems(),
+        getAllInventoryItems('', 1, 1000),
         userService.getUsersByRole('technician'),
         planService.getAllPlans(),
-        routerModelService.getAllRouterModels(),
       ]);
 
       if (!isMounted) return;
@@ -428,20 +426,40 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setUsageTypes([]);
       }
 
-      // Inventory Items
+      // Inventory Items & Router Models
       if (inventoryResult.status === 'fulfilled') {
         const response = inventoryResult.value;
         if (response.success && Array.isArray(response.data)) {
+          // Normal Items (Category 1)
           const filteredItems = response.data.filter(item => {
-            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId;
+            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
             return catId === 1 || String(catId) === '1';
           });
           setInventoryItems(filteredItems);
+
+          // Router Models (Category 11)
+          const combinedRouterModels = response.data
+            .filter(item => {
+              if (!item) return false;
+              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
+              return (catId === 11 || String(catId) === '11') && item.item_name;
+            })
+            .map((item, index) => ({
+              model: item.item_name,
+              brand: 'Inventory',
+              description: item.item_description || '',
+              id: index
+            }));
+
+          console.log('Processed Router Models from Inventory (Cat 11):', combinedRouterModels.length);
+          setRouterModels(combinedRouterModels);
         } else {
           setInventoryItems([]);
+          setRouterModels([]);
         }
       } else {
         setInventoryItems([]);
+        setRouterModels([]);
       }
 
       // Technicians
@@ -469,15 +487,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setPlans(planResult.value);
       }
 
-      // Router Models
-      if (routerModelResult.status === 'fulfilled') {
-        const filtered = routerModelResult.value.filter((rm: any) => {
-          if (!rm.model) return false;
-          const name = String(rm.model).trim().toLowerCase();
-          return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-        });
-        setRouterModels(filtered);
-      }
       // Fetch most used LCPNAPs
       try {
         const resp = await getMostUsedLCPNAPs();
@@ -1841,24 +1850,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlashList
-                data={filteredLcpnaps}
-                extraData={{ selectedValue: formData.lcpnap, onPress: handleLcpnapItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={renderLcpnapItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-                style={{ flexGrow: 1 }}
-              />
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredLcpnaps}
+                  extraData={{ selectedValue: formData.lcpnap, onPress: handleLcpnapItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                  ItemSeparatorComponent={() => (
+                    <View style={{ height: 16 }} />
+                  )}
+                  renderItem={renderLcpnapItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                />
+              </View>
             </View>
           </View>
         </Modal>
@@ -1901,24 +1911,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlashList
-                data={filteredRouterModels}
-                extraData={{ selectedValue: formData.routerModel, onPress: handleRouterModelItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={renderRouterModelItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-                style={{ flexGrow: 1 }}
-              />
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredRouterModels}
+                  extraData={{ selectedValue: formData.routerModel, onPress: handleRouterModelItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+                  ItemSeparatorComponent={() => (
+                    <View style={{ height: 16 }} />
+                  )}
+                  renderItem={renderRouterModelItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                />
+              </View>
             </View>
           </View>
         </Modal>
@@ -1961,27 +1972,28 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </View>
               </View>
 
-              <FlashList
-                data={[
-                  ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
-                  ...filteredInventoryItems
-                ]}
-                extraData={{ selectedValue: activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '', onPress: handleInventoryItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={renderItemItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-                style={{ flexGrow: 1 }}
-              />
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={[
+                    ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
+                    ...filteredInventoryItems
+                  ]}
+                  extraData={{ selectedValue: activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '', onPress: handleInventoryItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
+                  ItemSeparatorComponent={() => (
+                    <View style={{ height: 16 }} />
+                  )}
+                  renderItem={renderItemItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                />
+              </View>
             </View>
           </View>
         </Modal>
