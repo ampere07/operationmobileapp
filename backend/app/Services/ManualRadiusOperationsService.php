@@ -459,11 +459,13 @@ class ManualRadiusOperationsService
     private function updateDatabaseCredentials(string $accountNo, string $oldUsername, string $newUsername, string $updatedBy): void
     {
         $rowsUpdated = 0;
+        $accountId = null;
 
         // PPPoE Username is in technical_details table, not billing_accounts
         if (!empty($accountNo)) {
             $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
             if ($billingAccount) {
+                $accountId = $billingAccount->id;
                 $rowsUpdated = DB::table('technical_details')
                     ->where('account_id', $billingAccount->id)
                     ->update([
@@ -471,26 +473,50 @@ class ManualRadiusOperationsService
                         'updated_at' => now(),
                         'updated_by' => $updatedBy
                     ]);
-            }
 
-            if ($rowsUpdated > 0) {
-                $this->writeLog("[DB] Updated username via Account No: $accountNo");
-                return;
+                if ($rowsUpdated > 0) {
+                    $this->writeLog("[DB] Updated username via Account No: $accountNo");
+                }
             }
         }
 
-        // Fallback to old username in technical_details
-        $this->writeLog("[DB] Account No update failed/skipped. Trying old username...");
-        $rowsUpdated = DB::table('technical_details')
-            ->where('username', $oldUsername)
-            ->update([
-                'username' => $newUsername,
-                'updated_at' => now(),
-                'updated_by' => $updatedBy
-            ]);
+        // Fallback to old username in technical_details if account no update didn't happen
+        if ($rowsUpdated === 0) {
+            $this->writeLog("[DB] Account No update failed/skipped. Trying old username...");
+            
+            $techDetail = DB::table('technical_details')->where('username', $oldUsername)->first();
+            if ($techDetail) {
+                $accountId = $techDetail->account_id;
+            }
 
+            $rowsUpdated = DB::table('technical_details')
+                ->where('username', $oldUsername)
+                ->update([
+                    'username' => $newUsername,
+                    'updated_at' => now(),
+                    'updated_by' => $updatedBy
+                ]);
+
+            if ($rowsUpdated > 0) {
+                $this->writeLog("[DB] Database credentials updated successfully via username");
+            }
+        }
+
+        // If technical_details was updated successfully, also sync job_orders
         if ($rowsUpdated > 0) {
-            $this->writeLog("[DB] Database credentials updated successfully via username");
+            if ($accountId) {
+                $joUpdated = DB::table('job_orders')
+                    ->where('account_id', $accountId)
+                    ->update([
+                        'pppoe_username' => $newUsername,
+                        'username' => $newUsername,
+                        'updated_at' => now()
+                    ]);
+                
+                $this->writeLog("[DB] Synced job_orders username & pppoe_username for Account ID: $accountId ($joUpdated rows affected)");
+            } else {
+                $this->writeLog("[WARNING] Could not determine account_id to sync job_orders table");
+            }
         } else {
             $this->writeLog("[WARNING] RADIUS updated, but database update affected 0 rows");
         }

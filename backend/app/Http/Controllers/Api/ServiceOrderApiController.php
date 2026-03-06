@@ -459,7 +459,8 @@ class ServiceOrderApiController extends Controller
                 'image1_url',
                 'image2_url',
                 'image3_url',
-                'status'
+                'status',
+                'updated_by_user'
             ];
             
             $data = [];
@@ -507,13 +508,13 @@ class ServiceOrderApiController extends Controller
                         $lcpnapValue = $request->input('new_lcpnap');
                         $parts = explode(' - ', $lcpnapValue);
                         if (count($parts) === 2) {
-                            $newLcp = trim($parts[0]);
-                            $newNap = trim($parts[1]);
+                            $newLcp = $parts[0];
+                            $newNap = $parts[1];
                         } else {
                             $parts = explode('-', $lcpnapValue);
                             if (count($parts) === 2) {
-                                $newLcp = trim($parts[0]);
-                                $newNap = trim($parts[1]);
+                                $newLcp = $parts[0];
+                                $newNap = $parts[1];
                             }
                         }
                     }
@@ -526,7 +527,7 @@ class ServiceOrderApiController extends Controller
                     $newSN = $request->filled('new_router_modem_sn') ? $request->input('new_router_modem_sn') : $technicalDetails->router_modem_sn;
                     
                     // Calculate LCPNAP (LCP + NAP)
-                    $newLcpNap = trim(($newLcp ?? '') . ' - ' . ($newNap ?? ''), ' - ');
+                    $newLcpNap = trim(($newLcp ?? '') . ' ' . ($newNap ?? ''), ' ');
 
                     // Add new values to $data for service_orders
                     $data['new_lcp'] = $newLcp;
@@ -549,6 +550,31 @@ class ServiceOrderApiController extends Controller
                             'updated_at' => now(),
                             'updated_by' => Auth::user()->name ?? 'API'
                         ]);
+
+                    // Also update job_orders table to keep lcpnap/port/vlan in sync
+                    $billingAccountForJobOrder = DB::table('billing_accounts')
+                        ->where('account_no', $serviceOrder->account_no)
+                        ->first();
+
+                    if ($billingAccountForJobOrder) {
+                        $jobOrderSyncData = array_filter([
+                            'lcpnap'     => $newLcpNap ?: null,
+                            'port'       => $newPort   ?: null,
+                            'vlan'       => $newVlan   ?: null,
+                            'updated_at' => now(),
+                        ], fn($v) => !is_null($v));
+
+                        $joAffected = DB::table('job_orders')
+                            ->where('account_id', $billingAccountForJobOrder->id)
+                            ->update($jobOrderSyncData);
+
+                        Log::info('[API SERVICE ORDER] Synced job_orders lcpnap/port/vlan for account_id ' . $billingAccountForJobOrder->id, [
+                            'rows_affected' => $joAffected,
+                            'lcpnap'        => $newLcpNap,
+                            'port'          => $newPort,
+                            'vlan'          => $newVlan,
+                        ]);
+                    }
                 }
             }
 
@@ -713,18 +739,40 @@ class ServiceOrderApiController extends Controller
                 }
             }
 
-            // Trigger Migration if repair category is 'Migrate', 'Relocate', or 'Relocate Router' and visit status is 'Done'
+            // Trigger Migration if repair category is 'Migrate', 'Relocate', or 'Transfer LCP/NAP/PORT' and visit status is 'Done'
             $migrationStatus = null;
-            if (($repairCategory === 'migrate' || $repairCategory === 'relocate' || $repairCategory === 'relocate router' || $repairCategory === 'transfer lcp/nap/port') && $visitStatus === 'done') {
+            $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port'];
+            if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done') {
                 $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
                 if ($billingAccount) {
-                    $newRouterModemSN = $request->input('new_router_modem_sn');
-                    if ($newRouterModemSN) {
-                        \Log::info('Triggering auto-migration for Service Order', [
-                            'account_no' => $serviceOrder->account_no,
-                            'new_sn' => $newRouterModemSN
+                    \Log::info('Triggering auto-migration for Service Order', [
+                        'account_no' => $serviceOrder->account_no
+                    ]);
+                    $migrationStatus = $this->attemptMigration($billingAccount);
+
+                    // Update job_orders table with new LCPNAP, port, and vlan for relocation categories
+                    $newLcpnap = $request->input('new_lcpnap');
+                    $newPort   = $request->input('new_port');
+                    $newVlan   = $request->input('new_vlan');
+
+                    if ($newLcpnap || $newPort || $newVlan) {
+                        $jobOrderUpdateData = array_filter([
+                            'lcpnap' => $newLcpnap ?: null,
+                            'port'   => $newPort   ?: null,
+                            'vlan'   => $newVlan   ?: null,
+                            'updated_at' => now(),
+                        ], fn($v) => !is_null($v));
+
+                        $affected = DB::table('job_orders')
+                            ->where('account_id', $billingAccount->id)
+                            ->update($jobOrderUpdateData);
+
+                        \Log::info('[API SERVICE ORDER RELOCATE] Updated job_orders for account_id ' . $billingAccount->id, [
+                            'rows_affected' => $affected,
+                            'new_lcpnap'    => $newLcpnap,
+                            'new_port'      => $newPort,
+                            'new_vlan'      => $newVlan,
                         ]);
-                        $migrationStatus = $this->attemptMigration($billingAccount, $newRouterModemSN);
                     }
                 }
             }
@@ -1185,7 +1233,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptMigration($billingAccount, $newRouterModemSN): string
+    private function attemptMigration($billingAccount): string
     {
         try {
             $accountNo = $billingAccount->account_no;
@@ -1225,6 +1273,11 @@ class ServiceOrderApiController extends Controller
                 'old' => $oldUsername,
                 'new' => $newUsername
             ]);
+
+            if ($oldUsername === $newUsername) {
+                \Log::info('[API SERVICE ORDER MIGRATION SKIP] Username did not change');
+                return 'no_change';
+            }
 
             // Prepare parameters for ManualRadiusOperationsService
             // Password is NOT changed during migration

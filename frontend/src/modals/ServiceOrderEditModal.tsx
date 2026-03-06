@@ -412,6 +412,58 @@ const styles = StyleSheet.create({
   },
 });
 
+const FormInput = React.memo(({ field, placeholder, editable = true, keyboardType = 'default', value, error, isDarkMode, onChangeText }: any) => {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+        {placeholder.replace('Enter ', '')} {editable && field !== 'dateInstalled' && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TextInput
+        style={[styles.textInput, {
+          backgroundColor: !editable ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+          color: !editable ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+          borderColor: error ? '#ef4444' : (!editable ? (isDarkMode ? '#4b5563' : '#e5e7eb') : (isDarkMode ? '#374151' : '#d1d5db'))
+        }]}
+        value={String(value || '')}
+        onChangeText={(text) => onChangeText(field, text)}
+        placeholder={placeholder}
+        placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+        editable={editable}
+        keyboardType={keyboardType}
+      />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+});
+
+const FormPicker = React.memo(({ field, label, items, value, error, enabled = true, isDarkMode, onChangeValue }: any) => {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+        {label}
+      </Text>
+      <View style={[styles.pickerContainer, {
+        borderColor: error ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
+      }]}>
+        <Picker
+          selectedValue={value}
+          onValueChange={(val) => onChangeValue(field, val)}
+          enabled={enabled}
+          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+          style={{ color: isDarkMode ? '#fff' : '#000' }}
+        >
+          <Picker.Item label={`Select ${label}`} value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+          {items.map((item: any, idx: number) => (
+            <Picker.Item key={idx} label={item.label || item} value={item.value || item} color={isDarkMode ? '#fff' : '#000'} />
+          ))}
+        </Picker>
+      </View>
+      {error && <Text style={styles.errorText}>{error}</Text>}
+    </View>
+  );
+});
+
 const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   isOpen,
   onClose,
@@ -427,8 +479,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const isTechnician = currentUser?.role_id === 2 || (typeof currentUser?.role === 'string' && currentUser.role.toLowerCase() === 'technician') || (typeof currentUser?.role === 'object' && currentUser.role.role_name.toLowerCase() === 'technician');
 
   const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
-  const [lcps, setLcps] = useState<string[]>([]);
-  const [naps, setNaps] = useState<string[]>([]);
   const [usedPorts, setUsedPorts] = useState<string[]>([]);
   const [totalPorts, setTotalPorts] = useState<number>(32);
   const [lcpnaps, setLcpnaps] = useState<LCPNAP[]>([]);
@@ -576,8 +626,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         getAllInventoryItems('', 1, 1000),
         apiClient.get<{ success: boolean; data: any[] }>('/users'),
         Promise.all([
-          apiClient.get<{ success: boolean; data: any[] }>('/lcp'),
-          apiClient.get<{ success: boolean; data: any[] }>('/nap'),
           apiClient.get<{ success: boolean; data: any[] }>('/vlan'),
           getAllLCPNAPs('', 1, 1000),
           apiClient.get<{ success: boolean; data: any[] }>('/plans'),
@@ -648,19 +696,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         console.error('Error fetching technicians:', technicianResult.reason);
       }
 
-      // Technical Details (LCP, NAP, VLAN, LCPNAPs, Plans)
+      // Technical Details (VLAN, LCPNAPs, Plans)
       if (technicalDetailsResult.status === 'fulfilled') {
-        const [lcpResponse, napResponse, vlanResponse, lcpnapsRes, planResponse] = technicalDetailsResult.value;
-
-        if (lcpResponse.data.success && Array.isArray(lcpResponse.data.data)) {
-          const lcpOptions = lcpResponse.data.data.map((item: any) => item.lcp_name || item.lcp || item.name).filter(Boolean);
-          setLcps(lcpOptions as string[]);
-        }
-
-        if (napResponse.data.success && Array.isArray(napResponse.data.data)) {
-          const napOptions = napResponse.data.data.map((item: any) => item.nap_name || item.nap || item.name).filter(Boolean);
-          setNaps(napOptions as string[]);
-        }
+        const [vlanResponse, lcpnapsRes, planResponse] = technicalDetailsResult.value;
 
         if (vlanResponse.data.success && Array.isArray(vlanResponse.data.data)) {
           const vlanOptions = vlanResponse.data.data.map((item: any) => item.value).filter(Boolean);
@@ -855,13 +893,14 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         newPlan: serviceOrderData.new_plan || '',
         serviceCharge: serviceOrderData.serviceCharge ? serviceOrderData.serviceCharge.toString().replace('₱', '').trim() : (serviceOrderData.service_charge ? serviceOrderData.service_charge.toString().replace('₱', '').trim() : '0.00'),
         status: serviceOrderData.status || 'unused',
-        newRouterModemSN: '',
-        newLcp: '',
-        newNap: '',
-        newPort: '',
-        newVlan: '',
+        newRouterModemSN: serviceOrderData.newRouterModemSN || serviceOrderData.new_router_modem_sn || '',
+        newLcp: serviceOrderData.newLcp || serviceOrderData.new_lcp || '',
+        newNap: serviceOrderData.newNap || serviceOrderData.new_nap || '',
+        newPort: normalizePort(serviceOrderData.newPort || serviceOrderData.new_port),
+        newVlan: serviceOrderData.newVlan || serviceOrderData.new_vlan || '',
 
-        routerModel: '',
+        routerModel: serviceOrderData.routerModel || serviceOrderData.router_model || '',
+        newLcpnap: serviceOrderData.newLcpnap || serviceOrderData.new_lcpnap || '',
         fullAddress: serviceOrderData.fullAddress || serviceOrderData.full_address || ''
       }));
     }
@@ -1081,7 +1120,10 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             newErrors.newPort = 'This port is already taken';
           }
 
-          if (!formData.routerModel) newErrors.routerModel = 'Router Model is required';
+          // Router Model is NOT required for Relocate and Transfer LCP/NAP/PORT, only for Migrate
+          if (formData.repairCategory !== 'Relocate' && formData.repairCategory !== 'Transfer LCP/NAP/PORT' && !formData.routerModel) {
+            newErrors.routerModel = 'Router Model is required';
+          }
         }
 
         if (formData.repairCategory === 'Replace Router' && !formData.newRouterModemSN) {
@@ -1246,16 +1288,26 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         concern: updatedFormData.concern,
         concern_remarks: updatedFormData.concernRemarks,
         updated_by: currentUserEmail,
+        updated_by_user: currentUserEmail,
         updated_date: updatedFormData.modifiedDate,
         support_remarks: updatedFormData.supportRemarks,
         service_charge: parseFloat(updatedFormData.serviceCharge),
         status: updatedFormData.status,
         new_router_modem_sn: updatedFormData.newRouterModemSN,
+        new_lcp: updatedFormData.newLcp,
+        new_nap: updatedFormData.newNap,
         new_lcpnap: updatedFormData.newLcpnap,
         new_port: updatedFormData.newPort,
         new_vlan: updatedFormData.newVlan,
         router_model: updatedFormData.routerModel,
-        new_plan: updatedFormData.newPlan
+        new_plan: updatedFormData.newPlan,
+        // Save old values when doing a relocation/migration/transfer
+        old_lcp: updatedFormData.lcp,
+        old_nap: updatedFormData.nap,
+        old_port: updatedFormData.port,
+        old_vlan: updatedFormData.vlan,
+        old_lcpnap: serviceOrderData?.old_lcpnap || serviceOrderData?.lcpnap || '',
+        old_router_modem_sn: updatedFormData.routerModemSN
       };
 
       const response = await apiClient.put(`/service-orders/${serviceOrderId}`, updateData);
@@ -1396,67 +1448,41 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     </Text>
   );
 
-  const renderInput = (
+  const renderInput = useCallback((
     field: keyof ServiceOrderEditFormData,
     placeholder: string,
     editable = true,
     keyboardType: 'default' | 'numeric' | 'email-address' = 'default'
   ) => (
-    <View style={styles.inputGroup}>
-      {renderLabel(placeholder.replace('Enter ', ''), !editable && field !== 'dateInstalled' ? false : true)}
-      <TextInput
-        style={[styles.textInput, {
-          backgroundColor: !editable
-            ? (isDarkMode ? '#374151' : '#f3f4f6')
-            : (isDarkMode ? '#1f2937' : '#ffffff'),
-          color: !editable
-            ? (isDarkMode ? '#9ca3af' : '#6b7280')
-            : (isDarkMode ? '#ffffff' : '#111827'),
-          borderColor: errors[field] ? '#ef4444' : (!editable ? (isDarkMode ? '#4b5563' : '#e5e7eb') : (isDarkMode ? '#374151' : '#d1d5db'))
-        }]}
-        value={String(formData[field])}
-        onChangeText={(text) => handleInputChange(field, text)}
-        placeholder={placeholder}
-        placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-        editable={editable}
-        keyboardType={keyboardType}
-      />
-      {errors[field] && (
-        <Text style={styles.errorText}>{errors[field]}</Text>
-      )}
-    </View>
-  );
+    <FormInput
+      field={field}
+      placeholder={placeholder}
+      editable={editable}
+      keyboardType={keyboardType}
+      value={formData[field]}
+      error={errors[field]}
+      isDarkMode={isDarkMode}
+      onChangeText={handleInputChange}
+    />
+  ), [formData, errors, isDarkMode, handleInputChange]);
 
-  const renderPicker = (
+  const renderPicker = useCallback((
     field: keyof ServiceOrderEditFormData,
     items: string[],
     label: string,
     enabled = true
   ) => (
-    <View style={styles.inputGroup}>
-      {renderLabel(label)}
-      <View style={[styles.pickerContainer, {
-        borderColor: errors[field] ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-      }]}>
-        <Picker
-          selectedValue={formData[field]}
-          onValueChange={(val) => handleInputChange(field, val)}
-          enabled={enabled}
-          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-          style={{ color: isDarkMode ? '#fff' : '#000' }}
-        >
-          <Picker.Item label={`Select ${label}`} value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-          {items.map((item, idx) => (
-            <Picker.Item key={idx} label={item} value={item} color={isDarkMode ? '#fff' : '#000'} />
-          ))}
-        </Picker>
-      </View>
-      {errors[field] && (
-        <Text style={styles.errorText}>{errors[field]}</Text>
-      )}
-    </View>
-  );
+    <FormPicker
+      field={field}
+      label={label}
+      items={items}
+      value={formData[field]}
+      error={errors[field]}
+      enabled={enabled}
+      isDarkMode={isDarkMode}
+      onChangeValue={handleInputChange}
+    />
+  ), [formData, errors, isDarkMode, handleInputChange]);
 
   const renderLcpNapPicker = () => (
     <View style={styles.inputGroup}>
@@ -1517,6 +1543,139 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       </View>
     );
   };
+
+  const renderListSeparator = useCallback(() => <View style={{ height: 16 }} />, []);
+
+  const renderListEmpty = useCallback(() => (
+    <View style={styles.miniModalEmpty}>
+      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+    </View>
+  ), [isDarkMode]);
+
+  const renderLcpnapItem = useCallback(({ item }: any) => {
+    const isSelected = formData.newLcpnap === item.lcpnap_name;
+    return (
+      <Pressable
+        onPress={() => {
+          setFormData(prev => ({
+            ...prev,
+            newLcpnap: item.lcpnap_name,
+            newLcp: item.lcp || '',
+            newNap: item.nap || '',
+            newPort: ''
+          }));
+          setErrors(prev => ({ ...prev, newLcpnap: '' }));
+          setIsLcpnapMiniModalVisible(false);
+          setLcpnapSearch('');
+          Keyboard.dismiss();
+        }}
+        style={({ pressed }) => [
+          styles.miniModalItem,
+          {
+            backgroundColor: pressed
+              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              : 'transparent'
+          }
+        ]}
+      >
+        <Text style={[styles.miniModalItemText, {
+          color: isSelected
+            ? (colorPalette?.primary || '#7c3aed')
+            : (isDarkMode ? '#e5e7eb' : '#374151'),
+          fontWeight: isSelected ? '700' : 'bold',
+          flex: 1
+        }]}>
+          {item.lcpnap_name}
+        </Text>
+        {isSelected && (
+          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+        )}
+      </Pressable>
+    );
+  }, [formData.newLcpnap, isDarkMode, colorPalette?.primary]);
+
+  const renderRouterModelItem = useCallback(({ item }: any) => {
+    const isSelected = formData.routerModel === item.model;
+    return (
+      <Pressable
+        onPress={() => {
+          handleInputChange('routerModel', item.model);
+          setIsRouterModelMiniModalVisible(false);
+          setRouterModelSearch('');
+          Keyboard.dismiss();
+        }}
+        style={({ pressed }) => [
+          styles.miniModalItem,
+          {
+            backgroundColor: pressed
+              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              : 'transparent'
+          }
+        ]}
+      >
+        <Text style={[styles.miniModalItemText, {
+          color: isSelected
+            ? (colorPalette?.primary || '#7c3aed')
+            : (isDarkMode ? '#e5e7eb' : '#374151'),
+          fontWeight: isSelected ? '700' : 'bold',
+          flex: 1
+        }]}>
+          {item.model}
+        </Text>
+        {isSelected && (
+          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+        )}
+      </Pressable>
+    );
+  }, [formData.routerModel, isDarkMode, colorPalette?.primary, handleInputChange]);
+
+  const renderInventoryItem = useCallback(({ item }: any) => {
+    const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
+    const isSelected = currentItemId === item.item_name;
+    return (
+      <Pressable
+        onPress={() => {
+          if (activeItemIndex !== null) {
+            handleItemChange(activeItemIndex, 'itemId', item.item_name);
+          }
+          setIsItemMiniModalVisible(false);
+          setItemSearchModal('');
+          setActiveItemIndex(null);
+          Keyboard.dismiss();
+        }}
+        style={({ pressed }) => [
+          styles.miniModalItem,
+          {
+            backgroundColor: pressed
+              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              : 'transparent'
+          }
+        ]}
+      >
+        <Text style={[styles.miniModalItemText, {
+          color: isSelected
+            ? (colorPalette?.primary || '#7c3aed')
+            : (isDarkMode ? '#e5e7eb' : '#374151'),
+          fontWeight: isSelected ? '700' : 'bold',
+          flex: 1
+        }]}>
+          {item.item_name}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {item.image_url && (
+            <Image
+              source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
+              style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
+            />
+          )}
+          {isSelected && (
+            <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+          )}
+        </View>
+      </Pressable>
+    );
+  }, [activeItemIndex, orderItems, isDarkMode, colorPalette?.primary, handleItemChange]);
+
 
   if (!isOpen) return null;
 
@@ -1654,7 +1813,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                           >
                             <Picker.Item label="Select Technician" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                             {technicians.map((t, i) => (
-                              <Picker.Item key={i} label={t.name} value={t.email} color={isDarkMode ? '#fff' : '#000'} />
+                              <Picker.Item key={`tech-${i}`} label={t.name} value={t.email} color={isDarkMode ? '#fff' : '#000'} />
                             ))}
                           </Picker>
                         </View>
@@ -1674,35 +1833,37 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               {renderNewPortPicker()}
                               {renderPicker('newVlan', vlans, 'New VLAN')}
 
-                              {/* Router Model Selection */}
-                              <View style={styles.inputGroup}>
-                                {renderLabel('Router Model', true)}
-                                <Pressable
-                                  onPress={() => {
-                                    setIsRouterModelMiniModalVisible(true);
-                                    setRouterModelSearch('');
-                                  }}
-                                  style={[styles.searchContainer, {
-                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                    borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                    height: 50,
-                                  }]}
-                                >
-                                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                  <Text style={{
-                                    flex: 1,
-                                    paddingHorizontal: 12,
-                                    color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
-                                    fontSize: 16
-                                  }}>
-                                    {formData.routerModel || "Select Router Model"}
-                                  </Text>
-                                  <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                </Pressable>
-                                {errors.routerModel && (
-                                  <Text style={styles.errorText}>{errors.routerModel}</Text>
-                                )}
-                              </View>
+                              {/* Router Model Selection — hidden for Relocate and Transfer LCP/NAP/PORT */}
+                              {formData.repairCategory !== 'Relocate' && formData.repairCategory !== 'Transfer LCP/NAP/PORT' && (
+                                <View style={styles.inputGroup}>
+                                  {renderLabel('Router Model', true)}
+                                  <Pressable
+                                    onPress={() => {
+                                      setIsRouterModelMiniModalVisible(true);
+                                      setRouterModelSearch('');
+                                    }}
+                                    style={[styles.searchContainer, {
+                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                      borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                      height: 50,
+                                    }]}
+                                  >
+                                    <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                    <Text style={{
+                                      flex: 1,
+                                      paddingHorizontal: 12,
+                                      color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
+                                      fontSize: 16
+                                    }}>
+                                      {formData.routerModel || "Select Router Model"}
+                                    </Text>
+                                    <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  </Pressable>
+                                  {errors.routerModel && (
+                                    <Text style={styles.errorText}>{errors.routerModel}</Text>
+                                  )}
+                                </View>
+                              )}
                             </>
                           )}
                           {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
@@ -1727,7 +1888,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               >
                                 <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                 {visitByTechnicians.map((t, i) => (
-                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                  <Picker.Item key={`visitby-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                                 ))}
                               </Picker>
                             </View>
@@ -1982,7 +2143,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               >
                                 <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                 {technicians.map((t, i) => (
-                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                  <Picker.Item key={`resched-visitby-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                                 ))}
                               </Picker>
                             </View>
@@ -2022,7 +2183,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               >
                                 <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                 {failedVisitWithTechnicians.map((t, i) => (
-                                  <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
+                                  <Picker.Item key={`resched-visitother-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                                 ))}
                               </Picker>
                             </View>
@@ -2060,7 +2221,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             style={{ color: isDarkMode ? '#fff' : '#000' }}
                           >
                             <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                            {concerns.map(c => <Picker.Item key={c.id} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
+                            {concerns.map((c, i) => <Picker.Item key={`concern-${c.id || i}`} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
                           </Picker>
                         </View>
                         {errors.concern && (
@@ -2151,45 +2312,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               <FlashList
                 data={filteredLcpnaps}
                 keyExtractor={(item) => item.id.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      handleInputChange('newLcpnap', item.lcpnap_name);
-                      setIsLcpnapMiniModalVisible(false);
-                      setLcpnapSearch('');
-                      Keyboard.dismiss();
-                    }}
-                    style={({ pressed }) => [
-                      styles.miniModalItem,
-                      {
-                        backgroundColor: pressed
-                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                          : 'transparent'
-                      }
-                    ]}
-                  >
-                    <Text style={[styles.miniModalItemText, {
-                      color: formData.newLcpnap === item.lcpnap_name
-                        ? (colorPalette?.primary || '#7c3aed')
-                        : (isDarkMode ? '#e5e7eb' : '#374151'),
-                      fontWeight: formData.newLcpnap === item.lcpnap_name ? '700' : 'bold',
-                      flex: 1
-                    }]}>
-                      {item.lcpnap_name}
-                    </Text>
-                    {formData.newLcpnap === item.lcpnap_name && (
-                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                    )}
-                  </Pressable>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
+                ItemSeparatorComponent={renderListSeparator}
+                renderItem={renderLcpnapItem}
+                ListEmptyComponent={renderListEmpty}
                 contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
               />
             </View>
@@ -2239,45 +2364,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               <FlashList
                 data={filteredRouterModels}
                 keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      handleInputChange('routerModel', item.model);
-                      setIsRouterModelMiniModalVisible(false);
-                      setRouterModelSearch('');
-                      Keyboard.dismiss();
-                    }}
-                    style={({ pressed }) => [
-                      styles.miniModalItem,
-                      {
-                        backgroundColor: pressed
-                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                          : 'transparent'
-                      }
-                    ]}
-                  >
-                    <Text style={[styles.miniModalItemText, {
-                      color: formData.routerModel === item.model
-                        ? (colorPalette?.primary || '#7c3aed')
-                        : (isDarkMode ? '#e5e7eb' : '#374151'),
-                      fontWeight: formData.routerModel === item.model ? '700' : 'bold',
-                      flex: 1
-                    }]}>
-                      {item.model}
-                    </Text>
-                    {formData.routerModel === item.model && (
-                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                    )}
-                  </Pressable>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
+                ItemSeparatorComponent={renderListSeparator}
+                renderItem={renderRouterModelItem}
+                ListEmptyComponent={renderListEmpty}
                 contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
               />
             </View>
@@ -2330,60 +2419,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   ...filteredInventoryItems
                 ]}
                 keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={() => (
-                  <View style={{ height: 16 }} />
-                )}
-                renderItem={({ item }) => {
-                  const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
-                  const isSelected = currentItemId === item.item_name;
-                  return (
-                    <Pressable
-                      onPress={() => {
-                        if (activeItemIndex !== null) {
-                          handleItemChange(activeItemIndex, 'itemId', item.item_name);
-                        }
-                        setIsItemMiniModalVisible(false);
-                        setItemSearchModal('');
-                        setActiveItemIndex(null);
-                        Keyboard.dismiss();
-                      }}
-                      style={({ pressed }) => [
-                        styles.miniModalItem,
-                        {
-                          backgroundColor: pressed
-                            ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                            : 'transparent'
-                        }
-                      ]}
-                    >
-                      <Text style={[styles.miniModalItemText, {
-                        color: isSelected
-                          ? (colorPalette?.primary || '#7c3aed')
-                          : (isDarkMode ? '#e5e7eb' : '#374151'),
-                        fontWeight: isSelected ? '700' : 'bold',
-                        flex: 1
-                      }]}>
-                        {item.item_name}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        {item.image_url && (
-                          <Image
-                            source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
-                            style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
-                          />
-                        )}
-                        {isSelected && (
-                          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                }}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
+                ItemSeparatorComponent={renderListSeparator}
+                renderItem={renderInventoryItem}
+                ListEmptyComponent={renderListEmpty}
                 contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
               />
             </View>

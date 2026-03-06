@@ -141,8 +141,13 @@ const ServiceOrderPage: React.FC = () => {
   const isDarkMode = false; // Forced light mode as per user request
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-  const [selectedServiceOrder, setSelectedServiceOrder] = useState<ServiceOrder | null>(null);
   const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
+  const [selectedServiceOrderRaw, setSelectedServiceOrderRaw] = useState<ServiceOrder | null>(null);
+
+  const selectedServiceOrder = useMemo(() => {
+    if (!selectedServiceOrderRaw) return null;
+    return serviceOrders.find(so => String(so.id) === String(selectedServiceOrderRaw.id)) || selectedServiceOrderRaw;
+  }, [serviceOrders, selectedServiceOrderRaw]);
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
@@ -293,7 +298,7 @@ const ServiceOrderPage: React.FC = () => {
   const isTablet = width >= 768;
 
   const handleRowClick = useCallback((serviceOrder: ServiceOrder) => {
-    setSelectedServiceOrder(serviceOrder);
+    setSelectedServiceOrderRaw(serviceOrder);
     if (!isTablet) {
       setMobileView('details');
     }
@@ -303,13 +308,13 @@ const ServiceOrderPage: React.FC = () => {
 
   const handleMobileBack = useCallback(() => {
     if (mobileView === 'details') {
-      setSelectedServiceOrder(null);
+      setSelectedServiceOrderRaw(null);
       setMobileView('orders');
     }
   }, [mobileView]);
 
   const handleMobileRowClick = useCallback((serviceOrder: ServiceOrder) => {
-    setSelectedServiceOrder(serviceOrder);
+    setSelectedServiceOrderRaw(serviceOrder);
     setMobileView('details');
   }, []);
 
@@ -526,7 +531,7 @@ const ServiceOrderPage: React.FC = () => {
           <View style={[so.tabletDetail, { display: isTablet ? 'flex' : 'none' }]}>
             <ServiceOrderDetails
               serviceOrder={selectedServiceOrder as ServiceOrder}
-              onClose={() => setSelectedServiceOrder(null)}
+              onClose={() => setSelectedServiceOrderRaw(null)}
               isMobile={false}
             />
           </View>
