@@ -43,6 +43,14 @@ class RequestCache {
     this.pendingRequests.delete(key);
   }
 
+  getSync<T>(key: string, ttl: number = this.defaultTTL): T | null {
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.timestamp < ttl) {
+      return cached.data;
+    }
+    return null;
+  }
+
   clear() {
     this.cache.clear();
     this.pendingRequests.clear();

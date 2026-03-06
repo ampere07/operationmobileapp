@@ -7,6 +7,7 @@ import { initializeCsrf, loadCookies, clearCookies } from './src/config/api';
 import { userSettingsService } from './src/services/userSettingsService';
 import PaymentResultModal from './src/components/PaymentResultModal';
 import SplashScreen from './src/components/SplashScreen';
+import { settingsColorPaletteService } from './src/services/settingsColorPaletteService';
 
 import { View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -45,6 +46,14 @@ function App() {
         await initializeCsrf();
       } catch (error) {
         console.error('Failed to initialize CSRF or load cookies:', error);
+      }
+
+      // Pre-load the active configuration before rendering the app structure
+      // This eliminates the styling FOUC (Flash of Unstyled Content) on the Login & Dashboard screens.
+      try {
+        await settingsColorPaletteService.getActive();
+      } catch (error) {
+        console.error('Failed to preload color palette:', error);
       }
 
       try {

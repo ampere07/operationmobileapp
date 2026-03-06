@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, Pressable, TextInput, ScrollView, Modal, Alert,
-  Image, Platform, KeyboardAvoidingView, StyleSheet,
+  Image, Platform, KeyboardAvoidingView, StyleSheet, Keyboard, InteractionManager, ActivityIndicator
 } from 'react-native';
-import { Camera, CheckCircle, AlertCircle, Loader2 } from 'lucide-react-native';
+import { Camera, CheckCircle, AlertCircle, Loader2, Search, Check, X, ChevronDown } from 'lucide-react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -147,6 +148,36 @@ const DropdownField = React.memo<DropdownFieldProps>(
   ),
 );
 
+// ─── Mini Modal Item Component ──────────────────────────────────────────────
+interface MiniModalItemProps {
+  label: string;
+  isSelected: boolean;
+  onPress: (label: string) => void;
+  isDarkMode: boolean;
+  primaryColor: string;
+}
+
+const MiniModalItem = React.memo<MiniModalItemProps>(
+  ({ label, isSelected, onPress, isDarkMode, primaryColor }) => (
+    <Pressable
+      onPress={() => onPress(label)}
+      style={({ pressed }) => [
+        styles.miniModalItem,
+        { backgroundColor: pressed ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6') : 'transparent' }
+      ]}
+    >
+      <Text style={[styles.miniModalItemText, {
+        color: isSelected ? primaryColor : (isDarkMode ? '#e5e7eb' : '#374151'),
+        fontWeight: isSelected ? '700' : 'bold',
+        flex: 1
+      }]}>
+        {label}
+      </Text>
+      {isSelected && <Check size={24} color={primaryColor} />}
+    </Pressable>
+  ),
+);
+
 // Stable HTML — defined once at module level, never recreated
 const LEAFLET_HTML = `<!DOCTYPE html>
 <html>
@@ -269,10 +300,30 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
+  const [isLcpMiniModalVisible, setIsLcpMiniModalVisible] = useState(false);
+  const [lcpSearch, setLcpSearch] = useState('');
+
+  const [isNapMiniModalVisible, setIsNapMiniModalVisible] = useState(false);
+  const [napSearch, setNapSearch] = useState('');
+
   const webViewRef = useRef<WebView>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const primaryColor = colorPalette?.primary || '#7c3aed';
+
+  // Deferred rendering for heavy modal
+  const [isContentReady, setIsContentReady] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const handle = InteractionManager.runAfterInteractions(() => {
+        setIsContentReady(true);
+      });
+      return () => handle.cancel();
+    } else {
+      setIsContentReady(false);
+    }
+  }, [isOpen]);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
 
@@ -366,6 +417,18 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
     return city ? allBarangays.filter(b => b.city_id === city.id) : [];
   }, [formData.city, allCities, allBarangays]);
 
+  const filteredLcpList = useMemo(() => {
+    const query = lcpSearch.toLowerCase();
+    if (!query) return lcpList;
+    return lcpList.filter(l => l.lcp_name?.toLowerCase().includes(query));
+  }, [lcpList, lcpSearch]);
+
+  const filteredNapList = useMemo(() => {
+    const query = napSearch.toLowerCase();
+    if (!query) return napList;
+    return napList.filter(n => n.nap_name?.toLowerCase().includes(query));
+  }, [napList, napSearch]);
+
   // ── Handlers (stable references) ─────────────────────────────────────────
 
   const resetForm = useCallback(() => {
@@ -409,6 +472,46 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
 
   const handlePortTotalSelect = useCallback((val: string) => {
     setFormData(prev => ({ ...prev, port_total: val }));
+  }, []);
+
+  const handleLcpItemPress = useCallback((name: string) => {
+    handleLcpChange(name);
+    setIsLcpMiniModalVisible(false);
+    setLcpSearch('');
+    Keyboard.dismiss();
+  }, [handleLcpChange]);
+
+  const handleNapItemPress = useCallback((name: string) => {
+    handleNapChange(name);
+    setIsNapMiniModalVisible(false);
+    setNapSearch('');
+    Keyboard.dismiss();
+  }, [handleNapChange]);
+
+  const renderLcpItem = useCallback(({ item, extraData }: any) => {
+    if (!item?.lcp_name) return null;
+    return (
+      <MiniModalItem
+        label={item.lcp_name}
+        isSelected={extraData.selectedValue === item.lcp_name}
+        onPress={extraData.onPress}
+        isDarkMode={extraData.isDarkMode}
+        primaryColor={extraData.primaryColor}
+      />
+    );
+  }, []);
+
+  const renderNapItem = useCallback(({ item, extraData }: any) => {
+    if (!item?.nap_name) return null;
+    return (
+      <MiniModalItem
+        label={item.nap_name}
+        isSelected={extraData.selectedValue === item.nap_name}
+        onPress={extraData.onPress}
+        isDarkMode={extraData.isDarkMode}
+        primaryColor={extraData.primaryColor}
+      />
+    );
   }, []);
 
   const handleMapPress = useCallback(({ latitude, longitude }: { latitude: number; longitude: number }) => {
@@ -670,179 +773,234 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
-              <View style={{ gap: 16 }}>
-
-                <ImageUploadField
-                  label="Reading Image"
-                  field="reading_image"
-                  previewUri={imagePreviews.reading_image}
-                  isDarkMode={isDarkMode}
-                  onPress={handleImageUpload}
-                />
-
-                {/* Street */}
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
-                    Street<Text style={{ color: '#ef4444' }}>*</Text>
-                  </Text>
-                  <TextInput
-                    value={formData.street}
-                    onChangeText={handleStreetChange}
-                    style={{
-                      width: '100%', paddingHorizontal: 12, paddingVertical: 8,
-                      borderRadius: 4, borderWidth: 1,
-                      borderColor: errors.street ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                      color: isDarkMode ? '#ffffff' : '#111827',
-                    }}
-                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                    placeholder="Enter street"
-                  />
-                  {errors.street && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.street}</Text>}
+              {!isContentReady ? (
+                <View style={{ height: 400, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="large" color={primaryColor} />
                 </View>
+              ) : (
+                <View style={{ gap: 16 }}>
 
-                <DropdownField
-                  label="Region" value={formData.region} options={regionOptions}
-                  onChange={handleRegionChange} placeholder="Select Region"
-                  required error={errors.region} isDarkMode={isDarkMode} primaryColor={primaryColor}
-                />
-
-                <DropdownField
-                  label="City" value={formData.city} options={cityOptions}
-                  onChange={handleCityChange} placeholder={formData.region ? 'Select City' : 'All'}
-                  disabled={!formData.region} required error={errors.city}
-                  isDarkMode={isDarkMode} primaryColor={primaryColor}
-                />
-
-                <DropdownField
-                  label="Barangay" value={formData.barangay} options={barangayOptions}
-                  onChange={handleBarangayChange} placeholder={formData.city ? 'Select Barangay' : 'All'}
-                  disabled={!formData.city} required error={errors.barangay}
-                  isDarkMode={isDarkMode} primaryColor={primaryColor}
-                />
-
-                <DropdownField
-                  label="LCP" value={formData.lcp_name} options={lcpOptions}
-                  onChange={handleLcpChange} placeholder="Select LCP"
-                  required error={errors.lcp_name} isDarkMode={isDarkMode} primaryColor={primaryColor}
-                />
-
-                <DropdownField
-                  label="NAP" value={formData.nap_name} options={napOptions}
-                  onChange={handleNapChange} placeholder="Select NAP"
-                  required error={errors.nap_name} isDarkMode={isDarkMode} primaryColor={primaryColor}
-                />
-
-                {/* Port Total */}
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
-                    PORT TOTAL<Text style={{ color: '#ef4444' }}>*</Text>
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {(['8', '16', '32'] as const).map(val => {
-                      const isActive = formData.port_total === val;
-                      return (
-                        <Pressable
-                          key={val}
-                          onPress={() => handlePortTotalSelect(val)}
-                          style={{
-                            flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 6,
-                            borderWidth: isActive ? 2 : 1,
-                            borderColor: isActive ? primaryColor : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isActive ? primaryColor : (isDarkMode ? '#1f2937' : '#ffffff'),
-                          }}
-                        >
-                          <Text style={{ textAlign: 'center', fontWeight: isActive ? '700' : '400', color: isActive ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>
-                            {val}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  {errors.port_total && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.port_total}</Text>}
-                </View>
-
-                {/* LCPNAP Name (auto-generated) */}
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
-                    LCPNAP NAME<Text style={{ color: '#ef4444' }}>*</Text>
-                  </Text>
-                  <TextInput
-                    value={formData.lcpnap_name}
-                    editable={false}
-                    style={{
-                      width: '100%', paddingHorizontal: 12, paddingVertical: 8,
-                      borderRadius: 4, borderWidth: 1,
-                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                      backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                      color: isDarkMode ? '#d1d5db' : '#6b7280',
-                    }}
-                    placeholder="Auto-generated from LCP and NAP"
-                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                  />
-                  {errors.lcpnap_name && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.lcpnap_name}</Text>}
-                  <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Format: LCP-XXX NAP-XXX</Text>
-                </View>
-
-                {/* Coordinates + Map */}
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
-                    Coordinates<Text style={{ color: '#ef4444' }}>*</Text>
-                  </Text>
-                  <TextInput
-                    value={formData.coordinates}
-                    onChangeText={handleCoordinatesChange}
-                    placeholder="14.466580, 121.201807"
-                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                    style={{
-                      width: '100%', paddingHorizontal: 12, paddingVertical: 8,
-                      borderRadius: 4, borderWidth: 1,
-                      borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                      color: isDarkMode ? '#ffffff' : '#111827',
-                    }}
-                  />
-                  {errors.coordinates && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.coordinates}</Text>}
-
-                  <MapSection
-                    onMapPress={handleMapPress}
-                    onGetMyLocation={handleGetMyLocation}
+                  <ImageUploadField
+                    label="Reading Image"
+                    field="reading_image"
+                    previewUri={imagePreviews.reading_image}
                     isDarkMode={isDarkMode}
-                    colorPalette={colorPalette}
-                    webViewRef={webViewRef}
-                    loading={loading}
+                    onPress={handleImageUpload}
                   />
-                </View>
 
-                <ImageUploadField
-                  label="Image" field="image"
-                  previewUri={imagePreviews.image}
-                  isDarkMode={isDarkMode} onPress={handleImageUpload}
-                />
+                  {/* Street */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      Street<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
+                      value={formData.street}
+                      onChangeText={handleStreetChange}
+                      style={{
+                        width: '100%', paddingHorizontal: 12, paddingVertical: 8,
+                        borderRadius: 4, borderWidth: 1,
+                        borderColor: errors.street ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                        color: isDarkMode ? '#ffffff' : '#111827',
+                      }}
+                      placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                      placeholder="Enter street"
+                    />
+                    {errors.street && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.street}</Text>}
+                  </View>
 
-                <ImageUploadField
-                  label="Image 2" field="image_2"
-                  previewUri={imagePreviews.image_2}
-                  isDarkMode={isDarkMode} onPress={handleImageUpload}
-                />
-
-                {/* Modified By */}
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>Modified By</Text>
-                  <TextInput
-                    value={formData.modified_by}
-                    editable={false}
-                    style={{
-                      width: '100%', paddingHorizontal: 12, paddingVertical: 8,
-                      borderRadius: 4, borderWidth: 1,
-                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                      backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    }}
+                  <DropdownField
+                    label="Region" value={formData.region} options={regionOptions}
+                    onChange={handleRegionChange} placeholder="Select Region"
+                    required error={errors.region} isDarkMode={isDarkMode} primaryColor={primaryColor}
                   />
-                </View>
 
-              </View>
+                  <DropdownField
+                    label="City" value={formData.city} options={cityOptions}
+                    onChange={handleCityChange} placeholder={formData.region ? 'Select City' : 'All'}
+                    disabled={!formData.region} required error={errors.city}
+                    isDarkMode={isDarkMode} primaryColor={primaryColor}
+                  />
+
+                  <DropdownField
+                    label="Barangay" value={formData.barangay} options={barangayOptions}
+                    onChange={handleBarangayChange} placeholder={formData.city ? 'Select Barangay' : 'All'}
+                    disabled={!formData.city} required error={errors.barangay}
+                    isDarkMode={isDarkMode} primaryColor={primaryColor}
+                  />
+
+                  {/* LCP Filter Modal Trigger */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      LCP<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <Pressable
+                      onPress={() => { setIsLcpMiniModalVisible(true); setLcpSearch(''); }}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        width: '100%', paddingHorizontal: 16, paddingVertical: 14,
+                        borderRadius: 8, borderWidth: 1,
+                        borderColor: errors.lcp_name ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                      }}
+                    >
+                      <Text style={{ color: formData.lcp_name ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af'), fontSize: 16 }}>
+                        {formData.lcp_name || 'Select LCP'}
+                      </Text>
+                      <ChevronDown size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+                    </Pressable>
+                    {errors.lcp_name && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>!</Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: primaryColor }}>{errors.lcp_name}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* NAP Filter Modal Trigger */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      NAP<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <Pressable
+                      onPress={() => { setIsNapMiniModalVisible(true); setNapSearch(''); }}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        width: '100%', paddingHorizontal: 16, paddingVertical: 14,
+                        borderRadius: 8, borderWidth: 1,
+                        borderColor: errors.nap_name ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                      }}
+                    >
+                      <Text style={{ color: formData.nap_name ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#6b7280' : '#9ca3af'), fontSize: 16 }}>
+                        {formData.nap_name || 'Select NAP'}
+                      </Text>
+                      <ChevronDown size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+                    </Pressable>
+                    {errors.nap_name && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>!</Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: primaryColor }}>{errors.nap_name}</Text>
+                      </View>
+                    )}
+                  </View>
+
+
+                  {/* Port Total */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      PORT TOTAL<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['8', '16', '32'] as const).map(val => {
+                        const isActive = formData.port_total === val;
+                        return (
+                          <Pressable
+                            key={val}
+                            onPress={() => handlePortTotalSelect(val)}
+                            style={{
+                              flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 6,
+                              borderWidth: isActive ? 2 : 1,
+                              borderColor: isActive ? primaryColor : (isDarkMode ? '#374151' : '#d1d5db'),
+                              backgroundColor: isActive ? primaryColor : (isDarkMode ? '#1f2937' : '#ffffff'),
+                            }}
+                          >
+                            <Text style={{ textAlign: 'center', fontWeight: isActive ? '700' : '400', color: isActive ? '#ffffff' : (isDarkMode ? '#d1d5db' : '#374151') }}>
+                              {val}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {errors.port_total && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.port_total}</Text>}
+                  </View>
+
+                  {/* LCPNAP Name (auto-generated) */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      LCPNAP NAME<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
+                      value={formData.lcpnap_name}
+                      editable={false}
+                      style={{
+                        width: '100%', paddingHorizontal: 12, paddingVertical: 8,
+                        borderRadius: 4, borderWidth: 1,
+                        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                        backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                        color: isDarkMode ? '#d1d5db' : '#6b7280',
+                      }}
+                      placeholder="Auto-generated from LCP and NAP"
+                      placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    />
+                    {errors.lcpnap_name && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.lcpnap_name}</Text>}
+                    <Text style={{ fontSize: 12, marginTop: 4, color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Format: LCP-XXX NAP-XXX</Text>
+                  </View>
+
+                  {/* Coordinates + Map */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>
+                      Coordinates<Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
+                      value={formData.coordinates}
+                      onChangeText={handleCoordinatesChange}
+                      placeholder="14.466580, 121.201807"
+                      placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                      style={{
+                        width: '100%', paddingHorizontal: 12, paddingVertical: 8,
+                        borderRadius: 4, borderWidth: 1,
+                        borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                        color: isDarkMode ? '#ffffff' : '#111827',
+                      }}
+                    />
+                    {errors.coordinates && <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{errors.coordinates}</Text>}
+
+                    <MapSection
+                      onMapPress={handleMapPress}
+                      onGetMyLocation={handleGetMyLocation}
+                      isDarkMode={isDarkMode}
+                      colorPalette={colorPalette}
+                      webViewRef={webViewRef}
+                      loading={loading}
+                    />
+                  </View>
+
+                  <ImageUploadField
+                    label="Image" field="image"
+                    previewUri={imagePreviews.image}
+                    isDarkMode={isDarkMode} onPress={handleImageUpload}
+                  />
+
+                  <ImageUploadField
+                    label="Image 2" field="image_2"
+                    previewUri={imagePreviews.image_2}
+                    isDarkMode={isDarkMode} onPress={handleImageUpload}
+                  />
+
+                  {/* Modified By */}
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 8, color: isDarkMode ? '#ffffff' : '#111827' }}>Modified By</Text>
+                    <TextInput
+                      value={formData.modified_by}
+                      editable={false}
+                      style={{
+                        width: '100%', paddingHorizontal: 12, paddingVertical: 8,
+                        borderRadius: 4, borderWidth: 1,
+                        borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                        backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
+                        color: isDarkMode ? '#9ca3af' : '#6b7280',
+                      }}
+                    />
+                  </View>
+
+                </View>
+              )}
             </ScrollView>
 
             {/* Loading overlay — inside modal container, always visible on Android */}
@@ -883,6 +1041,124 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
                 </View>
               </View>
             )}
+
+            {/* LCP Selection Mini-Modal */}
+            <Modal
+              visible={isLcpMiniModalVisible}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setIsLcpMiniModalVisible(false)}
+            >
+              <View style={styles.miniModalOverlay}>
+                <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+                  <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                    <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP</Text>
+                    <Pressable onPress={() => setIsLcpMiniModalVisible(false)} style={styles.miniModalClose}>
+                      <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.miniModalSearchContainer}>
+                    <View style={[styles.searchContainer, {
+                      backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }]}>
+                      <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                      <TextInput
+                        placeholder="Search LCP..."
+                        value={lcpSearch}
+                        onChangeText={setLcpSearch}
+                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                        style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                        autoFocus={true}
+                      />
+                      {lcpSearch.length > 0 && (
+                        <Pressable onPress={() => setLcpSearch('')}>
+                          <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{ height: 350, width: '100%' }}>
+                    <FlashList
+                      data={filteredLcpList}
+                      extraData={{ selectedValue: formData.lcp_name, onPress: handleLcpItemPress, isDarkMode, primaryColor }}
+                      // @ts-ignore
+                      estimatedItemSize={60}
+                      keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                      ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                      renderItem={renderLcpItem}
+                      ListEmptyComponent={
+                        <View style={styles.miniModalEmpty}>
+                          <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                        </View>
+                      }
+                      contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
+            {/* NAP Selection Mini-Modal */}
+            <Modal
+              visible={isNapMiniModalVisible}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setIsNapMiniModalVisible(false)}
+            >
+              <View style={styles.miniModalOverlay}>
+                <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+                  <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                    <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select NAP</Text>
+                    <Pressable onPress={() => setIsNapMiniModalVisible(false)} style={styles.miniModalClose}>
+                      <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.miniModalSearchContainer}>
+                    <View style={[styles.searchContainer, {
+                      backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                      borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                    }]}>
+                      <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                      <TextInput
+                        placeholder="Search NAP..."
+                        value={napSearch}
+                        onChangeText={setNapSearch}
+                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                        style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                        autoFocus={true}
+                      />
+                      {napSearch.length > 0 && (
+                        <Pressable onPress={() => setNapSearch('')}>
+                          <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{ height: 350, width: '100%' }}>
+                    <FlashList
+                      data={filteredNapList}
+                      extraData={{ selectedValue: formData.nap_name, onPress: handleNapItemPress, isDarkMode, primaryColor }}
+                      // @ts-ignore
+                      estimatedItemSize={60}
+                      keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                      ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                      renderItem={renderNapItem}
+                      ListEmptyComponent={
+                        <View style={styles.miniModalEmpty}>
+                          <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                        </View>
+                      }
+                      contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Modal>
 
           </View>
         </KeyboardAvoidingView>
@@ -926,6 +1202,32 @@ const styles = StyleSheet.create({
   submitButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '500' },
   contentContainer: { flex: 1 },
   scrollViewContent: { padding: 24, paddingBottom: 48 },
+  miniModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center', alignItems: 'center', padding: 20,
+  },
+  miniModalContent: {
+    width: '100%', maxWidth: 400, maxHeight: '80%', borderRadius: 12,
+    overflow: 'hidden', elevation: 5, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84,
+  },
+  miniModalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
+  },
+  miniModalTitle: { fontSize: 18, fontWeight: '600' },
+  miniModalClose: { padding: 4 },
+  miniModalSearchContainer: { padding: 12 },
+  searchContainer: {
+    flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 16 },
+  miniModalItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40,
+  },
+  miniModalItemText: { fontSize: 24, textAlign: 'left' },
+  miniModalEmpty: { padding: 24, alignItems: 'center' },
 });
 
 export default AddLcpNapLocationModal;

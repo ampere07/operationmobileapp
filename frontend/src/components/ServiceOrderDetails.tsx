@@ -64,7 +64,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({ serviceOrder,
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh } = useServiceOrderContext();
   const isDarkMode = false; // Forced light mode as per user request
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [userRole, setUserRole] = useState<string>('');

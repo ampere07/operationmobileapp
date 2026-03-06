@@ -48,6 +48,10 @@ export const settingsColorPaletteService = {
     );
   },
 
+  getActiveSync: (): ColorPalette | null => {
+    return requestCache.getSync('color_palette_active', 30000);
+  },
+
   create: async (data: ColorPaletteCreateData): Promise<ColorPalette> => {
     const response = await api.post<ColorPaletteResponse>('/settings-color-palette', data);
     requestCache.invalidate('color_palettes_all');

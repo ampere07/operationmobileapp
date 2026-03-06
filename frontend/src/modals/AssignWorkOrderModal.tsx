@@ -57,8 +57,10 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   const [categories, setCategories] = useState<{ id: number, category: string }[]>([]);
   const [userRole, setUserRole] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
+  const hasInitializedEditRef = useRef(false);
 
   const sigCanvas = useRef<SignatureViewRef>(null);
 
@@ -91,7 +93,10 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const isAssignedToMe = userEmail && formData.assign_to === userEmail;
+  const isAssignedToMe =
+    (userEmail && formData.assign_to === userEmail) ||
+    (userName && formData.assign_to === userName) ||
+    assignees.some(a => a.email === userEmail && (a.name === formData.assign_to || a.email === formData.assign_to));
 
   useEffect(() => {
     const init = async () => {
@@ -106,6 +111,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
           const parsed = JSON.parse(authData);
           setUserRole(parsed.role_id || parsed.roleId || null);
           setUserEmail(parsed.email_address || parsed.email || null);
+          setUserName(`${parsed.first_name || ''} ${parsed.last_name || ''}`.trim() || parsed.username || null);
         } catch (e) { }
       }
     };
@@ -115,16 +121,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   useEffect(() => {
     const fetchTechnicians = async () => {
       if (!isOpen) return;
+      let techList: User[] = [];
       try {
         const response = await userService.getUsersByRole('technician');
         if (response.success && response.data) {
-          const list = response.data
+          techList = response.data
             .map((user: any) => ({
               email: user.email_address || user.email || '',
               name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username
             }))
             .filter((t: User) => t.name && t.email);
-          setTechnicians(list);
+          setTechnicians(techList);
         }
       } catch (error) {
         setTechnicians([]);
@@ -132,7 +139,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
       try {
         // We fetch role by role since the service currently only supports single roleId
         const rolesToFetch = [1, 4, 5, 6];
-        const allUsers: User[] = [];
+        const allUsers: User[] = [...techList];
         for (const roleId of rolesToFetch) {
           const response = await userService.getUsersByRoleId(roleId);
           if (response.success && response.data) {
@@ -168,16 +175,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
     fetchCategories();
 
     if (isOpen) {
-      if (isEditMode && workOrder) {
-        setFormData({
-          instructions: workOrder.instructions || '',
-          work_category: workOrder.work_category || '',
-          report_to: workOrder.report_to || '',
-          assign_to: workOrder.assign_to || '',
-          remarks: workOrder.remarks || '',
-          work_status: workOrder.work_status || 'Pending'
-        });
-      } else {
+      if (!isEditMode || !workOrder) {
         setFormData({
           instructions: '',
           work_category: '',
@@ -186,11 +184,38 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
           remarks: '',
           work_status: 'Pending'
         });
+        hasInitializedEditRef.current = false;
+      } else {
+        hasInitializedEditRef.current = false; // Reset when opening in edit mode
       }
       setImagePreviews({ image_1: '', image_2: '', image_3: '', signature: '' });
       setImages({ image_1: null, image_2: null, image_3: null, signature: null });
     }
   }, [isOpen, isEditMode, workOrder]);
+
+  // Handle prepopulating Assign To dynamically after assignees resolve
+  useEffect(() => {
+    if (isOpen && isEditMode && workOrder && assignees.length > 0 && !hasInitializedEditRef.current) {
+      hasInitializedEditRef.current = true;
+      const initialAssignTo = workOrder.assign_to || '';
+      let mappedAssignToName = initialAssignTo;
+
+      const matchingUser = assignees.find((u: User) => u.email === initialAssignTo || u.name === initialAssignTo);
+      if (matchingUser) {
+        mappedAssignToName = matchingUser.name;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        instructions: workOrder.instructions || '',
+        work_category: workOrder.work_category || '',
+        report_to: workOrder.report_to || '',
+        assign_to: mappedAssignToName,
+        remarks: workOrder.remarks || '',
+        work_status: workOrder.work_status || 'Pending'
+      }));
+    }
+  }, [isOpen, isEditMode, workOrder, assignees]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -512,7 +537,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
                     enabled={!isAssignedToMe}
                   >
                     <Picker.Item label="Select User" value="" />
-                    {assignees.map(t => <Picker.Item key={t.email} label={t.email} value={t.email} />)}
+                    {assignees.map(t => <Picker.Item key={t.email} label={t.name} value={t.name} />)}
                   </Picker>
                 </View>
                 {errors.assign_to && (

@@ -26,7 +26,7 @@ import AssignWorkOrderModal from '../modals/AssignWorkOrderModal';
 const WorkOrderPage: React.FC = () => {
   const isDarkMode = false; // Forced light mode as per user request
   const [searchQuery, setSearchQuery] = useState('');
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const { workOrders, isLoading, fetchWorkOrders, error } = useWorkOrderStore();
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);

@@ -83,6 +83,45 @@ interface OrderItem {
   quantity: string;
 }
 
+// ─── Mini Modal Item Component ──────────────────────────────────────────────
+interface MiniModalItemProps {
+  label: string;
+  isSelected: boolean;
+  onPress: (label: string) => void;
+  isDarkMode: boolean;
+  primaryColor: string;
+  imageUrl?: string | null;
+}
+
+const MiniModalItem = React.memo<MiniModalItemProps>(
+  ({ label, isSelected, onPress, isDarkMode, primaryColor, imageUrl }) => (
+    <Pressable
+      onPress={() => onPress(label)}
+      style={({ pressed }) => [
+        styles.miniModalItem,
+        { backgroundColor: pressed ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6') : 'transparent' }
+      ]}
+    >
+      <Text style={[styles.miniModalItemText, {
+        color: isSelected ? primaryColor : (isDarkMode ? '#e5e7eb' : '#374151'),
+        fontWeight: isSelected ? '700' : 'bold',
+        flex: 1
+      }]}>
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {imageUrl && (
+          <Image
+            source={{ uri: imageUrl || undefined }}
+            style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
+          />
+        )}
+        {isSelected && <Check size={24} color={primaryColor} />}
+      </View>
+    </Pressable>
+  )
+);
+
 const getTodayDate = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -1528,7 +1567,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData]);
 
   const selectedLcpnap = useMemo(() => lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap), [lcpnaps, formData.lcpnap]);
-  const portTotal = selectedLcpnap?.port_total || 0;
+  const portTotal = Number(selectedLcpnap?.port_total || 0) || 0;
 
   // Memoize filtered lists to prevent expensive re-computation on every render
   const filteredRouterModels = useMemo(() => {
@@ -1594,6 +1633,71 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     technicians.filter(t => t.name !== formData.visit_by && t.name !== formData.visit_with),
     [technicians, formData.visit_by, formData.visit_with]
   );
+
+  const handleLcpnapItemPress = useCallback((name: string) => {
+    handleInputChange('lcpnap', name);
+    setIsLcpnapMiniModalVisible(false);
+    setLcpnapSearch('');
+    Keyboard.dismiss();
+  }, [handleInputChange]);
+
+  const handleRouterModelItemPress = useCallback((model: string) => {
+    handleInputChange('routerModel', model);
+    setIsRouterModelMiniModalVisible(false);
+    setRouterModelSearch('');
+    Keyboard.dismiss();
+  }, [handleInputChange]);
+
+  const handleInventoryItemPress = useCallback((name: string) => {
+    if (activeItemIndex !== null) {
+      handleItemChange(activeItemIndex, 'itemId', name);
+    }
+    setIsItemMiniModalVisible(false);
+    setItemSearchModal('');
+    setActiveItemIndex(null);
+    Keyboard.dismiss();
+  }, [activeItemIndex, handleItemChange]);
+
+  const renderLcpnapItem = useCallback(({ item, extraData }: any) => {
+    const name = item.lcpnap_name || item.name || '';
+    if (!name) return null;
+    return (
+      <MiniModalItem
+        label={name}
+        isSelected={extraData.selectedValue === name}
+        onPress={extraData.onPress}
+        isDarkMode={extraData.isDarkMode}
+        primaryColor={extraData.primaryColor}
+      />
+    );
+  }, []);
+
+  const renderRouterModelItem = useCallback(({ item, extraData }: any) => {
+    if (!item?.model) return null;
+    return (
+      <MiniModalItem
+        label={item.model}
+        isSelected={extraData.selectedValue === item.model}
+        onPress={extraData.onPress}
+        isDarkMode={extraData.isDarkMode}
+        primaryColor={extraData.primaryColor}
+      />
+    );
+  }, []);
+
+  const renderItemItem = useCallback(({ item, extraData }: any) => {
+    if (!item?.item_name) return null;
+    return (
+      <MiniModalItem
+        label={item.item_name}
+        isSelected={extraData.selectedValue === item.item_name}
+        onPress={extraData.onPress}
+        isDarkMode={extraData.isDarkMode}
+        primaryColor={extraData.primaryColor}
+        imageUrl={item.image_url ? convertGoogleDriveUrl(item.image_url) : null}
+      />
+    );
+  }, []); // assuming convertGoogleDriveUrl is available globally in the file scope
 
   if (!isOpen) return null;
 
@@ -1739,44 +1843,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
               <FlashList
                 data={filteredLcpnaps}
+                extraData={{ selectedValue: formData.lcpnap, onPress: handleLcpnapItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
                 // @ts-ignore
                 estimatedItemSize={60}
                 keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />
                 )}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      const name = item.lcpnap_name || (item as any).name || '';
-                      handleInputChange('lcpnap', name);
-                      setIsLcpnapMiniModalVisible(false);
-                      setLcpnapSearch('');
-                      Keyboard.dismiss();
-                    }}
-                    style={({ pressed }) => [
-                      styles.miniModalItem,
-                      {
-                        backgroundColor: pressed
-                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                          : 'transparent'
-                      }
-                    ]}
-                  >
-                    <Text style={[styles.miniModalItemText, {
-                      color: formData.lcpnap === (item.lcpnap_name || (item as any).name)
-                        ? (colorPalette?.primary || '#7c3aed')
-                        : (isDarkMode ? '#e5e7eb' : '#374151'),
-                      fontWeight: formData.lcpnap === (item.lcpnap_name || (item as any).name) ? '700' : 'bold',
-                      flex: 1
-                    }]}>
-                      {item.lcpnap_name || (item as any).name}
-                    </Text>
-                    {formData.lcpnap === (item.lcpnap_name || (item as any).name) && (
-                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                    )}
-                  </Pressable>
-                )}
+                renderItem={renderLcpnapItem}
                 ListEmptyComponent={
                   <View style={styles.miniModalEmpty}>
                     <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
@@ -1829,43 +1903,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
               <FlashList
                 data={filteredRouterModels}
+                extraData={{ selectedValue: formData.routerModel, onPress: handleRouterModelItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
                 // @ts-ignore
                 estimatedItemSize={60}
                 keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />
                 )}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => {
-                      handleInputChange('routerModel', item.model);
-                      setIsRouterModelMiniModalVisible(false);
-                      setRouterModelSearch('');
-                      Keyboard.dismiss();
-                    }}
-                    style={({ pressed }) => [
-                      styles.miniModalItem,
-                      {
-                        backgroundColor: pressed
-                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                          : 'transparent'
-                      }
-                    ]}
-                  >
-                    <Text style={[styles.miniModalItemText, {
-                      color: formData.routerModel === item.model
-                        ? (colorPalette?.primary || '#7c3aed')
-                        : (isDarkMode ? '#e5e7eb' : '#374151'),
-                      fontWeight: formData.routerModel === item.model ? '700' : 'bold',
-                      flex: 1
-                    }]}>
-                      {item.model}
-                    </Text>
-                    {formData.routerModel === item.model && (
-                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                    )}
-                  </Pressable>
-                )}
+                renderItem={renderRouterModelItem}
                 ListEmptyComponent={
                   <View style={styles.miniModalEmpty}>
                     <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
@@ -1921,58 +1966,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
                   ...filteredInventoryItems
                 ]}
+                extraData={{ selectedValue: activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '', onPress: handleInventoryItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
                 // @ts-ignore
                 estimatedItemSize={60}
                 keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
                 ItemSeparatorComponent={() => (
                   <View style={{ height: 16 }} />
                 )}
-                renderItem={({ item }) => {
-                  const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
-                  const isSelected = currentItemId === item.item_name;
-                  return (
-                    <Pressable
-                      onPress={() => {
-                        if (activeItemIndex !== null) {
-                          handleItemChange(activeItemIndex, 'itemId', item.item_name);
-                        }
-                        setIsItemMiniModalVisible(false);
-                        setItemSearchModal('');
-                        setActiveItemIndex(null);
-                        Keyboard.dismiss();
-                      }}
-                      style={({ pressed }) => [
-                        styles.miniModalItem,
-                        {
-                          backgroundColor: pressed
-                            ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                            : 'transparent'
-                        }
-                      ]}
-                    >
-                      <Text style={[styles.miniModalItemText, {
-                        color: isSelected
-                          ? (colorPalette?.primary || '#7c3aed')
-                          : (isDarkMode ? '#e5e7eb' : '#374151'),
-                        fontWeight: isSelected ? '700' : 'bold',
-                        flex: 1
-                      }]}>
-                        {item.item_name}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        {item.image_url && (
-                          <Image
-                            source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
-                            style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
-                          />
-                        )}
-                        {isSelected && (
-                          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                }}
+                renderItem={renderItemItem}
                 ListEmptyComponent={
                   <View style={styles.miniModalEmpty}>
                     <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
@@ -2545,14 +2546,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                     const low = v.toLowerCase().trim();
                                     if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
 
-                                    const isExisting = vlans.some(vlan => vlan.value.toString() === v);
+                                    const isExisting = vlans.some(vlan => vlan.value != null && vlan.value.toString() === v);
                                     if (isExisting) return null;
 
                                     return <Picker.Item key="custom" label={v} value={v} />;
                                   })()}
-                                  {vlans.map((vlan) => (
-                                    <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
-                                  ))}
+                                  {vlans.map((vlan) => {
+                                    if (vlan.value == null) return null;
+                                    return (
+                                      <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
+                                    );
+                                  })}
                                 </Picker>
                               </View>
                             </View>

@@ -140,7 +140,7 @@ const JobOrderPage: React.FC = () => {
   const [mobileView, setMobileView] = useState<'orders' | 'details'>('orders');
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const handleApplyFilters = useCallback((filters: FilterValues) => {
     setFilterValues(filters);
@@ -476,16 +476,7 @@ const JobOrderPage: React.FC = () => {
             borderColor: '#e5e7eb'
           }]}>
             <View style={jo.toolbarRow}>
-              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-                <Pressable onPress={handleMobileBack} style={jo.iconBtn}>
-                  <ArrowLeft size={24} color={'#111827'} />
-                </Pressable>
-              )}
-              {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-                <Pressable onPress={() => setMobileMenuOpen(true)} style={jo.menuBtn}>
-                  <Menu size={20} color="white" />
-                </Pressable>
-              )}
+
               <View style={jo.searchWrap}>
                 <TextInput
                   placeholder="Search job orders..."

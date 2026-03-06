@@ -23,7 +23,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const isDarkMode = false; // Forced light mode as per user request
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(propColorPalette ?? null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => propColorPalette ?? settingsColorPaletteService.getActiveSync());
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
@@ -33,10 +33,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       try {
         // Dark mode logic removed as per user request
 
-        if (!propColorPalette) {
-          const palette = await settingsColorPaletteService.getActive();
-          setColorPalette(palette);
-        }
+        // Color palette is now loaded synchronously
 
         const authData = await AsyncStorage.getItem('authData');
         if (authData) {

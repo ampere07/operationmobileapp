@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, StyleSheet, FlatList, InteractionManager } from 'react-native';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, StyleSheet, InteractionManager } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { X, ChevronDown, Search, Check } from 'lucide-react-native';
@@ -2121,51 +2122,52 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               </View>
             </View>
 
-            <FlatList
-              data={filteredLcpnaps}
-              keyExtractor={(item) => item.id.toString()}
-              ItemSeparatorComponent={() => (
-                <View style={{ height: 16 }} />
-              )}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    handleInputChange('newLcpnap', item.lcpnap_name);
-                    setIsLcpnapMiniModalVisible(false);
-                    setLcpnapSearch('');
-                    Keyboard.dismiss();
-                  }}
-                  style={({ pressed }) => [
-                    styles.miniModalItem,
-                    {
-                      backgroundColor: pressed
-                        ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                        : 'transparent'
-                    }
-                  ]}
-                >
-                  <Text style={[styles.miniModalItemText, {
-                    color: formData.newLcpnap === item.lcpnap_name
-                      ? (colorPalette?.primary || '#7c3aed')
-                      : (isDarkMode ? '#e5e7eb' : '#374151'),
-                    fontWeight: formData.newLcpnap === item.lcpnap_name ? '700' : 'bold',
-                    flex: 1
-                  }]}>
-                    {item.lcpnap_name}
-                  </Text>
-                  {formData.newLcpnap === item.lcpnap_name && (
-                    <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                  )}
-                </Pressable>
-              )}
-              ListEmptyComponent={
-                <View style={styles.miniModalEmpty}>
-                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                </View>
-              }
-              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              style={{ flexGrow: 1 }}
-            />
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredLcpnaps}
+                keyExtractor={(item) => item.id.toString()}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 16 }} />
+                )}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      handleInputChange('newLcpnap', item.lcpnap_name);
+                      setIsLcpnapMiniModalVisible(false);
+                      setLcpnapSearch('');
+                      Keyboard.dismiss();
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniModalItem,
+                      {
+                        backgroundColor: pressed
+                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                          : 'transparent'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.miniModalItemText, {
+                      color: formData.newLcpnap === item.lcpnap_name
+                        ? (colorPalette?.primary || '#7c3aed')
+                        : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      fontWeight: formData.newLcpnap === item.lcpnap_name ? '700' : 'bold',
+                      flex: 1
+                    }]}>
+                      {item.lcpnap_name}
+                    </Text>
+                    {formData.newLcpnap === item.lcpnap_name && (
+                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                    )}
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -2208,51 +2210,52 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               </View>
             </View>
 
-            <FlatList
-              data={filteredRouterModels}
-              keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
-              ItemSeparatorComponent={() => (
-                <View style={{ height: 16 }} />
-              )}
-              renderItem={({ item }) => (
-                <Pressable
-                  onPress={() => {
-                    handleInputChange('routerModel', item.model);
-                    setIsRouterModelMiniModalVisible(false);
-                    setRouterModelSearch('');
-                    Keyboard.dismiss();
-                  }}
-                  style={({ pressed }) => [
-                    styles.miniModalItem,
-                    {
-                      backgroundColor: pressed
-                        ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                        : 'transparent'
-                    }
-                  ]}
-                >
-                  <Text style={[styles.miniModalItemText, {
-                    color: formData.routerModel === item.model
-                      ? (colorPalette?.primary || '#7c3aed')
-                      : (isDarkMode ? '#e5e7eb' : '#374151'),
-                    fontWeight: formData.routerModel === item.model ? '700' : 'bold',
-                    flex: 1
-                  }]}>
-                    {item.model}
-                  </Text>
-                  {formData.routerModel === item.model && (
-                    <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                  )}
-                </Pressable>
-              )}
-              ListEmptyComponent={
-                <View style={styles.miniModalEmpty}>
-                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                </View>
-              }
-              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              style={{ flexGrow: 1 }}
-            />
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredRouterModels}
+                keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 16 }} />
+                )}
+                renderItem={({ item }) => (
+                  <Pressable
+                    onPress={() => {
+                      handleInputChange('routerModel', item.model);
+                      setIsRouterModelMiniModalVisible(false);
+                      setRouterModelSearch('');
+                      Keyboard.dismiss();
+                    }}
+                    style={({ pressed }) => [
+                      styles.miniModalItem,
+                      {
+                        backgroundColor: pressed
+                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                          : 'transparent'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.miniModalItemText, {
+                      color: formData.routerModel === item.model
+                        ? (colorPalette?.primary || '#7c3aed')
+                        : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      fontWeight: formData.routerModel === item.model ? '700' : 'bold',
+                      flex: 1
+                    }]}>
+                      {item.model}
+                    </Text>
+                    {formData.routerModel === item.model && (
+                      <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                    )}
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -2295,69 +2298,70 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               </View>
             </View>
 
-            <FlatList
-              data={[
-                ...('None'.toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
-                ...filteredInventoryItems
-              ]}
-              keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
-              ItemSeparatorComponent={() => (
-                <View style={{ height: 16 }} />
-              )}
-              renderItem={({ item }) => {
-                const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
-                const isSelected = currentItemId === item.item_name;
-                return (
-                  <Pressable
-                    onPress={() => {
-                      if (activeItemIndex !== null) {
-                        handleItemChange(activeItemIndex, 'itemId', item.item_name);
-                      }
-                      setIsItemMiniModalVisible(false);
-                      setItemSearchModal('');
-                      setActiveItemIndex(null);
-                      Keyboard.dismiss();
-                    }}
-                    style={({ pressed }) => [
-                      styles.miniModalItem,
-                      {
-                        backgroundColor: pressed
-                          ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
-                          : 'transparent'
-                      }
-                    ]}
-                  >
-                    <Text style={[styles.miniModalItemText, {
-                      color: isSelected
-                        ? (colorPalette?.primary || '#7c3aed')
-                        : (isDarkMode ? '#e5e7eb' : '#374151'),
-                      fontWeight: isSelected ? '700' : 'bold',
-                      flex: 1
-                    }]}>
-                      {item.item_name}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      {item.image_url && (
-                        <Image
-                          source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
-                          style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
-                        />
-                      )}
-                      {isSelected && (
-                        <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
-                      )}
-                    </View>
-                  </Pressable>
-                );
-              }}
-              ListEmptyComponent={
-                <View style={styles.miniModalEmpty}>
-                  <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                </View>
-              }
-              contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              style={{ flexGrow: 1 }}
-            />
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={[
+                  ...('None'.toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
+                  ...filteredInventoryItems
+                ]}
+                keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 16 }} />
+                )}
+                renderItem={({ item }) => {
+                  const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
+                  const isSelected = currentItemId === item.item_name;
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        if (activeItemIndex !== null) {
+                          handleItemChange(activeItemIndex, 'itemId', item.item_name);
+                        }
+                        setIsItemMiniModalVisible(false);
+                        setItemSearchModal('');
+                        setActiveItemIndex(null);
+                        Keyboard.dismiss();
+                      }}
+                      style={({ pressed }) => [
+                        styles.miniModalItem,
+                        {
+                          backgroundColor: pressed
+                            ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+                            : 'transparent'
+                        }
+                      ]}
+                    >
+                      <Text style={[styles.miniModalItemText, {
+                        color: isSelected
+                          ? (colorPalette?.primary || '#7c3aed')
+                          : (isDarkMode ? '#e5e7eb' : '#374151'),
+                        fontWeight: isSelected ? '700' : 'bold',
+                        flex: 1
+                      }]}>
+                        {item.item_name}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {item.image_url && (
+                          <Image
+                            source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
+                            style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
+                          />
+                        )}
+                        {isSelected && (
+                          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
           </View>
         </View>
       </Modal>

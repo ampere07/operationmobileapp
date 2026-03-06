@@ -5,16 +5,11 @@ import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
 import { useServiceOrderContext, type ServiceOrder } from '../contexts/ServiceOrderContext';
-import { getCities, City } from '../services/cityService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
-interface LocationItem {
-  id: string;
-  name: string;
-  count: number;
-}
+// Location grouping removed as per user request
 
-type MobileView = 'locations' | 'orders' | 'details';
+type MobileView = 'orders' | 'details';
 
 const StatusText = React.memo(({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
@@ -144,19 +139,17 @@ const so = StyleSheet.create({
 
 const ServiceOrderPage: React.FC = () => {
   const isDarkMode = false; // Forced light mode as per user request
-  const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [selectedServiceOrder, setSelectedServiceOrder] = useState<ServiceOrder | null>(null);
   const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
-  const [cities, setCities] = useState<City[]>([]);
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userFullName, setUserFullName] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [mobileView, setMobileView] = useState<MobileView>('locations');
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [mobileView, setMobileView] = useState<MobileView>('orders');
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 15;
@@ -173,10 +166,9 @@ const ServiceOrderPage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const initLoad = async () => {
-      const [authResult, paletteResult, citiesResult] = await Promise.allSettled([
+      const [authResult, paletteResult] = await Promise.allSettled([
         AsyncStorage.getItem('authData'),
         settingsColorPaletteService.getActive(),
-        getCities(),
       ]);
 
       if (cancelled) return;
@@ -192,16 +184,12 @@ const ServiceOrderPage: React.FC = () => {
           setUserFullName(userData.full_name || '');
 
           if (role.toLowerCase() === 'technician' || roleId === 2 || role.toLowerCase() === 'agent' || roleId === 4) {
-            setMobileView('orders');
-            setSelectedLocation('all');
+            // MobileView enforces 'orders' by default
           }
         } catch (error) { }
       }
       if (paletteResult.status === 'fulfilled') {
         setColorPalette(paletteResult.value);
-      }
-      if (citiesResult.status === 'fulfilled') {
-        setCities(citiesResult.value || []);
       }
     };
     initLoad();
@@ -211,7 +199,7 @@ const ServiceOrderPage: React.FC = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedLocation, debouncedSearch]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     silentRefresh();
@@ -221,55 +209,7 @@ const ServiceOrderPage: React.FC = () => {
     await refreshServiceOrders();
   }, [refreshServiceOrders]);
 
-  const locationItems: LocationItem[] = useMemo(() => {
-    const items: LocationItem[] = [
-      {
-        id: 'all',
-        name: 'All',
-        count: serviceOrders.length
-      }
-    ];
-
-    if (cities.length > 0) {
-      cities.forEach(city => {
-        const cityCount = serviceOrders.filter(order =>
-          order.fullAddress.toLowerCase().includes(city.name.toLowerCase())
-        ).length;
-
-        items.push({
-          id: city.name.toLowerCase(),
-          name: city.name,
-          count: cityCount
-        });
-      });
-    } else {
-      const locationSet = new Set<string>();
-
-      serviceOrders.forEach(order => {
-        const addressParts = order.fullAddress.split(',');
-        if (addressParts.length >= 2) {
-          const cityPart = addressParts[addressParts.length - 2].trim().toLowerCase();
-          if (cityPart && cityPart !== '') {
-            locationSet.add(cityPart);
-          }
-        }
-      });
-
-      Array.from(locationSet).forEach(location => {
-        const cityCount = serviceOrders.filter(order =>
-          order.fullAddress.toLowerCase().includes(location)
-        ).length;
-
-        items.push({
-          id: location,
-          name: location.charAt(0).toUpperCase() + location.slice(1),
-          count: cityCount
-        });
-      });
-    }
-
-    return items;
-  }, [cities, serviceOrders]);
+  // locationItems removed
 
   const filteredServiceOrders = useMemo(() => {
     const isTechnician = userRole.toLowerCase() === 'technician' || userRoleId === 2 ||
@@ -299,15 +239,12 @@ const ServiceOrderPage: React.FC = () => {
         }
       }
 
-      const matchesLocation = selectedLocation === 'all' ||
-        serviceOrder.fullAddress.toLowerCase().includes(selectedLocation.toLowerCase());
-
       const matchesSearch = debouncedSearch === '' ||
         serviceOrder.fullName.toLowerCase().includes(lowerSearch) ||
         serviceOrder.fullAddress.toLowerCase().includes(lowerSearch) ||
         (serviceOrder.concern && serviceOrder.concern.toLowerCase().includes(lowerSearch));
 
-      if (!matchesLocation || !matchesSearch) return false;
+      if (!matchesSearch) return false;
 
       // Role-based filtering: Agents (role_id 4) only see their own referrals
       if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
@@ -330,7 +267,7 @@ const ServiceOrderPage: React.FC = () => {
     });
 
     return filtered;
-  }, [serviceOrders, selectedLocation, debouncedSearch, userRole, userRoleId, userFullName, userEmail]);
+  }, [serviceOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail]);
 
   const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
 
@@ -362,18 +299,12 @@ const ServiceOrderPage: React.FC = () => {
     }
   }, [isTablet]);
 
-  const handleLocationSelect = useCallback((locationId: string) => {
-    setSelectedLocation(locationId);
-    setMobileMenuOpen(false);
-    setMobileView('orders');
-  }, []);
+
 
   const handleMobileBack = useCallback(() => {
     if (mobileView === 'details') {
       setSelectedServiceOrder(null);
       setMobileView('orders');
-    } else if (mobileView === 'orders') {
-      setMobileView('locations');
     }
   }, [mobileView]);
 
@@ -387,6 +318,23 @@ const ServiceOrderPage: React.FC = () => {
       flexDirection: isTablet ? 'row' : 'column',
       backgroundColor: '#f9fafb'
     }]}>
+      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
+        <View style={so.mobileOverlay}>
+          <Pressable style={so.mobileBackdrop} onPress={() => setMobileMenuOpen(false)} />
+          <View style={[so.mobileSidebar, { backgroundColor: '#ffffff' }]}>
+            <View style={[so.mobileSidebarHeader, { borderColor: '#e5e7eb', padding: 16, paddingTop: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+              <Text style={[so.sidebarTitle, { color: '#111827' }]}>Filters</Text>
+              <Pressable onPress={() => setMobileMenuOpen(false)}>
+                <X size={24} color={'#4b5563'} />
+              </Pressable>
+            </View>
+            <View style={{ padding: 16 }}>
+              <Text style={{ color: '#6b7280' }}>No filters available</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && isTablet && (
         <View style={[so.sidebar, {
           width: 256,
@@ -398,140 +346,24 @@ const ServiceOrderPage: React.FC = () => {
               <Text style={[so.sidebarTitle, { color: '#111827' }]}>Service Orders</Text>
             </View>
           </View>
-          <ScrollView
-            style={so.flex1}
-            refreshControl={
-              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
-            }
-          >
-            {locationItems.map((location) => (
-              <Pressable
-                key={location.id}
-                onPress={() => setSelectedLocation(location.id)}
-                style={[so.locationItem, {
-                  backgroundColor: selectedLocation === location.id ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)') : 'transparent'
-                }]}
-              >
-                <View style={so.locationRow}>
-                  <FileText size={16} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#374151'} style={so.mr8} />
-                  <Text style={[so.locationName, {
-                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#374151',
-                    fontWeight: selectedLocation === location.id ? '500' : 'normal'
-                  }]}>{location.name}</Text>
-                </View>
-                {location.count > 0 && (
-                  <View style={[so.badge, {
-                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#7c3aed') : '#e5e7eb'
-                  }]}>
-                    <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : '#374151' }]}>{location.count}</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-        <View style={[so.mobileLocations, {
-          backgroundColor: '#f9fafb',
-          display: isTablet ? 'none' : 'flex'
-        }]}>
-          <View style={[so.mobileLocHeader, {
-            backgroundColor: '#ffffff',
-            borderColor: '#e5e7eb'
-          }]}>
-            <Text style={[so.sidebarTitle, { color: '#111827' }]}>Service Orders</Text>
-          </View>
-          <ScrollView
-            style={so.flex1}
-            refreshControl={
-              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
-            }
-          >
-            {locationItems.map((location) => (
-              <Pressable
-                key={location.id}
-                onPress={() => handleLocationSelect(location.id)}
-                style={[so.mobileLocationItem, {
-                  backgroundColor: selectedLocation === location.id ? (colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)') : 'transparent',
-                  borderColor: '#e5e7eb'
-                }]}
-              >
-                <View style={so.locationRow}>
-                  <FileText size={20} color={selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#374151'} style={so.mr12} />
-                  <Text style={[so.mobileLocationName, {
-                    color: selectedLocation === location.id ? (colorPalette?.primary || '#fb923c') : '#374151'
-                  }]}>{location.name}</Text>
-                </View>
-                {location.count > 0 && (
-                  <View style={[so.badgeLg, {
-                    backgroundColor: selectedLocation === location.id ? (colorPalette?.primary || '#7c3aed') : '#e5e7eb'
-                  }]}>
-                    <Text style={[so.badgeLgText, { color: selectedLocation === location.id ? 'white' : '#374151' }]}>{location.count}</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {mobileMenuOpen && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-        <View style={so.mobileOverlay}>
-          <Pressable style={so.mobileBackdrop} onPress={() => setMobileMenuOpen(false)} />
-          <View style={[so.mobileSidebar, { backgroundColor: '#ffffff' }]}>
-            <View style={[so.mobileSidebarHeader, { borderColor: '#e5e7eb' }]}>
-              <Text style={[so.sidebarTitle, { color: '#111827' }]}>Filters</Text>
-              <Pressable onPress={() => setMobileMenuOpen(false)}>
-                <X size={24} color="#4b5563" />
-              </Pressable>
-            </View>
-            <ScrollView style={so.flex1}>
-              {locationItems.map((location) => (
-                <Pressable
-                  key={location.id}
-                  onPress={() => handleLocationSelect(location.id)}
-                  style={[so.locationItem, {
-                    backgroundColor: selectedLocation === location.id ? 'rgba(249, 115, 22, 0.2)' : 'transparent'
-                  }]}
-                >
-                  <View style={so.locationRow}>
-                    <FileText size={16} color={selectedLocation === location.id ? '#fb923c' : '#374151'} style={so.mr8} />
-                    <Text style={[so.locationName, { color: selectedLocation === location.id ? '#fb923c' : '#374151' }]}>{location.name}</Text>
-                  </View>
-                  {location.count > 0 && (
-                    <View style={[so.badge, { backgroundColor: selectedLocation === location.id ? '#7c3aed' : '#e5e7eb' }]}>
-                      <Text style={[so.badgeText, { color: selectedLocation === location.id ? 'white' : '#374151' }]}>{location.count}</Text>
-                    </View>
-                  )}
-                </Pressable>
-              ))}
-            </ScrollView>
+          <View style={{ padding: 16 }}>
+            <Text style={{ color: '#6b7280' }}>No filters available</Text>
           </View>
         </View>
       )}
 
       <View style={[so.mainContent, {
         backgroundColor: '#ffffff',
-        display: ((mobileView === 'locations' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4) || mobileView === 'details') && !isTablet ? 'none' : 'flex'
+        display: mobileView === 'details' && !isTablet ? 'none' : 'flex'
       }]}>
         <View style={so.mainInner}>
           <View style={[so.toolbar, {
+            paddingTop: isTablet ? 16 : 60,
             backgroundColor: '#ffffff',
             borderColor: '#e5e7eb'
           }]}>
             <View style={so.toolbarRow}>
-              {!isTablet && mobileView === 'orders' && userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && (
-                <Pressable onPress={handleMobileBack} style={so.iconBtn}>
-                  <ArrowLeft size={24} color="#111827" />
-                </Pressable>
-              )}
-              {userRole.toLowerCase() !== 'technician' && userRole.toLowerCase() !== 'agent' && userRoleId !== 2 && userRoleId !== 4 && mobileView === 'orders' && (
-                <Pressable onPress={() => setMobileMenuOpen(true)} style={so.menuBtn}>
-                  <Menu size={20} color="white" />
-                </Pressable>
-              )}
+
               <View style={so.searchWrap}>
                 <TextInput
                   placeholder="Search service orders..."
