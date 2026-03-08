@@ -8,6 +8,8 @@ use App\Services\GoogleDriveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class LcpNapLocationController extends Controller
 {
@@ -72,105 +74,112 @@ class LcpNapLocationController extends Controller
     public function getLocations(Request $request)
     {
         try {
-            // Enable query logging for debugging
-            \DB::enableQueryLog();
+            $minimal = (bool) $request->get('minimal', false);
             
-            $lcpnapLocations = LCPNAPLocation::select('lcpnap.*')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    LEFT JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                    AND os.session_status = "Online"
-                ) as active_sessions')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    LEFT JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                    AND os.session_status = "Inactive"
-                ) as inactive_sessions')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    LEFT JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                    AND os.session_status = "Offline"
-                ) as offline_sessions')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    LEFT JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                    AND os.session_status = "Blocked"
-                ) as blocked_sessions')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    LEFT JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                    AND os.session_status = "Not Found"
-                ) as not_found_sessions')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT td.id)
-                    FROM technical_details td
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                ) as total_technical_details')
-                ->selectRaw('(
-                    SELECT COUNT(DISTINCT os.id)
-                    FROM technical_details td
-                    INNER JOIN online_status os ON td.account_id = os.account_id
-                    WHERE td.lcpnap = (SELECT lcpnap_name FROM lcpnap AS l WHERE l.id = lcpnap.id)
-                ) as total_sessions')
-                ->whereNotNull('coordinates')
-                ->where('coordinates', '!=', '')
-                ->orderBy('id', 'desc')
-                ->get()
-                ->map(function($item) {
+            // Fast 5-minute cache to avoid hammer results in huge DB load
+            $cacheKey = 'lcpnap_locations_' . ($minimal ? 'min_v2' : 'full_v2');
+            
+            return Cache::remember($cacheKey, 300, function () use ($minimal) {
+                $baseQuery = LCPNAPLocation::whereNotNull('coordinates')
+                    ->where('coordinates', '!=', '')
+                    ->orderBy('id', 'desc');
+
+                if ($minimal) {
+                    // Phase 1 (Pins only): returning numeric lat/lng and minimal keys (n, lat, lng)
+                    // saves massive amount of bytes in JSON payload and frontend CPU parse time.
                     return [
-                        'id' => $item->id,
-                        'lcpnap_name' => $item->lcpnap_name,
-                        'lcp_name' => $item->lcp,
-                        'nap_name' => $item->nap,
-                        'coordinates' => $item->coordinates,
-                        'street' => $item->street,
-                        'city' => $item->city,
-                        'region' => $item->region,
-                        'barangay' => $item->barangay,
-                        'location' => $item->location,
-                        'port_total' => $item->port_total,
-                        'reading_image_url' => $item->reading_image_url,
-                        'image1_url' => $item->image1_url,
-                        'image2_url' => $item->image2_url,
-                        'modified_by' => $item->modified_by,
-                        'modified_date' => $item->modified_date,
-                        'active_sessions' => (int) $item->active_sessions,
-                        'inactive_sessions' => (int) $item->inactive_sessions,
-                        'offline_sessions' => (int) $item->offline_sessions,
-                        'blocked_sessions' => (int) $item->blocked_sessions,
-                        'not_found_sessions' => (int) $item->not_found_sessions,
-                        'total_technical_details' => (int) $item->total_technical_details,
-                        'total_sessions' => (int) $item->total_sessions
+                        'success' => true,
+                        'data' => $baseQuery->select(['id', 'lcpnap_name', 'coordinates', 'port_total'])
+                            ->get()
+                            ->map(function ($item) {
+                                $coords = explode(',', $item->coordinates);
+                                if (count($coords) !== 2) return null;
+                                return [
+                                    'id' => $item->id,
+                                    'lcpnap_name' => $item->lcpnap_name, // keep for search
+                                    'latitude' => (float) trim($coords[0]),
+                                    'longitude' => (float) trim($coords[1]),
+                                    'port_total' => (int) $item->port_total,
+                                    'total_technical_details' => 0, // Placeholder
+                                    'is_minimal' => true
+                                ];
+                            })
+                            ->filter()
+                            ->values()
                     ];
-                });
-            
-            // Log the queries for debugging
-            $queries = \DB::getQueryLog();
-            Log::info('LCP/NAP Location Queries', ['queries' => $queries]);
-            
-            return response()->json([
-                'success' => true,
-                'data' => $lcpnapLocations,
-                'debug_queries' => $queries // Temporary for debugging
-            ]);
-            
+                }
+
+                // Phase 2 (Full enrichment): compute all session counts in 2 DB round-trips
+                // 1. tech counts
+                $techCounts = DB::table('technical_details')
+                    ->select('lcpnap', DB::raw('COUNT(*) as total_technical_details'))
+                    ->whereNotNull('lcpnap')
+                    ->groupBy('lcpnap')
+                    ->get()
+                    ->keyBy('lcpnap');
+
+                // 2. status counts
+                $sessionRows = DB::table('technical_details as td')
+                    ->join('online_status as os', 'td.account_id', '=', 'os.account_id')
+                    ->select('td.lcpnap', 'os.session_status', DB::raw('COUNT(*) as cnt'))
+                    ->whereNotNull('td.lcpnap')
+                    ->groupBy('td.lcpnap', 'os.session_status')
+                    ->get();
+
+                $sessionMap = [];
+                foreach ($sessionRows as $row) {
+                    if (!isset($sessionMap[$row->lcpnap])) {
+                        $sessionMap[$row->lcpnap] = ['Online' => 0, 'Inactive' => 0, 'Offline' => 0, 'Blocked' => 0, 'Not Found' => 0, 'total' => 0];
+                    }
+                    $status = $row->session_status;
+                    $count = (int)$row->cnt;
+                    $sessionMap[$row->lcpnap][$status] = $count;
+                    $sessionMap[$row->lcpnap]['total'] += $count;
+                }
+
+                $data = $baseQuery->select(['id', 'lcpnap_name', 'lcp', 'nap', 'coordinates', 'street', 'city', 'region', 'barangay', 'location', 'port_total', 'reading_image_url', 'image1_url', 'image2_url', 'modified_by', 'modified_date'])
+                    ->get()
+                    ->map(function ($item) use ($techCounts, $sessionMap) {
+                        $name = $item->lcpnap_name;
+                        $tech = $techCounts->get($name);
+                        $session = $sessionMap[$name] ?? [];
+                        $coords = explode(',', $item->coordinates);
+
+                        return [
+                            'id' => $item->id,
+                            'lcpnap_name' => $name,
+                            'lcp_name' => $item->lcp,
+                            'nap_name' => $item->nap,
+                            'latitude' => (float) trim($coords[0] ?? 0),
+                            'longitude' => (float) trim($coords[1] ?? 0),
+                            'street' => $item->street,
+                            'city' => $item->city,
+                            'region' => $item->region,
+                            'barangay' => $item->barangay,
+                            'location' => $item->location,
+                            'port_total' => (int)$item->port_total,
+                            'reading_image_url' => $item->reading_image_url,
+                            'image1_url' => $item->image1_url,
+                            'image2_url' => $item->image2_url,
+                            'modified_by' => $item->modified_by,
+                            'modified_date' => $item->modified_date,
+                            'active_sessions' => $session['Online'] ?? 0,
+                            'inactive_sessions' => $session['Inactive'] ?? 0,
+                            'offline_sessions' => $session['Offline'] ?? 0,
+                            'blocked_sessions' => $session['Blocked'] ?? 0,
+                            'not_found_sessions' => $session['Not Found'] ?? 0,
+                            'total_technical_details' => (int)($tech->total_technical_details ?? 0),
+                            'total_sessions' => $session['total'] ?? 0,
+                            'is_minimal' => false
+                        ];
+                    });
+
+                return ['success' => true, 'data' => $data];
+            });
+
         } catch (\Exception $e) {
             Log::error('LCPNAP Locations Error: ' . $e->getMessage());
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching locations: ' . $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Error fetching locations: ' . $e->getMessage()], 500);
         }
     }
 

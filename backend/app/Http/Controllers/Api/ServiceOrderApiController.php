@@ -191,6 +191,20 @@ class ServiceOrderApiController extends Controller
                 'created_by_user' => 'nullable|string|max:255',
                 'updated_by_user' => 'nullable|string|max:255'
             ]);
+
+            // Enforce limit: 1 ticket per day per account
+            $today = Carbon::today();
+            $existingToday = DB::table('service_orders')
+                ->where('account_no', $validated['account_no'])
+                ->whereDate('created_at', $today)
+                ->exists();
+
+            if ($existingToday) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already submitted a support ticket today. Please wait until tomorrow to submit another one.'
+                ], 422);
+            }
             
             $ticketId = $this->generateTicketId();
             Log::info('Generated ticket_id: ' . $ticketId);

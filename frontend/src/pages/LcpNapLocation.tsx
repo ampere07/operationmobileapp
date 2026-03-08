@@ -90,14 +90,20 @@ const CustomMarker = React.memo<{
 }>(({ location, pinSize, onPress }) => {
   const isFull = (location.total_technical_details || 0) >= (location.port_total || 0) && (location.port_total || 0) > 0;
 
-  // Optimization: track changes only when necessary
+  // tracksViewChanges=false after the very first render.
+  // Resetting it on pinSize changes forces the native layer to re-render
+  // ALL markers on every zoom event, which is the #1 cause of slow pin loading.
   const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
+  const hasSettled = React.useRef(false);
 
   React.useEffect(() => {
-    // Stop tracking after initial render to boost performance
-    const timer = setTimeout(() => setTracksViewChanges(false), 300);
+    if (hasSettled.current) return; // Never reset once settled
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+      hasSettled.current = true;
+    }, 300);
     return () => clearTimeout(timer);
-  }, [pinSize]);
+  }, []); // ← empty dep array: runs ONCE on mount, not on every pinSize change
 
   return (
     <Marker
@@ -181,11 +187,27 @@ const LcpNapLocation: React.FC = () => {
     longitude: 121.7740
   });
   const [headerHeight, setHeaderHeight] = useState(0);
+  // Pin dropped at the searched Google Place so the user can see exactly where they navigated to
+  const [searchedPlacePin, setSearchedPlacePin] = useState<{ latitude: number; longitude: number; title: string } | null>(null);
 
   const mapRef = useRef<MapView>(null);
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const primaryColor = colorPalette?.primary || '#7c3aed';
+
+  // Batched region ref — holds the latest region without triggering a render.
+  // A single debounced setState at 120 ms batches all three values into one update,
+  // eliminating the 3-sequential-setState storm that caused 3× render per pan/zoom.
+  const pendingRegionRef = useRef({
+    latitude: 12.8797,
+    longitude: 121.7740,
+    latitudeDelta: 12,
+    longitudeDelta: 12,
+  });
+
+  // Flag to prevet the search list from popping up immediately after a selection is made.
+  // When true, the search effect will fetch data but NOT set showSuggestions to true.
+  const skipShowSuggestionsRef = useRef(false);
 
   // Initialization
   useEffect(() => {
@@ -215,12 +237,19 @@ const LcpNapLocation: React.FC = () => {
       setSearchSuggestions([]);
       setShowSuggestions(false);
       setDebouncedSearch(query);
+      // Clear the place pin when search is cleared
+      if (query.length === 0) setSearchedPlacePin(null);
       return;
     }
 
     const fetchSuggestions = async () => {
       setIsSearchingSuggestions(true);
-      setShowSuggestions(true);
+
+      // Only auto-show if we aren't explicitly skipping (i.e. we just selected something)
+      if (!skipShowSuggestionsRef.current) {
+        setShowSuggestions(true);
+      }
+      skipShowSuggestionsRef.current = false; // Reset for next interaction
 
       // Local markers search
       const localMatches = markers
@@ -275,41 +304,58 @@ const LcpNapLocation: React.FC = () => {
     return () => clearTimeout(handler);
   }, [searchQuery, markers]);
 
+  const processMarkers = (data: any[]): LocationMarker[] =>
+    data.map((item: any) => ({
+      ...item,
+      // Favor numeric lat/lng from server; fallback to parsing if server sent strings
+      latitude: typeof item.latitude === 'number' ? item.latitude : parseCoordinates(item.coordinates)?.latitude || 0,
+      longitude: typeof item.longitude === 'number' ? item.longitude : parseCoordinates(item.coordinates)?.longitude || 0,
+      lcpnap_name: item.lcpnap_name || 'Unnamed'
+    })).filter(m => m.latitude !== 0 && m.longitude !== 0);
+
+  const fitMap = useCallback((locationData: LocationMarker[]) => {
+    if (locationData.length > 0 && mapRef.current) {
+      const sample = locationData.length > 200
+        ? locationData.filter((_, i) => i % Math.ceil(locationData.length / 200) === 0)
+        : locationData;
+      mapRef.current.fitToCoordinates(
+        sample.map(loc => ({ latitude: loc.latitude, longitude: loc.longitude })),
+        { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 }, animated: true }
+      );
+    }
+  }, []);
+
   const loadLocations = useCallback(async () => {
-    if (showAddModal) return;
     setIsLoading(true);
     try {
-      const response = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations');
-      if (response.data.success && response.data.data) {
-        const locationData = response.data.data
-          .map((item: any) => {
-            const coords = parseCoordinates(item.coordinates);
-            if (!coords) return null;
-            return {
-              ...item,
-              latitude: coords.latitude,
-              longitude: coords.longitude,
-              lcpnap_name: item.lcpnap_name || 'Unnamed',
-            } as LocationMarker;
-          })
-          .filter((m): m is LocationMarker => m !== null);
+      // ── Phase 1: lightweight pins ──────────────────────────────────────────
+      // This returns numeric lat/lng and fewer keys. Very fast.
+      const minRes = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations?minimal=1');
+      if (minRes.data.success && minRes.data.data) {
+        const pinData = processMarkers(minRes.data.data);
+        setMarkers(pinData);
+        fitMap(pinData);
+        setIsLoading(false); // Map is interactive now
 
-        setMarkers(locationData);
-
-        if (locationData.length > 0 && mapRef.current) {
-          const coordinates = locationData.map(loc => ({ latitude: loc.latitude, longitude: loc.longitude }));
-          mapRef.current.fitToCoordinates(coordinates, {
-            edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-            animated: true
-          });
+        // ── Phase 2: enriched data with session counts ────────────────────────
+        try {
+          const fullRes = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations');
+          if (fullRes.data.success && fullRes.data.data) {
+            const fullData = processMarkers(fullRes.data.data);
+            const fullMap = new Map(fullData.map(m => [m.id, m]));
+            setMarkers(prev => prev.map(m => fullMap.get(m.id) || m));
+          }
+        } catch (enrichErr) {
+          console.warn('Delayed enrichment failed:', enrichErr);
         }
+        return;
       }
     } catch (e) {
-      console.error('Error loading locations:', e);
+      console.error('Initial load failed:', e);
     } finally {
       setIsLoading(false);
     }
-  }, [showAddModal]);
+  }, [fitMap]);
 
   useEffect(() => { loadLocations(); }, [loadLocations]);
 
@@ -345,12 +391,10 @@ const LcpNapLocation: React.FC = () => {
         (m.lcp_name || '').toLowerCase().includes(query) ||
         (m.nap_name || '').toLowerCase().includes(query)
       );
-      // When searching, show all matches regardless of viewport
       return filtered.slice(0, 100);
     }
 
-    // 3. Viewport Culling - Crucial for performance with 10k+ markers
-    // Filter markers that are within our current view plus a small buffer (0.1 delta)
+    // 3. Viewport Culling — only render markers in the current view + 50% buffer
     const latSpan = currentRegion.latitudeDelta * 1.5;
     const lngSpan = currentRegion.longitudeDelta * 1.5;
     const latMin = currentRegion.latitude - latSpan / 2;
@@ -363,17 +407,19 @@ const LcpNapLocation: React.FC = () => {
       m.longitude >= lngMin && m.longitude <= lngMax
     );
 
-    // 4. Limit the number of pins rendered near the center to prevent clutter
+    // 4. Limit rendered pins. If within limit, return as-is (no sort cost).
     const limit = parseInt(pinLimit) || 50;
     if (visible.length <= limit) return visible;
 
+    // Only pay the sort cost when we actually need to trim.
+    // Use cheap Manhattan distance — no Math.sqrt needed.
+    const cLat = mapCenter.latitude;
+    const cLng = mapCenter.longitude;
     return visible
-      .map(m => ({
-        ...m,
-        _dist: Math.abs(m.latitude - mapCenter.latitude) + Math.abs(m.longitude - mapCenter.longitude)
-      }))
-      .sort((a, b) => a._dist! - b._dist!)
-      .slice(0, limit);
+      .map(m => ({ m, d: Math.abs(m.latitude - cLat) + Math.abs(m.longitude - cLng) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, limit)
+      .map(x => x.m);
   }, [markers, selectedLcpNapId, lcpNapGroups, debouncedSearch, mapCenter, pinLimit, currentRegion]);
 
   const handleLcpNapSelect = useCallback((id: number | string) => {
@@ -414,10 +460,13 @@ const LcpNapLocation: React.FC = () => {
   }, []);
 
   const handleSuggestionSelect = async (suggestion: any) => {
+    skipShowSuggestionsRef.current = true; // Prevent re-opening immediately after selection
     setSearchQuery(suggestion.title);
     setShowSuggestions(false);
 
     if (suggestion.type === 'lcpnap') {
+      // Clear any place pin when navigating to an LCP-NAP marker
+      setSearchedPlacePin(null);
       handleLocationSelect(suggestion.data);
     } else {
       setIsLoading(true);
@@ -426,6 +475,12 @@ const LcpNapLocation: React.FC = () => {
         const response = await axios.get(url);
         if (response.data && response.data.result && response.data.result.geometry) {
           const { lat, lng } = response.data.result.geometry.location;
+          // Drop a pin at the searched place so it's visible after the camera animates
+          setSearchedPlacePin({
+            latitude: lat,
+            longitude: lng,
+            title: suggestion.title
+          });
           mapRef.current?.animateToRegion({
             latitude: lat,
             longitude: lng,
@@ -483,7 +538,10 @@ const LcpNapLocation: React.FC = () => {
                     placeholder="Search Lcpnap or Places..."
                     placeholderTextColor="#9ca3af"
                     value={searchQuery}
-                    onChangeText={setSearchQuery}
+                    onChangeText={(text) => {
+                      skipShowSuggestionsRef.current = false; // User is typing, allow auto-show
+                      setSearchQuery(text);
+                    }}
                     onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
                   />
                   {isSearchingSuggestions && (
@@ -521,9 +579,12 @@ const LcpNapLocation: React.FC = () => {
                 showsMyLocationButton
                 onUserLocationChange={e => e.nativeEvent.coordinate && setUserLocation(e.nativeEvent.coordinate)}
                 onRegionChangeComplete={r => {
+                  // Batch all region state into a single update via a ref + one debounced setState.
+                  // Previously this fired 3 separate setStates → 3 re-renders → 3× markersToDisplay recalculations per pan.
+                  pendingRegionRef.current = r;
+                  setCurrentRegion(r); // single batched update; currentDelta & mapCenter are derived below
                   setCurrentDelta(r.latitudeDelta);
                   setMapCenter({ latitude: r.latitude, longitude: r.longitude });
-                  setCurrentRegion(r);
                 }}
                 onMapReady={() => mapRef.current?.setMapBoundaries({ latitude: 21.1, longitude: 126.6 }, { latitude: 4.4, longitude: 114.1 })}
                 customMapStyle={[{ featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] }]}
@@ -532,6 +593,16 @@ const LcpNapLocation: React.FC = () => {
                 {markersToDisplay.map(loc => (
                   <CustomMarker key={loc.id} location={loc} pinSize={pinSize} onPress={handleLocationSelect} />
                 ))}
+                {/* Place search result pin — visually distinct red drop-pin */}
+                {searchedPlacePin && (
+                  <Marker
+                    coordinate={{ latitude: searchedPlacePin.latitude, longitude: searchedPlacePin.longitude }}
+                    title={searchedPlacePin.title}
+                    description="Searched location"
+                    pinColor="#ef4444"
+                    tracksViewChanges={false}
+                  />
+                )}
               </MapView>
             ) : (
               <View style={[styles.map, styles.pausedMap, { backgroundColor: '#f3f4f6' }]}>

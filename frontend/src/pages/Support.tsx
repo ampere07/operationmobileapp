@@ -90,8 +90,17 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [details, setDetails] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitMessage, setSubmitMessage] = useState<string>('');
-  const [remainingRequests, setRemainingRequests] = useState<number>(5);
   const [cooldownTime, setCooldownTime] = useState<number>(0);
+
+  // Check if user has already submitted a ticket today
+  const hasSubmittedToday = useMemo(() => {
+    if (!requests || requests.length === 0) return false;
+    const latestDate = requests[0].date;
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return latestDate === today;
+  }, [requests]);
+
+  const remainingRequests = hasSubmittedToday ? 0 : 1;
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showLoadingModal, setShowLoadingModal] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
@@ -236,10 +245,9 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         setShowSuccessModal(true);
         await silentRefresh();
         setDetails('');
-        setRemainingRequests(remainingRequests - 1);
       } else {
         setShowLoadingModal(false);
-        setSubmitMessage('Failed to submit request. Please try again.');
+        setSubmitMessage(response.message || 'Failed to submit request. Please try again.');
         setTimeout(() => setSubmitMessage(''), 3000);
       }
     } catch (error) {
@@ -267,10 +275,9 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
 
   const handleRequestPlanUpdate = handleOpenChat;
 
-  const paginatedRequests = useMemo(() => {
-    const start = currentPage * ITEMS_PER_PAGE;
-    return requests.slice(start, start + ITEMS_PER_PAGE);
-  }, [requests, currentPage]);
+  const latestRequest = useMemo(() => {
+    return requests.length > 0 ? [requests[0]] : [];
+  }, [requests]);
 
   const totalPages = Math.max(1, Math.ceil(requests.length / ITEMS_PER_PAGE));
 
@@ -312,7 +319,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       </View>
 
       <FlashList
-        data={paginatedRequests}
+        data={latestRequest}
         keyExtractor={(item: any) => item.id}
         contentContainerStyle={{
           paddingHorizontal: isMobile ? 16 : 24,
@@ -349,7 +356,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             onPress={setSelectedRequest}
           />
         )}
-        ListFooterComponent={renderPagination}
       />
 
       {/* Support Details Modal */}
@@ -542,7 +548,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
                     fontSize: 14,
                     color: isDarkMode ? '#9ca3af' : '#4b5563'
                   }}>
-                    Limit: {remainingRequests} requests/day. 1 hour cooldown.
+                    Limit: 1 request/day.{hasSubmittedToday ? ' You have reached today\'s limit.' : ''}
                   </Text>
                 </View>
               </View>

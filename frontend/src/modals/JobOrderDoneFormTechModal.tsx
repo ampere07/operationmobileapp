@@ -266,13 +266,30 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Shared mounted flag – set false on unmount so ALL async callbacks can bail out
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Open-session counter – incremented each time the modal transitions to isOpen=true.
+  // Every async fetch captures this snapshot; if it changes (modal closed + reopened)
+  // the stale callback sees the mismatch and silently discards its results.
+  const openCycleRef = useRef(0);
+
   // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
   const [isContentReady, setIsContentReady] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      const session = openCycleRef.current;
       const handle = InteractionManager.runAfterInteractions(() => {
-        setIsContentReady(true);
+        if (isMountedRef.current && openCycleRef.current === session) {
+          setIsContentReady(true);
+        }
       });
       return () => handle.cancel();
     } else {
@@ -324,17 +341,27 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
 
-  // Consolidated data fetching - all independent API calls batched into one effect
-  // This prevents 12+ simultaneous state update storms that crash the app
+  // Consolidated data fetching - all independent API calls batched into one effect.
+  // Uses openCycleRef so rapid open/close cycles never cause stale state merges.
   useEffect(() => {
     if (!isOpen) {
-      // Cleanup when modal closes
+      // Cleanup when modal closes – reset transient state only
       setOrderItems([{ itemId: '', quantity: '' }]);
       setTechInputValue('');
       return;
     }
 
-    let isMounted = true;
+    // Bump the session counter every time we open
+    openCycleRef.current += 1;
+    const session = openCycleRef.current;
+
+    // Helper: returns true only if THIS fetch's session is still active
+    const isCurrentSession = () =>
+      isMountedRef.current && openCycleRef.current === session;
+
+    // AbortController lets us cancel in-flight axios requests when the
+    // modal closes before the requests complete.
+    const controller = new AbortController();
 
     const fetchAllData = async () => {
       // Fire all independent API calls in parallel with Promise.allSettled
@@ -359,7 +386,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         planService.getAllPlans(),
       ]);
 
-      if (!isMounted) return;
+      // Bail if the modal was closed (or reopened) while we were waiting
+      if (!isCurrentSession()) return;
 
       // Image Size
       if (imageSizeResult.status === 'fulfilled') {
@@ -487,10 +515,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setPlans(planResult.value);
       }
 
+      // Check session again before the sequential most-used LCPNAPs fetch
+      if (!isCurrentSession()) return;
+
       // Fetch most used LCPNAPs
       try {
         const resp = await getMostUsedLCPNAPs();
-        if (resp.success) {
+        if (isCurrentSession() && resp.success) {
           setMostUsedLcpnaps(resp.data);
         }
       } catch (err) {
@@ -506,10 +537,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         const jobOrderId = jobOrderData.id || jobOrderData.JobOrder_ID;
         if (jobOrderId) {
           try {
-            const response = await apiClient.get(`/job-order-items?job_order_id=${jobOrderId}`);
+            const response = await apiClient.get(`/job-order-items?job_order_id=${jobOrderId}`, {
+              signal: controller.signal
+            });
             const data = response.data as { success: boolean; data: any[] };
 
-            if (!isMounted) return;
+            if (!isCurrentSession()) return;
 
             if (data.success && Array.isArray(data.data)) {
               const items = data.data;
@@ -541,8 +574,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 setOrderItems([{ itemId: '', quantity: '' }]);
               }
             }
-          } catch (error) {
-            if (isMounted) setOrderItems([{ itemId: '', quantity: '' }]);
+          } catch (error: any) {
+            // Ignore AbortError – it's an intentional cancellation
+            if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED' && isCurrentSession()) {
+              setOrderItems([{ itemId: '', quantity: '' }]);
+            }
           }
         }
       }
@@ -551,7 +587,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchJobOrderItems();
 
     return () => {
-      isMounted = false;
+      // Cancel in-flight HTTP requests immediately when this effect re-runs or unmounts
+      controller.abort();
     };
   }, [isOpen, jobOrderData]);
 
@@ -559,7 +596,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    let isMounted = true;
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+    const controller = new AbortController();
 
     const fetchPorts = async () => {
       if (formData.lcpnap) {
@@ -567,15 +606,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           const jobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
           const response = await getAllPorts(formData.lcpnap, 1, 100, true, jobOrderId);
 
-          if (!isMounted) return;
+          if (!isCurrentSession()) return;
 
           if (response.success && Array.isArray(response.data)) {
             setPorts(response.data);
           } else {
             setPorts([]);
           }
-        } catch (error) {
-          if (isMounted) setPorts([]);
+        } catch (error: any) {
+          if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED' && isCurrentSession()) {
+            setPorts([]);
+          }
         }
       } else {
         setPorts([]);
@@ -583,7 +624,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     };
     fetchPorts();
 
-    return () => { isMounted = false; };
+    return () => { controller.abort(); };
   }, [isOpen, jobOrderData, formData.lcpnap]);
 
   // Fetch used ports for the selected LCPNAP
@@ -593,7 +634,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    let isMounted = true;
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+    const controller = new AbortController();
 
     const fetchUsedPorts = async () => {
       try {
@@ -601,10 +644,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           params: {
             lcpnap: formData.lcpnap,
             limit: 2000
-          }
+          },
+          signal: controller.signal
         });
 
-        if (!isMounted) return;
+        if (!isCurrentSession()) return;
 
         if (response.data && response.data.success && Array.isArray(response.data.data)) {
           const used = new Set<string>();
@@ -625,182 +669,150 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
           setUsedPorts(used);
         }
-      } catch (error) {
-        console.error('Failed to fetch used ports:', error);
+      } catch (error: any) {
+        if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
+          console.error('Failed to fetch used ports:', error);
+        }
       }
     };
 
     fetchUsedPorts();
 
-    return () => { isMounted = false; };
+    return () => { controller.abort(); };
   }, [isOpen, formData.lcpnap, jobOrderData]);
 
   useEffect(() => {
-    if (jobOrderData && isOpen) {
+    if (!jobOrderData || !isOpen) return;
 
-      const loadedOnsiteStatus = jobOrderData.Onsite_Status || jobOrderData.onsite_status || 'In Progress';
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+    const controller = new AbortController();
 
-      const isEmptyValue = (value: any): boolean => {
-        if (value === null || value === undefined || value === '') return true;
-        if (typeof value === 'string') {
-          const trimmed = value.trim().toLowerCase();
-          return trimmed === 'null' || trimmed === 'undefined';
+    const loadedOnsiteStatus = jobOrderData.Onsite_Status || jobOrderData.onsite_status || 'In Progress';
+
+    const isEmptyValue = (value: any): boolean => {
+      if (value === null || value === undefined || value === '') return true;
+      if (typeof value === 'string') {
+        const trimmed = value.trim().toLowerCase();
+        return trimmed === 'null' || trimmed === 'undefined';
+      }
+      return false;
+    };
+
+    const getValue = (value: any, fieldName: string): string => {
+      const result = isEmptyValue(value) ? '' : value;
+      return result;
+    };
+
+    const formatDateForInput = (dateValue: any): string => {
+      const today = getTodayDate();
+      const isEmpty = (val: any) => {
+        if (!val) return true;
+        if (typeof val === 'string') {
+          const t = val.trim().toLowerCase();
+          return t === '' || t === 'null' || t === 'undefined' || t === '0000-00-00' || t.startsWith('0000-00-00');
         }
         return false;
       };
 
-      const getValue = (value: any, fieldName: string): string => {
-        const result = isEmptyValue(value) ? '' : value;
-        return result;
-      };
+      if (isEmpty(dateValue)) return today;
 
-      const formatDateForInput = (dateValue: any): string => {
-        const today = getTodayDate();
-        const isEmpty = (val: any) => {
-          if (!val) return true;
-          if (typeof val === 'string') {
-            const t = val.trim().toLowerCase();
-            return t === '' || t === 'null' || t === 'undefined' || t === '0000-00-00' || t.startsWith('0000-00-00');
-          }
-          return false;
-        };
+      try {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return today;
 
-        if (isEmpty(dateValue)) return today;
+        const year = date.getFullYear();
+        if (year < 2020) return today;
 
-        try {
-          const date = new Date(dateValue);
-          if (isNaN(date.getTime())) return today;
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
 
-          const year = date.getFullYear();
-          if (year < 2020) return today; // Any date before 2020 is likely invalid or default
+        return `${year}-${month}-${day}`;
+      } catch (error) {
+        return today;
+      }
+    };
 
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
+    const buildFormData = (appData?: any) => ({
+      dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
+      usageType: (jobOrderData.Usage_Type || jobOrderData.usage_type || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Usage_Type || jobOrderData.usage_type || ''),
+      choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan, 'choosePlan'),
+      connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
+      routerModel: (jobOrderData.Router_Model || jobOrderData.router_model || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Router_Model || jobOrderData.router_model || ''),
+      modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
+      lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
+      port: getValue(jobOrderData.PORT || jobOrderData.port, 'port'),
+      vlan: getValue(jobOrderData.VLAN || jobOrderData.vlan, 'vlan'),
+      region: getValue((appData?.region) || jobOrderData.Region || jobOrderData.region, 'region'),
+      city: getValue((appData?.city) || jobOrderData.City || jobOrderData.city, 'city'),
+      barangay: getValue((appData?.barangay) || jobOrderData.Barangay || jobOrderData.barangay, 'barangay'),
+      onsiteStatus: loadedOnsiteStatus,
+      onsiteRemarks: getValue(jobOrderData.Onsite_Remarks || jobOrderData.onsite_remarks, 'onsiteRemarks'),
+      itemName1: getValue(jobOrderData.Item_Name_1 || jobOrderData.item_name_1, 'itemName1'),
+      visit_by: getValue(jobOrderData.Visit_By || jobOrderData.visit_by, 'visit_by'),
+      visit_with: getValue(jobOrderData.Visit_With || jobOrderData.visit_with, 'visit_with'),
+      visit_with_other: getValue(jobOrderData.Visit_With_Other || jobOrderData.visit_with_other, 'visit_with_other'),
+      statusRemarks: getValue(jobOrderData.Status_Remarks || jobOrderData.status_remarks, 'statusRemarks'),
+      ip: getValue(jobOrderData.IP || jobOrderData.ip, 'ip'),
+      addressCoordinates: getValue(jobOrderData.Address_Coordinates || jobOrderData.address_coordinates, 'addressCoordinates')
+    });
 
-          return `${year}-${month}-${day}`;
-        } catch (error) {
-          return today;
-        }
-      };
+    const buildImagePreviews = (safeConvert: (val: any) => string | null) => ({
+      signedContractImage: safeConvert(jobOrderData.signed_contract_image_url || jobOrderData.Signed_Contract_Image_URL),
+      setupImage: safeConvert(jobOrderData.setup_image_url || jobOrderData.Setup_Image_URL),
+      boxReadingImage: safeConvert(jobOrderData.box_reading_image_url || jobOrderData.Box_Reading_Image_URL),
+      routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
+      portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
+      clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
+      speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
+    });
 
-      const fetchApplicationData = async () => {
-        try {
-          const applicationId = jobOrderData.application_id || jobOrderData.Application_ID;
-          if (applicationId) {
-            const appResponse = await apiClient.get<{ success: boolean; application: any }>(`/applications/${applicationId}`);
-            if (appResponse.data.success && appResponse.data.application) {
-              const appData = appResponse.data.application;
+    const safeConvertUrl = (val: any): string | null => {
+      const url = val || '';
+      if (url && typeof url === 'string' && url.startsWith('http')) {
+        return convertGoogleDriveUrl(url);
+      }
+      return null;
+    };
 
-              const newFormData = {
-                dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
-                usageType: (jobOrderData.Usage_Type || jobOrderData.usage_type || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Usage_Type || jobOrderData.usage_type || ''),
-                choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan, 'choosePlan'),
-                connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
-                routerModel: (jobOrderData.Router_Model || jobOrderData.router_model || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Router_Model || jobOrderData.router_model || ''),
-                modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
+    const fetchApplicationData = async () => {
+      try {
+        const applicationId = jobOrderData.application_id || jobOrderData.Application_ID;
+        if (applicationId) {
+          const appResponse = await apiClient.get<{ success: boolean; application: any }>(
+            `/applications/${applicationId}`,
+            { signal: controller.signal }
+          );
 
-                lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
-                port: getValue(jobOrderData.PORT || jobOrderData.port, 'port'),
-                vlan: getValue(jobOrderData.VLAN || jobOrderData.vlan, 'vlan'),
-                region: getValue(appData.region || jobOrderData.Region || jobOrderData.region, 'region'),
-                city: getValue(appData.city || jobOrderData.City || jobOrderData.city, 'city'),
-                barangay: getValue(appData.barangay || jobOrderData.Barangay || jobOrderData.barangay, 'barangay'),
-                onsiteStatus: loadedOnsiteStatus,
-                onsiteRemarks: getValue(jobOrderData.Onsite_Remarks || jobOrderData.onsite_remarks, 'onsiteRemarks'),
-                itemName1: getValue(jobOrderData.Item_Name_1 || jobOrderData.item_name_1, 'itemName1'),
-                visit_by: getValue(jobOrderData.Visit_By || jobOrderData.visit_by, 'visit_by'),
-                visit_with: getValue(jobOrderData.Visit_With || jobOrderData.visit_with, 'visit_with'),
-                visit_with_other: getValue(jobOrderData.Visit_With_Other || jobOrderData.visit_with_other, 'visit_with_other'),
-                statusRemarks: getValue(jobOrderData.Status_Remarks || jobOrderData.status_remarks, 'statusRemarks'),
-                ip: getValue(jobOrderData.IP || jobOrderData.ip, 'ip'),
-                addressCoordinates: getValue(jobOrderData.Address_Coordinates || jobOrderData.address_coordinates, 'addressCoordinates')
-              };
+          // Discard if the modal was closed or a new open-cycle started
+          if (!isCurrentSession()) return;
 
-              setFormData(prev => ({
-                ...prev,
-                ...newFormData
-              }));
-
-              // Initialize image previews from database values (only if they are actual URLs)
-              const safeConvert = (val: any) => {
-                const url = val || '';
-                if (url && typeof url === 'string' && url.startsWith('http')) {
-                  return convertGoogleDriveUrl(url);
-                }
-                return null;
-              };
-
-              setImagePreviews({
-                signedContractImage: safeConvert(jobOrderData.signed_contract_image_url || jobOrderData.Signed_Contract_Image_URL),
-                setupImage: safeConvert(jobOrderData.setup_image_url || jobOrderData.Setup_Image_URL),
-                boxReadingImage: safeConvert(jobOrderData.box_reading_image_url || jobOrderData.Box_Reading_Image_URL),
-                routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
-                portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
-                clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
-                speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
-              });
-            }
+          if (appResponse.data.success && appResponse.data.application) {
+            setFormData(prev => ({ ...prev, ...buildFormData(appResponse.data.application) }));
+            setImagePreviews(buildImagePreviews(safeConvertUrl));
           } else {
-            loadDefaultFormData();
+            setFormData(prev => ({ ...prev, ...buildFormData() }));
+            setImagePreviews(buildImagePreviews(safeConvertUrl));
           }
-        } catch (error) {
-          loadDefaultFormData();
+        } else {
+          if (!isCurrentSession()) return;
+          setFormData(prev => ({ ...prev, ...buildFormData() }));
+          setImagePreviews(buildImagePreviews(safeConvertUrl));
         }
-      };
+      } catch (error: any) {
+        // Ignore AbortError – it's an intentional cancellation
+        if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
+        if (!isCurrentSession()) return;
+        setFormData(prev => ({ ...prev, ...buildFormData() }));
+        setImagePreviews(buildImagePreviews(safeConvertUrl));
+      }
+    };
 
-      const loadDefaultFormData = () => {
-        const newFormData = {
-          dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
-          usageType: (jobOrderData.Usage_Type || jobOrderData.usage_type || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Usage_Type || jobOrderData.usage_type || ''),
-          choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan, 'choosePlan'),
-          connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type, 'connectionType'),
-          routerModel: (jobOrderData.Router_Model || jobOrderData.router_model || '').toString().trim().toLowerCase() === 'undefined' ? '' : (jobOrderData.Router_Model || jobOrderData.router_model || ''),
-          modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn, 'modemSN'),
+    fetchApplicationData();
 
-          lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap, 'lcpnap'),
-          port: getValue(jobOrderData.PORT || jobOrderData.port, 'port'),
-          vlan: getValue(jobOrderData.VLAN || jobOrderData.vlan, 'vlan'),
-          region: getValue(jobOrderData.Region || jobOrderData.region, 'region'),
-          city: getValue(jobOrderData.City || jobOrderData.city, 'city'),
-          barangay: getValue(jobOrderData.Barangay || jobOrderData.barangay, 'barangay'),
-          onsiteStatus: loadedOnsiteStatus,
-          onsiteRemarks: getValue(jobOrderData.Onsite_Remarks || jobOrderData.onsite_remarks, 'onsiteRemarks'),
-          itemName1: getValue(jobOrderData.Item_Name_1 || jobOrderData.item_name_1, 'itemName1'),
-          visit_by: getValue(jobOrderData.Visit_By || jobOrderData.visit_by, 'visit_by'),
-          visit_with: getValue(jobOrderData.Visit_With || jobOrderData.visit_with, 'visit_with'),
-          visit_with_other: getValue(jobOrderData.Visit_With_Other || jobOrderData.visit_with_other, 'visit_with_other'),
-          statusRemarks: getValue(jobOrderData.Status_Remarks || jobOrderData.status_remarks, 'statusRemarks'),
-          ip: getValue(jobOrderData.IP || jobOrderData.ip, 'ip'),
-          addressCoordinates: getValue(jobOrderData.Address_Coordinates || jobOrderData.address_coordinates, 'addressCoordinates')
-        };
-
-        setFormData(prev => ({
-          ...prev,
-          ...newFormData
-        }));
-
-        // Initialize image previews from database values (only if they are actual URLs)
-        const safeConvertDefault = (val: any) => {
-          const url = val || '';
-          if (url && typeof url === 'string' && url.startsWith('http')) {
-            return convertGoogleDriveUrl(url);
-          }
-          return null;
-        };
-
-        setImagePreviews({
-          signedContractImage: safeConvertDefault(jobOrderData.signed_contract_image_url || jobOrderData.Signed_Contract_Image_URL),
-          setupImage: safeConvertDefault(jobOrderData.setup_image_url || jobOrderData.Setup_Image_URL),
-          boxReadingImage: safeConvertDefault(jobOrderData.box_reading_image_url || jobOrderData.Box_Reading_Image_URL),
-          routerReadingImage: safeConvertDefault(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
-          portLabelImage: safeConvertDefault(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
-          clientSignatureImage: safeConvertDefault(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
-          speedTestImage: safeConvertDefault(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
-        });
-      };
-
-      fetchApplicationData();
-    }
+    return () => {
+      controller.abort();
+    };
   }, [jobOrderData, isOpen]);
 
   const handleInputChange = useCallback((field: keyof JobOrderDoneFormData, value: string | File | null) => {

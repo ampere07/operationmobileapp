@@ -567,6 +567,20 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isItemMiniModalVisible, setIsItemMiniModalVisible] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
 
+  // ─── Crash-prevention refs ─────────────────────────────────────────────────
+  // isMountedRef: set false on unmount so no setState fires after destruction
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  // openCycleRef: incremented each time isOpen becomes true.
+  // Every async fetch captures this snapshot; a mismatch means the modal
+  // was closed (or re-opened) before the fetch finished – discard results.
+  const openCycleRef = useRef(0);
+  // ───────────────────────────────────────────────────────────────────────────
+
   // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
   const [isContentReady, setIsContentReady] = useState(false);
   const initialDataLoadedRef = useRef(false);
@@ -574,8 +588,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       initialDataLoadedRef.current = false;
+      const session = openCycleRef.current;
       const handle = InteractionManager.runAfterInteractions(() => {
-        setIsContentReady(true);
+        if (isMountedRef.current && openCycleRef.current === session) {
+          setIsContentReady(true);
+        }
       });
       return () => handle.cancel();
     } else {
@@ -612,7 +629,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    let isMounted = true;
+    // Bump session counter every open so stale fetches self-discard
+    openCycleRef.current += 1;
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+    const controller = new AbortController();
 
     const fetchAllData = async () => {
       // Fire all independent API calls in parallel with Promise.allSettled
@@ -624,16 +645,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         concernResult,
       ] = await Promise.allSettled([
         getAllInventoryItems('', 1, 1000),
-        apiClient.get<{ success: boolean; data: any[] }>('/users'),
+        apiClient.get<{ success: boolean; data: any[] }>('/users', { signal: controller.signal }),
         Promise.all([
-          apiClient.get<{ success: boolean; data: any[] }>('/vlan'),
+          apiClient.get<{ success: boolean; data: any[] }>('/vlan', { signal: controller.signal }),
           getAllLCPNAPs('', 1, 1000),
-          apiClient.get<{ success: boolean; data: any[] }>('/plans'),
+          apiClient.get<{ success: boolean; data: any[] }>('/plans', { signal: controller.signal }),
         ]),
         concernService.getAllConcerns(),
       ]);
 
-      if (!isMounted) return;
+      if (!isCurrentSession()) return;
 
       // Inventory Items & Router Models
       if (inventoryResult.status === 'fulfilled') {
@@ -733,10 +754,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     const fetchServiceOrderItems = async () => {
       if (serviceOrderData && serviceOrderId) {
         try {
-          const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
+          const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`, {
+            signal: controller.signal
+          });
           const data = response.data;
 
-          if (!isMounted) return;
+          if (!isCurrentSession()) return;
 
           if (data.success && Array.isArray(data.data)) {
             const items = data.data;
@@ -768,8 +791,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               setOrderItems([{ itemId: '', quantity: '' }]);
             }
           }
-        } catch (error) {
-          if (isMounted) setOrderItems([{ itemId: '', quantity: '' }]);
+        } catch (error: any) {
+          // Ignore AbortError – it's an intentional cancellation
+          if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED' && isCurrentSession()) {
+            setOrderItems([{ itemId: '', quantity: '' }]);
+          }
         }
       }
     };
@@ -777,7 +803,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     fetchServiceOrderItems();
 
     return () => {
-      isMounted = false;
+      // Cancel in-flight HTTP requests immediately on cleanup
+      controller.abort();
     };
   }, [isOpen, serviceOrderData]);
 
@@ -792,14 +819,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       return;
     }
 
-    let isMounted = true;
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+    const controller = new AbortController();
 
     const fetchUsedPortsFunc = async () => {
       try {
         // Also fetch total ports for this LCP-NAP
         const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
 
-        if (!isMounted) return;
+        if (!isCurrentSession()) return;
 
         if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data) && lcpnapsRes.data.length > 0) {
           const match = lcpnapsRes.data.find((item: any) => item.lcpnap_name === formData.newLcpnap);
@@ -810,7 +839,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
         const usedRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
 
-        if (!isMounted) return;
+        if (!isCurrentSession()) return;
 
         if (usedRes.success && usedRes.data) {
           setUsedPorts(usedRes.data.used);
@@ -819,17 +848,19 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           setUsedPorts([]);
           if (!totalPorts) setTotalPorts(32);
         }
-      } catch (error) {
-        console.error('Error fetching used ports/location:', error);
-        if (isMounted) {
-          setUsedPorts([]);
-          setTotalPorts(32);
+      } catch (error: any) {
+        if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
+          console.error('Error fetching used ports/location:', error);
+          if (isCurrentSession()) {
+            setUsedPorts([]);
+            setTotalPorts(32);
+          }
         }
       }
     };
     fetchUsedPortsFunc();
 
-    return () => { isMounted = false; };
+    return () => { controller.abort(); };
   }, [isOpen, formData.newLcpnap, serviceOrderData?.id]);
 
   // Initialize Form Data
@@ -938,10 +969,15 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     if (!isOpen || !serviceOrderData || !serviceOrderId) return;
 
+    const session = openCycleRef.current;
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
+
     const timer = setTimeout(async () => {
       try {
         const savedDraft = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
         const savedItemsDraft = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
+
+        if (!isCurrentSession()) return;
 
         if (savedDraft) {
           const parsedDraft = JSON.parse(savedDraft);
@@ -958,7 +994,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         console.error('Failed to load draft:', error);
       } finally {
         // Mark initial load done so draft saves can start
-        initialDataLoadedRef.current = true;
+        if (isCurrentSession()) {
+          initialDataLoadedRef.current = true;
+        }
       }
     }, 800);
     return () => clearTimeout(timer);
