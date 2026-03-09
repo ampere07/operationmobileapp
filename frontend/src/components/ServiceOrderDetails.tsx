@@ -255,6 +255,24 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
   const valStyle = [styles.valueText, { color: '#111827' }];
 
+  const isFieldEmpty = useCallback((fieldKey: string): boolean => {
+    const val = (serviceOrder as any)[fieldKey];
+    if (val === null || val === undefined || val === '') return true;
+    if (val === '-' || val === 'None' || val === 'Not assigned' || val === 'No remarks' || val === 'Not set') return true;
+
+    // Special check for images
+    if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'clientSignatureUrl'].includes(fieldKey)) {
+      return !val || val === 'No image available';
+    }
+
+    // Special check for numeric/currency
+    if (fieldKey === 'serviceCharge') {
+      return !val || val === '0';
+    }
+
+    return false;
+  }, [serviceOrder]);
+
   const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
     ticketId: () => <Text style={valStyle}>{serviceOrder.ticketId}</Text>,
     timestamp: () => <Text style={valStyle}>{serviceOrder.timestamp}</Text>,
@@ -300,14 +318,13 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     ),
     repairCategory: () => <Text style={valStyle}>{serviceOrder.repairCategory || 'None'}</Text>,
     newRouterSn: () => <Text style={valStyle}>{serviceOrder.newRouterSn || 'None'}</Text>,
-    newLcpnap: () => <Text style={valStyle}>{serviceOrder.newLcpnap || 'None'}</Text>,
     newPlan: () => <Text style={valStyle}>{serviceOrder.newPlan || 'None'}</Text>,
     image1Url: () => renderImageLinkContent(serviceOrder.image1Url),
     image2Url: () => renderImageLinkContent(serviceOrder.image2Url),
     image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
     clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
     serviceCharge: () => <Text style={valStyle}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
-  }), [serviceOrder, userRole, userRoleId]);
+  }), [serviceOrder, userRole, userRoleId, isFieldEmpty]);
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>
@@ -360,7 +377,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {fieldOrder.map(key => {
-            if (!fieldVisibility[key]) return null;
+            if (!fieldVisibility[key] || isFieldEmpty(key)) return null;
             const renderer = fieldRenderers[key];
             if (!renderer) return null;
             return <React.Fragment key={key}>{renderField(getFieldLabel(key), renderer())}</React.Fragment>;

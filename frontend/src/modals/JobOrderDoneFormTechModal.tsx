@@ -285,13 +285,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      const session = openCycleRef.current;
+      // Use InteractionManager for better performance during modal transition,
+      // but add a safety fallback timeout in case InteractionManager is blocked.
       const handle = InteractionManager.runAfterInteractions(() => {
-        if (isMountedRef.current && openCycleRef.current === session) {
+        if (isMountedRef.current) {
           setIsContentReady(true);
         }
       });
-      return () => handle.cancel();
+
+      const safetyTimeout = setTimeout(() => {
+        if (isMountedRef.current) {
+          setIsContentReady(true);
+        }
+      }, 500); // 500ms safety fallback
+
+      return () => {
+        handle.cancel();
+        clearTimeout(safetyTimeout);
+      };
     } else {
       setIsContentReady(false);
     }
@@ -1730,7 +1741,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalOverlay}
       >
         <Modal
@@ -2014,8 +2025,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
             borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
           }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{fullName}</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+              >
+                {fullName}
+              </Text>
             </View>
             <View style={styles.headerActions}>
               <Pressable

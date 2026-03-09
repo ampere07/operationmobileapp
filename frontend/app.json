@@ -3,7 +3,7 @@
     "name": "ATSS",
     "slug": "atss",
     "scheme": "atss-app",
-    "version": "1.0.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
@@ -43,7 +43,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "e3f6cb9d-29f1-4c89-9160-45ea193d6eaf"
+        "projectId": "fa56b827-6f01-45a6-96b2-f5b07927296b"
       }
     }
   }

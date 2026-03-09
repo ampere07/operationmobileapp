@@ -338,10 +338,6 @@ const WorkOrderPage: React.FC = () => {
             <Text style={[st.emptyText, { color: '#9ca3af' }]}>
               No work orders found
             </Text>
-            {/* Helpful Debug Info for the User */}
-            <Text style={[st.emptyText, { color: '#d1d5db', fontSize: 10, marginTop: 10 }]}>
-              Account: {userEmail || 'N/A'} | Role: {userRole || 'N/A'} | Logic: {Number(userRole) === 6 || Number(userRole) === 4 || Number(userRole) === 2 ? 'Personal Only' : 'View All'}
-            </Text>
           </View>
         )}
       </ScrollView>
@@ -387,7 +383,7 @@ const st = StyleSheet.create({
   searchIcon: { position: 'absolute', left: 12, top: 10, zIndex: 10 },
   searchInput: { width: '100%', paddingLeft: 40, paddingRight: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionIconBtn: { padding: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  actionIconBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
   scrollContent: { paddingVertical: 16 },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80 },

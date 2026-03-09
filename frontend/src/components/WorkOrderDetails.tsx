@@ -151,15 +151,29 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     signature: () => renderImageLink(workOrder.signature),
   }), [workOrder, renderImageLink]);
 
+  const isFieldEmpty = useCallback((fieldKey: string): boolean => {
+    switch (fieldKey) {
+      case 'workOrderId': return !workOrder.id;
+      case 'instructions': return !workOrder.instructions || workOrder.instructions === 'No instructions';
+      case 'reportTo': return !workOrder.report_to || workOrder.report_to === 'Not specified';
+      case 'assignTo': return !workOrder.assign_to || workOrder.assign_to === 'Not assigned';
+      case 'workStatus': return !workOrder.work_status || workOrder.work_status === 'Not set';
+      case 'remarks': return !workOrder.remarks || workOrder.remarks === 'No remarks';
+      case 'requestedBy': return !workOrder.requested_by || workOrder.requested_by === 'System';
+      case 'requestedDate': return !workOrder.requested_date;
+      case 'updatedBy': return !workOrder.updated_by || workOrder.updated_by === 'Not updated';
+      case 'updatedDate': return !workOrder.updated_date;
+      case 'image1': return !workOrder.image_1;
+      case 'image2': return !workOrder.image_2;
+      case 'image3': return !workOrder.image_3;
+      case 'signature': return !workOrder.signature;
+      default: return false;
+    }
+  }, [workOrder]);
+
   const renderFieldContent = useCallback((fieldKey: string) => {
     const renderer = fieldRenderers[fieldKey];
-    if (!renderer) return null;
-
-    const imageFields = ['image1', 'image2', 'image3', 'signature'];
-    if (imageFields.includes(fieldKey)) {
-      const val = (workOrder as any)[fieldKey === 'signature' ? 'signature' : `image_${fieldKey.slice(-1)}`];
-      if (!val) return null;
-    }
+    if (!renderer || isFieldEmpty(fieldKey)) return null;
 
     return (
       <View key={fieldKey} style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>
@@ -169,7 +183,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         </View>
       </View>
     );
-  }, [fieldRenderers, workOrder]);
+  }, [fieldRenderers, isFieldEmpty]);
 
   return (
     <View style={[st.container, {

@@ -400,7 +400,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
   return (
     <Modal visible={isOpen} animationType="slide" transparent={true} onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <View style={st.modalOverlay}>

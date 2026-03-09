@@ -137,9 +137,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitleContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 12,
   },
   headerTitle: {
     fontSize: 20,
@@ -588,13 +590,24 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       initialDataLoadedRef.current = false;
-      const session = openCycleRef.current;
+      // Use InteractionManager for better performance during modal transition,
+      // but add a safety fallback timeout in case InteractionManager is blocked.
       const handle = InteractionManager.runAfterInteractions(() => {
-        if (isMountedRef.current && openCycleRef.current === session) {
+        if (isMountedRef.current) {
           setIsContentReady(true);
         }
       });
-      return () => handle.cancel();
+
+      const safetyTimeout = setTimeout(() => {
+        if (isMountedRef.current) {
+          setIsContentReady(true);
+        }
+      }, 500); // 500ms safety fallback
+
+      return () => {
+        handle.cancel();
+        clearTimeout(safetyTimeout);
+      };
     } else {
       setIsContentReady(false);
       initialDataLoadedRef.current = false;
@@ -1726,7 +1739,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalOverlay}
       >
         <View style={[styles.modalContent, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
@@ -1737,7 +1750,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb'
           }]}>
             <View style={styles.headerTitleContainer}>
-              <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+              <Text
+                style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {serviceOrderData?.ticket_id || serviceOrderData?.id} | {formData.fullName}
               </Text>
             </View>
@@ -2200,6 +2217,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                 style={{ color: isDarkMode ? '#fff' : '#000' }}
                               >
                                 <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
                                 {failedVisitWithTechnicians.map((t, i) => (
                                   <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                                 ))}
@@ -2220,6 +2238,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                 style={{ color: isDarkMode ? '#fff' : '#000' }}
                               >
                                 <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
+                                <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
                                 {failedVisitWithTechnicians.map((t, i) => (
                                   <Picker.Item key={`resched-visitother-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
                                 ))}

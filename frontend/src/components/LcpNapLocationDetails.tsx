@@ -81,14 +81,19 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     fontSize: 16,
   };
 
-  const renderField = (label: string, content: React.ReactNode) => (
-    <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
-      <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
-      <View style={styles.fieldValueContainer}>
-        {typeof content === 'string' ? <Text style={valueStyle} selectable={true}>{content}</Text> : content}
+  const renderField = (label: string, content: React.ReactNode) => {
+    if (content === null || content === undefined || content === '') return null;
+    if (typeof content === 'string' && (content.trim() === '' || content === 'Not available' || content === 'None' || content === 'Not set')) return null;
+
+    return (
+      <View style={[styles.fieldContainer, { borderBottomColor: isDarkMode ? '#1f2937' : '#e5e7eb' }]}>
+        <Text style={[styles.fieldLabel, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>{label}</Text>
+        <View style={styles.fieldValueContainer}>
+          {typeof content === 'string' ? <Text style={valueStyle} selectable={true}>{content}</Text> : content}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const getImageUrl = (url: string): string => {
     if (!url) return '';
@@ -183,7 +188,7 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
           {location.region && renderField('Region', location.region)}
           {location.port_total !== undefined && renderField('Port Usage', `${location.total_technical_details || 0} / ${location.port_total}`)}
 
-          {renderField('Session Status', (
+          {((location.active_sessions || 0) + (location.offline_sessions || 0) + (location.inactive_sessions || 0) + (location.blocked_sessions || 0) + (location.not_found_sessions || 0)) > 0 && renderField('Session Status', (
             <View style={styles.sessionGrid}>
               <View style={styles.sessionItem}>
                 <Text style={[styles.sessionLabel, { color: '#22c55e' }]}>Online</Text>

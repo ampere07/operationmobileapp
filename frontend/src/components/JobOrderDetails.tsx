@@ -632,9 +632,55 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     houseFrontPicture: () => renderImageLink(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture),
   }), [jobOrder, applicationData, jobOrderItems, billingStatuses]);
 
+  const isFieldEmpty = (fieldKey: string): boolean => {
+    switch (fieldKey) {
+      case 'timestamp': return !(jobOrder.Create_DateTime || jobOrder.created_at || jobOrder.timestamp);
+      case 'jobOrderNumber': return !(jobOrder.id || jobOrder.JobOrder_ID || applicationData?.id);
+      case 'referredBy': return !(jobOrder.Referred_By || jobOrder.referred_by || applicationData?.referred_by);
+      case 'fullName': return !getClientFullName() || getClientFullName() === 'Unknown Client';
+      case 'contactNumber': return !(jobOrder.Contact_Number || jobOrder.mobile_number || applicationData?.mobile_number);
+      case 'secondContactNumber': return !(jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || applicationData?.secondary_mobile_number);
+      case 'emailAddress': return !(jobOrder.Email_Address || jobOrder.email_address || applicationData?.email_address);
+      case 'fullAddress': return !getClientFullAddress() || getClientFullAddress() === 'No address provided';
+      case 'billingStatus': return !(jobOrder.billing_status || jobOrder.Billing_Status);
+      case 'billingDay': return jobOrder.Billing_Day === null || jobOrder.Billing_Day === undefined;
+      case 'choosePlan': return !(jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || applicationData?.desired_plan);
+      case 'statusRemarks': return !(jobOrder.Status_Remarks || jobOrder.status_remarks);
+      case 'remarks': return !(jobOrder.Remarks || jobOrder.onsite_remarks);
+      case 'installationLandmark': return !(jobOrder.Installation_Landmark || jobOrder.installation_landmark || jobOrder.landmark || applicationData?.landmark);
+      case 'connectionType': return !(jobOrder.Connection_Type || jobOrder.connection_type);
+      case 'modemRouterSn': return !(jobOrder.Modem_Router_SN || jobOrder.modem_router_sn || jobOrder.Modem_SN || jobOrder.modem_sn);
+      case 'routerModel': return !(jobOrder.Router_Model || jobOrder.router_model);
+      case 'lcpnap': return !(jobOrder.LCPNAP || jobOrder.lcpnap);
+      case 'port': return !(jobOrder.PORT || jobOrder.Port || jobOrder.port);
+      case 'vlan': return !(jobOrder.VLAN || jobOrder.vlan);
+      case 'username': return !(jobOrder.Username || jobOrder.username || jobOrder.pppoe_username);
+      case 'ipAddress': return !(jobOrder.IP_Address || jobOrder.ip_address || jobOrder.IP || jobOrder.ip);
+      case 'usageType': return !(jobOrder.Usage_Type || jobOrder.usage_type);
+      case 'installation_fee': return !(jobOrder.installation_fee || jobOrder.Installation_Fee);
+      case 'itemsUsed': return jobOrderItems.length === 0;
+      case 'dateInstalled': return !(jobOrder.Date_Installed || jobOrder.date_installed);
+      case 'visitBy': return !(jobOrder.Visit_By || jobOrder.visit_by);
+      case 'visitWith': return !(jobOrder.Visit_With || jobOrder.visit_with);
+      case 'visitWithOther': return !(jobOrder.Visit_With_Other || jobOrder.visit_with_other);
+      case 'onsiteStatus': return !jobOrder.Onsite_Status;
+      case 'modifiedBy': return !jobOrder.Modified_By;
+      case 'modifiedDate': return !jobOrder.Modified_Date;
+      case 'assignedEmail': return !jobOrder.Assigned_Email;
+      case 'setupImage': return !(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url);
+      case 'speedtestImage': return !(jobOrder.speedtest_image_url || jobOrder.Setup_Image_URL || jobOrder.setup_image_url || jobOrder.Setup_Image_Url);
+      case 'signedContractImage': return !(jobOrder.signed_contract_image_url || jobOrder.Signed_Contract_Image_URL || jobOrder.signed_contract_url || jobOrder.Signed_Contract_URL);
+      case 'boxReadingImage': return !(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL);
+      case 'routerReadingImage': return !(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL);
+      case 'portLabelImage': return !(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL);
+      case 'houseFrontPicture': return !(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture);
+      default: return false;
+    }
+  };
+
   const renderFieldContent = (fieldKey: string) => {
     const renderer = fieldRenderers[fieldKey];
-    if (!renderer) return null;
+    if (!renderer || isFieldEmpty(fieldKey)) return null;
 
     return (
       <View style={[st.fieldRow, { borderBottomColor: '#e5e7eb' }]}>

@@ -508,7 +508,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 onRequestClose={handleCloseVerifyModal}
             >
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     style={styles.kav}
                 >
                     <Pressable style={styles.modalBackdrop} onPress={handleCloseVerifyModal} />

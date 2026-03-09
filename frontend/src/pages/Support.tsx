@@ -404,7 +404,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         onRequestClose={() => setShowNewRequestModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{
             flex: 1,
             backgroundColor: 'transparent',
