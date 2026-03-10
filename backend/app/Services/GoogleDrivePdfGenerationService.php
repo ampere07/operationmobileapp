@@ -408,22 +408,8 @@ class GoogleDrivePdfGenerationService
         ];
 
         if ($soa) {
+            $dueDate = \Carbon\Carbon::parse($soa->due_date);
             $billingConfig = \App\Models\BillingConfig::first();
-            $billingDay = $account->billing_day;
-            $statementDate = \Carbon\Carbon::parse($soa->statement_date);
-            $daysInMonth = $statementDate->daysInMonth;
-            
-            // Calculate Due Date based on billing_config.due_date_day
-            $dueDateDay = $billingConfig ? $billingConfig->due_date_day : 0;
-            $calculatedDueDay = $dueDateDay == 0 ? $billingDay : $billingDay + $dueDateDay;
-            
-            if ($calculatedDueDay > $daysInMonth) {
-                $dueDate = $statementDate->copy()->addMonth()->day($calculatedDueDay - $daysInMonth);
-            } else {
-                $dueDate = $statementDate->copy()->day($calculatedDueDay);
-            }
-            
-            // Calculate DC Date by adding disconnection_day to the calculated due date
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
             $dcDate = $dueDate->copy()->addDays($disconnectionDay);
             
@@ -469,24 +455,14 @@ class GoogleDrivePdfGenerationService
         }
 
         if ($invoice) {
-            $billingConfig = \App\Models\BillingConfig::first();
-            $billingDay = $account->billing_day;
-            $statementDate = now();
-            $daysInMonth = $statementDate->daysInMonth;
-            
-            $dueDateDay = $billingConfig ? $billingConfig->due_date_day : 0;
-            $calculatedDueDay = $dueDateDay == 0 ? $billingDay : $billingDay + $dueDateDay;
-            
-            if ($calculatedDueDay > $daysInMonth) {
-                $dueDate = $statementDate->copy()->addMonth()->day($calculatedDueDay - $daysInMonth);
-            } else {
-                $dueDate = $statementDate->copy()->day($calculatedDueDay);
-            }
+            $dueDate = \Carbon\Carbon::parse($invoice->due_date);
             
             $data = array_merge($data, [
                 'Invoice_No' => $invoice->id,
                 'Invoice_Balance' => number_format($invoice->invoice_balance, 2),
                 'Total_Amount' => number_format($invoice->total_amount, 2),
+                'Total_Due' => number_format($invoice->total_amount, 2),
+                'Amount_Due' => number_format($invoice->total_amount, 2),
                 'Due_Date' => $dueDate->format('F d, Y')
             ]);
         }

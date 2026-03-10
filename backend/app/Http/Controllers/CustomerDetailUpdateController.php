@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use App\Models\ActivityLog;
 
 class CustomerDetailUpdateController extends Controller
@@ -117,6 +118,8 @@ class CustomerDetailUpdateController extends Controller
                 'customer_id' => $customer->id
             ]);
 
+            $this->broadcastCustomerUpdated($accountNo, 'customer_details');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Customer details updated successfully',
@@ -217,6 +220,8 @@ class CustomerDetailUpdateController extends Controller
                 'account_no' => $accountNo,
                 'billing_account_id' => $billingAccount->id
             ]);
+
+            $this->broadcastCustomerUpdated($accountNo, 'billing_details');
 
             return response()->json([
                 'success' => true,
@@ -338,6 +343,8 @@ class CustomerDetailUpdateController extends Controller
                 'technical_detail_id' => $technicalDetail->id
             ]);
 
+            $this->broadcastCustomerUpdated($accountNo, 'technical_details');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Technical details updated successfully',
@@ -364,6 +371,29 @@ class CustomerDetailUpdateController extends Controller
                 'message' => 'Failed to update technical details',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Broadcast customer-updated event via Soketi
+     */
+    private function broadcastCustomerUpdated($accountNo, $editType = 'customer_details')
+    {
+        try {
+            event(new \App\Events\CustomerUpdated([
+                'account_no' => $accountNo,
+                'type' => 'customer_updated',
+                'edit_type' => $editType,
+                'title' => 'Customer Updated',
+                'message' => "Customer data updated for account {$accountNo}",
+                'timestamp' => now()->timestamp,
+                'formatted_date' => now()->format('Y-m-d h:i:s A')
+            ]));
+        } catch (\Exception $e) {
+            Log::warning('Failed to broadcast customer update via Soketi', [
+                'account_no' => $accountNo,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 

@@ -61,7 +61,6 @@ class RelatedDataController extends Controller
 
             $logs = DB::table('payment_portal_logs')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'total_amount', 'account_balance_before', 'date_time', 'status'])
                 ->orderBy('date_time', 'desc')
                 ->orderBy('updated_at', 'desc')
                 ->get();
@@ -130,7 +129,6 @@ class RelatedDataController extends Controller
         try {
             $staggered = DB::table('staggered_installation')
                 ->where('account_no', $accountNo)
-                ->select(['id', 'staggered_date', 'staggered_balance', 'monthly_payment', 'modified_date'])
                 ->orderBy('staggered_date', 'desc')
                 ->get();
 
@@ -162,7 +160,6 @@ class RelatedDataController extends Controller
         try {
             $discounts = DB::table('discounts')
                 ->where('account_no', $accountNo)
-                ->select(['id', 'discount_amount', 'status', 'used_date'])
                 ->orderBy('used_date', 'desc')
                 ->orderBy('created_at', 'desc')
                 ->get();
@@ -195,7 +192,6 @@ class RelatedDataController extends Controller
         try {
             $serviceOrders = DB::table('service_orders')
                 ->where('account_no', $accountNo)
-                ->select(['id', 'concern', 'support_status', 'assigned_email', 'timestamp'])
                 ->orderBy('timestamp', 'desc')
                 ->get();
 
@@ -242,9 +238,7 @@ class RelatedDataController extends Controller
                 ->leftJoin('plan_list', 'reconnection_logs.plan_id', '=', 'plan_list.id')
                 ->where('reconnection_logs.account_id', $billingAccount->id)
                 ->select([
-                    'reconnection_logs.id',
-                    'reconnection_logs.reconnection_fee',
-                    'reconnection_logs.created_at',
+                    'reconnection_logs.*',
                     'plan_list.plan_name'
                 ])
                 ->orderBy('reconnection_logs.created_at', 'desc')
@@ -291,7 +285,6 @@ class RelatedDataController extends Controller
 
             $logs = DB::table('disconnected_logs')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'remarks', 'created_at'])
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -336,7 +329,6 @@ class RelatedDataController extends Controller
 
             $logs = DB::table('details_update_logs')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'old_details', 'new_details', 'updated_at', 'updated_by_user_id'])
                 ->orderBy('updated_at', 'desc')
                 ->get();
 
@@ -384,11 +376,7 @@ class RelatedDataController extends Controller
                 ->leftJoin('plan_list as new_plans', 'plan_change_logs.new_plan_id', '=', 'new_plans.id')
                 ->where('plan_change_logs.account_id', $billingAccount->id)
                 ->select([
-                    'plan_change_logs.id',
-                    'plan_change_logs.status',
-                    'plan_change_logs.date_changed',
-                    'plan_change_logs.date_used',
-                    'plan_change_logs.created_at',
+                    'plan_change_logs.*',
                     'old_plans.plan_name as old_plan_name',
                     'new_plans.plan_name as new_plan_name'
                 ])
@@ -423,8 +411,7 @@ class RelatedDataController extends Controller
         try {
             $logs = DB::table('service_charge_logs')
                 ->where('account_no', $accountNo)
-                ->select(['id', 'service_charge', 'status', 'date_used'])
-                ->orderBy('date_used', 'desc')
+                ->orderBy('created_at', 'desc')
                 ->get();
 
             return response()->json([
@@ -468,7 +455,6 @@ class RelatedDataController extends Controller
 
             $logs = DB::table('change_due_logs')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'previous_date', 'changed_date', 'added_balance', 'remarks', 'created_at'])
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -513,7 +499,6 @@ class RelatedDataController extends Controller
 
             $deposits = DB::table('security_deposits')
                 ->where('account_id', $billingAccount->id)
-                ->select(['id', 'amount', 'status', 'payment_date', 'reference_no', 'created_by', 'created_at'])
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -545,16 +530,6 @@ class RelatedDataController extends Controller
         try {
             $soas = DB::table('statement_of_accounts')
                 ->where('account_no', $accountNo)
-                ->select([
-                    'id',
-                    'statement_date',
-                    'balance_from_previous_bill',
-                    'payment_received_previous',
-                    'remaining_balance_previous',
-                    'amount_due',
-                    'total_amount_due',
-                    'print_link'
-                ])
                 ->orderBy('statement_date', 'desc')
                 ->get();
 
@@ -852,6 +827,438 @@ class RelatedDataController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch transaction',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all payment methods
+     */
+    public function getPaymentMethods(): JsonResponse
+    {
+        try {
+            $methods = DB::table('payment_methods')
+                ->select('id', 'payment_method')
+                ->orderBy('payment_method', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $methods
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch payment methods',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get distinct transaction types from transactions table
+     */
+    public function getDistinctTransactionTypes(): JsonResponse
+    {
+        try {
+            $types = DB::table('transactions')
+                ->whereNotNull('transaction_type')
+                ->where('transaction_type', '!=', '')
+                ->distinct()
+                ->pluck('transaction_type');
+
+            return response()->json([
+                'success' => true,
+                'data' => $types
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch distinct transaction types',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get distinct barangay and city from customers table
+     */
+    public function getDistinctCustomerLocations(): JsonResponse
+    {
+        try {
+            $barangays = DB::table('customers')
+                ->whereNotNull('barangay')
+                ->where('barangay', '!=', '')
+                ->distinct()
+                ->pluck('barangay')
+                ->sort()
+                ->values();
+
+            $cities = DB::table('customers')
+                ->whereNotNull('city')
+                ->where('city', '!=', '')
+                ->distinct()
+                ->pluck('city')
+                ->sort()
+                ->values();
+
+            $regions = DB::table('customers')
+                ->whereNotNull('region')
+                ->where('region', '!=', '')
+                ->distinct()
+                ->pluck('region')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'barangays' => $barangays,
+                    'cities' => $cities,
+                    'regions' => $regions
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch customer locations',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get distinct status and transaction_status from payment_portal_logs
+     */
+    public function getPaymentPortalLookupData(): JsonResponse
+    {
+        try {
+            $statuses = DB::table('payment_portal_logs')
+                ->whereNotNull('status')
+                ->where('status', '!=', '')
+                ->distinct()
+                ->pluck('status')
+                ->sort()
+                ->values();
+
+            $transactionStatuses = DB::table('payment_portal_logs')
+                ->whereNotNull('transaction_status')
+                ->where('transaction_status', '!=', '')
+                ->distinct()
+                ->pluck('transaction_status')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'statuses' => $statuses,
+                    'transaction_statuses' => $transactionStatuses
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch payment portal lookup data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get lookup data for Job Order filters
+     */
+    public function getJobOrderLookupData(): JsonResponse
+    {
+        try {
+            $lcpNames = DB::table('lcp')
+                ->whereNotNull('lcp_name')
+                ->where('lcp_name', '!=', '')
+                ->distinct()
+                ->pluck('lcp_name')
+                ->sort()
+                ->values();
+
+            $napNames = DB::table('nap')
+                ->whereNotNull('nap_name')
+                ->where('nap_name', '!=', '')
+                ->distinct()
+                ->pluck('nap_name')
+                ->sort()
+                ->values();
+
+            $ports = DB::table('job_orders')
+                ->whereNotNull('port')
+                ->where('port', '!=', '')
+                ->distinct()
+                ->pluck('port')
+                ->sort()
+                ->values();
+
+            $vlans = DB::table('job_orders')
+                ->whereNotNull('vlan')
+                ->where('vlan', '!=', '')
+                ->distinct()
+                ->pluck('vlan')
+                ->sort()
+                ->values();
+
+            $lcpnaps = DB::table('job_orders')
+                ->whereNotNull('lcpnap')
+                ->where('lcpnap', '!=', '')
+                ->distinct()
+                ->pluck('lcpnap')
+                ->sort()
+                ->values();
+
+            $routerModels = DB::table('job_orders')
+                ->whereNotNull('router_model')
+                ->where('router_model', '!=', '')
+                ->distinct()
+                ->pluck('router_model')
+                ->sort()
+                ->values();
+
+            $usageTypes = DB::table('job_orders')
+                ->whereNotNull('usage_type')
+                ->where('usage_type', '!=', '')
+                ->distinct()
+                ->pluck('usage_type')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'lcp_names' => $lcpNames,
+                    'nap_names' => $napNames,
+                    'ports' => $ports,
+                    'vlans' => $vlans,
+                    'lcpnaps' => $lcpnaps,
+                    'router_models' => $routerModels,
+                    'usage_types' => $usageTypes
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch job order lookup data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get lookup data for Service Order filters
+     */
+    public function getServiceOrderLookupData(): JsonResponse
+    {
+        try {
+            $lcpNames = DB::table('lcp')
+                ->whereNotNull('lcp_name')
+                ->where('lcp_name', '!=', '')
+                ->distinct()
+                ->pluck('lcp_name')
+                ->sort()
+                ->values();
+
+            $napNames = DB::table('nap')
+                ->whereNotNull('nap_name')
+                ->where('nap_name', '!=', '')
+                ->distinct()
+                ->pluck('nap_name')
+                ->sort()
+                ->values();
+
+            // From service_orders table - old values
+            $ports = DB::table('service_orders')
+                ->whereNotNull('old_port')
+                ->where('old_port', '!=', '')
+                ->distinct()
+                ->pluck('old_port')
+                ->sort()
+                ->values();
+
+            $vlans = DB::table('service_orders')
+                ->whereNotNull('old_vlan')
+                ->where('old_vlan', '!=', '')
+                ->distinct()
+                ->pluck('old_vlan')
+                ->sort()
+                ->values();
+
+            $lcpnaps = DB::table('service_orders')
+                ->whereNotNull('old_lcpnap')
+                ->where('old_lcpnap', '!=', '')
+                ->distinct()
+                ->pluck('old_lcpnap')
+                ->sort()
+                ->values();
+
+            // From service_orders table - new values
+            $newPorts = DB::table('service_orders')
+                ->whereNotNull('new_port')
+                ->where('new_port', '!=', '')
+                ->distinct()
+                ->pluck('new_port')
+                ->sort()
+                ->values();
+
+            $newVlans = DB::table('service_orders')
+                ->whereNotNull('new_vlan')
+                ->where('new_vlan', '!=', '')
+                ->distinct()
+                ->pluck('new_vlan')
+                ->sort()
+                ->values();
+
+            $newLcpnaps = DB::table('service_orders')
+                ->whereNotNull('new_lcpnap')
+                ->where('new_lcpnap', '!=', '')
+                ->distinct()
+                ->pluck('new_lcpnap')
+                ->sort()
+                ->values();
+
+            $routerModels = DB::table('job_orders')
+                ->whereNotNull('router_model')
+                ->where('router_model', '!=', '')
+                ->distinct()
+                ->pluck('router_model')
+                ->sort()
+                ->values();
+
+            $usageTypes = DB::table('job_orders')
+                ->whereNotNull('usage_type')
+                ->where('usage_type', '!=', '')
+                ->distinct()
+                ->pluck('usage_type')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'lcp_names' => $lcpNames,
+                    'nap_names' => $napNames,
+                    'ports' => $ports,
+                    'vlans' => $vlans,
+                    'lcpnaps' => $lcpnaps,
+                    'new_ports' => $newPorts,
+                    'new_vlans' => $newVlans,
+                    'new_lcpnaps' => $newLcpnaps,
+                    'router_models' => $routerModels,
+                    'usage_types' => $usageTypes
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch service order lookup data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getCustomerLookupData(): JsonResponse
+    {
+        try {
+            $lcpNames = DB::table('lcp')->pluck('lcp_name')->sort()->values();
+            $napNames = DB::table('nap')->pluck('nap_name')->sort()->values();
+
+            $ports = DB::table('technical_details')
+                ->whereNotNull('port')
+                ->where('port', '!=', '')
+                ->distinct()
+                ->pluck('port')
+                ->sort()
+                ->values();
+
+            $vlans = DB::table('technical_details')
+                ->whereNotNull('vlan')
+                ->where('vlan', '!=', '')
+                ->distinct()
+                ->pluck('vlan')
+                ->sort()
+                ->values();
+
+            $lcpnaps = DB::table('technical_details')
+                ->whereNotNull('lcpnap')
+                ->where('lcpnap', '!=', '')
+                ->distinct()
+                ->pluck('lcpnap')
+                ->sort()
+                ->values();
+
+            $routerModels = DB::table('technical_details')
+                ->whereNotNull('router_model')
+                ->where('router_model', '!=', '')
+                ->distinct()
+                ->pluck('router_model')
+                ->sort()
+                ->values();
+
+            $usageTypes = DB::table('technical_details')
+                ->whereNotNull('usage_type')
+                ->where('usage_type', '!=', '')
+                ->distinct()
+                ->pluck('usage_type')
+                ->sort()
+                ->values();
+
+            $connectionTypes = DB::table('technical_details')
+                ->whereNotNull('connection_type')
+                ->where('connection_type', '!=', '')
+                ->distinct()
+                ->pluck('connection_type')
+                ->sort()
+                ->values();
+
+            $usernameStatuses = DB::table('technical_details')
+                ->whereNotNull('username_status')
+                ->where('username_status', '!=', '')
+                ->distinct()
+                ->pluck('username_status')
+                ->sort()
+                ->values();
+
+            $groupNames = DB::table('customers')
+                ->whereNotNull('group_name')
+                ->where('group_name', '!=', '')
+                ->distinct()
+                ->pluck('group_name')
+                ->sort()
+                ->values();
+
+            // Try to get billing statuses, if table exists
+            $billingStatuses = [];
+            try {
+                $billingStatuses = DB::table('billing_status')->select('id', 'status_name as name')->get();
+            } catch (\Exception $e) {
+                // Ignore if table doesn't exist
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'lcp_names' => $lcpNames,
+                    'nap_names' => $napNames,
+                    'ports' => $ports,
+                    'vlans' => $vlans,
+                    'lcpnaps' => $lcpnaps,
+                    'router_models' => $routerModels,
+                    'usage_types' => $usageTypes,
+                    'connection_types' => $connectionTypes,
+                    'username_statuses' => $usernameStatuses,
+                    'group_names' => $groupNames,
+                    'billing_statuses' => $billingStatuses
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch customer lookup data',
                 'error' => $e->getMessage()
             ], 500);
         }

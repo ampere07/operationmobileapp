@@ -11,6 +11,7 @@ class JobOrder extends Model
     protected $fillable = [
         'application_id',
         'account_id',
+        'status',
         'timestamp',
         'date_installed',
         'installation_fee',

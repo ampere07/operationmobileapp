@@ -92,17 +92,26 @@ class PppoeUsernameService
             case 'first_name':
                 return strtolower($firstName);
             
+            case 'first_name_capitalized':
+                return ucfirst(strtolower($firstName));
+            
             case 'first_name_initial':
                 return strtolower(substr($firstName, 0, 1));
             
             case 'middle_name':
                 return strtolower($middleInitial);
             
+            case 'middle_name_capitalized':
+                return ucfirst(strtolower($middleInitial));
+            
             case 'middle_name_initial':
                 return strtolower(substr($middleInitial, 0, 1));
             
             case 'last_name':
                 return strtolower($lastName);
+            
+            case 'last_name_capitalized':
+                return ucfirst(strtolower($lastName));
             
             case 'last_name_initial':
                 return strtolower(substr($lastName, 0, 1));

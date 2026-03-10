@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\InventoryCategory;
 use Illuminate\Support\Facades\Validator;
 use App\Models\ActivityLog;
+use App\Events\InventoryCategoryUpdated;
 
 class InventoryCategoryApiController extends Controller
 {
@@ -68,6 +69,8 @@ class InventoryCategoryApiController extends Controller
                 ]
             );
             
+            event(new InventoryCategoryUpdated(['action' => 'created', 'category_id' => $category->id, 'name' => $category->category_name]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory category added successfully',
@@ -143,6 +146,8 @@ class InventoryCategoryApiController extends Controller
                 ]
             );
             
+            event(new InventoryCategoryUpdated(['action' => 'updated', 'category_id' => $category->id, 'name' => $category->category_name]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory category updated successfully',
@@ -183,6 +188,8 @@ class InventoryCategoryApiController extends Controller
                 ]
             );
             
+            event(new InventoryCategoryUpdated(['action' => 'deleted', 'category_id' => $id, 'name' => $categoryName]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory category deleted successfully'

@@ -9,6 +9,7 @@ use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use App\Events\DCNoticeUpdated;
 
 class DCNoticeApiController extends Controller
 {
@@ -202,6 +203,8 @@ class DCNoticeApiController extends Controller
 
             $dcNotice = DCNotice::create($validated);
 
+            event(new DCNoticeUpdated(['action' => 'created', 'dc_notice_id' => $dcNotice->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'DC Notice record created successfully',
@@ -238,6 +241,8 @@ class DCNoticeApiController extends Controller
 
             $dcNotice->update($validated);
 
+            event(new DCNoticeUpdated(['action' => 'updated', 'dc_notice_id' => $dcNotice->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'DC Notice record updated successfully',
@@ -263,6 +268,8 @@ class DCNoticeApiController extends Controller
         try {
             $dcNotice = DCNotice::findOrFail($id);
             $dcNotice->delete();
+
+            event(new DCNoticeUpdated(['action' => 'deleted', 'dc_notice_id' => $id]));
 
             return response()->json([
                 'success' => true,

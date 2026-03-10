@@ -390,10 +390,12 @@ class MonitorController extends Controller
             // X-axis: Status values (Paid, Unpaid, Pending, etc.), Y-axis: Count or Amount
             if (in_array($action, ['invoice_mon', 'transactions_mon', 'portal_mon'], true)) {
                 if ($action === 'invoice_mon') {
-                    // Get count/sum for each invoice status in the given year
+                    // Get count/sum for each invoice status per month in the given year
                     $qb = DB::table('invoices')
                         ->select(
-                            DB::raw("IFNULL(status, 'Unknown') as label"),
+                            DB::raw("MONTH(invoice_date) as month_num"),
+                            DB::raw("MONTHNAME(invoice_date) as month_name"),
+                            DB::raw("IFNULL(status, 'Unknown') as status_value"),
                             // Count records or sum amounts based on param
                             $param === 'amount' 
                                 ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
@@ -401,13 +403,27 @@ class MonitorController extends Controller
                         )
                         ->whereYear('invoice_date', $year)
                         ->whereNotNull('invoice_date')
-                        ->groupBy(DB::raw("IFNULL(status, 'Unknown')"))
-                        ->orderByDesc('value')
+                        ->groupBy(DB::raw("MONTH(invoice_date)"), DB::raw("MONTHNAME(invoice_date)"), DB::raw("IFNULL(status, 'Unknown')"))
+                        ->orderBy(DB::raw("MONTH(invoice_date)"))
                         ->get();
+                    
+                    // Transform to: {label: "January", series: {"Paid": 1000, "Unpaid": 200}}
+                    $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                    $result = [];
+                    
+                    foreach ($months as $month) {
+                        $result[$month] = ['label' => $month, 'series' => []];
+                    }
+                    
+                    foreach ($qb as $row) {
+                        if (isset($result[$row->month_name])) {
+                            $result[$row->month_name]['series'][$row->status_value] = (float)$row->value;
+                        }
+                    }
                     
                     return response()->json([
                         'status' => 'success', 
-                        'data' => $qb, 
+                        'data' => array_values($result), 
                         'barangays' => $response['barangays']
                     ]);
                 } elseif ($action === 'transactions_mon') {
@@ -686,7 +702,7 @@ class MonitorController extends Controller
                     ->join('applications', 'job_orders.application_id', '=', 'applications.id')
                     ->select(
                         'users.username as team_name',
-                        DB::raw("'Job Order' as type"),
+                        DB::raw("'Installation (Joborder)' as type"),
                         DB::raw("CONCAT(applications.first_name, ' ', applications.last_name) as customer"),
                         DB::raw("CONCAT(
                             COALESCE(applications.installation_address, ''), ' ', 
@@ -711,7 +727,7 @@ class MonitorController extends Controller
                     ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                     ->select(
                         'users.username as team_name',
-                        DB::raw("COALESCE(service_orders.concern, 'Service Order') as type"),
+                        DB::raw("CONCAT(COALESCE(service_orders.repair_category, service_orders.concern, 'Repair'), ' (Service Order)') as type"),
                         DB::raw("CONCAT(customers.first_name, ' ', customers.last_name) as customer"),
                         DB::raw("CONCAT(
                             COALESCE(customers.address, ''), ' ', 
@@ -768,6 +784,90 @@ class MonitorController extends Controller
                 return response()->json(['status' => 'success', 'data' => $data]);
             }
 
+            // 15) AGENT DETAILED QUEUE
+            if ($action === 'agent_detailed_queue') {
+                // 1) Job Orders
+                $jobs = DB::table('job_orders')
+                    ->join('applications', 'job_orders.application_id', '=', 'applications.id')
+                    ->select(
+                        'applications.referred_by as team_name',
+                        DB::raw("'Installation (Joborder)' as type"),
+                        DB::raw("CONCAT(applications.first_name, ' ', applications.last_name) as customer"),
+                        DB::raw("CONCAT(
+                            COALESCE(applications.installation_address, ''), ' ', 
+                            COALESCE(applications.landmark, ''), ' ', 
+                            COALESCE(applications.location, ''), ' ', 
+                            COALESCE(applications.barangay, ''), ' ', 
+                            COALESCE(applications.city, ''), ' ', 
+                            COALESCE(applications.region, '')
+                        ) as address"),
+                        DB::raw("CAST(job_orders.updated_at AS CHAR) as start_time_str"),
+                        'job_orders.onsite_status as status'
+                    )
+                    ->where('job_orders.onsite_status', '!=', 'Done')
+                    ->whereNotNull('applications.referred_by')
+                    ->where('applications.referred_by', '!=', '');
+
+                // 2) Service Orders
+                $services = DB::table('service_orders')
+                    ->join('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
+                    ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                    ->select(
+                        'customers.referred_by as team_name',
+                        DB::raw("CONCAT(COALESCE(service_orders.repair_category, service_orders.concern, 'Repair'), ' (Service Order)') as type"),
+                        DB::raw("CONCAT(customers.first_name, ' ', customers.last_name) as customer"),
+                        DB::raw("CONCAT(
+                            COALESCE(customers.address, ''), ' ', 
+                            COALESCE(customers.location, ''), ' ', 
+                            COALESCE(customers.barangay, ''), ' ', 
+                            COALESCE(customers.city, ''), ' ', 
+                            COALESCE(customers.region, '')
+                        ) as address"),
+                        DB::raw("CAST(service_orders.updated_at AS CHAR) as start_time_str"),
+                        'service_orders.visit_status as status'
+                    )
+                    ->where('service_orders.visit_status', '!=', 'Resolved')
+                    ->where('service_orders.visit_status', '!=', 'Done') 
+                    ->whereNotNull('customers.referred_by')
+                    ->where('customers.referred_by', '!=', '');
+
+                $all = $jobs->union($services)->get();
+
+                $data = $all->map(function ($item) {
+                    $startStr = $item->start_time_str ?? null;
+                    $start = $startStr ? \Carbon\Carbon::parse($startStr) : null;
+                    
+                    if (!$start) {
+                        return [
+                            'team_name' => $item->team_name,
+                            'type' => $item->type,
+                            'customer' => $item->customer,
+                            'address' => trim($item->address),
+                            'start' => '-',
+                            'duration' => '-'
+                        ];
+                    }
+
+                    $now = \Carbon\Carbon::now();
+                    $diff = $start->diff($now);
+                    $duration = "";
+                    if ($diff->d > 0) $duration .= $diff->d . "d ";
+                    if ($diff->h > 0) $duration .= $diff->h . "h ";
+                    $duration .= $diff->i . "m";
+
+                    return [
+                        'team_name' => $item->team_name,
+                        'type' => $item->type,
+                        'customer' => $item->customer,
+                        'address' => trim($item->address),
+                        'start' => $start->format('M d, Y h:i A'),
+                        'duration' => $duration
+                    ];
+                });
+
+                return response()->json(['status' => 'success', 'data' => $data]);
+            }
+            
             return response()->json([
                 'status' => 'error',
                 'message' => "Unknown action: $action",

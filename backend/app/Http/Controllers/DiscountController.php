@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ActivityLog;
+use App\Events\DiscountUpdated;
 
 class DiscountController extends Controller
 {
@@ -84,6 +85,8 @@ class DiscountController extends Controller
             );
 
             DB::commit();
+
+            event(new DiscountUpdated(['action' => 'created', 'discount_id' => $discount->id, 'account_no' => $validated['account_no']]));
 
             return response()->json([
                 'success' => true,
@@ -188,6 +191,8 @@ class DiscountController extends Controller
 
             DB::commit();
 
+            event(new DiscountUpdated(['action' => 'updated', 'discount_id' => $id, 'account_no' => $discount->account_no]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Discount updated successfully',
@@ -240,6 +245,8 @@ class DiscountController extends Controller
             );
 
             DB::commit();
+
+            event(new DiscountUpdated(['action' => 'deleted', 'discount_id' => $id, 'account_no' => $discount->account_no]));
 
             return response()->json([
                 'success' => true,

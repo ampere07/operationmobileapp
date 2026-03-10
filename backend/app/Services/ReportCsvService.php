@@ -7,19 +7,21 @@ use Illuminate\Support\Facades\Schema;
 
 class ReportCsvService
 {
-    public function generateFile($reportType)
+    public function generateFile($reportType, $dateRange = null)
     {
         $fileName = 'Report_' . time() . '_' . str_replace(' ', '_', $reportType) . '.csv';
         $tempPath = sys_get_temp_dir() . '/' . $fileName;
         
         $fileHandle = fopen($tempPath, 'w');
 
+        [$startDate, $endDate] = $this->parseDateRange($dateRange);
+
         if (strtolower($reportType) === 'summary') {
-            $this->generateSummaryCSV($fileHandle);
+            $this->generateSummaryCSV($fileHandle, $dateRange);
         } else {
             $tableName = $this->getTableNameForType($reportType);
             if ($tableName) {
-                $this->generateTableCSV($fileHandle, $tableName);
+                $this->generateTableCSV($fileHandle, $tableName, $startDate, $endDate);
             } else {
                 fclose($fileHandle);
                 @unlink($tempPath);
@@ -46,7 +48,35 @@ class ReportCsvService
         return $map[$key] ?? null;
     }
 
-    private function generateTableCSV($fileHandle, $tableName)
+    public function parseDateRange($dateRange)
+    {
+        $startDate = null;
+        $endDate = null;
+        if ($dateRange && strpos($dateRange, ' to ') !== false) {
+            $parts = explode(' to ', $dateRange);
+            if (count($parts) === 2) {
+                $startDate = trim($parts[0]);
+                $endDate = trim($parts[1]);
+            }
+        }
+        return [$startDate, $endDate];
+    }
+
+    private function getDateColumnForTable($tableName)
+    {
+        $map = [
+            'transactions' => 'payment_date',
+            'payment_portal_logs' => 'created_at',
+            'inventory_logs' => 'created_at',
+            'job_orders' => 'created_at',
+            'service_orders' => 'created_at',
+            'work_order' => 'created_at',
+            'work_orders' => 'created_at',
+        ];
+        return $map[$tableName] ?? 'created_at';
+    }
+
+    private function generateTableCSV($fileHandle, $tableName, $startDate = null, $endDate = null)
     {
         // For work order, fallback to work_orders if work_order doesn't exist
         if ($tableName === 'work_order' && !Schema::hasTable($tableName)) {
@@ -61,7 +91,14 @@ class ReportCsvService
         $columns = Schema::getColumnListing($tableName);
         fputcsv($fileHandle, $columns);
 
-        DB::table($tableName)->orderBy('id')->chunk(500, function ($rows) use ($fileHandle, $columns) {
+        $query = DB::table($tableName);
+
+        if ($startDate && $endDate) {
+            $dateCol = $this->getDateColumnForTable($tableName);
+            $query->whereBetween($dateCol, [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        }
+
+        $query->orderBy('id')->chunk(500, function ($rows) use ($fileHandle, $columns) {
             foreach ($rows as $row) {
                 $rowArray = (array) $row;
                 $csvRow = [];
@@ -73,36 +110,58 @@ class ReportCsvService
         });
     }
 
-    private function generateSummaryCSV($fileHandle)
+    private function generateSummaryCSV($fileHandle, $dateRange = null)
     {
+        $metrics = $this->getSummaryMetrics($dateRange);
+
+        // Write to CSV (Header Row)
+        fputcsv($fileHandle, array_keys($metrics));
+        
+        // Write to CSV (Data Row)
+        fputcsv($fileHandle, array_values($metrics));
+    }
+
+    public function getSummaryMetrics($dateRange = null)
+    {
+        [$startDate, $endDate] = $this->parseDateRange($dateRange);
+
         // Calculate all metrics requested
         $metrics = [];
+        $hasRange = $startDate && $endDate;
 
         // transactions table data count
-        $txnDataCount = Schema::hasTable('transactions') ? DB::table('transactions')->count() : 0;
-        $metrics['Transactions Count'] = $txnDataCount;
+        if (Schema::hasTable('transactions')) {
+            $query = DB::table('transactions');
+            if ($hasRange) $query->whereBetween('payment_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            $metrics['Transactions Count'] = $query->count();
+            
+            $querySum = DB::table('transactions');
+            if ($hasRange) $querySum->whereBetween('payment_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            $metrics['Transactions Total Received Payment'] = $querySum->sum('received_payment');
+        } else {
+            $metrics['Transactions Count'] = 0;
+            $metrics['Transactions Total Received Payment'] = 0;
+        }
 
-        // transactions table total received_payment column
-        $txnReceivedSum = Schema::hasTable('transactions') ? DB::table('transactions')->sum('received_payment') : 0;
-        $metrics['Transactions Total Received Payment'] = $txnReceivedSum;
-
-        // payment_portal_logs table count
-        $pplDataCount = Schema::hasTable('payment_portal_logs') ? DB::table('payment_portal_logs')->count() : 0;
-        $metrics['Payment Portal Logs Count'] = $pplDataCount;
-
-        // payment_portal_logs total total_amount column
-        $pplTotalSum = Schema::hasTable('payment_portal_logs') ? DB::table('payment_portal_logs')->sum('total_amount') : 0;
-        $metrics['Payment Portal Logs Total Amount'] = $pplTotalSum;
+        // payment_portal_logs table
+        if (Schema::hasTable('payment_portal_logs')) {
+            $query = DB::table('payment_portal_logs');
+            if ($hasRange) $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            $metrics['Payment Portal Logs Count'] = $query->count();
+            
+            $querySum = DB::table('payment_portal_logs');
+            if ($hasRange) $querySum->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            $metrics['Payment Portal Logs Total Amount'] = $querySum->sum('total_amount');
+        } else {
+            $metrics['Payment Portal Logs Count'] = 0;
+            $metrics['Payment Portal Logs Total Amount'] = 0;
+        }
 
         // sales total count = txn sum + ppl sum
-        $salesTotalCount = $txnReceivedSum + $pplTotalSum;
-        $metrics['Sales Total (Value)'] = $salesTotalCount;
+        $metrics['Sales Total (Value)'] = $metrics['Transactions Total Received Payment'] + $metrics['Payment Portal Logs Total Amount'];
+        $metrics['Sales Total (Count)'] = $metrics['Transactions Count'] + $metrics['Payment Portal Logs Count'];
 
-        // sales transaction count = txn count + ppl count
-        $salesDataCount = $txnDataCount + $pplDataCount;
-        $metrics['Sales Total (Count)'] = $salesDataCount;
-
-        // low count stock and good stock count from inventory_items
+        // inventory items (not usually date filtered as it is current stock)
         $lowStockCount = 0;
         $goodStockCount = 0;
         if (Schema::hasTable('inventory_items')) {
@@ -110,59 +169,65 @@ class ReportCsvService
             foreach ($items as $item) {
                 $qty = $item->total_quantity ?? 0;
                 $alert = $item->quantity_alert ?? 0;
-                if ($qty <= $alert) {
-                    $lowStockCount++;
-                } else {
-                    $goodStockCount++;
-                }
+                if ($qty <= $alert) $lowStockCount++; else $goodStockCount++;
             }
         }
         $metrics['Low Stock Count'] = $lowStockCount;
         $metrics['Good Stock Count'] = $goodStockCount;
 
-        // job_orders table count of onsite_status value Done
-        $joDoneCount = Schema::hasTable('job_orders') ? DB::table('job_orders')->where('onsite_status', 'Done')->count() : 0;
-        $metrics['Job Orders (Onsite Status = Done)'] = $joDoneCount;
-
-        // job_orders table count of onsite_status In Progress
-        $joInProgressCount = Schema::hasTable('job_orders') ? DB::table('job_orders')->where('onsite_status', 'In Progress')->count() : 0;
-        $metrics['Job Orders (Onsite Status = In Progress)'] = $joInProgressCount;
-
-        // service_orders table support_status value resolve count
-        $soResolveCount = Schema::hasTable('service_orders') ? DB::table('service_orders')->where('support_status', 'like', '%resolv%')->count() : 0;
-        $metrics['Service Orders (Support Status = Resolved)'] = $soResolveCount;
-
-        // service_orders table visit_status value Done count
-        $soVisitDoneCount = Schema::hasTable('service_orders') ? DB::table('service_orders')->where('visit_status', 'Done')->count() : 0;
-        $metrics['Service Orders (Visit Status = Done)'] = $soVisitDoneCount;
-
-        // service_orders table repair_category value pullout count
-        $soPulloutCount = Schema::hasTable('service_orders') ? DB::table('service_orders')->where('repair_category', 'pullout')->count() : 0;
-        $metrics['Service Orders (Repair Category = Pullout)'] = $soPulloutCount;
-
-        // service_orders: visit_status Done and repair_category pullout
-        $soDoneAndPulloutCount = Schema::hasTable('service_orders') ? DB::table('service_orders')->where('visit_status', 'Done')->where('repair_category', 'pullout')->count() : 0;
-        $metrics['Service Orders (Done & Pullout)'] = $soDoneAndPulloutCount;
-
-        // service_orders: visit_status In Progress count
-        $soVisitInProgressCount = Schema::hasTable('service_orders') ? DB::table('service_orders')->where('visit_status', 'In Progress')->count() : 0;
-        $metrics['Service Orders (Visit Status = In Progress)'] = $soVisitInProgressCount;
-
-        // work_order table work_status Completed count
-        $woTable = Schema::hasTable('work_order') ? 'work_order' : (Schema::hasTable('work_orders') ? 'work_orders' : null);
-        $woCompletedCount = 0;
-        $woPendingCount = 0;
-        if ($woTable) {
-            $woCompletedCount = DB::table($woTable)->where('work_status', 'Completed')->count();
-            $woPendingCount = DB::table($woTable)->where('work_status', 'Pending')->count();
+        // job_orders
+        if (Schema::hasTable('job_orders')) {
+            $qDone = DB::table('job_orders')->where('onsite_status', 'Done');
+            $qProg = DB::table('job_orders')->where('onsite_status', 'In Progress');
+            if ($hasRange) {
+                $qDone->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                $qProg->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            }
+            $metrics['Job Orders (Onsite Status = Done)'] = $qDone->count();
+            $metrics['Job Orders (Onsite Status = In Progress)'] = $qProg->count();
         }
-        $metrics['Work Orders (Completed)'] = $woCompletedCount;
-        $metrics['Work Orders (Pending)'] = $woPendingCount;
 
-        // Write to CSV (Header Row)
-        fputcsv($fileHandle, array_keys($metrics));
-        
-        // Write to CSV (Data Row)
-        fputcsv($fileHandle, array_values($metrics));
+        // service_orders
+        if (Schema::hasTable('service_orders')) {
+            $qRes = DB::table('service_orders')->where('support_status', 'like', '%resolv%');
+            $qVisDone = DB::table('service_orders')->where('visit_status', 'Done');
+            $qPull = DB::table('service_orders')->where('repair_category', 'pullout');
+            $qDonePull = DB::table('service_orders')->where('visit_status', 'Done')->where('repair_category', 'pullout');
+            $qVisProg = DB::table('service_orders')->where('visit_status', 'In Progress');
+
+            if ($hasRange) {
+                $range = [$startDate . ' 00:00:00', $endDate . ' 23:59:59'];
+                $qRes->whereBetween('created_at', $range);
+                $qVisDone->whereBetween('created_at', $range);
+                $qPull->whereBetween('created_at', $range);
+                $qDonePull->whereBetween('created_at', $range);
+                $qVisProg->whereBetween('created_at', $range);
+            }
+
+            $metrics['Service Orders (Support Status = Resolved)'] = $qRes->count();
+            $metrics['Service Orders (Visit Status = Done)'] = $qVisDone->count();
+            $metrics['Service Orders (Repair Category = Pullout)'] = $qPull->count();
+            $metrics['Service Orders (Done & Pullout)'] = $qDonePull->count();
+            $metrics['Service Orders (Visit Status = In Progress)'] = $qVisProg->count();
+        }
+
+        // work_order
+        $woTable = Schema::hasTable('work_order') ? 'work_order' : (Schema::hasTable('work_orders') ? 'work_orders' : null);
+        if ($woTable) {
+            $qComp = DB::table($woTable)->where('work_status', 'Completed');
+            $qPend = DB::table($woTable)->where('work_status', 'Pending');
+            if ($hasRange) {
+                $range = [$startDate . ' 00:00:00', $endDate . ' 23:59:59'];
+                $qComp->whereBetween('created_at', $range);
+                $qPend->whereBetween('created_at', $range);
+            }
+            $metrics['Work Orders (Completed)'] = $qComp->count();
+            $metrics['Work Orders (Pending)'] = $qPend->count();
+        } else {
+            $metrics['Work Orders (Completed)'] = 0;
+            $metrics['Work Orders (Pending)'] = 0;
+        }
+
+        return $metrics;
     }
 }

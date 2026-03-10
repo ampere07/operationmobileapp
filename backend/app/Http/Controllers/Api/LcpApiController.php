@@ -19,7 +19,7 @@ class LcpApiController extends Controller
     {
         try {
             $page = (int) $request->get('page', 1);
-            $limit = min((int) $request->get('limit', 10), 10000);
+            $limit = min((int) $request->get('limit', 10), 100);
             $search = $request->get('search', '');
             
             $query = LCP::query();

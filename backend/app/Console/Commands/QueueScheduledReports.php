@@ -79,12 +79,17 @@ class QueueScheduledReports extends Command
                 $sendTo = $report->send_to;
                 $emails = array_map('trim', explode(',', $sendTo));
 
-                // Generate fresh CSV attachment
-                $csvService = new \App\Services\ReportCsvService();
+                // Generate fresh attachment
                 $tempPath = null;
                 try {
-                    $tempPath = $csvService->generateFile($report->report_type);
-                    $logger->info("Report ID {$report->id} ('{$report->report_name}') CSV attachment generated successfully.");
+                    if (strtolower($report->report_type) === 'summary') {
+                        $pdfService = new \App\Services\ReportPdfService();
+                        $tempPath = $pdfService->generateSummaryPdf($report);
+                    } else {
+                        $csvService = new \App\Services\ReportCsvService();
+                        $tempPath = $csvService->generateFile($report->report_type, $report->date_range);
+                    }
+                    $logger->info("Report ID {$report->id} ('{$report->report_name}') attachment generated successfully.");
                 } catch (\Exception $e) {
                     $logger->error("Report ID {$report->id} ('{$report->report_name}') CSV generation failed: " . $e->getMessage());
                     \Illuminate\Support\Facades\Log::error('Scheduled Report CSV Generation Failed: ' . $e->getMessage());

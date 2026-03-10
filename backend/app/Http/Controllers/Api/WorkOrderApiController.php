@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\WorkOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Events\WorkOrderUpdated;
 
 class WorkOrderApiController extends Controller
 {
@@ -141,6 +142,8 @@ class WorkOrderApiController extends Controller
 
             $workOrder->save();
             
+            event(new WorkOrderUpdated(['action' => 'created', 'work_order_id' => $workOrder->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Work order created successfully',
@@ -247,6 +250,8 @@ class WorkOrderApiController extends Controller
             }
 
             $workOrder->save();
+
+            event(new WorkOrderUpdated(['action' => 'images_uploaded', 'work_order_id' => $workOrder->id]));
 
             return response()->json([
                 'success' => true,
@@ -368,6 +373,8 @@ class WorkOrderApiController extends Controller
 
             $workOrder->save();
             
+            event(new WorkOrderUpdated(['action' => 'updated', 'work_order_id' => $workOrder->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Work order updated successfully',
@@ -394,6 +401,8 @@ class WorkOrderApiController extends Controller
             }
             
             $workOrder->delete();
+
+            event(new WorkOrderUpdated(['action' => 'deleted', 'work_order_id' => $id]));
             
             return response()->json([
                 'success' => true,

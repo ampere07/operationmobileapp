@@ -250,8 +250,9 @@ class EnhancedBillingGenerationServiceWithNotifications
                 throw new \Exception("Plan '{$planName}' has invalid price: " . ($plan->price ?? 'NULL'));
             }
 
+            $dueDateOffset = $this->getDueDateOffset();
             $adjustedDate = $this->calculateAdjustedBillingDate($account, $statementDate);
-            $dueDate = $adjustedDate->copy()->addDays(self::DAYS_UNTIL_DUE);
+            $dueDate = $adjustedDate->copy()->addDays($dueDateOffset);
 
             $prorateAmount = $this->calculateProrateAmount($account, $plan->price, $adjustedDate);
             $monthlyFeeGross = $prorateAmount / (1 + self::VAT_RATE);
@@ -302,6 +303,33 @@ class EnhancedBillingGenerationServiceWithNotifications
 
             DB::commit();
             
+            // GENERATE PDF AND SAVE TO GOOGLE DRIVE IMMEDIATELY AFTER COMMIT
+            try {
+                $pdfService = app(\App\Services\GoogleDrivePdfGenerationService::class);
+                $pdfResult = $pdfService->generateBillingPdf($account, null, $statement);
+                
+                if (isset($pdfResult['success']) && $pdfResult['success'] && !empty($pdfResult['url'])) {
+                    $statement->print_link = $pdfResult['url'];
+                    $statement->save();
+                    
+                    $this->log('info', 'SOA PDF generated and saved to Google Drive immediately', [
+                        'account_no' => $account->account_no,
+                        'statement_id' => $statement->id,
+                        'print_link' => $pdfResult['url']
+                    ]);
+                } else {
+                    $this->log('error', 'Failed to generate SOA PDF immediately', [
+                        'account_no' => $account->account_no,
+                        'error' => $pdfResult['error'] ?? 'Unknown error'
+                    ]);
+                }
+            } catch (\Exception $e) {
+                $this->log('error', 'Exception generating SOA PDF immediately', [
+                    'account_no' => $account->account_no,
+                    'error' => $e->getMessage()
+                ]);
+            }
+            
             $this->log('info', 'SOA created successfully', [
                 'account_no' => $account->account_no,
                 'statement_id' => $statement->id,
@@ -343,8 +371,9 @@ class EnhancedBillingGenerationServiceWithNotifications
                 throw new \Exception("Plan '{$planName}' has invalid price: " . ($plan->price ?? 'NULL'));
             }
 
+            $dueDateOffset = $this->getDueDateOffset();
             $adjustedDate = $this->calculateAdjustedBillingDate($account, $invoiceDate);
-            $dueDate = $adjustedDate->copy()->addDays(self::DAYS_UNTIL_DUE);
+            $dueDate = $adjustedDate->copy()->addDays($dueDateOffset);
 
             $invoiceId = $this->generateInvoiceId($invoiceDate);
             
@@ -443,13 +472,8 @@ class EnhancedBillingGenerationServiceWithNotifications
         if ($account->billing_day === self::END_OF_MONTH_BILLING) {
             return $baseDate->copy()->endOfMonth();
         }
-
-        if ($account->billing_day != 30) {
-            $daysRemaining = 30 - $account->billing_day;
-            return $baseDate->copy()->addDays($daysRemaining);
-        }
         
-        return $baseDate->copy();
+        return $baseDate->copy()->day($account->billing_day);
     }
 
     protected function calculateProrateAmount(BillingAccount $account, float $monthlyFee, Carbon $currentDate): float
@@ -533,6 +557,18 @@ class EnhancedBillingGenerationServiceWithNotifications
     {
         $endDateWithBuffer = $endDate->copy()->addDays(self::DAYS_UNTIL_DUE);
         return $startDate->diffInDays($endDateWithBuffer) + 1;
+    }
+
+    protected function getDueDateOffset(): int
+    {
+        $billingConfig = BillingConfig::first();
+        
+        if (!$billingConfig || $billingConfig->due_date_day === null) {
+            $this->log('info', 'No due_date_day configured, using default ' . self::DAYS_UNTIL_DUE);
+            return self::DAYS_UNTIL_DUE;
+        }
+        
+        return (int)$billingConfig->due_date_day;
     }
 
     protected function getAdvanceGenerationDay(): int
@@ -879,7 +915,7 @@ class EnhancedBillingGenerationServiceWithNotifications
         $transactions = DB::table('transactions')
             ->where('account_no', $account->account_no)
             ->where('status', 'Done')
-            ->where('transaction_type', 'Recurring Fee')
+            ->whereNotIn('transaction_type', ['Security Deposit', 'Installation Fee'])
             ->whereMonth('payment_date', $lastMonth->month)
             ->whereYear('payment_date', $lastMonth->year)
             ->sum('received_payment');
@@ -948,7 +984,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'status' => 'Used',
                 'date_used' => now(),
                 'remarks' => DB::raw("CONCAT(IFNULL(remarks, ''), ' [Applied to Invoice: ', '$invoiceId', ']')"),
-                'updated_by_user_id' => $userId,
+                'updated_by_user' => (string) $userId,
                 'updated_at' => now()
             ]);
     }

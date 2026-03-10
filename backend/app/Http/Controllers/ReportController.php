@@ -28,6 +28,7 @@ class ReportController extends Controller
             'report_time' => 'nullable|string',
             'day' => 'nullable|string|max:100',
             'send_to' => 'nullable|string|max:255',
+            'date_range' => 'nullable|string|max:100',
             'created_by' => 'nullable|string|max:255',
         ]);
 
@@ -35,9 +36,13 @@ class ReportController extends Controller
         $report->save();
 
         try {
-            // Generate CSV
-            $csvService = new \App\Services\ReportCsvService();
-            $tempPath = $csvService->generateFile($report->report_type);
+            if (strtolower($report->report_type) === 'summary') {
+                $pdfService = new \App\Services\ReportPdfService();
+                $tempPath = $pdfService->generateSummaryPdf($report);
+            } else {
+                $csvService = new \App\Services\ReportCsvService();
+                $tempPath = $csvService->generateFile($report->report_type, $report->date_range);
+            }
             $fileName = basename($tempPath);
 
             // Upload to GDrive

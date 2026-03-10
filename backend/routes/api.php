@@ -1610,6 +1610,7 @@ Route::prefix('lcpnap')->group(function () {
     Route::post('/', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'store']);
     Route::get('/statistics', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'getStatistics']);
     Route::get('/{id}', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'show']);
+    Route::get('/{id}/related-customers', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'getRelatedCustomers']);
     Route::put('/{id}', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'update']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\LcpNapLocationController::class, 'destroy']);
 });
@@ -1784,6 +1785,7 @@ Route::prefix('customers')->group(function () {
 
 // Billing API Routes - Fetches from customers, billing_accounts, and technical_details
 Route::prefix('billing')->group(function () {
+    Route::get('/check-updates', [\App\Http\Controllers\BillingController::class, 'checkUpdates']);
     Route::get('/', [\App\Http\Controllers\BillingController::class, 'index']);
     Route::get('/{id}', [\App\Http\Controllers\BillingController::class, 'show']);
     Route::get('/accounts/active', function() {
@@ -2153,7 +2155,17 @@ Route::prefix('transactions')->group(function () {
     Route::post('/batch-approve', [\App\Http\Controllers\TransactionController::class, 'batchApprove']);
     Route::get('/{id}', [\App\Http\Controllers\TransactionController::class, 'show']);
     Route::post('/{id}/approve', [\App\Http\Controllers\TransactionController::class, 'approve']);
+    Route::post('/{id}/revert', [\App\Http\Controllers\TransactionController::class, 'revert']);
     Route::put('/{id}/status', [\App\Http\Controllers\TransactionController::class, 'updateStatus']);
+    Route::delete('/{id}', [\App\Http\Controllers\TransactionController::class, 'destroy']);
+});
+
+// Transaction Revert Request Routes (Super Admin only)
+Route::prefix('transaction-reverts')->group(function () {
+    Route::get('/', [\App\Http\Controllers\TransactionRevertController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\TransactionRevertController::class, 'store']);
+    Route::get('/{id}', [\App\Http\Controllers\TransactionRevertController::class, 'show']);
+    Route::put('/{id}/status', [\App\Http\Controllers\TransactionRevertController::class, 'updateStatus']);
 });
 
 // Rebates endpoint for frontend
@@ -2835,16 +2847,8 @@ Route::prefix('payments')->group(function () {
     Route::post('/status', [\App\Http\Controllers\Api\XenditPaymentController::class, 'checkPaymentStatus']);
     Route::post('/check-pending', [\App\Http\Controllers\Api\XenditPaymentController::class, 'checkPendingPayment']);
     Route::post('/account-balance', [\App\Http\Controllers\Api\XenditPaymentController::class, 'getAccountBalance']);
-    Route::get('/redirect', function(\Illuminate\Http\Request $request) {
-        $to = $request->query('to');
-        if ($to) {
-            return redirect()->away($to);
-        }
-        return response('Missing destination', 400);
-    });
     
     // Test endpoint to verify webhook configuration
-
     Route::get('/webhook-info', function() {
         return response()->json([
             'status' => 'success',
@@ -3060,6 +3064,17 @@ Route::prefix('monitor')->group(function () {
     Route::match(['GET', 'OPTIONS'], '/templates/{id}', [MonitorController::class, 'loadTemplate']);
     Route::match(['DELETE', 'OPTIONS'], '/templates/{id}', [MonitorController::class, 'deleteTemplate']);
 });
+
+Route::get('/invoices/{id}', [RelatedDataController::class, 'getInvoiceById']);
+Route::get('/payment-portal-logs/{id}', [RelatedDataController::class, 'getPaymentPortalLogById']);
+Route::get('/lookup/payment-methods', [RelatedDataController::class, 'getPaymentMethods']);
+Route::get('/lookup/transaction-types', [RelatedDataController::class, 'getDistinctTransactionTypes']);
+Route::get('/lookup/customer-locations', [RelatedDataController::class, 'getDistinctCustomerLocations']);
+Route::get('/lookup/payment-portal', [RelatedDataController::class, 'getPaymentPortalLookupData']);
+Route::get('/lookup/job-orders', [RelatedDataController::class, 'getJobOrderLookupData']);
+Route::get('/lookup/service-orders', [RelatedDataController::class, 'getServiceOrderLookupData']);
+Route::get('/lookup/customers', [RelatedDataController::class, 'getCustomerLookupData']);
+Route::get('/transactions/{id}/details', [RelatedDataController::class, 'getTransactionById']);
 
 Route::get('/invoices/by-account/{accountNo}', [RelatedDataController::class, 'getInvoicesByAccount']);
 Route::get('/payment-portal-logs/by-account/{accountNo}', [RelatedDataController::class, 'getPaymentPortalLogsByAccount']);

@@ -9,6 +9,7 @@ use App\Models\Invoice;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
+use App\Events\OverdueUpdated;
 
 class OverdueApiController extends Controller
 {
@@ -189,6 +190,8 @@ class OverdueApiController extends Controller
 
             $overdue = Overdue::create($validated);
 
+            event(new OverdueUpdated(['action' => 'created', 'overdue_id' => $overdue->id, 'account_no' => $overdue->account_no]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Overdue record created successfully',
@@ -225,6 +228,8 @@ class OverdueApiController extends Controller
 
             $overdue->update($validated);
 
+            event(new OverdueUpdated(['action' => 'updated', 'overdue_id' => $overdue->id, 'account_no' => $overdue->account_no]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Overdue record updated successfully',
@@ -250,6 +255,8 @@ class OverdueApiController extends Controller
         try {
             $overdue = Overdue::findOrFail($id);
             $overdue->delete();
+
+            event(new OverdueUpdated(['action' => 'deleted', 'overdue_id' => $id]));
 
             return response()->json([
                 'success' => true,

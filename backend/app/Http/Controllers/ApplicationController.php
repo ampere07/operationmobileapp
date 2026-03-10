@@ -179,15 +179,15 @@ class ApplicationController extends Controller
                 'customer_name' => $this->getFullName($application),
                 'plan_name' => $application->desired_plan ?? 'Unknown',
                 'status' => $application->status ?? 'pending',
-                'title' => '🔔 New Application',
+                'title' => 'New Application',
                 'message' => 'A new customer application has been received',
                 'timestamp' => now()->timestamp,
-                'formatted_date' => now()->format('Y-m-d h:i:s A') // e.g. 2026-02-11 05:53:42 PM
+                'formatted_date' => now()->format('Y-m-d h:i:s A')
             ];
 
-            Http::timeout(2)->post('http://127.0.0.1:3001/broadcast/new-application', $data);
+            event(new \App\Events\NewApplicationCreated($data));
         } catch (\Exception $e) {
-            Log::warning('Failed to broadcast new application to socket server', [
+            Log::warning('Failed to broadcast new application via Soketi', [
                 'error' => $e->getMessage()
             ]);
         }

@@ -8,29 +8,29 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class NewApplicationCreated implements ShouldBroadcastNow
+class BillingUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $applicationData;
+    public $billingData;
 
-    public function __construct(array $applicationData)
+    public function __construct(array $billingData)
     {
-        $this->applicationData = $applicationData;
+        $this->billingData = $billingData;
     }
 
     public function broadcastOn()
     {
-        return new Channel('applications');
+        return new Channel('billing');
     }
 
     public function broadcastAs()
     {
-        return 'new-application';
+        return 'billing-updated';
     }
 
     public function broadcastWith()
     {
-        return $this->applicationData;
+        return $this->billingData;
     }
 }

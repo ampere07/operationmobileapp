@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
+use App\Events\InventoryUpdated;
 
 class InventoryApiController extends Controller
 {
@@ -127,6 +128,8 @@ class InventoryApiController extends Controller
             
             $item->load('category');
             
+            event(new InventoryUpdated(['action' => 'created', 'item_id' => $item->id, 'item_name' => $item->item_name]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory item added successfully',
@@ -273,6 +276,8 @@ class InventoryApiController extends Controller
             
             $item->load('category');
             
+            event(new InventoryUpdated(['action' => 'updated', 'item_id' => $item->id, 'item_name' => $item->item_name]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory item updated successfully',
@@ -336,6 +341,8 @@ class InventoryApiController extends Controller
                 ]
             );
             
+            event(new InventoryUpdated(['action' => 'deleted', 'item_name' => $item->item_name]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Inventory item deleted successfully'

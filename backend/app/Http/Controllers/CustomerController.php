@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\BillingAccount;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class CustomerController extends Controller
 {
@@ -29,6 +32,7 @@ class CustomerController extends Controller
                 ->pluck('total', 'account_id');
 
             $customers = Customer::with(['group', 'billingAccounts'])
+                ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($customer) use ($transactions, $portalLogs) {
                     $totalPaid = 0;
@@ -223,6 +227,9 @@ class CustomerController extends Controller
 
             $customer->update($request->all());
 
+            // Broadcast customer-updated event
+            $this->broadcastCustomerUpdated($customer);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Customer updated successfully',
@@ -236,6 +243,29 @@ class CustomerController extends Controller
                 'message' => 'Failed to update customer',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    private function broadcastCustomerUpdated($customer)
+    {
+        try {
+            $billingAccount = BillingAccount::where('customer_id', $customer->id)->first();
+            $accountNo = $billingAccount ? $billingAccount->account_no : null;
+
+            event(new \App\Events\CustomerUpdated([
+                'account_no' => $accountNo,
+                'customer_id' => $customer->id,
+                'type' => 'customer_updated',
+                'title' => 'Customer Updated',
+                'message' => 'Customer data has been updated',
+                'timestamp' => now()->timestamp,
+                'formatted_date' => now()->format('Y-m-d h:i:s A')
+            ]));
+        } catch (\Exception $e) {
+            Log::warning('Failed to broadcast customer update via Soketi', [
+                'customer_id' => $customer->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 

@@ -16,6 +16,7 @@ use App\Services\ManualRadiusOperationsService;
 use App\Models\RadiusConfig;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Auth;
+use App\Events\ServiceOrderUpdated;
 
 class ServiceOrderController extends Controller
 {
@@ -307,6 +308,8 @@ class ServiceOrderController extends Controller
                     ]
                 ]
             );
+
+            event(new ServiceOrderUpdated(['action' => 'created', 'service_order_id' => $serviceOrderId, 'ticket_id' => $ticketId]));
 
             return response()->json([
                 'success' => true,
@@ -692,6 +695,7 @@ class ServiceOrderController extends Controller
             }
             
             if (!empty($billingUpdateData)) {
+                $billingUpdateData['updated_at'] = now();
                 $sets = [];
                 $params = [];
                 foreach ($billingUpdateData as $key => $value) {
@@ -705,6 +709,7 @@ class ServiceOrderController extends Controller
             }
             
             if (!empty($customerUpdateData)) {
+                $customerUpdateData['updated_at'] = now();
                 $sets = [];
                 $params = [];
                 foreach ($customerUpdateData as $key => $value) {
@@ -900,6 +905,8 @@ class ServiceOrderController extends Controller
                 ]
             );
 
+            event(new ServiceOrderUpdated(['action' => 'updated', 'service_order_id' => $id, 'ticket_id' => $order->ticket_id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Service order updated successfully',
@@ -942,6 +949,8 @@ class ServiceOrderController extends Controller
                     ]
                 ]
             );
+
+            event(new ServiceOrderUpdated(['action' => 'deleted', 'service_order_id' => $id, 'ticket_id' => $ticketId]));
 
             return response()->json([
                 'success' => true,

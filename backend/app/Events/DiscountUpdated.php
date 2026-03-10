@@ -8,29 +8,29 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class NewApplicationCreated implements ShouldBroadcastNow
+class DiscountUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $applicationData;
+    public $data;
 
-    public function __construct(array $applicationData)
+    public function __construct(array $data = [])
     {
-        $this->applicationData = $applicationData;
+        $this->data = $data;
     }
 
     public function broadcastOn()
     {
-        return new Channel('applications');
+        return new Channel('discounts');
     }
 
     public function broadcastAs()
     {
-        return 'new-application';
+        return 'discount-updated';
     }
 
     public function broadcastWith()
     {
-        return $this->applicationData;
+        return $this->data;
     }
 }

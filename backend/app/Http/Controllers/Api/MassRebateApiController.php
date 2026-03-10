@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
+use App\Events\RebateUpdated;
 
 class MassRebateApiController extends Controller
 {
@@ -81,6 +82,8 @@ class MassRebateApiController extends Controller
                 ]
             );
 
+            event(new RebateUpdated(['action' => 'created', 'rebate_id' => $rebate->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mass rebate created successfully',
@@ -145,6 +148,8 @@ class MassRebateApiController extends Controller
                 ]
             );
 
+            event(new RebateUpdated(['action' => 'updated', 'rebate_id' => $id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mass rebate updated successfully',
@@ -178,6 +183,8 @@ class MassRebateApiController extends Controller
                     'additional_data' => $rebateData
                 ]
             );
+
+            event(new RebateUpdated(['action' => 'deleted', 'rebate_id' => $id]));
 
             return response()->json([
                 'success' => true,
@@ -218,6 +225,8 @@ class MassRebateApiController extends Controller
                     ]
                 ]
             );
+
+            event(new RebateUpdated(['action' => 'marked_used', 'rebate_id' => $id]));
 
             return response()->json([
                 'success' => true,

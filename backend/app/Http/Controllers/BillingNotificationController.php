@@ -10,6 +10,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Events\OverdueUpdated;
+use App\Events\DCNoticeUpdated;
+use App\Events\InvoiceUpdated;
+use App\Events\SOAUpdated;
 
 class BillingNotificationController extends Controller
 {
@@ -50,6 +54,9 @@ class BillingNotificationController extends Controller
             );
 
             $totalGenerated = $soaResults['success'] + $invoiceResults['success'];
+
+            event(new InvoiceUpdated(['action' => 'generated_with_notifications', 'count' => $invoiceResults['success']]));
+            event(new SOAUpdated(['action' => 'generated_with_notifications', 'count' => $soaResults['success']]));
 
             return response()->json([
                 'success' => true,
@@ -113,6 +120,8 @@ class BillingNotificationController extends Controller
                 }
             }
 
+            event(new OverdueUpdated(['action' => 'notices_sent', 'count' => $results['success']]));
+
             return response()->json([
                 'success' => true,
                 'message' => "Processed {$results['success']} overdue notices",
@@ -170,6 +179,8 @@ class BillingNotificationController extends Controller
                     ];
                 }
             }
+
+            event(new DCNoticeUpdated(['action' => 'notices_sent', 'count' => $results['success']]));
 
             return response()->json([
                 'success' => true,

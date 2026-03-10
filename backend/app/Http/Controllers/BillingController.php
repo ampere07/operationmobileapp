@@ -34,18 +34,35 @@ class BillingController extends Controller
                 ->get()
                 ->pluck('total', 'account_id');
 
-            $query = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus']);
+            $query = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus'])
+                ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc');
 
-            // Fetch one extra record to check if there are more pages
-            $billingAccounts = $query
-                ->skip(($page - 1) * $perPage)
-                ->take($perPage + 1)
-                ->get();
+            // Support incremental refresh: only return records updated since a given timestamp
+            $updatedSince = $request->get('updated_since');
+            if ($updatedSince) {
+                $query->where(function ($q) use ($updatedSince) {
+                    $q->where('billing_accounts.updated_at', '>=', $updatedSince)
+                      ->orWhereHas('customer', function ($cq) use ($updatedSince) {
+                          $cq->where('updated_at', '>=', $updatedSince);
+                      });
+                });
 
-            $hasMore = $billingAccounts->count() > $perPage;
+                // No pagination for incremental refresh - return all changed records
+                $billingAccounts = $query->get();
+                $hasMore = false;
+            } else {
+                // Fetch one extra record to check if there are more pages
+                $billingAccounts = $query
+                    ->skip(($page - 1) * $perPage)
+                    ->take($perPage + 1)
+                    ->get();
 
-            if ($hasMore) {
-                $billingAccounts = $billingAccounts->slice(0, $perPage);
+                $hasMore = $billingAccounts->count() > $perPage;
+
+                if ($hasMore) {
+                    $billingAccounts = $billingAccounts->slice(0, $perPage);
+                }
             }
 
             $billingData = $billingAccounts->map(function ($billingAccount) use ($transactions, $portalLogs) {
@@ -117,6 +134,7 @@ class BillingController extends Controller
                 'data' => $billingData->values(),
                 'count' => $billingData->count(),
                 'total' => BillingAccount::count(),
+                'server_time' => now()->toISOString(),
                 'pagination' => [
                     'current_page' => (int)$page,
                     'per_page' => (int)$perPage,
@@ -231,6 +249,35 @@ class BillingController extends Controller
                 'message' => 'Billing record not found',
                 'error' => $e->getMessage()
             ], 404);
+        }
+    }
+
+    /**
+     * Lightweight endpoint to check if any records have changed since a given timestamp.
+     * Used for polling to detect changes from any source (web, mobile app, etc.)
+     */
+    public function checkUpdates(Request $request): JsonResponse
+    {
+        try {
+            $since = $request->get('since');
+
+            if (!$since) {
+                return response()->json(['has_updates' => false, 'count' => 0]);
+            }
+
+            $count = BillingAccount::where('updated_at', '>=', $since)
+                ->orWhereHas('customer', function ($q) use ($since) {
+                    $q->where('updated_at', '>=', $since);
+                })
+                ->count();
+
+            return response()->json([
+                'has_updates' => $count > 0,
+                'count' => $count,
+                'server_time' => now()->toISOString()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['has_updates' => false, 'count' => 0]);
         }
     }
 }

@@ -8,29 +8,29 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class NewApplicationCreated implements ShouldBroadcastNow
+class JobOrderDone implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $applicationData;
+    public $jobOrderData;
 
-    public function __construct(array $applicationData)
+    public function __construct(array $jobOrderData)
     {
-        $this->applicationData = $applicationData;
+        $this->jobOrderData = $jobOrderData;
     }
 
     public function broadcastOn()
     {
-        return new Channel('applications');
+        return new Channel('job-orders');
     }
 
     public function broadcastAs()
     {
-        return 'new-application';
+        return 'job-order-done';
     }
 
     public function broadcastWith()
     {
-        return $this->applicationData;
+        return $this->jobOrderData;
     }
 }

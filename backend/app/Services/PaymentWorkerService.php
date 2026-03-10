@@ -178,7 +178,7 @@ class PaymentWorkerService
                     'date_time' => now(),
                     'checkout_id' => $checkoutID,
                     'status' => $status,
-                    'transaction_status' => 'COMPLETED',
+                    'transaction_status' => 'PAID',
                     'ewallet_type' => $ewalletType,
                     'payment_channel' => $paymentChannel,
                     'type' => $type,

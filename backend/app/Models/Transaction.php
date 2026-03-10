@@ -65,5 +65,10 @@ class Transaction extends Model
     {
         return $this->hasMany(Invoice::class, 'transaction_id');
     }
+
+    public function revert_request()
+    {
+        return $this->hasOne(\App\Models\TransactionRevert::class, 'transaction_id');
+    }
 }
 

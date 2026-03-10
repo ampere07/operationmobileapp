@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Services\ManualRadiusOperationsService;
+use App\Events\TransactionUpdated;
 
 class TransactionController extends Controller
 {
@@ -18,7 +19,7 @@ class TransactionController extends Controller
             $limit = request()->input('limit');
             $offset = request()->input('offset');
 
-            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
+            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request'])
                 ->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc');
 
@@ -112,7 +113,7 @@ class TransactionController extends Controller
                 'account_no' => $transaction->account_no
             ]);
 
-            if ($autoApplyPayment && $transaction->account_no) {
+            if ($autoApplyPayment && $transaction->account_no && $transaction->transaction_type !== 'Security Deposit') {
                 \Log::info('Auto-applying payment', [
                     'transaction_id' => $transaction->id,
                     'account_no' => $transaction->account_no
@@ -157,6 +158,8 @@ class TransactionController extends Controller
                 'transaction_id' => $transaction->id
             ]);
 
+            event(new TransactionUpdated(['action' => 'created', 'transaction_id' => $transaction->id, 'account_no' => $transaction->account_no]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Transaction created successfully',
@@ -193,7 +196,7 @@ class TransactionController extends Controller
     public function show(string $id): JsonResponse
     {
         try {
-            $transaction = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
+            $transaction = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request'])
                 ->findOrFail($id);
 
             return response()->json([
@@ -260,22 +263,32 @@ class TransactionController extends Controller
             ]);
 
             $currentBalance = floatval($billingAccount->account_balance ?? 0);
-            $newBalance = $currentBalance - $paymentReceived;
+            $newBalance = $currentBalance;
+            $invoiceUpdateResult = ['invoices_paid' => [], 'invoices_partial' => [], 'distribution' => []];
 
-            $billingAccount->account_balance = round($newBalance, 2);
-            $billingAccount->balance_update_date = $currentTime;
-            $billingAccount->updated_by = $userId;
-            $billingAccount->save();
+            if ($transaction->transaction_type !== 'Security Deposit') {
+                $newBalance = $currentBalance - $paymentReceived;
 
-            \Log::info('Account balance updated', [
-                'account_no' => $accountNo,
-                'account_id' => $billingAccount->id,
-                'old_balance' => $currentBalance,
-                'new_balance' => $newBalance,
-                'payment_applied' => $paymentReceived
-            ]);
+                $billingAccount->account_balance = round($newBalance, 2);
+                $billingAccount->balance_update_date = $currentTime;
+                $billingAccount->updated_by = $userId;
+                $billingAccount->save();
 
-            $invoiceUpdateResult = $this->updateInvoiceDetails($accountNo, $paymentReceived, $transactionId, $userId, $currentTime);
+                \Log::info('Account balance updated', [
+                    'account_no' => $accountNo,
+                    'account_id' => $billingAccount->id,
+                    'old_balance' => $currentBalance,
+                    'new_balance' => $newBalance,
+                    'payment_applied' => $paymentReceived
+                ]);
+
+                $invoiceUpdateResult = $this->updateInvoiceDetails($accountNo, $paymentReceived, $transactionId, $userId, $currentTime);
+            } else {
+                \Log::info('Transaction is Security Deposit, skipping balance and invoice updates', [
+                    'transaction_id' => $transactionId,
+                    'account_no' => $accountNo
+                ]);
+            }
 
             $transaction->status = 'Done';
             $transaction->date_processed = $currentTime;
@@ -319,6 +332,8 @@ class TransactionController extends Controller
 
             // Attempt reconnection after successful approval
             $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount);
+
+            event(new TransactionUpdated(['action' => 'approved', 'transaction_id' => $transactionId, 'account_no' => $accountNo]));
 
             return response()->json([
                 'success' => true,
@@ -382,60 +397,71 @@ class TransactionController extends Controller
                 ], 404);
             }
 
+            $currentBalance = floatval($billingAccount->account_balance ?? 0);
+
             \Log::info('Transaction revert started', [
                 'transaction_id' => $transactionId,
                 'account_no' => $accountNo,
-                'payment_to_revert' => $paymentToRevert
+                'payment_to_revert' => $paymentToRevert,
+                'current_balance' => $currentBalance
             ]);
 
-            // 1. Revert Account Balance
-            $currentBalance = floatval($billingAccount->account_balance ?? 0);
-            $newBalance = $currentBalance + $paymentToRevert;
-
-            $billingAccount->account_balance = round($newBalance, 2);
-            $billingAccount->balance_update_date = $currentTime;
-            $billingAccount->updated_by = $userId;
-            $billingAccount->save();
-
-            // 2. Revert Invoice Payments
-            // Find invoices updated by this transaction
-            $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
-                ->orderBy('invoice_date', 'desc') // Revert in reverse order of application
-                ->get();
-
-            $remainingToRevert = $paymentToRevert;
             $revertedInvoices = [];
+            $newBalance = $currentBalance;
 
-            foreach ($invoices as $invoice) {
-                if ($remainingToRevert <= 0) break;
+            if ($transaction->transaction_type !== 'Security Deposit') {
+                // 1. Revert Account Balance
+                $newBalance = $currentBalance + $paymentToRevert;
 
-                $currentReceived = floatval($invoice->received_payment ?? 0);
-                
-                // Subtract as much as possible from this invoice
-                $toSubtract = min($currentReceived, $remainingToRevert);
-                
-                $newReceived = $currentReceived - $toSubtract;
-                $invoice->received_payment = round($newReceived, 2);
-                
-                // Update status
-                if ($newReceived <= 0) {
-                    $invoice->status = 'Unpaid';
-                } else {
-                    $invoice->status = 'Partial';
+                $billingAccount->account_balance = round($newBalance, 2);
+                $billingAccount->balance_update_date = $currentTime;
+                $billingAccount->updated_by = $userId;
+                $billingAccount->save();
+
+                // 2. Revert Invoice Payments
+                // Find invoices updated by this transaction
+                $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
+                    ->orderBy('invoice_date', 'desc') // Revert in reverse order of application
+                    ->get();
+
+                $remainingToRevert = $paymentToRevert;
+
+                foreach ($invoices as $invoice) {
+                    if ($remainingToRevert <= 0) break;
+
+                    $currentReceived = floatval($invoice->received_payment ?? 0);
+                    
+                    // Subtract as much as possible from this invoice
+                    $toSubtract = min($currentReceived, $remainingToRevert);
+                    
+                    $newReceived = $currentReceived - $toSubtract;
+                    $invoice->received_payment = round($newReceived, 2);
+                    
+                    // Update status
+                    if ($newReceived <= 0) {
+                        $invoice->status = 'Unpaid';
+                    } else {
+                        $invoice->status = 'Partial';
+                    }
+                    
+                    // Clear transaction_id since we're reverting
+                    $invoice->transaction_id = null;
+                    $invoice->updated_by = Auth::check() ? Auth::user()->email_address : 'unknown';
+                    $invoice->updated_at = $currentTime;
+                    $invoice->save();
+
+                    $remainingToRevert -= $toSubtract;
+                    $revertedInvoices[] = [
+                        'invoice_id' => $invoice->id,
+                        'amount_reverted' => $toSubtract,
+                        'new_status' => $invoice->status
+                    ];
                 }
-                
-                // Clear transaction_id since we're reverting
-                $invoice->transaction_id = null;
-                $invoice->updated_by = Auth::check() ? Auth::user()->email_address : 'unknown';
-                $invoice->updated_at = $currentTime;
-                $invoice->save();
-
-                $remainingToRevert -= $toSubtract;
-                $revertedInvoices[] = [
-                    'invoice_id' => $invoice->id,
-                    'amount_reverted' => $toSubtract,
-                    'new_status' => $invoice->status
-                ];
+            } else {
+                \Log::info('Transaction is Security Deposit, skipping balance and invoice reverts', [
+                    'transaction_id' => $transactionId,
+                    'account_no' => $accountNo
+                ]);
             }
 
             // 3. Update Transaction Status
@@ -632,6 +658,8 @@ class TransactionController extends Controller
 
             DB::commit();
 
+            event(new TransactionUpdated(['action' => 'status_updated', 'transaction_id' => $transaction->id]));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Transaction status updated successfully',
@@ -714,14 +742,19 @@ class TransactionController extends Controller
                     }
 
                     $currentBalance = floatval($billingAccount->account_balance ?? 0);
-                    $newBalance = $currentBalance - $paymentReceived;
+                    $newBalance = $currentBalance;
+                    $invoiceUpdateResult = ['invoices_paid' => [], 'invoices_partial' => [], 'distribution' => []];
 
-                    $billingAccount->account_balance = round($newBalance, 2);
-                    $billingAccount->balance_update_date = $currentTime;
-                    $billingAccount->updated_by = $userId;
-                    $billingAccount->save();
+                    if ($transaction->transaction_type !== 'Security Deposit') {
+                        $newBalance = $currentBalance - $paymentReceived;
 
-                    $invoiceUpdateResult = $this->updateInvoiceDetails($accountNo, $paymentReceived, $transaction->id, $userId, $currentTime);
+                        $billingAccount->account_balance = round($newBalance, 2);
+                        $billingAccount->balance_update_date = $currentTime;
+                        $billingAccount->updated_by = $userId;
+                        $billingAccount->save();
+
+                        $invoiceUpdateResult = $this->updateInvoiceDetails($accountNo, $paymentReceived, $transaction->id, $userId, $currentTime);
+                    }
 
                     $transaction->status = 'Done';
                     $transaction->date_processed = $currentTime;
@@ -792,6 +825,8 @@ class TransactionController extends Controller
                 'success' => $successCount,
                 'failed' => $failedCount
             ]);
+
+            event(new TransactionUpdated(['action' => 'batch_approved', 'success_count' => $successCount]));
 
             return response()->json([
                 'success' => true,
@@ -1165,6 +1200,8 @@ class TransactionController extends Controller
                     ]
                 ]
             );
+
+            event(new TransactionUpdated(['action' => 'deleted', 'transaction_id' => $id]));
 
             return response()->json([
                 'success' => true,

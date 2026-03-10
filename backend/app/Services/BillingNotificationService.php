@@ -321,7 +321,8 @@ class BillingNotificationService
                     ->first();
                     
                 if ($template) {
-                    $amount = $soa ? $soa->total_amount_due : $invoice->total_amount;
+                    $totalDue = $soa ? $soa->total_amount_due : $invoice->total_amount;
+                    $amountDue = $soa ? $soa->amount_due : $invoice->total_amount;
                     $dueDate = $soa ? $soa->due_date : $invoice->due_date;
                     $paymentLink = config('app.payment_link', 'https://sync.atssfiber.ph');
                     
@@ -335,9 +336,11 @@ class BillingNotificationService
                     $message = str_replace('{{account_no}}', $account->account_no, $message);
                     $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
                     $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
-                    $message = str_replace('{{amount_due}}', number_format($amount, 2), $message);
-                    $message = str_replace('{{amount}}', number_format($amount, 2), $message);
-                    $message = str_replace('{{balance}}', number_format($amount, 2), $message);
+                    $message = str_replace('{{amount_due}}', number_format($amountDue, 2), $message);
+                    $message = str_replace('{{total_amount}}', number_format($totalDue, 2), $message);
+                    $message = str_replace('{{total_due}}', number_format($totalDue, 2), $message);
+                    $message = str_replace('{{amount}}', number_format($amountDue, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($totalDue, 2), $message);
                     $message = str_replace('{{due_date}}', $dueDate->format('M d, Y'), $message);
                     $message = str_replace('{{payment_link}}', $paymentLink, $message);
                     
@@ -496,8 +499,9 @@ class BillingNotificationService
     ): array {
         $customer = $account->customer;
 
-        $amount = $invoice ? $invoice->total_amount : $soa->total_amount_due;
-        $dueDate = $invoice ? $invoice->due_date : $soa->due_date;
+        $totalDue = $soa ? $soa->total_amount_due : ($invoice ? $invoice->total_amount : 0);
+        $amountDue = $soa ? $soa->amount_due : ($invoice ? $invoice->total_amount : 0);
+        $dueDate = $soa ? $soa->due_date : ($invoice ? $invoice->due_date : now());
         
         $billingConfig = BillingConfig::first();
         $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 4;
@@ -516,14 +520,14 @@ class BillingNotificationService
             'Plan' => $planFormatted,
             'Due_Date' => $dueDate->format('F j Y'),
             'DC_Date' => $dcDate->format('F j Y'),
-            'Total_Due' => number_format($amount ?? 0, 2),
-            'Amount_Due' => number_format($amount ?? 0, 2),
-            'amount' => number_format($amount ?? 0, 2),
-            'amount_due' => number_format($amount ?? 0, 2),
-            'balance' => number_format($amount ?? 0, 2),
+            'Total_Due' => number_format($totalDue ?? 0, 2),
+            'Amount_Due' => number_format($amountDue ?? 0, 2),
+            'amount' => number_format($amountDue ?? 0, 2),
+            'amount_due' => number_format($amountDue ?? 0, 2),
+            'balance' => number_format($totalDue ?? 0, 2),
             'account_no' => $account->account_no,
             'customer_name' => $customerName,
-            'total_amount' => number_format($amount ?? 0, 2),
+            'total_amount' => number_format($totalDue ?? 0, 2),
             'due_date' => $dueDate->format('F j Y'),
             'plan' => $planFormatted,
             'contact_no' => $customer->contact_number_primary
