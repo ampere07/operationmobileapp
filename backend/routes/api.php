@@ -1006,7 +1006,24 @@ Route::post('/login', function (Request $request) {
         }
         
         // Verify password
-        if (!Hash::check($password, $user->password_hash)) {
+        $passwordMatches = Hash::check($password, $user->password_hash);
+        
+        // For customers (role_id 3), allow variations of the leading '0' if the primary check fails
+        if (!$passwordMatches && $user->role_id == 3) {
+            $altPassword = null;
+            if (str_starts_with($password, '0')) {
+                $altPassword = substr($password, 1); // Try without leading '0'
+            } else {
+                $altPassword = '0' . $password; // Try with leading '0'
+            }
+            
+            if ($altPassword && Hash::check($altPassword, $user->password_hash)) {
+                $passwordMatches = true;
+                \Log::info('Customer login: Password matched using variation', ['user_id' => $user->id]);
+            }
+        }
+
+        if (!$passwordMatches) {
             \Log::warning('Login failed: Invalid password', [
                 'identifier' => $identifier,
                 'ip' => $request->ip()

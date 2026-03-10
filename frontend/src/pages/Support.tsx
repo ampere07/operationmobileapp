@@ -92,15 +92,55 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const [cooldownTime, setCooldownTime] = useState<number>(0);
 
-  // Check if user has already submitted a ticket today
-  const hasSubmittedToday = useMemo(() => {
-    if (!requests || requests.length === 0) return false;
-    const latestDate = requests[0].date;
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    return latestDate === today;
+  // Check ticket submission limits: 5 per day, 1 hour interval
+  const MAX_TICKETS_PER_DAY = 5;
+  const COOLDOWN_HOURS = 1;
+
+  const todayTicketInfo = useMemo(() => {
+    if (!requests || requests.length === 0) return { count: 0, lastSubmitTime: null as Date | null };
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    let count = 0;
+    let lastSubmitTime: Date | null = null;
+    for (const req of requests) {
+      if (req.date === todayStr) {
+        count++;
+        if (!lastSubmitTime) {
+          // First match is the latest since requests are sorted newest-first
+          // Try to parse a more precise time from the raw data
+          const raw = (req as any).rawTimestamp || (req as any).timestamp || (req as any).created_at;
+          if (raw) {
+            const parsed = new Date(raw);
+            if (!isNaN(parsed.getTime())) lastSubmitTime = parsed;
+          }
+          if (!lastSubmitTime) lastSubmitTime = today; // fallback
+        }
+      }
+    }
+    return { count, lastSubmitTime };
   }, [requests]);
 
-  const remainingRequests = hasSubmittedToday ? 0 : 1;
+  const hasReachedDailyLimit = todayTicketInfo.count >= MAX_TICKETS_PER_DAY;
+
+  const cooldownRemaining = useMemo(() => {
+    if (!todayTicketInfo.lastSubmitTime) return 0;
+    const now = new Date();
+    const elapsed = now.getTime() - todayTicketInfo.lastSubmitTime.getTime();
+    const cooldownMs = COOLDOWN_HOURS * 60 * 60 * 1000;
+    return Math.max(0, cooldownMs - elapsed);
+  }, [todayTicketInfo.lastSubmitTime, cooldownTime]); // cooldownTime triggers re-compute
+
+  const isInCooldown = cooldownRemaining > 0;
+  const remainingRequests = (hasReachedDailyLimit || isInCooldown) ? 0 : MAX_TICKETS_PER_DAY - todayTicketInfo.count;
+
+  // Countdown timer
+  useEffect(() => {
+    if (!isInCooldown) return;
+    const timer = setInterval(() => {
+      setCooldownTime(prev => prev + 1); // trigger re-render to update cooldownRemaining
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isInCooldown]);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showLoadingModal, setShowLoadingModal] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
@@ -211,8 +251,15 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       return;
     }
 
-    if (remainingRequests <= 0) {
-      setSubmitMessage('Request limit reached. Please wait for cooldown.');
+    if (hasReachedDailyLimit) {
+      setSubmitMessage(`Daily limit of ${MAX_TICKETS_PER_DAY} tickets reached. Please try again tomorrow.`);
+      setTimeout(() => setSubmitMessage(''), 3000);
+      return;
+    }
+
+    if (isInCooldown) {
+      const mins = Math.ceil(cooldownRemaining / 60000);
+      setSubmitMessage(`Please wait ${mins} minute${mins !== 1 ? 's' : ''} before submitting another ticket.`);
       setTimeout(() => setSubmitMessage(''), 3000);
       return;
     }
@@ -347,9 +394,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             </View>
           ) : (
             <View style={s.emptyState}>
-              <View style={[s.emptyIconContainer, { backgroundColor: primaryColor + '10' }]}>
-                <FileText size={48} color={primaryColor} strokeWidth={1} />
-              </View>
               <Text style={s.emptyTitle}>No Requests Yet</Text>
               <Text style={s.emptySubtitle}>If you have any issues with your connection, please submit a ticket.</Text>
             </View>
@@ -554,7 +598,11 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
                     fontSize: 14,
                     color: isDarkMode ? '#9ca3af' : '#4b5563'
                   }}>
-                    Limit: 1 request/day.{hasSubmittedToday ? ' You have reached today\'s limit.' : ''}
+                    {hasReachedDailyLimit
+                      ? `Daily limit reached (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY}).`
+                      : isInCooldown
+                        ? `Next ticket available in ${Math.floor(cooldownRemaining / 60000)}m ${Math.floor((cooldownRemaining % 60000) / 1000)}s`
+                        : `Limit: ${MAX_TICKETS_PER_DAY} requests/day. (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY} used)`}
                   </Text>
                 </View>
               </View>
@@ -865,7 +913,7 @@ const s = StyleSheet.create({
   detailsBtnText: { fontSize: 12, fontWeight: '700' },
   emptyState: { paddingVertical: 80, alignItems: 'center', width: '100%', paddingHorizontal: 40 },
   emptyIconContainer: { padding: 24, borderRadius: 32, marginBottom: 20 },
-  emptyTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: '#6b7280', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
   emptyText: { marginTop: 16, color: '#6b7280', fontSize: 14 },
   paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 10, paddingBottom: 40, gap: 16 },

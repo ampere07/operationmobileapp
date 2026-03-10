@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     pageIndicator: { fontSize: 14, color: '#111827', fontWeight: '800' },
     emptyContainer: { paddingVertical: 80, alignItems: 'center', paddingHorizontal: 40 },
     emptyIconContainer: { padding: 24, borderRadius: 32, marginBottom: 20 },
-    emptyTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 8 },
+    emptyTitle: { fontSize: 20, fontWeight: '800', color: '#6b7280', marginBottom: 8 },
     emptySubtitle: { fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22 },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     modalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
@@ -557,9 +557,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 }
                 ListEmptyComponent={() => (
                     <View style={styles.emptyContainer}>
-                        <View style={[styles.emptyIconContainer, { backgroundColor: primaryColor + '10' }]}>
-                            {activeTab === 'payments' ? <Clock size={48} color={primaryColor} strokeWidth={1} /> : <ReceiptText size={48} color={primaryColor} strokeWidth={1} />}
-                        </View>
                         <Text style={styles.emptyTitle}>
                             {activeTab === 'soa' ? 'No Statements' : activeTab === 'invoices' ? 'No Invoices' : 'No History'}
                         </Text>

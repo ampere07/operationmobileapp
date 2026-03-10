@@ -719,19 +719,27 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
             </Pressable>
           )}
 
-          {!(jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && userRole !== 'agent' && userRoleId !== 4 && (
-            <Pressable
-              style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
-              onPress={handleDoneClick}
-              disabled={loading}
-            >
-              <Text style={[st.actionBtnText, { fontSize: isMobile ? 14 : 16 }]}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
-            </Pressable>
-          )}
+          {!(
+            ['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') &&
+            (userRoleId === 2 || userRole === 'technician')
+          ) && userRole !== 'agent' && userRoleId !== 4 && (
+              <Pressable
+                style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
+                onPress={handleDoneClick}
+                disabled={loading}
+              >
+                <Text style={[st.actionBtnText, { fontSize: isMobile ? 14 : 16 }]}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
+              </Pressable>
+            )}
           {/* Invisible placeholder for centering symmetry if no actions */}
-          {!shouldShowApproveButton() && !(!(jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && userRole !== 'agent' && userRoleId !== 4) && (
-            <View style={{ width: 28 }} />
-          )}
+          {!shouldShowApproveButton() && !(
+            !(
+              ['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') &&
+              (userRoleId === 2 || userRole === 'technician')
+            ) && userRole !== 'agent' && userRoleId !== 4
+          ) && (
+              <View style={{ width: 28 }} />
+            )}
         </View>
       </View>
 

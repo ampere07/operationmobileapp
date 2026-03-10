@@ -336,6 +336,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     placeholder="Password"
                     placeholderTextColor="#6b7280"
                     secureTextEntry={!showPassword}
+                    keyboardType="phone-pad"
+                    autoComplete="password"
+                    textContentType="password"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}

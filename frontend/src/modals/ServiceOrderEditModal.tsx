@@ -3,6 +3,7 @@ import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, Acti
 import { FlashList } from '@shopify/flash-list';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
+import ImagePreview from '../components/ImagePreview';
 import { X, ChevronDown, Search, Check, ChevronLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignatureScreen from 'react-native-signature-canvas';
@@ -1026,21 +1027,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     });
   }, []);
 
-  const handleImageChange = useCallback(async (field: keyof ImageFiles) => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setImageFiles(prev => ({ ...prev, [field]: result.assets[0] }));
-        if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
-    }
+  const handleImageUpload = useCallback((field: keyof ImageFiles, file: any) => {
+    setImageFiles(prev => ({ ...prev, [field]: file }));
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   }, [errors]);
 
   const uploadImageToGoogleDrive = async (asset: ImagePicker.ImagePickerAsset | { uri: string; mimeType?: string }): Promise<string> => {
@@ -1302,20 +1291,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       }
 
       // Update Service Order
+      // Only send fields that exist in the service_orders table schema
       const updateData: any = {
         account_no: updatedFormData.accountNo,
-        date_installed: updatedFormData.dateInstalled,
-        full_name: updatedFormData.fullName,
-        contact_number: updatedFormData.contactNumber,
-        email_address: updatedFormData.emailAddress,
-        plan: updatedFormData.plan,
-        username: updatedFormData.username,
-        connection_type: updatedFormData.connectionType,
-        router_modem_sn: updatedFormData.routerModemSN,
-        lcp: updatedFormData.lcp,
-        nap: updatedFormData.nap,
-        port: updatedFormData.port,
-        vlan: updatedFormData.vlan,
         support_status: updatedFormData.supportStatus,
         visit_status: updatedFormData.visitStatus,
         repair_category: updatedFormData.repairCategory,
@@ -1323,17 +1301,14 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         visit_with: updatedFormData.visitWith,
         visit_with_other: updatedFormData.visitWithOther,
         visit_remarks: updatedFormData.visitRemarks,
-        client_signature: uploadedUrls.client_signature_url || updatedFormData.clientSignature,
-        item_name_1: updatedFormData.itemName1,
+        client_signature_url: uploadedUrls.client_signature_url || updatedFormData.clientSignature || '',
         image1_url: uploadedUrls.image1_url || updatedFormData.timeIn,
         image2_url: uploadedUrls.image2_url || updatedFormData.modemSetupImage,
         image3_url: uploadedUrls.image3_url || updatedFormData.timeOut,
         assigned_email: updatedFormData.assignedEmail,
         concern: updatedFormData.concern,
         concern_remarks: updatedFormData.concernRemarks,
-        updated_by: currentUserEmail,
         updated_by_user: currentUserEmail,
-        updated_date: updatedFormData.modifiedDate,
         support_remarks: updatedFormData.supportRemarks,
         service_charge: parseFloat(updatedFormData.serviceCharge),
         status: updatedFormData.status,
@@ -2146,48 +2121,36 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             </View>
 
                             <View style={styles.inputGroup}>
-                              {renderLabel('Time In Image')}
-                              <Pressable
-                                onPress={() => handleImageChange('timeInFile')}
-                                style={[styles.signatureContainer, {
-                                  borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                                }]}
-                              >
-                                {imageFiles.timeInFile || formData.timeIn ? (
-                                  <Image source={{ uri: imageFiles.timeInFile?.uri || formData.timeIn }} style={styles.signatureImage} />
-                                ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time In</Text>}
-                              </Pressable>
+                              <ImagePreview
+                                label="Time In Image"
+                                imageUrl={imageFiles.timeInFile?.uri || formData.timeIn}
+                                onUpload={(file) => handleImageUpload('timeInFile', file)}
+                                error={errors.timeInFile}
+                                isDarkMode={isDarkMode}
+                                colorPrimary={colorPalette?.primary}
+                              />
                             </View>
 
                             <View style={styles.inputGroup}>
-                              {renderLabel('Modem Setup Image')}
-                              <Pressable
-                                onPress={() => handleImageChange('modemSetupFile')}
-                                style={[styles.signatureContainer, {
-                                  borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                                }]}
-                              >
-                                {imageFiles.modemSetupFile || formData.modemSetupImage ? (
-                                  <Image source={{ uri: imageFiles.modemSetupFile?.uri || formData.modemSetupImage }} style={styles.signatureImage} />
-                                ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Modem Setup</Text>}
-                              </Pressable>
+                              <ImagePreview
+                                label="Modem Setup Image"
+                                imageUrl={imageFiles.modemSetupFile?.uri || formData.modemSetupImage}
+                                onUpload={(file) => handleImageUpload('modemSetupFile', file)}
+                                error={errors.modemSetupFile}
+                                isDarkMode={isDarkMode}
+                                colorPrimary={colorPalette?.primary}
+                              />
                             </View>
 
                             <View style={styles.inputGroup}>
-                              {renderLabel('Time Out Image')}
-                              <Pressable
-                                onPress={() => handleImageChange('timeOutFile')}
-                                style={[styles.signatureContainer, {
-                                  borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                                }]}
-                              >
-                                {imageFiles.timeOutFile || formData.timeOut ? (
-                                  <Image source={{ uri: imageFiles.timeOutFile?.uri || formData.timeOut }} style={styles.signatureImage} />
-                                ) : <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Upload Time Out</Text>}
-                              </Pressable>
+                              <ImagePreview
+                                label="Time Out Image"
+                                imageUrl={imageFiles.timeOutFile?.uri || formData.timeOut}
+                                onUpload={(file) => handleImageUpload('timeOutFile', file)}
+                                error={errors.timeOutFile}
+                                isDarkMode={isDarkMode}
+                                colorPrimary={colorPalette?.primary}
+                              />
                             </View>
                           </>
                         )}

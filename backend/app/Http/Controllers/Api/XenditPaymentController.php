@@ -18,9 +18,27 @@ class XenditPaymentController extends Controller
 
     public function __construct()
     {
-        $this->xenditApiKey = env('XENDIT_API_KEY');
-        $this->xenditCallbackToken = env('XENDIT_CALLBACK_TOKEN');
-        $this->portalLink = env('APP_URL', 'https://sync.atssfiber.ph');
+        $this->xenditApiKey = (string) (config('services.xendit.api_key') ?: env('XENDIT_API_KEY', ''));
+        $this->xenditCallbackToken = (string) (config('services.xendit.callback_token') ?: env('XENDIT_CALLBACK_TOKEN', ''));
+        
+        // Fallback for production environments where config cache might be returning null
+        // and we cannot easily run `php artisan config:clear`
+        if (empty($this->xenditApiKey) || empty($this->xenditCallbackToken)) {
+            $envPath = base_path('.env');
+            if (file_exists($envPath)) {
+                $envContent = file_get_contents($envPath);
+                
+                if (empty($this->xenditApiKey) && preg_match('/^XENDIT_API_KEY=(.*)$/m', $envContent, $matches)) {
+                    $this->xenditApiKey = trim($matches[1], "\"' \t\n\r\0\x0B");
+                }
+                
+                if (empty($this->xenditCallbackToken) && preg_match('/^XENDIT_CALLBACK_TOKEN=(.*)$/m', $envContent, $matches)) {
+                    $this->xenditCallbackToken = trim($matches[1], "\"' \t\n\r\0\x0B");
+                }
+            }
+        }
+
+        $this->portalLink = (string) (config('app.url') ?: env('APP_URL', 'https://sync.atssfiber.ph'));
     }
 
     public function createPayment(Request $request)

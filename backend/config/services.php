@@ -35,4 +35,9 @@ return [
         'api_key' => env('RESEND_API_KEY'),
     ],
 
+    'xendit' => [
+        'api_key' => env('XENDIT_API_KEY'),
+        'callback_token' => env('XENDIT_CALLBACK_TOKEN'),
+    ],
+
 ];
