@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     refText: { fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: '#64748b', marginTop: 2 },
     paymentAmount: { fontSize: 18, fontWeight: '900', color: '#16a34a', marginTop: 2 },
     paginationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 10, paddingBottom: 40, gap: 16 },
-    paginationBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
+    paginationBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 12, borderRadius: 12, minWidth: 40, justifyContent: 'center' },
     paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
     paginationText: { fontSize: 14, fontWeight: '800' },
     pageIndicator: { fontSize: 14, color: '#111827', fontWeight: '800' },
@@ -460,8 +460,11 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                     disabled={isPrevDisabled}
                     style={[styles.paginationBtn, isPrevDisabled ? styles.paginationBtnDisabled : { backgroundColor: primaryColor + '10' }]}
                 >
-                    <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primaryColor} />
-                    <Text style={[styles.paginationText, { color: isPrevDisabled ? '#9ca3af' : primaryColor }]}>Previous</Text>
+                    <Text style={[styles.paginationText, {
+                        color: isPrevDisabled ? '#9ca3af' : primaryColor,
+                        fontSize: 18,
+                        fontWeight: 'bold'
+                    }]}>{"<"}</Text>
                 </Pressable>
 
                 <Text style={styles.pageIndicator}>
@@ -473,8 +476,11 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                     disabled={isNextDisabled}
                     style={[styles.paginationBtn, isNextDisabled ? styles.paginationBtnDisabled : { backgroundColor: primaryColor + '10' }]}
                 >
-                    <Text style={[styles.paginationText, { color: isNextDisabled ? '#9ca3af' : primaryColor }]}>Next</Text>
-                    <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primaryColor} />
+                    <Text style={[styles.paginationText, {
+                        color: isNextDisabled ? '#9ca3af' : primaryColor,
+                        fontSize: 18,
+                        fontWeight: 'bold'
+                    }]}>{">"}</Text>
                 </Pressable>
             </View>
         );

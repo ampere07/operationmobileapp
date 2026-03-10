@@ -118,7 +118,7 @@ const jo = StyleSheet.create({
   paginationInfo: { fontSize: 14 },
   bold500: { fontWeight: '500' },
   paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
   pageBtnText: { fontSize: 14 },
   pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
@@ -650,8 +650,10 @@ const JobOrderPage: React.FC = () => {
                   }]}
                 >
                   <Text style={[jo.pageBtnText, {
-                    color: currentPage === 1 ? '#9ca3af' : '#374151'
-                  }]}>Previous</Text>
+                    color: currentPage === 1 ? '#9ca3af' : '#374151',
+                    fontSize: 18,
+                    fontWeight: 'bold'
+                  }]}>{"<"}</Text>
                 </Pressable>
 
                 <View style={jo.pageIndicatorWrap}>
@@ -670,8 +672,10 @@ const JobOrderPage: React.FC = () => {
                   }]}
                 >
                   <Text style={[jo.pageBtnText, {
-                    color: currentPage === totalPages ? '#9ca3af' : '#374151'
-                  }]}>Next</Text>
+                    color: currentPage === totalPages ? '#9ca3af' : '#374151',
+                    fontSize: 18,
+                    fontWeight: 'bold'
+                  }]}>{">"}</Text>
                 </Pressable>
               </View>
             </View>

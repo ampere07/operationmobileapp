@@ -291,19 +291,25 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         <Pressable
           onPress={() => setCurrentPage(Math.max(0, currentPage - 1))}
           disabled={isPrevDisabled}
-          style={[s.paginationBtn, isPrevDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+          style={[s.paginationBtn, isPrevDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }, { minWidth: 40, justifyContent: 'center', paddingHorizontal: 8 }]}
         >
-          <ChevronLeft width={16} height={16} color={isPrevDisabled ? '#9ca3af' : primary} />
-          <Text style={[s.paginationText, { color: isPrevDisabled ? '#9ca3af' : primary }]}>Previous</Text>
+          <Text style={[s.paginationText, {
+            color: isPrevDisabled ? '#9ca3af' : primary,
+            fontSize: 18,
+            fontWeight: 'bold'
+          }]}>{"<"}</Text>
         </Pressable>
         <Text style={s.pageIndicator}>{currentPage + 1} / {totalPages}</Text>
         <Pressable
           onPress={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
           disabled={isNextDisabled}
-          style={[s.paginationBtn, isNextDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }]}
+          style={[s.paginationBtn, isNextDisabled ? s.paginationBtnDisabled : { backgroundColor: primary + '12' }, { minWidth: 40, justifyContent: 'center', paddingHorizontal: 8 }]}
         >
-          <Text style={[s.paginationText, { color: isNextDisabled ? '#9ca3af' : primary }]}>Next</Text>
-          <ChevronRight width={16} height={16} color={isNextDisabled ? '#9ca3af' : primary} />
+          <Text style={[s.paginationText, {
+            color: isNextDisabled ? '#9ca3af' : primary,
+            fontSize: 18,
+            fontWeight: 'bold'
+          }]}>{">"}</Text>
         </Pressable>
       </View>
     );

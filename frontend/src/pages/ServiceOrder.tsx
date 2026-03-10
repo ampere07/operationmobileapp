@@ -169,7 +169,7 @@ const so = StyleSheet.create({
   paginationInfo: { fontSize: 14 },
   bold500: { fontWeight: '500' },
   paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
   pageBtnText: { fontSize: 14 },
   pageIndicatorWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pageIndicator: { paddingHorizontal: 8, fontSize: 14 },
@@ -509,7 +509,11 @@ const ServiceOrderPage: React.FC = () => {
                     borderWidth: currentPage === 1 ? 0 : 1, borderColor: '#d1d5db'
                   }]}
                 >
-                  <Text style={[so.pageBtnText, { color: currentPage === 1 ? '#9ca3af' : '#374151' }]}>Previous</Text>
+                  <Text style={[so.pageBtnText, {
+                    color: currentPage === 1 ? '#9ca3af' : '#374151',
+                    fontSize: 18,
+                    fontWeight: 'bold'
+                  }]}>{"<"}</Text>
                 </Pressable>
 
                 <View style={so.pageIndicatorWrap}>
@@ -524,7 +528,11 @@ const ServiceOrderPage: React.FC = () => {
                     borderWidth: currentPage === totalPages ? 0 : 1, borderColor: '#d1d5db'
                   }]}
                 >
-                  <Text style={[so.pageBtnText, { color: currentPage === totalPages ? '#9ca3af' : '#374151' }]}>Next</Text>
+                  <Text style={[so.pageBtnText, {
+                    color: currentPage === totalPages ? '#9ca3af' : '#374151',
+                    fontSize: 18,
+                    fontWeight: 'bold'
+                  }]}>{">"}</Text>
                 </Pressable>
               </View>
             </View>

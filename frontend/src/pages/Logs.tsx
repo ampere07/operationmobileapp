@@ -66,21 +66,21 @@ const Logs: React.FC = () => {
       const theme = localStorage.getItem('theme');
       setIsDarkMode(theme === 'dark');
     };
-    
+
     checkDarkMode();
-    
+
     const observer = new MutationObserver(checkDarkMode);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
-    
+
     return () => observer.disconnect();
   }, []);
 
   const levelColors = {
     info: 'text-blue-400 bg-blue-900',
-    warning: 'text-yellow-400 bg-yellow-900', 
+    warning: 'text-yellow-400 bg-yellow-900',
     error: 'text-red-400 bg-red-900',
     debug: 'text-gray-400 bg-gray-700'
   };
@@ -151,11 +151,11 @@ const Logs: React.FC = () => {
         level: filterLevel !== 'all' ? filterLevel : undefined,
         days: 30
       });
-      
+
       const blob = new Blob([JSON.stringify(response, null, 2)], {
         type: 'application/json'
       });
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -179,14 +179,12 @@ const Logs: React.FC = () => {
     <div className={isDarkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}>
       <div className="p-6">
         <div className="mb-8">
-          <h2 className={`text-2xl font-semibold mb-2 ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>
+          <h2 className={`text-2xl font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
             Activity Logs
           </h2>
-          <p className={`text-sm ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          }`}>
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
             Monitor system activities and user actions
           </p>
         </div>
@@ -200,48 +198,36 @@ const Logs: React.FC = () => {
             >
               {showStats ? 'Hide Statistics' : 'Show Statistics (Last 7 Days)'}
             </button>
-            
+
             {showStats && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className={`p-4 rounded ${
-                  isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
-                }`}>
-                  <div className={`text-2xl font-semibold ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>{stats.total_logs}</div>
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Total Activities</div>
+                <div className={`p-4 rounded ${isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+                  }`}>
+                  <div className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>{stats.total_logs}</div>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Total Activities</div>
                 </div>
-                <div className={`p-4 rounded ${
-                  isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
-                }`}>
-                  <div className={`text-2xl font-semibold ${
-                    isDarkMode ? 'text-red-400' : 'text-red-600'
-                  }`}>{stats.by_level.error}</div>
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Errors</div>
+                <div className={`p-4 rounded ${isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+                  }`}>
+                  <div className={`text-2xl font-semibold ${isDarkMode ? 'text-red-400' : 'text-red-600'
+                    }`}>{stats.by_level.error}</div>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Errors</div>
                 </div>
-                <div className={`p-4 rounded ${
-                  isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
-                }`}>
-                  <div className={`text-2xl font-semibold ${
-                    isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
-                  }`}>{stats.by_level.warning}</div>
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Warnings</div>
+                <div className={`p-4 rounded ${isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+                  }`}>
+                  <div className={`text-2xl font-semibold ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                    }`}>{stats.by_level.warning}</div>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Warnings</div>
                 </div>
-                <div className={`p-4 rounded ${
-                  isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
-                }`}>
-                  <div className={`text-2xl font-semibold ${
-                    isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                  }`}>{stats.by_level.info}</div>
-                  <div className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Info</div>
+                <div className={`p-4 rounded ${isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+                  }`}>
+                  <div className={`text-2xl font-semibold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                    }`}>{stats.by_level.info}</div>
+                  <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>Info</div>
                 </div>
               </div>
             )}
@@ -255,21 +241,19 @@ const Logs: React.FC = () => {
             placeholder="Search logs by message, action, or user..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`px-4 py-3 rounded focus:outline-none flex-1 max-w-md ${
-              isDarkMode 
+            className={`px-4 py-3 rounded focus:outline-none flex-1 max-w-md ${isDarkMode
                 ? 'bg-gray-900 border border-gray-600 text-white placeholder-gray-500 focus:border-orange-500'
                 : 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-orange-500'
-            }`}
+              }`}
           />
-          
+
           <select
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value)}
-            className={`px-4 py-3 rounded focus:outline-none ${
-              isDarkMode 
+            className={`px-4 py-3 rounded focus:outline-none ${isDarkMode
                 ? 'bg-gray-900 border border-gray-600 text-white focus:border-gray-400'
                 : 'bg-white border border-gray-300 text-gray-900 focus:border-gray-500'
-            }`}
+              }`}
           >
             <option value="all">All Levels</option>
             <option value="info">Info</option>
@@ -278,26 +262,23 @@ const Logs: React.FC = () => {
             <option value="debug">Debug</option>
           </select>
 
-          <button 
+          <button
             onClick={handleExport}
-            className={`px-6 py-3 rounded transition-colors text-sm font-medium ${
-              isDarkMode 
+            className={`px-6 py-3 rounded transition-colors text-sm font-medium ${isDarkMode
                 ? 'bg-gray-600 text-white hover:bg-gray-700'
                 : 'bg-gray-500 text-white hover:bg-gray-600'
-            }`}
+              }`}
           >
             Export Logs
           </button>
         </div>
 
         {/* Logs Table */}
-        <div className={`rounded overflow-hidden ${
-          isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
-        }`}>
+        <div className={`rounded overflow-hidden ${isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+          }`}>
           {loading ? (
-            <div className={`p-8 text-center ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-            }`}>
+            <div className={`p-8 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
               Loading logs...
             </div>
           ) : (
@@ -306,43 +287,34 @@ const Logs: React.FC = () => {
                 <table className="w-full">
                   <thead>
                     <tr className={isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>Time</th>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>Level</th>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>Action</th>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>User</th>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>Message</th>
-                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${
-                        isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
-                      }`}>IP</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>Time</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>Level</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>Action</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>User</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>Message</th>
+                      <th className={`px-4 py-4 text-left text-sm font-medium border-b ${isDarkMode ? 'text-gray-300 border-gray-600' : 'text-gray-700 border-gray-200'
+                        }`}>IP</th>
                     </tr>
                   </thead>
                   <tbody>
                     {logs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className={`px-6 py-8 text-center ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
+                        <td colSpan={6} className={`px-6 py-8 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
                           No logs found
                         </td>
                       </tr>
                     ) : (
                       logs.map((log) => (
-                        <tr key={log.log_id} className={`border-b ${
-                          isDarkMode ? 'border-gray-700 hover:bg-gray-750' : 'border-gray-200 hover:bg-gray-50'
-                        }`}>
-                          <td className={`px-4 py-4 text-sm ${
-                            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                        <tr key={log.log_id} className={`border-b ${isDarkMode ? 'border-gray-700 hover:bg-gray-750' : 'border-gray-200 hover:bg-gray-50'
                           }`}>
+                          <td className={`px-4 py-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
                             {formatDate(log.created_at)}
                           </td>
                           <td className="px-4 py-4 text-sm">
@@ -350,24 +322,20 @@ const Logs: React.FC = () => {
                               {log.level.toUpperCase()}
                             </span>
                           </td>
-                          <td className={`px-4 py-4 text-sm ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>
+                          <td className={`px-4 py-4 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
                             {formatAction(log.action)}
                           </td>
-                          <td className={`px-4 py-4 text-sm ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>
+                          <td className={`px-4 py-4 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
                             {log.user ? log.user.username : 'System'}
                           </td>
-                          <td className={`px-4 py-4 text-sm max-w-md truncate ${
-                            isDarkMode ? 'text-white' : 'text-gray-900'
-                          }`}>
+                          <td className={`px-4 py-4 text-sm max-w-md truncate ${isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
                             {log.message}
                           </td>
-                          <td className={`px-4 py-4 text-sm ${
-                            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}>
+                          <td className={`px-4 py-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
                             {log.ip_address || '-'}
                           </td>
                         </tr>
@@ -379,37 +347,33 @@ const Logs: React.FC = () => {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className={`p-4 border-t ${
-                  isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
-                }`}>
+                <div className={`p-4 border-t ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'
+                  }`}>
                   <div className="flex items-center justify-between">
-                    <div className={`text-sm ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
+                    <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                      }`}>
                       Page {currentPage} of {totalPages}
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className={`px-3 py-1 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isDarkMode 
+                        className={`px-3 py-1 text-lg font-bold rounded min-w-[40px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
                             ? 'bg-gray-700 text-white hover:bg-gray-600'
                             : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                        }`}
+                          }`}
                       >
-                        Previous
+                        {"<"}
                       </button>
                       <button
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className={`px-3 py-1 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isDarkMode 
+                        className={`px-3 py-1 text-lg font-bold rounded min-w-[40px] flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode
                             ? 'bg-gray-700 text-white hover:bg-gray-600'
                             : 'bg-gray-200 text-gray-900 hover:bg-gray-300'
-                        }`}
+                          }`}
                       >
-                        Next
+                        {">"}
                       </button>
                     </div>
                   </div>

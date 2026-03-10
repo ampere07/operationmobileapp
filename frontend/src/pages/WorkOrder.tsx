@@ -231,7 +231,11 @@ const WorkOrderPage: React.FC = () => {
               borderWidth: currentPage === 1 ? 0 : 1
             }]}
           >
-            <Text style={[st.pageBtnText, { color: currentPage === 1 ? '#4b5563' : '#374151' }]}>Prev</Text>
+            <Text style={[st.pageBtnText, {
+              color: currentPage === 1 ? '#4b5563' : '#374151',
+              fontSize: 18,
+              fontWeight: 'bold'
+            }]}>{"<"}</Text>
           </TouchableOpacity>
 
           <Text style={[st.pageCountText, { color: '#111827' }]}>
@@ -247,7 +251,11 @@ const WorkOrderPage: React.FC = () => {
               borderWidth: currentPage === totalPages ? 0 : 1
             }]}
           >
-            <Text style={[st.pageBtnText, { color: currentPage === totalPages ? '#4b5563' : '#374151' }]}>Next</Text>
+            <Text style={[st.pageBtnText, {
+              color: currentPage === totalPages ? '#4b5563' : '#374151',
+              fontSize: 18,
+              fontWeight: 'bold'
+            }]}>{">"}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -402,7 +410,7 @@ const st = StyleSheet.create({
   paginationInfo: { flex: 1 },
   paginationText: { fontSize: 12 },
   paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pageBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4 },
+  pageBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
   pageBtnText: { fontSize: 12 },
   pageCountText: { paddingHorizontal: 4, fontSize: 12 },
   emptyState: { paddingVertical: 80 },

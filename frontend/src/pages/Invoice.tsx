@@ -231,12 +231,12 @@ const Invoice: React.FC = () => {
           <button
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
+            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === 1
               ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
               : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
               }`}
           >
-            Previous
+            {"<"}
           </button>
 
           <div className="flex items-center space-x-1">
@@ -248,12 +248,12 @@ const Invoice: React.FC = () => {
           <button
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
+            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === totalPages
               ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
               : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
               }`}
           >
-            Next
+            {">"}
           </button>
         </div>
       </div>

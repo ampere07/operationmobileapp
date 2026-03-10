@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, Edit } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
@@ -704,8 +704,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         borderBottomColor: '#e5e7eb'
       }]}>
         <View style={st.headerLeft}>
-          <Text style={[st.headerName, { maxWidth: isMobile ? 200 : undefined, fontSize: isMobile ? 20 : 24, color: '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
-          {loading && <Text style={[st.loadingLabel, { color: '#7c3aed' }]}>Loading...</Text>}
+          <Pressable onPress={onClose} style={st.backBtn}>
+            <ChevronLeft width={28} height={28} color={'#4b5563'} />
+          </Pressable>
+          <View style={st.headerNameContainer}>
+            <Text style={[st.headerName, { maxWidth: isMobile ? 180 : undefined, fontSize: isMobile ? 20 : 24, color: '#111827' }]} numberOfLines={1}>{getClientFullName()}</Text>
+          </View>
         </View>
 
         <View style={st.headerActions}>
@@ -724,10 +728,10 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
               <Text style={[st.actionBtnText, { fontSize: isMobile ? 14 : 16 }]}>{(userRoleId === 2 || userRole === 'technician') ? 'Edit' : 'Done'}</Text>
             </Pressable>
           )}
-
-          <Pressable onPress={onClose}>
-            <X width={28} height={28} color={'#4b5563'} />
-          </Pressable>
+          {/* Invisible placeholder for centering symmetry if no actions */}
+          {!shouldShowApproveButton() && !(!(jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && userRole !== 'agent' && userRoleId !== 4) && (
+            <View style={{ width: 28 }} />
+          )}
         </View>
       </View>
 
@@ -812,8 +816,10 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 const st = StyleSheet.create({
   container: { height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%' },
   header: { padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  headerName: { fontWeight: '500' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, position: 'relative' },
+  backBtn: { position: 'absolute', left: 0, zIndex: 10 },
+  headerNameContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerName: { fontWeight: '500', textAlign: 'center' },
   loadingLabel: { marginLeft: 12, fontSize: 14 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   approveBtn: { backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },

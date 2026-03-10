@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, Edit } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -352,9 +352,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     <View style={[styles.container, { borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: '#f9fafb', borderLeftColor: '#d1d5db' }]}>
       <View style={[styles.header, { backgroundColor: '#ffffff', borderBottomColor: '#e5e7eb', paddingTop: isMobile ? 60 : 12 }]}>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { fontSize: isMobile ? 14 : 18, color: '#111827' }]} numberOfLines={1} selectable={true}>
-            {serviceOrder.accountNumber} | {serviceOrder.fullName}
-          </Text>
+          <Pressable onPress={onClose} style={styles.backButton}>
+            <ChevronLeft width={28} height={28} color="#4b5563" />
+          </Pressable>
+          <View style={styles.centeredTitle}>
+            <Text style={[styles.headerTitle, { fontSize: isMobile ? 14 : 18, color: '#111827' }]} numberOfLines={1} selectable={true}>
+              {serviceOrder.accountNumber} | {serviceOrder.fullName}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.headerActions}>
@@ -368,9 +373,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
               )}
             </>
           )}
-          <Pressable onPress={onClose}>
-            <X width={28} height={28} color="#4b5563" />
-          </Pressable>
+          {/* Symmetric placeholder if no actions are visible */}
+          {(!userRole || userRole === 'agent' || userRoleId === 4) && (
+            <View style={{ width: 28 }} />
+          )}
         </View>
       </View>
 
@@ -401,8 +407,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 const styles = StyleSheet.create({
   container: { height: '100%', flexDirection: 'column', overflow: 'hidden', position: 'relative', width: '100%' },
   header: { padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
-  headerTitleContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
-  headerTitle: { fontWeight: '500' },
+  headerTitleContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, position: 'relative' },
+  backButton: { position: 'absolute', left: 0, zIndex: 10 },
+  centeredTitle: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontWeight: '500', textAlign: 'center' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
   headerButtonText: { color: '#ffffff', fontWeight: '500', fontSize: 14 },
