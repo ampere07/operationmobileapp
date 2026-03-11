@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
   Pressable
 } from 'react-native';
-import * as ExpoFileSystem from 'expo-file-system';
+import * as ExpoFileSystem from 'expo-file-system/legacy';
 import { Picker } from '@react-native-picker/picker';
 import { X, Camera, ImageIcon, Trash2, ChevronDown, CheckCircle, AlertCircle, XCircle, Loader2, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';

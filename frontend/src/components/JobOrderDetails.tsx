@@ -224,6 +224,15 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     }
   };
 
+  const formatDateOnly = (dateStr?: string | null): string => {
+    if (!dateStr) return 'Not scheduled';
+    try {
+      return new Date(dateStr).toLocaleDateString();
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   const formatPrice = (price?: string | number | null): string => {
     if (price === null || price === undefined) return '₱0.00';
     const numPrice = typeof price === 'string' ? parseFloat(price) : price;
@@ -611,7 +620,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         )}
       </View>
     ),
-    dateInstalled: () => <Text style={valStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDate(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
+    dateInstalled: () => <Text style={valStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDateOnly(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
     visitBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
     visitWith: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
     visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,

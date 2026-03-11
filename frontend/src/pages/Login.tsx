@@ -336,7 +336,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     placeholder="Password"
                     placeholderTextColor="#6b7280"
                     secureTextEntry={!showPassword}
-                    keyboardType="phone-pad"
+                    keyboardType="default"
                     autoComplete="password"
                     textContentType="password"
                   />

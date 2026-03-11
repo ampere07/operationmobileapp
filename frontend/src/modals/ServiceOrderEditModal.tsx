@@ -7,7 +7,7 @@ import ImagePreview from '../components/ImagePreview';
 import { X, ChevronDown, Search, Check, ChevronLeft } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignatureScreen from 'react-native-signature-canvas';
-import * as ExpoFileSystem from 'expo-file-system';
+import * as ExpoFileSystem from 'expo-file-system/legacy';
 
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   signatureCanvasContainer: {
-    height: 240,
+    height: 288,
     borderWidth: 1,
     backgroundColor: '#ffffff',
     marginBottom: 8,
@@ -920,11 +920,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         visitWith: serviceOrderData.visitWith || serviceOrderData.visit_with || '',
         visitWithOther: serviceOrderData.visitWithOther || serviceOrderData.visit_with_other || '',
         visitRemarks: serviceOrderData.visitRemarks || serviceOrderData.visit_remarks || '',
-        clientSignature: serviceOrderData.clientSignature || serviceOrderData.client_signature || '',
+        clientSignature: serviceOrderData.clientSignature || serviceOrderData.client_signature_url || serviceOrderData.client_signature || '',
         itemName1: serviceOrderData.itemName1 || serviceOrderData.item_name_1 || '',
-        timeIn: serviceOrderData.timeIn || serviceOrderData.time_in || '',
-        modemSetupImage: serviceOrderData.modemSetupImage || serviceOrderData.modem_setup_image || '',
-        timeOut: serviceOrderData.timeOut || serviceOrderData.time_out || '',
+        timeIn: serviceOrderData.timeIn || serviceOrderData.image1_url || serviceOrderData.time_in || '',
+        modemSetupImage: serviceOrderData.modemSetupImage || serviceOrderData.image2_url || serviceOrderData.modem_setup_image || '',
+        timeOut: serviceOrderData.timeOut || serviceOrderData.image3_url || serviceOrderData.time_out || '',
         assignedEmail: serviceOrderData.assignedEmail || serviceOrderData.assigned_email || '',
         concern: serviceOrderData.concern || '',
         concernRemarks: serviceOrderData.concernRemarks || serviceOrderData.concern_remarks || '',
@@ -1067,7 +1067,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
       const base64Code = signature.replace('data:image/png;base64,', '');
 
       await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, {
-        encoding: (ExpoFileSystem as any).EncodingType.Base64,
+        encoding: 'base64',
       });
 
       // Set into state logic similar to other images
@@ -1182,6 +1182,11 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (isDrawingSignature) {
+      Alert.alert('Signature Required', 'Please click the "Save" button below the signature pad first to confirm your signature.');
+      return;
+    }
+
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
@@ -2022,25 +2027,34 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   )}
                                 </View>
                               ) : (
-                                <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
-                                  <SignatureScreen
-                                    ref={signatureRef}
-                                    onOK={handleSignatureOK}
-                                    onEmpty={() => { }}
-                                    descriptionText="Sign above"
-                                    clearText="Clear"
-                                    confirmText="Save"
-                                    webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
-                                  />
-                                  <Pressable
-                                    onPress={() => {
-                                      setIsDrawingSignature(false);
-                                      setScrollEnabled(true);
-                                    }}
-                                    style={styles.signatureCloseButton}
-                                  >
-                                    <X size={20} color="#000" />
-                                  </Pressable>
+                                <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db', flexDirection: 'column' }]}>
+                                  <View style={{ flex: 1 }}>
+                                    <SignatureScreen
+                                      ref={signatureRef}
+                                      onOK={handleSignatureOK}
+                                      onEmpty={() => { Alert.alert('Empty', 'Please sign the canvas before saving.'); }}
+                                      onBegin={() => setScrollEnabled(false)}
+                                      onEnd={() => setScrollEnabled(true)}
+                                      webStyle={`.m-signature-pad--footer {display: none;} .m-signature-pad {box-shadow: none; border: none;} .m-signature-pad--body {border: none;} body,html {width: 100%; height: 100%; margin: 0; padding: 0;}`}
+                                    />
+                                    <Pressable
+                                      onPress={() => {
+                                        setIsDrawingSignature(false);
+                                        setScrollEnabled(true);
+                                      }}
+                                      style={styles.signatureCloseButton}
+                                    >
+                                      <X size={20} color="#000" />
+                                    </Pressable>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: isDarkMode ? '#4b5563' : '#e5e7eb', backgroundColor: isDarkMode ? '#374151' : '#f9fafb' }}>
+                                    <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}>
+                                      <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text>
+                                    </Pressable>
+                                    <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#10b981', borderRadius: 6 }}>
+                                      <Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text>
+                                    </Pressable>
+                                  </View>
                                 </View>
                               )}
                             </View>

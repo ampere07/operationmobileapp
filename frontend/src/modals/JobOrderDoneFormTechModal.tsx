@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, InteractionManager } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import SignatureScreen from 'react-native-signature-canvas';
-import * as ExpoFileSystem from 'expo-file-system';
+import * as ExpoFileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { ChevronLeft, X, ChevronDown, Camera, CheckCircle, AlertCircle, XCircle, Search, Check } from 'lucide-react-native';
@@ -807,7 +807,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
       const base64Code = signature.replace('data:image/png;base64,', '');
       await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, {
-        encoding: (ExpoFileSystem as any).EncodingType.Base64,
+        encoding: 'base64',
       });
 
       const file = {
@@ -931,6 +931,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (isDrawingSignature) {
+      Alert.alert('Signature Required', 'Please click the "Save" button below the signature pad first to confirm your signature.');
+      return;
+    }
+
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
@@ -2697,27 +2702,34 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               )}
                             </View>
                           ) : (
-                            <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}>
-                              <SignatureScreen
-                                ref={signatureRef}
-                                onOK={handleSignatureOK}
-                                onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
-                                onBegin={() => setScrollEnabled(false)}
-                                onEnd={() => setScrollEnabled(true)}
-                                descriptionText="Sign above"
-                                clearText="Clear"
-                                confirmText="Save"
-                                webStyle={`.m-signature-pad--footer {display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px;} .m-signature-pad--body {border: 1px solid #ccc;}`}
-                              />
-                              <Pressable
-                                onPress={() => {
-                                  setIsDrawingSignature(false);
-                                  setScrollEnabled(true);
-                                }}
-                                style={styles.signatureCloseButton}
-                              >
-                                <X size={20} color="#000" />
-                              </Pressable>
+                            <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db', flexDirection: 'column' }]}>
+                              <View style={{ flex: 1 }}>
+                                <SignatureScreen
+                                  ref={signatureRef}
+                                  onOK={handleSignatureOK}
+                                  onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
+                                  onBegin={() => setScrollEnabled(false)}
+                                  onEnd={() => setScrollEnabled(true)}
+                                  webStyle={`.m-signature-pad--footer {display: none;} .m-signature-pad {box-shadow: none; border: none;} .m-signature-pad--body {border: none;} body,html {width: 100%; height: 100%; margin: 0; padding: 0;}`}
+                                />
+                                <Pressable
+                                  onPress={() => {
+                                    setIsDrawingSignature(false);
+                                    setScrollEnabled(true);
+                                  }}
+                                  style={styles.signatureCloseButton}
+                                >
+                                  <X size={20} color="#000" />
+                                </Pressable>
+                              </View>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: isDarkMode ? '#4b5563' : '#e5e7eb', backgroundColor: isDarkMode ? '#374151' : '#f9fafb' }}>
+                                <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}>
+                                  <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text>
+                                </Pressable>
+                                <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#10b981', borderRadius: 6 }}>
+                                  <Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text>
+                                </Pressable>
+                              </View>
                             </View>
                           )}
                           {errors.clientSignatureImage && (

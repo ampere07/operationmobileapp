@@ -15,7 +15,43 @@ class GoogleDriveService
     public function __construct()
     {
         $this->service = $this->initializeGoogleDriveService();
-        $this->parentFolderId = env('GOOGLE_DRIVE_FOLDER_ID');
+        $this->parentFolderId = $this->getEnvVariable('GOOGLE_DRIVE_FOLDER_ID');
+    }
+
+    private function getEnvVariable($key)
+    {
+        // 1. Try env()
+        $val = env($key);
+        if ($val) return $val;
+
+        // 2. Try config() if available
+        $configKey = 'services.google_drive.' . strtolower(str_replace('GOOGLE_DRIVE_', '', $key));
+        $val = config($configKey);
+        if ($val) return $val;
+
+        // 3. Fallback: Read .env file directly (bypasses config cache in production)
+        try {
+            $envFile = base_path('.env');
+            if (file_exists($envFile)) {
+                $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                foreach ($lines as $line) {
+                    if (strpos(trim($line), '#') === 0) continue;
+                    $parts = explode('=', $line, 2);
+                    if (count($parts) === 2 && trim($parts[0]) === $key) {
+                        $value = trim($parts[1]);
+                        // Remove surrounding quotes and handle possible \n escaping in the .env string
+                        if (preg_match('/^"(.*)"$/s', $value, $matches) || preg_match("/^'(.*)'$/s", $value, $matches)) {
+                            $value = str_replace('\\n', "\n", $matches[1]);
+                        }
+                        return $value;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Ignore
+        }
+
+        return null;
     }
 
     private function getActiveImageSizePercentage()
@@ -119,19 +155,26 @@ class GoogleDriveService
 
     private function initializeGoogleDriveService()
     {
+        // Prevent open_basedir restriction errors when Google auth tries to check for ~/.config/gcloud
+        $tempHome = storage_path('app');
+        putenv('HOME=' . $tempHome);
+        $_ENV['HOME'] = $tempHome;
+
         $client = new GoogleClient();
+        
+        $clientEmail = $this->getEnvVariable('GOOGLE_DRIVE_CLIENT_EMAIL');
         
         $credentials = [
             'type' => 'service_account',
-            'project_id' => env('GOOGLE_DRIVE_PROJECT_ID'),
-            'private_key_id' => env('GOOGLE_DRIVE_PRIVATE_KEY_ID'),
-            'private_key' => str_replace('\\n', "\n", env('GOOGLE_DRIVE_PRIVATE_KEY')),
-            'client_email' => env('GOOGLE_DRIVE_CLIENT_EMAIL'),
-            'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+            'project_id' => $this->getEnvVariable('GOOGLE_DRIVE_PROJECT_ID'),
+            'private_key_id' => $this->getEnvVariable('GOOGLE_DRIVE_PRIVATE_KEY_ID'),
+            'private_key' => str_replace('\\n', "\n", $this->getEnvVariable('GOOGLE_DRIVE_PRIVATE_KEY')),
+            'client_email' => $clientEmail,
+            'client_id' => $this->getEnvVariable('GOOGLE_DRIVE_CLIENT_ID'),
             'auth_uri' => 'https://accounts.google.com/o/oauth2/auth',
             'token_uri' => 'https://oauth2.googleapis.com/token',
             'auth_provider_x509_cert_url' => 'https://www.googleapis.com/oauth2/v1/certs',
-            'client_x509_cert_url' => 'https://www.googleapis.com/robot/v1/metadata/x509/' . env('GOOGLE_DRIVE_CLIENT_EMAIL')
+            'client_x509_cert_url' => 'https://www.googleapis.com/robot/v1/metadata/x509/' . $clientEmail
         ];
         
         $client->setAuthConfig($credentials);

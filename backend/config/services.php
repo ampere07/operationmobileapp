@@ -40,4 +40,13 @@ return [
         'callback_token' => env('XENDIT_CALLBACK_TOKEN'),
     ],
 
+    'google_drive' => [
+        'folder_id' => env('GOOGLE_DRIVE_FOLDER_ID'),
+        'project_id' => env('GOOGLE_DRIVE_PROJECT_ID'),
+        'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+        'client_email' => env('GOOGLE_DRIVE_CLIENT_EMAIL'),
+        'private_key_id' => env('GOOGLE_DRIVE_PRIVATE_KEY_ID'),
+        'private_key' => env('GOOGLE_DRIVE_PRIVATE_KEY'),
+    ],
+
 ];
