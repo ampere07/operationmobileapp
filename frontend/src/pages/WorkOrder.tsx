@@ -201,10 +201,15 @@ const WorkOrderPage: React.FC = () => {
 
   const formatDate = useCallback((dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('en-PH', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: true
-    });
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString;
+      const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} ${timePart}`;
+    } catch (e) {
+      return dateString;
+    }
   }, []);
 
   useEffect(() => {
@@ -363,6 +368,7 @@ const WorkOrderPage: React.FC = () => {
             onEdit={() => {
               setShowAssignModal(true);
             }}
+            onRefresh={() => fetchWorkOrders(1, 1000, '', '')}
             isDarkMode={isDarkMode}
             colorPalette={colorPalette}
           />

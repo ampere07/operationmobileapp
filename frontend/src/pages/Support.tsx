@@ -99,7 +99,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const todayTicketInfo = useMemo(() => {
     if (!requests || requests.length === 0) return { count: 0, lastSubmitTime: null as Date | null };
     const today = new Date();
-    const todayStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const todayStr = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}/${today.getFullYear()}`;
     let count = 0;
     let lastSubmitTime: Date | null = null;
     for (const req of requests) {

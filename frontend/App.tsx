@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './global.css';
 import Login from './src/pages/Login';
 import Dashboard from './src/pages/Dashboard';
@@ -9,11 +9,14 @@ import PaymentResultModal from './src/components/PaymentResultModal';
 import SplashScreen from './src/components/SplashScreen';
 import { settingsColorPaletteService } from './src/services/settingsColorPaletteService';
 import { PaymentSuccessProvider } from './src/contexts/PaymentSuccessContext';
+import IdleWarningModal from './src/modals/IdleWarningModal';
 
-import { View } from 'react-native';
+import { View, AppState, PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 
+const IDLE_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours in ms
+const WARNING_TIMEOUT = 1.5 * 60 * 60 * 1000; // 1.5 hours in ms
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -23,6 +26,110 @@ function App() {
   const [showPaymentResult, setShowPaymentResult] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
+
+  const [showIdleWarning, _setShowIdleWarning] = useState(false);
+  const isWarningVisible = useRef(false);
+
+  const setShowIdleWarning = (visible: boolean) => {
+    isWarningVisible.current = visible;
+    _setShowIdleWarning(visible);
+  };
+
+  const lastInteractionTime = useRef<number>(Date.now());
+  const logoutTimer = useRef<NodeJS.Timeout | null>(null);
+  const warningTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogout = async () => {
+    // Remove user data and cookies from AsyncStorage
+    await AsyncStorage.removeItem('authData');
+    await clearCookies();
+    setUserData(null);
+    setIsLoggedIn(false);
+    setShowIdleWarning(false);
+    if (warningTimer.current) clearTimeout(warningTimer.current);
+    if (logoutTimer.current) clearTimeout(logoutTimer.current);
+  };
+
+  const resetTimer = () => {
+    lastInteractionTime.current = Date.now();
+    if (warningTimer.current) {
+      clearTimeout(warningTimer.current);
+    }
+    if (logoutTimer.current) {
+      clearTimeout(logoutTimer.current);
+    }
+    
+    if (isWarningVisible.current) {
+      setShowIdleWarning(false);
+    }
+
+    if (isLoggedIn) {
+      warningTimer.current = setTimeout(() => {
+        setShowIdleWarning(true);
+      }, WARNING_TIMEOUT);
+
+      logoutTimer.current = setTimeout(() => {
+        handleLogout();
+      }, IDLE_TIMEOUT);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      resetTimer();
+    } else {
+      if (warningTimer.current) clearTimeout(warningTimer.current);
+      if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isLoggedIn) {
+        const timeSinceLastInteraction = Date.now() - lastInteractionTime.current;
+        if (timeSinceLastInteraction >= IDLE_TIMEOUT) {
+          handleLogout();
+        } else if (timeSinceLastInteraction >= WARNING_TIMEOUT) {
+          // Warning window
+          setShowIdleWarning(true);
+          
+          if (warningTimer.current) clearTimeout(warningTimer.current);
+          if (logoutTimer.current) clearTimeout(logoutTimer.current);
+          
+          const remainingTime = IDLE_TIMEOUT - timeSinceLastInteraction;
+          logoutTimer.current = setTimeout(() => {
+            handleLogout();
+          }, remainingTime > 0 ? remainingTime : 0);
+        } else {
+          resetTimer();
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (warningTimer.current) clearTimeout(warningTimer.current);
+      if (logoutTimer.current) clearTimeout(logoutTimer.current);
+    };
+  }, [isLoggedIn]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponderCapture: () => {
+        if (!isWarningVisible.current) {
+          resetTimer();
+        }
+        return false;
+      },
+      onMoveShouldSetPanResponderCapture: () => {
+        if (!isWarningVisible.current) {
+          resetTimer();
+        }
+        return false;
+      },
+      onPanResponderTerminationRequest: () => true,
+    })
+  ).current;
 
   useEffect(() => {
     const initialize = async () => {
@@ -96,14 +203,7 @@ function App() {
 
     setIsLoggingIn(false);
     setIsLoggedIn(true);
-  };
-
-  const handleLogout = async () => {
-    // Remove user data and cookies from AsyncStorage
-    await AsyncStorage.removeItem('authData');
-    await clearCookies();
-    setUserData(null);
-    setIsLoggedIn(false);
+    resetTimer(); // Start the timer when logged in
   };
 
   // Show loading state while checking authentication or logging in
@@ -111,22 +211,30 @@ function App() {
     return <SplashScreen />;
   }
 
-  if (isLoggedIn) {
-    return (
-      <PaymentSuccessProvider>
-        <Dashboard onLogout={handleLogout} />
-        <PaymentResultModal
-          isOpen={showPaymentResult}
-          onClose={() => setShowPaymentResult(false)}
-          success={paymentSuccess}
-          referenceNo={paymentRef}
-          isDarkMode={false}
-        />
-      </PaymentSuccessProvider>
-    );
-  }
-
-  return <Login onLogin={handleLogin} />;
+  return (
+    <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+      {isLoggedIn ? (
+        <PaymentSuccessProvider>
+          <Dashboard onLogout={handleLogout} />
+          <PaymentResultModal
+            isOpen={showPaymentResult}
+            onClose={() => setShowPaymentResult(false)}
+            success={paymentSuccess}
+            referenceNo={paymentRef}
+            isDarkMode={false}
+          />
+          <IdleWarningModal 
+            visible={showIdleWarning}
+            onStayLoggedIn={resetTimer}
+            onLogout={handleLogout}
+            countdown={30}
+          />
+        </PaymentSuccessProvider>
+      ) : (
+        <Login onLogin={handleLogin} />
+      )}
+    </View>
+  );
 }
 
 export default App;

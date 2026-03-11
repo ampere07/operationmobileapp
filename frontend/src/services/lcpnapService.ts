@@ -176,3 +176,25 @@ export const getMostUsedLCPNAPs = async (): Promise<ApiResponse<LCPNAP[]>> => {
     };
   }
 };
+
+export interface RelatedCustomer {
+  account_no: string;
+  full_name: string;
+  port: string;
+  status: string;
+}
+
+export const getRelatedCustomers = async (id: number): Promise<ApiResponse<RelatedCustomer[]>> => {
+  try {
+    const response = await apiClient.get<ApiResponse<RelatedCustomer[]>>(`/lcpnap/${id}/related-customers`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching related customers:', error);
+    return {
+      success: false,
+      data: [],
+      message: error.message || 'Failed to fetch related customers'
+    };
+  }
+};
+

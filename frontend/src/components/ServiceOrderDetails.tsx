@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, Edit, ChevronLeft } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
+import { updateServiceOrder } from '../services/serviceOrderService';
 
 interface ServiceOrderDetailsProps {
   serviceOrder: {
@@ -69,6 +70,9 @@ const defaultFields = [
   'timestamp',
   'accountNumber',
   'dateInstalled',
+  'startTime',
+  'endTime',
+  'duration',
   'fullName',
   'contactNumber',
   'fullAddress',
@@ -111,9 +115,24 @@ const initialVisibility = defaultFields.reduce((acc: Record<string, boolean>, fi
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
   try {
-    return new Date(dateStr).toLocaleString();
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${datePart} ${timePart}`;
   } catch (e) {
     return dateStr || 'Not set';
+  }
+};
+
+const formatDateOnly = (dateStr?: string | null): string => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+  } catch (e) {
+    return dateStr;
   }
 };
 
@@ -140,6 +159,9 @@ const getFieldLabel = (fieldKey: string): string => {
     timestamp: 'Timestamp',
     accountNumber: 'Account No.',
     dateInstalled: 'Date Installed',
+    startTime: 'Start Time',
+    endTime: 'End Time',
+    duration: 'Duration',
     fullName: 'Full Name',
     contactNumber: 'Contact Number',
     fullAddress: 'Full Address',
@@ -196,6 +218,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
   const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(initialVisibility);
   const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
+  const [isStarted, setIsStarted] = useState(!!(serviceOrder as any).start_time);
+  const [isEnded, setIsEnded] = useState(!!(serviceOrder as any).end_time);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setIsStarted(!!(serviceOrder as any).start_time);
+    setIsEnded(!!(serviceOrder as any).end_time);
+  }, [serviceOrder]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -238,6 +268,56 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     setFieldVisibility(prev => ({ ...prev, [field]: !prev[field] }));
   }, []);
 
+  const formatMySQLDate = () => {
+    const now = new Date();
+    return now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0') + ':' + 
+      String(now.getSeconds()).padStart(2, '0');
+  };
+
+  const handleStartTimer = async () => {
+    try {
+      setLoading(true);
+      if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateServiceOrder(serviceOrder.id, {
+        start_time: currentTime,
+      } as any);
+
+      (serviceOrder as any).start_time = currentTime;
+      setIsStarted(true);
+      silentRefresh();
+    } catch (err) {
+      console.error('Failed to start timer:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEndTimer = async () => {
+    try {
+      setLoading(true);
+      if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateServiceOrder(serviceOrder.id, {
+        end_time: currentTime,
+      } as any);
+
+      (serviceOrder as any).end_time = currentTime;
+      setIsEnded(true);
+      silentRefresh();
+    } catch (err) {
+      console.error('Failed to end timer:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const selectAllFields = useCallback(() => {
     const allVisible = defaultFields.reduce((acc, field) => ({ ...acc, [field]: true }), {});
     setFieldVisibility(allVisible);
@@ -256,6 +336,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const valStyle = [styles.valueText, { color: '#111827' }];
 
   const isFieldEmpty = useCallback((fieldKey: string): boolean => {
+    if (fieldKey === 'duration') return !(serviceOrder as any).start_time || !(serviceOrder as any).end_time;
+    if (fieldKey === 'startTime') return !(serviceOrder as any).start_time;
+    if (fieldKey === 'endTime') return !(serviceOrder as any).end_time;
+
     const val = (serviceOrder as any)[fieldKey];
     if (val === null || val === undefined || val === '') return true;
     if (val === '-' || val === 'None' || val === 'Not assigned' || val === 'No remarks' || val === 'Not set') return true;
@@ -273,15 +357,32 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     return false;
   }, [serviceOrder]);
 
+  const getDurationString = (start?: string | null, end?: string | null): string => {
+    if (!start || !end) return 'N/A';
+    const startTime = new Date(start.replace(' ', 'T')).getTime();
+    const endTime = new Date(end.replace(' ', 'T')).getTime();
+    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+    
+    const diff = Math.max(0, endTime - startTime);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
   const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
     ticketId: () => <Text style={valStyle}>{serviceOrder.ticketId}</Text>,
-    timestamp: () => <Text style={valStyle}>{serviceOrder.timestamp}</Text>,
+    timestamp: () => <Text style={valStyle}>{formatDate(serviceOrder.timestamp)}</Text>,
     accountNumber: () => (
       <Text style={[styles.accountDetailsText, styles.valueText]} selectable={true}>
         {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
       </Text>
     ),
-    dateInstalled: () => <Text style={valStyle}>{serviceOrder.dateInstalled ? serviceOrder.dateInstalled.split(/[ T]/)[0] : '-'}</Text>,
+    dateInstalled: () => <Text style={valStyle}>{formatDateOnly(serviceOrder.dateInstalled)}</Text>,
+    startTime: () => <Text style={valStyle}>{formatDate((serviceOrder as any).start_time)}</Text>,
+    endTime: () => <Text style={valStyle}>{formatDate((serviceOrder as any).end_time)}</Text>,
+    duration: () => <Text style={valStyle}>{getDurationString((serviceOrder as any).start_time, (serviceOrder as any).end_time)}</Text>,
     fullName: () => <Text style={valStyle}>{serviceOrder.fullName}</Text>,
     contactNumber: () => <Text style={valStyle}>{serviceOrder.contactNumber}</Text>,
     fullAddress: () => <Text style={valStyle}>{serviceOrder.fullAddress}</Text>,
@@ -363,6 +464,28 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         </View>
 
         <View style={styles.headerActions}>
+          {userRoleId === 2 && !isEnded && (
+            <>
+              {!isStarted ? (
+                <Pressable
+                  style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
+                  onPress={handleStartTimer}
+                  disabled={loading}
+                >
+                  <Play width={18} height={18} color="#ffffff" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
+                  onPress={handleEndTimer}
+                  disabled={loading}
+                >
+                  <Square width={18} height={18} color="#ffffff" />
+                </Pressable>
+              )}
+            </>
+          )}
+
           {userRole !== 'agent' && userRoleId !== 4 && (
             <>
               {!(serviceOrder.visitStatus?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && (
@@ -415,6 +538,7 @@ const styles = StyleSheet.create({
   headerButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, flexDirection: 'row', alignItems: 'center' },
   headerButtonText: { color: '#ffffff', fontWeight: '500', fontSize: 14 },
   headerButtonIcon: { marginRight: 4 },
+  iconBtn: { padding: 6, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
   settingsButton: { padding: 4 },
   flex1: { flex: 1 },
   content: { width: '100%', paddingVertical: 8 },

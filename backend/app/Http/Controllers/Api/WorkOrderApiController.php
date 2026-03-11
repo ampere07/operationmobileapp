@@ -75,7 +75,9 @@ class WorkOrderApiController extends Controller
                 'work_status' => 'nullable|string|max:100',
                 'work_category' => 'nullable|string|max:255',
                 'requested_by' => 'required|string|max:255',
-                'updated_by' => 'nullable|string|max:255'
+                'updated_by' => 'nullable|string|max:255',
+                'start_time' => 'nullable|string',
+                'end_time' => 'nullable|string'
             ]);
 
             if ($validator->fails()) {
@@ -303,7 +305,9 @@ class WorkOrderApiController extends Controller
                 'remarks' => 'nullable|string',
                 'work_status' => 'nullable|string|max:100',
                 'work_category' => 'nullable|string|max:255',
-                'updated_by' => 'nullable|string|max:255'
+                'updated_by' => 'nullable|string|max:255',
+                'start_time' => 'nullable|string',
+                'end_time' => 'nullable|string'
             ]);
 
             if ($validator->fails()) {
@@ -324,7 +328,7 @@ class WorkOrderApiController extends Controller
             
             $data = $request->only([
                 'instructions', 'report_to', 'assign_to', 'remarks', 
-                'work_status', 'work_category', 'updated_by'
+                'work_status', 'work_category', 'updated_by', 'start_time', 'end_time'
             ]);
             
             $workOrder->fill($data);

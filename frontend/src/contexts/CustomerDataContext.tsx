@@ -142,7 +142,11 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
                 const soData = soRes?.data?.data || [];
                 const mappedOrders: ServiceOrderRecord[] = Array.isArray(soData) ? soData.map((order: any) => ({
                     id: order.id,
-                    date: order.created_at ? new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+                    date: order.created_at ? (() => {
+                        const d = new Date(order.created_at);
+                        if (isNaN(d.getTime())) return '';
+                        return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+                    })() : '',
                     requestId: order.ticket_id,
                     issue: order.concern || '',
                     issueDetails: order.concern_remarks || '',

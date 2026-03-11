@@ -51,6 +51,9 @@ class JobOrder extends Model
         'pppoe_password',
         'created_by_user_email',
         'updated_by_user_email',
+        'start_time',
+        'end_time',
+        'proof_image_url',
     ];
 
     protected $dates = [

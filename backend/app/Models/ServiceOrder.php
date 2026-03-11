@@ -65,6 +65,8 @@ class ServiceOrder extends Model
         'new_port',
         'new_vlan',
         'router_model',
+        'start_time',
+        'end_time',
     ];
     
     protected $dates = [

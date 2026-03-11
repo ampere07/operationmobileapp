@@ -8,17 +8,23 @@ import {
   useWindowDimensions,
   StyleSheet
 } from 'react-native';
-import { X, ExternalLink } from 'lucide-react-native';
+import { X, ExternalLink, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WorkOrderDetailsProps } from '../types/workOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { updateWorkOrder } from '../services/workOrderService';
+import ConfirmationModal from '../modals/MoveToJoModal';
 
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
   try {
-    return new Date(dateStr).toLocaleString();
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${datePart} ${timePart}`;
   } catch (e) {
-    return dateStr;
+    return dateStr || 'Not set';
   }
 };
 
@@ -56,6 +62,9 @@ const getFieldLabel = (fieldKey: string): string => {
     requestedDate: 'Requested Date',
     updatedBy: 'Updated By',
     updatedDate: 'Updated Date',
+    startTime: 'Start Time',
+    endTime: 'End Time',
+    duration: 'Duration',
     image1: 'Image 1',
     image2: 'Image 2',
     image3: 'Image 3',
@@ -75,6 +84,9 @@ const defaultFields = [
   'requestedDate',
   'updatedBy',
   'updatedDate',
+  'startTime',
+  'endTime',
+  'duration',
   'image1',
   'image2',
   'image3',
@@ -85,6 +97,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   workOrder,
   onClose,
   onEdit,
+  onRefresh,
   isDarkMode: propDarkMode,
   colorPalette: propColorPalette
 }) => {
@@ -93,6 +106,17 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => propColorPalette ?? settingsColorPaletteService.getActiveSync());
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [isStarted, setIsStarted] = useState(!!(workOrder as any).start_time);
+  const [isEnded, setIsEnded] = useState(!!(workOrder as any).end_time);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
+
+  useEffect(() => {
+    setIsStarted(!!(workOrder as any).start_time);
+    setIsEnded(!!(workOrder as any).end_time);
+  }, [workOrder]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -130,6 +154,75 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     </View>
   ), []);
 
+  const formatMySQLDate = () => {
+    const now = new Date();
+    return now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0') + ':' + 
+      String(now.getSeconds()).padStart(2, '0');
+  };
+  const handleStartTimer = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      if (!workOrder.id) throw new Error('Cannot update work order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateWorkOrder(workOrder.id, {
+        start_time: currentTime,
+      } as any);
+
+      (workOrder as any).start_time = currentTime;
+      setIsStarted(true);
+      setSuccessMessage('Work timer started successfully!');
+      setShowSuccessModal(true);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setError(`Failed to start timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEndTimer = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      if (!workOrder.id) throw new Error('Cannot update work order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateWorkOrder(workOrder.id, {
+        end_time: currentTime,
+      } as any);
+
+      (workOrder as any).end_time = currentTime;
+      setIsEnded(true);
+      setSuccessMessage('Work timer ended successfully!');
+      setShowSuccessModal(true);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setError(`Failed to end timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDurationString = (start?: string | null, end?: string | null): string => {
+    if (!start || !end) return 'N/A';
+    const startTime = new Date(start.replace(' ', 'T')).getTime();
+    const endTime = new Date(end.replace(' ', 'T')).getTime();
+    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+    
+    const diff = Math.max(0, endTime - startTime);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
   const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
     workOrderId: () => <Text style={valStyle} selectable={true}>{workOrder.id || 'N/A'}</Text>,
     instructions: () => <Text style={valStyle} selectable={true}>{workOrder.instructions || 'No instructions'}</Text>,
@@ -145,6 +238,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     requestedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.requested_date)}</Text>,
     updatedBy: () => <Text style={valStyle} selectable={true}>{workOrder.updated_by || 'Not updated'}</Text>,
     updatedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.updated_date)}</Text>,
+    startTime: () => <Text style={valStyle} selectable={true}>{formatDate((workOrder as any).start_time)}</Text>,
+    endTime: () => <Text style={valStyle} selectable={true}>{formatDate((workOrder as any).end_time)}</Text>,
+    duration: () => <Text style={valStyle} selectable={true}>{getDurationString((workOrder as any).start_time, (workOrder as any).end_time)}</Text>,
     image1: () => renderImageLink(workOrder.image_1),
     image2: () => renderImageLink(workOrder.image_2),
     image3: () => renderImageLink(workOrder.image_3),
@@ -163,6 +259,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       case 'requestedDate': return !workOrder.requested_date;
       case 'updatedBy': return !workOrder.updated_by || workOrder.updated_by === 'Not updated';
       case 'updatedDate': return !workOrder.updated_date;
+      case 'startTime': return !(workOrder as any).start_time;
+      case 'endTime': return !(workOrder as any).end_time;
+      case 'duration': return !(workOrder as any).start_time || !(workOrder as any).end_time;
       case 'image1': return !workOrder.image_1;
       case 'image2': return !workOrder.image_2;
       case 'image3': return !workOrder.image_3;
@@ -219,17 +318,58 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
             </Pressable>
           )}
 
+          {userRoleId === 2 && !isEnded && (
+            <>
+              {!isStarted ? (
+                <Pressable
+                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981', marginRight: 8 }]}
+                  onPress={handleStartTimer}
+                  disabled={loading}
+                >
+                  <Play width={18} height={18} color="#ffffff" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#ef4444', marginRight: 8 }]}
+                  onPress={handleEndTimer}
+                  disabled={loading}
+                >
+                  <Square width={18} height={18} color="#ffffff" />
+                </Pressable>
+              )}
+            </>
+          )}
+
           <Pressable onPress={onClose} style={{ padding: 4 }}>
             <X width={28} height={28} color="#4b5563" />
           </Pressable>
         </View>
       </View>
 
+      {error && (
+        <View style={[st.errorBox, {
+          backgroundColor: '#fef2f2',
+          borderColor: '#fca5a5'
+        }]}>
+          <Text style={{ color: '#991b1b' }}>{error}</Text>
+        </View>
+      )}
+
       <ScrollView style={st.flex1} showsVerticalScrollIndicator={false} contentContainerStyle={st.scrollContent}>
         <View style={[st.fieldsContainer, { backgroundColor: '#f9fafb' }]}>
           {defaultFields.map(renderFieldContent)}
         </View>
       </ScrollView>
+
+      <ConfirmationModal
+        isOpen={showSuccessModal}
+        title="Success"
+        message={successMessage}
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setShowSuccessModal(false)}
+        onCancel={() => setShowSuccessModal(false)}
+      />
     </View>
   );
 };
@@ -242,6 +382,8 @@ const st = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },
   actionBtnText: { color: '#ffffff', fontWeight: '500' },
+  iconBtn: { padding: 6, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
+  errorBox: { padding: 12, margin: 12, borderRadius: 4, borderWidth: 1 },
   statusText: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
   flex1: { flex: 1 },
   scrollContent: { flexGrow: 1 },

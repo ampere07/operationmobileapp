@@ -12,6 +12,18 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 type MobileView = 'orders' | 'details';
 
 // Utility functions outside component to avoid recreation
+const formatDate = (dateStr?: string | null): string => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${datePart} ${timePart}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
 const StatusText = React.memo(({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
 
@@ -93,7 +105,7 @@ const ServiceOrderCard = React.memo(({
       <View style={so.cardLeft}>
         <Text style={[so.cardName, { color: '#111827' }]}>{serviceOrder.fullName}</Text>
         <Text style={[so.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
-          {serviceOrder.timestamp} | {serviceOrder.fullAddress}
+          {formatDate(serviceOrder.timestamp)} | {serviceOrder.fullAddress}
         </Text>
       </View>
       <View style={so.cardRight}>

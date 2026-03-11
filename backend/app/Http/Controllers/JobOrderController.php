@@ -1332,6 +1332,7 @@ class JobOrderController extends Controller
                 'has_port_label' => $request->hasFile('port_label_image'),
                 'has_client_signature' => $request->hasFile('client_signature_image'),
                 'has_speed_test' => $request->hasFile('speed_test_image'),
+                'has_proof_image' => $request->hasFile('proof_image'),
             ]);
 
             $validator = Validator::make($request->all(), [
@@ -1343,6 +1344,7 @@ class JobOrderController extends Controller
                 'port_label_image' => 'nullable|image|max:10240',
                 'client_signature_image' => 'nullable|image|max:10240',
                 'speed_test_image' => 'nullable|image|max:10240',
+                'proof_image' => 'nullable|image|max:10240',
             ]);
 
             if ($validator->fails()) {
@@ -1474,6 +1476,23 @@ class JobOrderController extends Controller
                 ]);
                 $fileName = 'speed_test_' . time() . '.' . $file->getClientOriginalExtension();
                 $imageUrls['speedtest_image_url'] = $driveService->uploadFile(
+                    $file,
+                    $folderId,
+                    $fileName,
+                    $file->getMimeType()
+                );
+            }
+
+            if ($request->hasFile('proof_image')) {
+                $file = $request->file('proof_image');
+                $fileSizeKB = round($file->getSize() / 1024, 2);
+                Log::info('[BACKEND] Proof image received', [
+                    'size_kb' => $fileSizeKB,
+                    'size_mb' => round($fileSizeKB / 1024, 2),
+                    'mime_type' => $file->getMimeType(),
+                ]);
+                $fileName = 'proof_' . time() . '.' . $file->getClientOriginalExtension();
+                $imageUrls['proof_image_url'] = $driveService->uploadFile(
                     $file,
                     $folderId,
                     $fileName,

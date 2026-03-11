@@ -14,9 +14,9 @@ export const login = async (email: string, password: string): Promise<LoginRespo
   return response.data;
 };
 
-export const forgotPassword = async (email: string): Promise<ForgotPasswordResponse> => {
+export const forgotPassword = async (account_no: string): Promise<ForgotPasswordResponse> => {
   const response = await apiClient.post<ForgotPasswordResponse>('/forgot-password', {
-    email
+    account_no
   });
   return response.data;
 };

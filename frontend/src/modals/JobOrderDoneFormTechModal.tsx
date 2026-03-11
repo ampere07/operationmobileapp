@@ -65,6 +65,7 @@ interface JobOrderDoneFormData {
   statusRemarks: string;
   ip: string;
   addressCoordinates: string;
+  proofImage: File | null;
 }
 
 interface OrderItem {
@@ -199,11 +200,27 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     visit_with_other: '',
     statusRemarks: '',
     ip: '',
-    addressCoordinates: ''
+    addressCoordinates: '',
+    proofImage: null
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [submittingDots, setSubmittingDots] = useState('');
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (loading) {
+      setSubmittingDots('.');
+      interval = setInterval(() => {
+        setSubmittingDots(prev => (prev.length >= 3 ? '.' : prev + '.'));
+      }, 500);
+    } else {
+      setSubmittingDots('');
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const [technicians, setTechnicians] = useState<Array<{ email: string; name: string }>>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [routerModels, setRouterModels] = useState<RouterModelEntry[]>([]);
@@ -222,6 +239,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     portLabelImage: string | null;
     clientSignatureImage: string | null;
     speedTestImage: string | null;
+    proofImage: string | null;
   }>({
     signedContractImage: null,
     setupImage: null,
@@ -229,7 +247,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
-    speedTestImage: null
+    speedTestImage: null,
+    proofImage: null
   });
 
   const [showModal, setShowModal] = useState(false);
@@ -727,7 +746,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
       portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
       clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
-      speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL)
+      speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL),
+      proofImage: safeConvert(jobOrderData.proof_image_url || jobOrderData.Proof_Image_URL)
     });
 
     const safeConvertUrl = (val: any): string | null => {
@@ -794,7 +814,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     });
   }, []);
 
-  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage', file: any) => {
+  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage' | 'proofImage', file: any) => {
     setFormData(prev => ({ ...prev, [field]: file }));
     setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
     setErrors(prev => prev[field] ? { ...prev, [field]: '' } : prev);
@@ -924,6 +944,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.visit_with_other.trim()) newErrors.visit_with_other = 'Visit With(Other) is required';
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
       if (!formData.statusRemarks.trim()) newErrors.statusRemarks = 'Status Remarks is required';
+      if (!formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) newErrors.proofImage = 'Proof Image is required';
     }
 
     setErrors(newErrors);
@@ -1096,7 +1117,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         jobOrderUpdateData.onsite_remarks = updatedFormData.onsiteRemarks;
         jobOrderUpdateData.address_coordinates = updatedFormData.addressCoordinates || '';
         jobOrderUpdateData.onsite_status = 'Done';
+      }
 
+      if (['Done', 'Failed', 'Reschedule'].includes(updatedFormData.onsiteStatus)) {
         const firstName = (jobOrderData?.First_Name || jobOrderData?.first_name || '').trim();
         const middleInitial = (jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || '').trim();
         const fullLastName = (jobOrderData?.Last_Name || jobOrderData?.last_name || '').trim();
@@ -1105,19 +1128,29 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         const imageFormData = new FormData();
         imageFormData.append('folder_name', folderName);
 
+        let hasImages = false;
         const safeAppendImage = (fieldName: string, fileObj: any) => {
           if (!fileObj) return;
           const fileName = fileObj.name || `${fieldName}_${Date.now()}.jpg`;
           imageFormData.append(fieldName, fileObj, fileName);
+          hasImages = true;
         };
 
-        safeAppendImage('signed_contract_image', formData.signedContractImage);
-        safeAppendImage('setup_image', formData.setupImage);
-        safeAppendImage('box_reading_image', formData.boxReadingImage);
-        safeAppendImage('router_reading_image', formData.routerReadingImage);
-        safeAppendImage('port_label_image', formData.portLabelImage);
-        safeAppendImage('client_signature_image', formData.clientSignatureImage);
-        safeAppendImage('speed_test_image', formData.speedTestImage);
+        if (updatedFormData.onsiteStatus === 'Done') {
+          safeAppendImage('signed_contract_image', formData.signedContractImage);
+          safeAppendImage('setup_image', formData.setupImage);
+          safeAppendImage('box_reading_image', formData.boxReadingImage);
+          safeAppendImage('router_reading_image', formData.routerReadingImage);
+          safeAppendImage('port_label_image', formData.portLabelImage);
+          safeAppendImage('client_signature_image', formData.clientSignatureImage);
+          safeAppendImage('speed_test_image', formData.speedTestImage);
+        }
+
+        if (updatedFormData.onsiteStatus === 'Failed' || updatedFormData.onsiteStatus === 'Reschedule') {
+          safeAppendImage('proof_image', formData.proofImage);
+        }
+
+        if (hasImages) {
 
         try {
           const uploadResponse = await apiClient.post<{
@@ -1131,6 +1164,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               port_label_image_url?: string;
               client_signature_image_url?: string;
               speedtest_image_url?: string;
+              proof_image_url?: string;
             };
             folder_id?: string;
           }>(`/job-orders/${jobOrderId}/upload-images`, imageFormData, {
@@ -1163,6 +1197,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             if (imageUrls.speedtest_image_url) {
               jobOrderUpdateData.speedtest_image_url = imageUrls.speedtest_image_url;
             }
+            if (imageUrls.proof_image_url) {
+              jobOrderUpdateData.proof_image_url = imageUrls.proof_image_url;
+            }
           }
         } catch (uploadError: any) {
           const errorMsg = uploadError.response?.data?.message || uploadError.message || 'Unknown error';
@@ -1170,6 +1207,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             type: 'warning',
             text: `Failed to upload images to Google Drive: ${errorMsg}`
           });
+        }
         }
       }
 
@@ -1571,25 +1609,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   return (
     <>
 
-      {/* ─── Loading Modal ───────────────────────────────────────────── */}
-      <Modal
-        visible={showLoadingModal}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-      >
-        <View style={styles.loadingModalOverlay}>
-          <View style={[styles.loadingModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <ActivityIndicator
-              size="large"
-              color={colorPalette?.primary || '#7c3aed'}
-            />
-            <View>
-              <Text style={[styles.loadingPercentage, { color: isDarkMode ? '#ffffff' : '#111827' }]}>{Math.floor(loadingPercentage)}%</Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Loading Modal removed as per user request */}
 
       {/* ─── Message Modal ───────────────────────────────────────────── */}
       <Modal
@@ -1914,7 +1934,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     paddingHorizontal: 16
                   }]}
                 >
-                  <Text style={styles.submitButtonText}>{loading ? 'Submitting...' : 'Submit'}</Text>
+                  <Text style={styles.submitButtonText}>{loading ? `Submitting${submittingDots}` : 'Submit'}</Text>
                 </Pressable>
               </View>
             </View>
@@ -1938,31 +1958,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         Choose Plan<Text style={styles.required}>*</Text>
                       </Text>
                       <View>
-                        <View style={[styles.pickerContainer, {
-                          borderColor: errors.choosePlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                        }]}>
-                          <Picker
-                            selectedValue={formData.choosePlan}
-                            onValueChange={(value) => handleInputChange('choosePlan', value)}
-                            style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                          >
-                            <Picker.Item key="default" label="Select Plan" value="" enabled={false} />
-                            {formData.choosePlan && !plans.some(plan => {
-                              const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                              return planWithPrice === formData.choosePlan || plan.name === formData.choosePlan;
-                            }) && (
-                                <Picker.Item key="custom" label={formData.choosePlan} value={formData.choosePlan} />
-                              )}
-                            {plans.map((plan) => {
-                              const planWithPrice = plan.price ? `${plan.name} - P${plan.price}` : plan.name;
-                              return (
-                                <Picker.Item key={plan.id} label={planWithPrice} value={planWithPrice} />
-                              );
-                            })}
-                          </Picker>
-                        </View>
+                        <TextInput
+                          value={formData.choosePlan}
+                          editable={false}
+                          placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                          style={[styles.textInput, {
+                            opacity: 0.75,
+                            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                            borderColor: errors.choosePlan ? '#ef4444' : (isDarkMode ? '#4b5563' : '#d1d5db'),
+                            color: isDarkMode ? '#d1d5db' : '#4b5563'
+                          }]}
+                        />
                       </View>
                       {errors.choosePlan && (
                         <View style={styles.errorContainer}>
@@ -3036,6 +3042,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             </View>
                           )}
                         </View>
+
+                        <ImagePreview
+                          imageUrl={imagePreviews.proofImage}
+                          label="Proof Image"
+                          onUpload={(file) => handleImageUpload('proofImage', file)}
+                          error={errors.proofImage}
+                        />
                       </View>
                     )}
                   </View>

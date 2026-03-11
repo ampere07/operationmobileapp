@@ -129,8 +129,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         }
 
         const nextDueDate = new Date(dueYear, dueMonth, billingDay);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        dueDateString = `${months[nextDueDate.getMonth()]} ${nextDueDate.getDate()}, ${nextDueDate.getFullYear()}`;
+        dueDateString = `${String(nextDueDate.getMonth() + 1).padStart(2, '0')}/${String(nextDueDate.getDate()).padStart(2, '0')}/${nextDueDate.getFullYear()}`;
     }
 
     useEffect(() => {
@@ -508,8 +507,12 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 onRequestClose={handleCloseVerifyModal}
             >
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={styles.kav}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+                    style={{
+                        flex: 1,
+                        backgroundColor: 'transparent',
+                        justifyContent: 'flex-end'
+                    }}
                 >
                     <Pressable style={styles.modalBackdrop} onPress={handleCloseVerifyModal} />
                     <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>

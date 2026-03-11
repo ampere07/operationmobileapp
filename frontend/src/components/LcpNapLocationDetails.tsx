@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, Linking, useWindowDimensions, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { X, ExternalLink, MapPin, Navigation2 } from 'lucide-react-native';
+import { X, ExternalLink, MapPin, Navigation2, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { getRelatedCustomers, RelatedCustomer } from '../services/lcpnapService';
 
 interface LocationMarker {
   id: number;
@@ -46,6 +47,11 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
   const isMobile = propIsMobile || width < 768;
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const primaryColor = colorPalette?.primary || '#ef4444';
+  const [relatedCustomers, setRelatedCustomers] = useState<RelatedCustomer[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 5;
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -66,6 +72,32 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
     };
     fetchColorPalette();
   }, []);
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      if (!location.id) return;
+      setIsLoadingCustomers(true);
+      try {
+        const response = await getRelatedCustomers(location.id);
+        if (response.success) {
+          setRelatedCustomers(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch related customers:', err);
+      } finally {
+        setIsLoadingCustomers(false);
+      }
+    };
+    fetchCustomers();
+    setCurrentPage(0); // Reset page when location changes
+  }, [location.id]);
+
+  const paginatedCustomers = relatedCustomers.slice(
+    currentPage * itemsPerPage,
+    (currentPage + 1) * itemsPerPage
+  );
+
+  const totalPages = Math.ceil(relatedCustomers.length / itemsPerPage);
 
   const formatDate = (dateStr: string | undefined): string => {
     if (!dateStr) return 'Not available';
@@ -187,6 +219,93 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
           {location.city && renderField('City', location.city)}
           {location.region && renderField('Region', location.region)}
           {location.port_total !== undefined && renderField('Port Usage', `${location.total_technical_details || 0} / ${location.port_total}`)}
+
+          {renderField('Related Customers', (
+            <View style={styles.relatedCustomersContainer}>
+              {isLoadingCustomers ? (
+                <ActivityIndicator color={primaryColor} />
+              ) : relatedCustomers.length > 0 ? (
+                <View style={[styles.table, { borderColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                  {/* Table Header */}
+                  <View style={[styles.tableHeader, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }]}>
+                    <Text style={[styles.columnHeader, styles.colAccNo, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Acc No</Text>
+                    <Text style={[styles.columnHeader, styles.colName, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Full Name</Text>
+                    <Text style={[styles.columnHeader, styles.colPort, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Port</Text>
+                    <Text style={[styles.columnHeader, styles.colStatus, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Status</Text>
+                  </View>
+                  {/* Table Rows */}
+                  {paginatedCustomers.map((customer, index) => (
+                    <View 
+                      key={index} 
+                      style={[
+                        styles.tableRow, 
+                        { borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' },
+                        index % 2 === 1 && { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }
+                      ]}
+                    >
+                      <Text style={[styles.cellText, styles.colAccNo, { color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{customer.account_no}</Text>
+                      <Text style={[styles.cellText, styles.colName, { color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{customer.full_name}</Text>
+                      <Text style={[styles.cellText, styles.colPort, { color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{customer.port}</Text>
+                      <View style={[styles.colStatus, styles.statusCell]}>
+                        <View style={[
+                          styles.statusBadgeSmall, 
+                          { 
+                            backgroundColor: customer.status === 'Online' ? '#dcfce7' : 
+                                            customer.status === 'Offline' ? '#fee2e2' : '#f3f4f6' 
+                          }
+                        ]}>
+                          <Text style={[
+                            styles.statusBadgeTextSmall, 
+                            { 
+                              color: customer.status === 'Online' ? '#166534' : 
+                                     customer.status === 'Offline' ? '#991b1b' : '#374151' 
+                            }
+                          ]}>
+                            {customer.status || 'N/A'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <View style={[styles.paginationContainer, { borderTopColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                      <Text style={[styles.paginationText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>
+                        Page {currentPage + 1} of {totalPages}
+                      </Text>
+                      <View style={styles.paginationButtons}>
+                        <Pressable 
+                          onPress={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                          disabled={currentPage === 0}
+                          style={[
+                            styles.paginationButton,
+                            { borderColor: isDarkMode ? '#374151' : '#e5e7eb' },
+                            currentPage === 0 && { opacity: 0.3 }
+                          ]}
+                        >
+                          <ChevronLeft size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                        </Pressable>
+                        <Pressable 
+                          onPress={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                          disabled={currentPage === totalPages - 1}
+                          style={[
+                            styles.paginationButton,
+                            { borderColor: isDarkMode ? '#374151' : '#e5e7eb' },
+                            currentPage === totalPages - 1 && { opacity: 0.3 }
+                          ]}
+                        >
+                          <ChevronRight size={20} color={isDarkMode ? '#ffffff' : '#111827'} />
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <Text style={[styles.noDataText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>No related customers found</Text>
+              )}
+            </View>
+          ))}
 
           {((location.active_sessions || 0) + (location.offline_sessions || 0) + (location.inactive_sessions || 0) + (location.blocked_sessions || 0) + (location.not_found_sessions || 0)) > 0 && renderField('Session Status', (
             <View style={styles.sessionGrid}>
@@ -467,6 +586,90 @@ const styles = StyleSheet.create({
   },
   latLongValue: {
     fontSize: 15,
+  },
+  relatedCustomersContainer: {
+    marginTop: 4,
+    width: '100%',
+  },
+  table: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
+  columnHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  cellText: {
+    fontSize: 13,
+  },
+  colAccNo: {
+    flex: 2,
+  },
+  colName: {
+    flex: 3,
+  },
+  colPort: {
+    flex: 1,
+    textAlign: 'center',
+  },
+  colStatus: {
+    flex: 2,
+    alignItems: 'flex-end',
+  },
+  statusCell: {
+    justifyContent: 'center',
+  },
+  statusBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  statusBadgeTextSmall: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  noDataText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+  },
+  paginationText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  paginationButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

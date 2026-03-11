@@ -23,6 +23,8 @@ class WorkOrder extends Model
         'image_3',
         'signature',
         'requested_by',
-        'updated_by'
+        'updated_by',
+        'start_time',
+        'end_time'
     ];
 }

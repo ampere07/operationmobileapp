@@ -508,7 +508,16 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       setShowLoadingModal(false);
       setResultType('error');
-      setResultMessage(error?.response?.data?.message || error?.message || 'Failed to save');
+
+      const message = error?.response?.data?.message || error?.message || 'Failed to save';
+
+      if (message.toLowerCase().includes('already exist') || message.toLowerCase().includes('duplicate') || message.toLowerCase().includes('existing')) {
+        setResultMessage(`LCPNAP Name ${formData.lcpnap_name} already existing`);
+      } else {
+        const errorDetails = error?.response?.data?.error || '';
+        setResultMessage(`Error: ${message}${errorDetails ? ` - ${errorDetails}` : ''}`);
+      }
+
       setShowResultModal(true);
     } finally {
       setLoading(false);

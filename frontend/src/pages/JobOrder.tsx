@@ -131,7 +131,11 @@ const jo = StyleSheet.create({
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   try {
-    return new Date(dateStr).toLocaleString();
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '-';
+    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${datePart} ${timePart}`;
   } catch (e) {
     return '-';
   }
@@ -534,14 +538,6 @@ const JobOrderPage: React.FC = () => {
                 </View>
               </View>
               <View style={jo.actionsRow}>
-                {userRole.toLowerCase() !== 'agent' && userRoleId !== 4 && (
-                  <Pressable
-                    onPress={() => setIsFunnelFilterOpen(true)}
-                    style={[jo.actionBtn, { backgroundColor: '#e5e7eb' }]}
-                  >
-                    <ListFilter size={20} color={'#374151'} />
-                  </Pressable>
-                )}
 
                 <Pressable
                   onPress={handleRefresh}

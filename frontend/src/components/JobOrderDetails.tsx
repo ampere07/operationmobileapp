@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet } from 'react-native';
-import { X, ExternalLink, Edit, ChevronLeft } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
@@ -46,7 +46,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [jobOrderItems, setJobOrderItems] = useState<JobOrderItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [isStarted, setIsStarted] = useState(!!(jobOrder as any).start_time);
+  const [isEnded, setIsEnded] = useState(!!(jobOrder as any).end_time);
 
+  useEffect(() => {
+    setIsStarted(!!(jobOrder as any).start_time);
+    setIsEnded(!!(jobOrder as any).end_time);
+  }, [jobOrder]);
 
   const isAgent = userRole === 'agent' || userRoleId === 4 || String(userRoleId) === '4';
 
@@ -79,6 +85,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       'itemsUsed',
     ] : []),
     'dateInstalled',
+    'startTime',
+    'endTime',
+    'duration',
     'visitBy',
     'visitWith',
     'visitWithOther',
@@ -218,7 +227,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const formatDate = (dateStr?: string | null): string => {
     if (!dateStr) return 'Not scheduled';
     try {
-      return new Date(dateStr).toLocaleString();
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} ${timePart}`;
     } catch (e) {
       return dateStr;
     }
@@ -227,7 +240,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const formatDateOnly = (dateStr?: string | null): string => {
     if (!dateStr) return 'Not scheduled';
     try {
-      return new Date(dateStr).toLocaleDateString();
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
     } catch (e) {
       return dateStr;
     }
@@ -517,6 +532,74 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     }
   };
 
+  const formatMySQLDate = () => {
+    const now = new Date();
+    return now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0') + ':' + 
+      String(now.getSeconds()).padStart(2, '0');
+  };
+
+  const handleStartTimer = async () => {
+    try {
+      setLoading(true);
+      if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateJobOrder(jobOrder.id, {
+        start_time: currentTime,
+      } as any);
+
+      (jobOrder as any).start_time = currentTime;
+      setIsStarted(true);
+      setSuccessMessage('Timer started successfully!');
+      setShowSuccessModal(true);
+      silentRefresh();
+    } catch (err: any) {
+      setError(`Failed to start timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEndTimer = async () => {
+    try {
+      setLoading(true);
+      if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
+
+      const currentTime = formatMySQLDate();
+      await updateJobOrder(jobOrder.id, {
+        end_time: currentTime,
+      } as any);
+
+      (jobOrder as any).end_time = currentTime;
+      setIsEnded(true);
+      setSuccessMessage('Timer ended successfully!');
+      setShowSuccessModal(true);
+      silentRefresh();
+    } catch (err: any) {
+      setError(`Failed to end timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDurationString = (start?: string | null, end?: string | null): string => {
+    if (!start || !end) return 'N/A';
+    const startTime = new Date(start.replace(' ', 'T')).getTime();
+    const endTime = new Date(end.replace(' ', 'T')).getTime();
+    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+    
+    const diff = Math.max(0, endTime - startTime);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
   const getFieldLabel = (fieldKey: string): string => {
     const labels: Record<string, string> = {
       timestamp: 'Timestamp',
@@ -545,6 +628,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       installation_fee: 'Installation Fee',
       itemsUsed: 'Item Used',
       dateInstalled: 'Date Installed',
+      startTime: 'Start Time',
+      endTime: 'End Time',
+      duration: 'Duration',
       visitBy: 'Visit By',
       visitWith: 'Visit With',
       visitWithOther: 'Visit With Other',
@@ -621,6 +707,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       </View>
     ),
     dateInstalled: () => <Text style={valStyle} selectable={true}>{(jobOrder.Date_Installed || jobOrder.date_installed) ? formatDateOnly(jobOrder.Date_Installed || jobOrder.date_installed) : 'Not installed yet'}</Text>,
+    startTime: () => <Text style={valStyle} selectable={true}>{formatDate((jobOrder as any).start_time)}</Text>,
+    endTime: () => <Text style={valStyle} selectable={true}>{formatDate((jobOrder as any).end_time)}</Text>,
+    duration: () => <Text style={valStyle} selectable={true}>{getDurationString((jobOrder as any).start_time, (jobOrder as any).end_time)}</Text>,
     visitBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
     visitWith: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
     visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
@@ -669,6 +758,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       case 'installation_fee': return !(jobOrder.installation_fee || jobOrder.Installation_Fee);
       case 'itemsUsed': return jobOrderItems.length === 0;
       case 'dateInstalled': return !(jobOrder.Date_Installed || jobOrder.date_installed);
+      case 'startTime': return !(jobOrder as any).start_time;
+      case 'endTime': return !(jobOrder as any).end_time;
+      case 'duration': return !(jobOrder as any).start_time || !(jobOrder as any).end_time;
       case 'visitBy': return !(jobOrder.Visit_By || jobOrder.visit_by);
       case 'visitWith': return !(jobOrder.Visit_With || jobOrder.visit_with);
       case 'visitWithOther': return !(jobOrder.Visit_With_Other || jobOrder.visit_with_other);
@@ -722,6 +814,28 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
+          {userRoleId === 2 && !isEnded && (
+            <>
+              {!isStarted ? (
+                <Pressable
+                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
+                  onPress={handleStartTimer}
+                  disabled={loading}
+                >
+                  <Play width={18} height={18} color="#ffffff" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
+                  onPress={handleEndTimer}
+                  disabled={loading}
+                >
+                  <Square width={18} height={18} color="#ffffff" />
+                </Pressable>
+              )}
+            </>
+          )}
+
           {shouldShowApproveButton() && (
             <Pressable style={st.approveBtn} onPress={handleApproveClick} disabled={loading}>
               <Text style={st.whiteTxt}>Approve</Text>
@@ -843,6 +957,7 @@ const st = StyleSheet.create({
   whiteTxt: { color: '#ffffff' },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 2, flexDirection: 'row', alignItems: 'center' },
   actionBtnText: { color: '#ffffff', fontWeight: '500' },
+  iconBtn: { padding: 6, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
   editBar: { paddingVertical: 12, borderBottomWidth: 1 },
   editBarInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   editBtnWrap: { flexDirection: 'column', alignItems: 'center', padding: 8, borderRadius: 6 },
