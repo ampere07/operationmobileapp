@@ -106,16 +106,16 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => propColorPalette ?? settingsColorPaletteService.getActiveSync());
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
-  const [isStarted, setIsStarted] = useState(!!(workOrder as any).start_time);
-  const [isEnded, setIsEnded] = useState(!!(workOrder as any).end_time);
+  const [isStarted, setIsStarted] = useState(!!workOrder?.start_time);
+  const [isEnded, setIsEnded] = useState(!!workOrder?.end_time);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
 
   useEffect(() => {
-    setIsStarted(!!(workOrder as any).start_time);
-    setIsEnded(!!(workOrder as any).end_time);
+    setIsStarted(!!workOrder?.start_time);
+    setIsEnded(!!workOrder?.end_time);
   }, [workOrder]);
 
   useEffect(() => {
@@ -174,7 +174,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         start_time: currentTime,
       } as any);
 
-      (workOrder as any).start_time = currentTime;
+      workOrder.start_time = currentTime;
       setIsStarted(true);
       setSuccessMessage('Work timer started successfully!');
       setShowSuccessModal(true);
@@ -197,7 +197,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         end_time: currentTime,
       } as any);
 
-      (workOrder as any).end_time = currentTime;
+      workOrder.end_time = currentTime;
       setIsEnded(true);
       setSuccessMessage('Work timer ended successfully!');
       setShowSuccessModal(true);
@@ -238,9 +238,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     requestedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.requested_date)}</Text>,
     updatedBy: () => <Text style={valStyle} selectable={true}>{workOrder.updated_by || 'Not updated'}</Text>,
     updatedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.updated_date)}</Text>,
-    startTime: () => <Text style={valStyle} selectable={true}>{formatDate((workOrder as any).start_time)}</Text>,
-    endTime: () => <Text style={valStyle} selectable={true}>{formatDate((workOrder as any).end_time)}</Text>,
-    duration: () => <Text style={valStyle} selectable={true}>{getDurationString((workOrder as any).start_time, (workOrder as any).end_time)}</Text>,
+    startTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.start_time)}</Text>,
+    endTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.end_time)}</Text>,
+    duration: () => <Text style={valStyle} selectable={true}>{getDurationString(workOrder.start_time, workOrder.end_time)}</Text>,
     image1: () => renderImageLink(workOrder.image_1),
     image2: () => renderImageLink(workOrder.image_2),
     image3: () => renderImageLink(workOrder.image_3),
@@ -259,9 +259,9 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       case 'requestedDate': return !workOrder.requested_date;
       case 'updatedBy': return !workOrder.updated_by || workOrder.updated_by === 'Not updated';
       case 'updatedDate': return !workOrder.updated_date;
-      case 'startTime': return !(workOrder as any).start_time;
-      case 'endTime': return !(workOrder as any).end_time;
-      case 'duration': return !(workOrder as any).start_time || !(workOrder as any).end_time;
+      case 'startTime': return !workOrder.start_time;
+      case 'endTime': return !workOrder.end_time;
+      case 'duration': return !workOrder.start_time || !workOrder.end_time;
       case 'image1': return !workOrder.image_1;
       case 'image2': return !workOrder.image_2;
       case 'image3': return !workOrder.image_3;

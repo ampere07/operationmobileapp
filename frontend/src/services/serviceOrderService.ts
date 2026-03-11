@@ -59,6 +59,8 @@ export interface ServiceOrderData {
   created_by_user?: string;
   updated_at?: string;
   updated_by_user?: string;
+  start_time?: string;
+  end_time?: string;
   region?: string;
   city?: string;
   barangay?: string;

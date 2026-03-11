@@ -188,6 +188,8 @@ class ServiceOrderApiController extends Controller
                 'new_lcpnap' => 'nullable|string|max:255',
                 'new_plan' => 'nullable|string|max:255',
                 'status' => 'nullable|string|max:50',
+                'start_time' => 'nullable|date',
+                'end_time' => 'nullable|date',
                 'created_by_user' => 'nullable|string|max:255',
                 'updated_by_user' => 'nullable|string|max:255'
             ]);
@@ -260,6 +262,8 @@ class ServiceOrderApiController extends Controller
                 'new_lcpnap' => $validated['new_lcpnap'] ?? null,
                 'new_plan' => $validated['new_plan'] ?? null,
                 'status' => $validated['status'] ?? 'unused',
+                'start_time' => $validated['start_time'] ?? null,
+                'end_time' => $validated['end_time'] ?? null,
                 'created_by_user' => $validated['created_by_user'] ?? null,
                 'updated_by_user' => $validated['updated_by_user'] ?? null,
                 'created_at' => now(),
@@ -411,6 +415,8 @@ class ServiceOrderApiController extends Controller
                     'so.image2_url',
                     'so.image3_url',
                     'so.status',
+                    'so.start_time',
+                    'so.end_time',
                     'so.created_at',
                     'so.created_by_user',
                     'so.updated_at',
@@ -495,6 +501,8 @@ class ServiceOrderApiController extends Controller
                 'image2_url',
                 'image3_url',
                 'status',
+                'start_time',
+                'end_time',
                 'updated_by_user'
             ];
             

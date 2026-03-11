@@ -186,6 +186,8 @@ class ServiceOrderController extends Controller
                     'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                     'time_out_image_url' => $order->time_out_image_url ?? null,
                     'status' => $order->status ?? 'unused',
+                    'start_time' => $order->start_time ?? null,
+                    'end_time' => $order->end_time ?? null,
                     'created_at' => $order->created_at,
                     'created_by_user' => $createdUser->name ?? null,
                     'updated_at' => $order->updated_at,
@@ -233,6 +235,8 @@ class ServiceOrderController extends Controller
                 'requested_by' => $request->requested_by,
                 'visit_status' => $request->visit_status,
                 'status' => $request->status ?? 'unused',
+                'start_time' => $request->start_time,
+                'end_time' => $request->end_time,
                 'created_by_user_id' => null,
                 'created_at' => now(),
                 'updated_at' => now()
@@ -413,6 +417,8 @@ class ServiceOrderController extends Controller
                 'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                 'time_out_image_url' => $order->time_out_image_url ?? null,
                 'status' => $order->status ?? 'unused',
+                'start_time' => $order->start_time ?? null,
+                'end_time' => $order->end_time ?? null,
                 'created_at' => $order->created_at,
                 'created_by_user' => $createdUser->name ?? null,
                 'updated_at' => $order->updated_at,
@@ -596,6 +602,14 @@ class ServiceOrderController extends Controller
             
             if ($request->has('assigned_email')) {
                 $updateData['assigned_email'] = $request->assigned_email;
+            }
+
+            if ($request->has('start_time')) {
+                $updateData['start_time'] = $request->start_time;
+            }
+
+            if ($request->has('end_time')) {
+                $updateData['end_time'] = $request->end_time;
             }
             
             if ($request->has('visit_by')) {

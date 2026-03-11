@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions,
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
+import ConfirmationModal from '../modals/MoveToJoModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { updateServiceOrder } from '../services/serviceOrderService';
@@ -55,6 +56,8 @@ interface ServiceOrderDetailsProps {
     region?: string;
     city?: string;
     barangay?: string;
+    start_time?: string | null;
+    end_time?: string | null;
   };
   onClose: () => void;
   isMobile?: boolean;
@@ -221,6 +224,9 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [isStarted, setIsStarted] = useState(!!(serviceOrder as any).start_time);
   const [isEnded, setIsEnded] = useState(!!(serviceOrder as any).end_time);
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsStarted(!!(serviceOrder as any).start_time);
@@ -290,9 +296,12 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
       (serviceOrder as any).start_time = currentTime;
       setIsStarted(true);
+      setSuccessMessage('Timer started successfully!');
+      setShowSuccessModal(true);
       silentRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to start timer:', err);
+      setError(`Failed to start timer: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -310,9 +319,12 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
       (serviceOrder as any).end_time = currentTime;
       setIsEnded(true);
+      setSuccessMessage('Timer ended successfully!');
+      setShowSuccessModal(true);
       silentRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to end timer:', err);
+      setError(`Failed to end timer: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -523,6 +535,22 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
           serviceOrderData={serviceOrder}
         />
       )}
+
+      {error && (
+        <View style={[styles.errorBox, { backgroundColor: '#fef2f2', borderColor: '#fca5a5' }]}>
+          <Text style={{ color: '#991b1b' }}>{error}</Text>
+        </View>
+      )}
+
+      <ConfirmationModal
+        isOpen={showSuccessModal}
+        title="Success"
+        message={successMessage}
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setShowSuccessModal(false)}
+        onCancel={() => setShowSuccessModal(false)}
+      />
     </View>
   );
 };
@@ -561,6 +589,7 @@ const styles = StyleSheet.create({
   valueText: { fontSize: 16 },
   accountDetailsText: { color: '#ef4444' },
   statusText: { fontWeight: '600', textTransform: 'uppercase' },
+  errorBox: { padding: 12, margin: 12, borderRadius: 4, borderWidth: 1 },
 });
 
 export default ServiceOrderDetails;

@@ -13,6 +13,8 @@ export interface WorkOrder {
   requested_date: string;
   updated_by?: string;
   updated_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
 
   // Flexible property for additional fields
   [key: string]: any;
