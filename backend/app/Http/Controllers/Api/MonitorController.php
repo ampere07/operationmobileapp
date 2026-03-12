@@ -607,64 +607,157 @@ class MonitorController extends Controller
                     $name = trim(($tech->first_name ?? '') . ' ' . ($tech->last_name ?? ''));
                     if (!$name) $name = $tech->username;
 
-                    // Check Job Orders (Working if not Done)
-                    $activeJO = DB::table('job_orders')
+                    if (!$name) $name = $tech->username;
+
+                    // --- RESET TIME LOGIC (Every 7:59 AM GMT+8) ---
+                    $now = \Carbon\Carbon::now('Asia/Manila');
+                    $resetTime = $now->copy()->hour(7)->minute(59)->second(0);
+                    if ($now->lt($resetTime)) {
+                        $resetTime->subDay();
+                    }
+
+                    // 1. Fetch ALL tasks (JO/SO) that happened since resetTime
+                    $dailyJOs = DB::table('job_orders')
                         ->where('assigned_email', $email)
-                        ->where('onsite_status', '!=', 'Done')
-                        ->orderByDesc('updated_at')
+                        ->where(function($q) use ($resetTime) {
+                            $q->where('start_time', '>=', $resetTime)
+                              ->orWhere('end_time', '>=', $resetTime)
+                              ->orWhere(function($sq) { $sq->whereNotNull('start_time')->whereNull('end_time'); });
+                        })
+                        ->select('id', 'start_time', 'end_time', DB::raw("'jo' as task_type"))
+                        ->get();
+
+                    $dailySOs = DB::table('service_orders')
+                        ->where('assigned_email', $email)
+                        ->where(function($q) use ($resetTime) {
+                            $q->where('start_time', '>=', $resetTime)
+                              ->orWhere('end_time', '>=', $resetTime)
+                              ->orWhere(function($sq) { $sq->whereNotNull('start_time')->whereNull('end_time'); });
+                        })
+                        ->select('id', 'start_time', 'end_time', DB::raw("'so' as task_type"))
+                        ->get();
+
+                    // Combine and sort by start_time
+                    $allDailyTasks = $dailyJOs->concat($dailySOs)->sortBy('start_time');
+
+                    // 2. Calculate Cumulative Available Time
+                    $totalAvailableSeconds = 0;
+                    $refTime = $resetTime->copy();
+
+                    foreach ($allDailyTasks as $task) {
+                        $tStart = \Carbon\Carbon::parse($task->start_time, 'Asia/Manila');
+                        $tEnd = $task->end_time ? \Carbon\Carbon::parse($task->end_time, 'Asia/Manila') : null;
+
+                        // Ensure task start is not before reset
+                        if ($tStart->lt($resetTime)) $tStart = $resetTime->copy();
+
+                        // Idle gap found?
+                        if ($tStart->gt($refTime)) {
+                            $totalAvailableSeconds += $refTime->diffInSeconds($tStart);
+                        }
+
+                        // Update reference time to end of this task (or now if it's currently running)
+                        $actualEnd = $tEnd ?: $now;
+                        if ($actualEnd->gt($refTime)) {
+                            $refTime = $actualEnd->copy();
+                        }
+                    }
+
+                    // Final gap if they are currently available
+                    if ($refTime->lt($now)) {
+                        $totalAvailableSeconds += $refTime->diffInSeconds($now);
+                    }
+
+                    // Format available time
+                    $avHours = floor($totalAvailableSeconds / 3600);
+                    $avMins = floor(($totalAvailableSeconds % 3600) / 60);
+                    $availableTimeStr = "{$avHours}h {$avMins}m";
+
+                    // --- STATUS LOGIC (AS BEFORE) ---
+                    // 1. Check for CURRENT Working Task (Has start_time, No end_time)
+                    $workingJO = DB::table('job_orders')
+                        ->where('assigned_email', $email)
+                        ->whereNotNull('start_time')
+                        ->whereNull('end_time')
+                        ->orderByDesc('start_time')
                         ->first();
 
-                    // Check Service Orders (Working if not Resolved)
-                    $activeSO = DB::table('service_orders')
+                    $workingSO = DB::table('service_orders')
                         ->where('assigned_email', $email)
-                        ->where('support_status', '!=', 'Resolved')
-                        ->orderByDesc('updated_at')
+                        ->whereNotNull('start_time')
+                        ->whereNull('end_time')
+                        ->orderByDesc('start_time')
                         ->first();
+
+                    // 2. Count assigned tasks (Active but no start_time)
+                    $pendingJO = DB::table('job_orders')
+                        ->where('assigned_email', $email)
+                        ->where('onsite_status', '!=', 'Done')
+                        ->whereNull('start_time')
+                        ->count();
+
+                    $pendingSO = DB::table('service_orders')
+                        ->where('assigned_email', $email)
+                        ->where('visit_status', '!=', 'Resolved')
+                        ->where('visit_status', '!=', 'Done')
+                        ->whereNull('start_time')
+                        ->count();
+
+                    $totalPending = $pendingJO + $pendingSO;
 
                     // Default to Available
                     $status = 'Available';
-                    $details = 'Ready to accept tasks';
+                    $details = $totalPending > 0 ? "Ready to accept ($totalPending assigned)" : 'Ready to accept tasks';
                     $since = null;
                     $type = null;
 
-                    // If active JO exists, they are working
-                    if ($activeJO) {
+                    // If working JO or SO exists, they are working
+                    $joStartTime = $workingJO ? $workingJO->start_time : null;
+                    $soStartTime = $workingSO ? $workingSO->start_time : null;
+
+                    if ($workingJO || $workingSO) {
                         $status = 'Working';
-                        $details = 'Job Order #' . $activeJO->id . ' (' . ($activeJO->onsite_status ?? 'Unknown') . ')';
-                        $since = $activeJO->updated_at ?? $activeJO->created_at;
-                        $type = 'jo';
-                    } 
-                    // Else if active SO exists, they are working
-                    elseif ($activeSO) {
-                        $status = 'Working';
-                        $details = 'Service Order #' . $activeSO->id . ' (' . ($activeSO->support_status ?? 'Unknown') . ')';
-                        $since = $activeSO->updated_at ?? $activeSO->created_at;
-                        $type = 'so';
+                        if ($workingJO && (!$workingSO || $joStartTime > $soStartTime)) {
+                            $details = 'Job Order #' . $workingJO->id . ' (' . ($workingJO->onsite_status ?? 'Unknown') . ')';
+                            $since = $joStartTime;
+                            $type = 'jo';
+                        } else {
+                            $details = 'Service Order #' . $workingSO->id . ' (' . ($workingSO->visit_status ?? 'Unknown') . ')';
+                            $since = $soStartTime;
+                            $type = 'so';
+                        }
                     } 
                     // Otherwise they are available, find when they finished last task
                     else {
-                        // Find last finished JO
+                        // Find last finished JO/SO with end_time
                         $lastJO = DB::table('job_orders')
                             ->where('assigned_email', $email)
-                            ->where('onsite_status', 'Done')
-                            ->orderByDesc('updated_at')
+                            ->whereNotNull('end_time')
+                            ->orderByDesc('end_time')
                             ->first();
 
-                        // Find last finished SO
                         $lastSO = DB::table('service_orders')
                             ->where('assigned_email', $email)
-                            ->where('support_status', 'Resolved')
-                            ->orderByDesc('updated_at')
+                            ->whereNotNull('end_time')
+                            ->orderByDesc('end_time')
                             ->first();
                         
-                        $joTime = $lastJO ? ($lastJO->updated_at ?? $lastJO->created_at) : null;
-                        $soTime = $lastSO ? ($lastSO->updated_at ?? $lastSO->created_at) : null;
+                        $joTime = $lastJO ? $lastJO->end_time : null;
+                        $soTime = $lastSO ? $lastSO->end_time : null;
                         
-                        // Compare who is later
                         if ($joTime && $soTime) {
                             $since = ($joTime > $soTime) ? $joTime : $soTime;
                         } else {
                             $since = $joTime ?? $soTime ?? null;
+                        }
+
+                        // Fallback if no end_time ever recorded
+                        if (!$since) {
+                            $lastActivity = DB::table('activity_log')
+                                ->where('description', 'LIKE', "%$email%")
+                                ->orderByDesc('created_at')
+                                ->first();
+                            $since = $lastActivity ? $lastActivity->created_at : $tech->created_at ?? now();
                         }
                     }
 
@@ -685,7 +778,8 @@ class MonitorController extends Controller
                             'status' => $status,
                             'details' => $details,
                             'since' => $since,
-                            'type' => $type
+                            'type' => $type,
+                            'available_time_str' => $availableTimeStr
                         ]
                     ];
                 }
@@ -713,7 +807,8 @@ class MonitorController extends Controller
                             COALESCE(applications.region, '')
                         ) as address"),
                         // Cast updated_at to char to match service_orders type if diff, or just for safety
-                        DB::raw("CAST(job_orders.updated_at AS CHAR) as start_time_str"),
+                        DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
                         'job_orders.onsite_status as status'
                     )
                     ->where('job_orders.onsite_status', '!=', 'Done')
@@ -736,7 +831,8 @@ class MonitorController extends Controller
                             COALESCE(customers.city, ''), ' ', 
                             COALESCE(customers.region, '')
                         ) as address"),
-                        DB::raw("CAST(service_orders.updated_at AS CHAR) as start_time_str"),
+                        DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
                         'service_orders.visit_status as status'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
@@ -749,7 +845,9 @@ class MonitorController extends Controller
                 // Calculate duration in PHP
                 $data = $all->map(function ($item) {
                     $startStr = $item->start_time_str ?? null;
+                    $endStr = $item->end_time_str ?? null;
                     $start = $startStr ? \Carbon\Carbon::parse($startStr) : null;
+                    $end = $endStr ? \Carbon\Carbon::parse($endStr) : null;
                     
                     if (!$start) {
                         return [
@@ -762,14 +860,15 @@ class MonitorController extends Controller
                         ];
                     }
 
-                    $now = \Carbon\Carbon::now();
+                    $endTime = $end ?: \Carbon\Carbon::now();
                     
                     // Duration string
-                    $diff = $start->diff($now);
+                    $diff = $start->diff($endTime);
                     $duration = "";
                     if ($diff->d > 0) $duration .= $diff->d . "d ";
                     if ($diff->h > 0) $duration .= $diff->h . "h ";
-                    $duration .= $diff->i . "m";
+                    $duration .= $diff->i . "m ";
+                    $duration .= $diff->s . "s";
 
                     return [
                         'team_name' => $item->team_name,
@@ -801,7 +900,8 @@ class MonitorController extends Controller
                             COALESCE(applications.city, ''), ' ', 
                             COALESCE(applications.region, '')
                         ) as address"),
-                        DB::raw("CAST(job_orders.updated_at AS CHAR) as start_time_str"),
+                        DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
                         'job_orders.onsite_status as status'
                     )
                     ->where('job_orders.onsite_status', '!=', 'Done')
@@ -823,7 +923,8 @@ class MonitorController extends Controller
                             COALESCE(customers.city, ''), ' ', 
                             COALESCE(customers.region, '')
                         ) as address"),
-                        DB::raw("CAST(service_orders.updated_at AS CHAR) as start_time_str"),
+                        DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
                         'service_orders.visit_status as status'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
@@ -835,7 +936,9 @@ class MonitorController extends Controller
 
                 $data = $all->map(function ($item) {
                     $startStr = $item->start_time_str ?? null;
+                    $endStr = $item->end_time_str ?? null;
                     $start = $startStr ? \Carbon\Carbon::parse($startStr) : null;
+                    $end = $endStr ? \Carbon\Carbon::parse($endStr) : null;
                     
                     if (!$start) {
                         return [
@@ -848,12 +951,13 @@ class MonitorController extends Controller
                         ];
                     }
 
-                    $now = \Carbon\Carbon::now();
-                    $diff = $start->diff($now);
+                    $endTime = $end ?: \Carbon\Carbon::now();
+                    $diff = $start->diff($endTime);
                     $duration = "";
                     if ($diff->d > 0) $duration .= $diff->d . "d ";
                     if ($diff->h > 0) $duration .= $diff->h . "h ";
-                    $duration .= $diff->i . "m";
+                    $duration .= $diff->i . "m ";
+                    $duration .= $diff->s . "s";
 
                     return [
                         'team_name' => $item->team_name,

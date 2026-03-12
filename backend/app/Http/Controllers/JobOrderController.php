@@ -109,6 +109,8 @@ class JobOrderController extends Controller
                         'Status' => $jobOrder->status,
                         'status' => $jobOrder->status,
                         'updated_at' => $jobOrder->updated_at ? $jobOrder->updated_at->format('Y-m-d H:i:s') : null,
+                        'start_time' => $jobOrder->start_time,
+                        'end_time' => $jobOrder->end_time,
                     ];
                 });
 
@@ -150,6 +152,8 @@ class JobOrderController extends Controller
                     'pppoe_password' => $jobOrder->pppoe_password,
                     
                     'date_installed' => $jobOrder->date_installed,
+                    'start_time' => $jobOrder->start_time,
+                    'end_time' => $jobOrder->end_time,
                     'usage_type' => $jobOrder->usage_type,
                     'connection_type' => $jobOrder->connection_type,
                     'router_model' => $jobOrder->router_model,
@@ -534,6 +538,8 @@ class JobOrderController extends Controller
                 'custom_password' => 'nullable|string|max:255',
                 'created_by_user_email' => 'nullable|email|max:255',
                 'updated_by_user_email' => 'nullable|email|max:255',
+                'start_time' => 'nullable|date',
+                'end_time' => 'nullable|date',
             ]);
 
             if ($validator->fails()) {

@@ -814,7 +814,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
-          {userRoleId === 2 && !isEnded && (
+          {userRoleId === 2 && !isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
             <>
               {!isStarted ? (
                 <Pressable

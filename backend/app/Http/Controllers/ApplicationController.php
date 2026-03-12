@@ -18,15 +18,22 @@ class ApplicationController extends Controller
             $limit = $request->input('limit', 50); // Default 50 for faster response
             $search = $request->input('search', '');
             $fastMode = $request->input('fast', false); // Fast mode: skip heavy processing
+            $since = $request->input('since'); // Filter by updated_at since this timestamp
 
             Log::info('ApplicationController: Starting to fetch applications', [
                 'page' => $page,
                 'limit' => $limit,
                 'search' => $search,
-                'fast_mode' => $fastMode
+                'fast_mode' => $fastMode,
+                'since' => $since
             ]);
 
             $query = Application::orderBy('id', 'desc');
+
+            // Apply 'since' filter if provided
+            if ($since) {
+                $query->where('updated_at', '>', $since);
+            }
 
             // Apply search filter
             if ($search) {
