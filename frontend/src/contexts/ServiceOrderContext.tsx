@@ -53,6 +53,8 @@ interface ServiceOrder {
     city?: string;
     barangay?: string;
     referredBy?: string;
+    start_time?: string | null;
+    end_time?: string | null;
 }
 
 interface ServiceOrderContextType {
@@ -134,7 +136,9 @@ const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => {
         region: order.region || '',
         city: order.city || '',
         barangay: order.barangay || '',
-        referredBy: order.referred_by || ''
+        referredBy: order.referred_by || '',
+        start_time: order.start_time || null,
+        end_time: order.end_time || null
     };
 };
 

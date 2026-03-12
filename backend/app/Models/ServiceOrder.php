@@ -67,6 +67,7 @@ class ServiceOrder extends Model
         'router_model',
         'start_time',
         'end_time',
+        'proof_image_url',
     ];
     
     protected $dates = [

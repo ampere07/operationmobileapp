@@ -646,7 +646,7 @@ class TransactionController extends Controller
     {
         try {
             $request->validate([
-                'status' => 'required|string|in:Pending,Done,Processing,Cancelled'
+                'status' => 'required|string|in:Pending,Done,Processing,Cancelled,Failed'
             ]);
 
             DB::beginTransaction();

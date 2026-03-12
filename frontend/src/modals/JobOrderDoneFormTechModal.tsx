@@ -926,7 +926,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (selectedItems.length === 0 && !hasNoneItem) {
         newErrors.items = 'At least one item or "None" is required';
       } else {
-        selectedItems.forEach((item, idx) => {
+      selectedItems.forEach((item, idx) => {
           if (!item.quantity || parseInt(item.quantity) <= 0) {
             newErrors[`quantity_${idx}`] = 'Valid quantity is required';
             // Also set a general error message if it's the first problem found
@@ -934,6 +934,29 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           }
         });
       }
+
+      // Image and Signature Validations for 'Done'
+      if (!formData.boxReadingImage && !jobOrderData?.box_reading_image_url && !jobOrderData?.Box_Reading_Image_URL)
+        newErrors.boxReadingImage = 'Box Reading Image is required';
+
+      if (!formData.routerReadingImage && !jobOrderData?.router_reading_image_url && !jobOrderData?.Router_Reading_Image_URL)
+        newErrors.routerReadingImage = 'Router Reading Image is required';
+
+      if ((formData.connectionType === 'Antenna' || formData.connectionType === 'Local') &&
+        !formData.portLabelImage && !jobOrderData?.port_label_image_url && !jobOrderData?.Port_Label_Image_URL)
+        newErrors.portLabelImage = 'Port Label Image is required';
+
+      if (!formData.setupImage && !jobOrderData?.setup_image_url && !jobOrderData?.Setup_Image_URL)
+        newErrors.setupImage = 'Setup Image is required';
+
+      if (!formData.signedContractImage && !jobOrderData?.signed_contract_image_url && !jobOrderData?.Signed_Contract_Image_URL)
+        newErrors.signedContractImage = 'Signed Contract Image is required';
+
+      if (!formData.clientSignatureImage && !jobOrderData?.client_signature_url && !jobOrderData?.Client_Signature_URL)
+        newErrors.clientSignatureImage = 'Client Signature is required';
+
+      if (!formData.speedTestImage && !jobOrderData?.speedtest_image_url && !jobOrderData?.Speedtest_Image_URL)
+        newErrors.speedTestImage = 'Speed Test Image is required';
 
 
     }
@@ -2629,14 +2652,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.boxReadingImage}
-                          label="Box Reading Image"
+                          label="Box Reading Image *"
                           onUpload={(file) => handleImageUpload('boxReadingImage', file)}
                           error={errors.boxReadingImage}
                         />
 
                         <ImagePreview
                           imageUrl={imagePreviews.routerReadingImage}
-                          label="Router Reading Image"
+                          label="Router Reading Image *"
                           onUpload={(file) => handleImageUpload('routerReadingImage', file)}
                           error={errors.routerReadingImage}
                         />
@@ -2644,7 +2667,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
                           <ImagePreview
                             imageUrl={imagePreviews.portLabelImage}
-                            label="Port Label Image"
+                            label="Port Label Image *"
                             onUpload={(file) => handleImageUpload('portLabelImage', file)}
                             error={errors.portLabelImage}
                           />
@@ -2652,20 +2675,22 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.setupImage}
-                          label="Setup Image"
+                          label="Setup Image *"
                           onUpload={(file) => handleImageUpload('setupImage', file)}
                           error={errors.setupImage}
                         />
 
                         <ImagePreview
                           imageUrl={imagePreviews.signedContractImage}
-                          label="Signed Contract Image"
+                          label="Signed Contract Image *"
                           onUpload={(file) => handleImageUpload('signedContractImage', file)}
                           error={errors.signedContractImage}
                         />
 
                         <View style={styles.inputGroup}>
-                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature Image</Text>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            Client Signature Image<Text style={styles.required}>*</Text>
+                          </Text>
                           {!isDrawingSignature ? (
                             <View>
                               <Pressable
@@ -2745,7 +2770,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.speedTestImage}
-                          label="Speed Test Image"
+                          label="Speed Test Image *"
                           onUpload={(file) => handleImageUpload('speedTestImage', file)}
                           error={errors.speedTestImage}
                         />

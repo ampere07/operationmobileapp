@@ -39,6 +39,7 @@ interface FormDataState {
   nap_name: string;
   port_total: string;
   lcpnap_name: string;
+  location: string;
   coordinates: string;
   image: { uri: string; type: string; name: string } | null;
   image_2: { uri: string; type: string; name: string } | null;
@@ -57,6 +58,7 @@ const INITIAL_FORM: FormDataState = {
   nap_name: '',
   port_total: '',
   lcpnap_name: '',
+  location: '',
   coordinates: '',
   image: null,
   image_2: null,
@@ -367,6 +369,12 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
     }
   }, [formData.lcp_name, formData.nap_name]);
 
+  useEffect(() => {
+    const { street, barangay, city, region, lcpnap_name } = formData;
+    const addr = [street, barangay, city, region].filter(Boolean).join(', ');
+    setFormData(prev => ({ ...prev, location: addr || lcpnap_name || '' }));
+  }, [formData.street, formData.barangay, formData.city, formData.region, formData.lcpnap_name]);
+
   const filteredCities = useMemo(() => {
     if (!formData.region) return [];
     const reg = regions.find(r => r.name === formData.region);
@@ -481,6 +489,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       submitData.append('nap_id', selectedNap?.id.toString() || '');
       submitData.append('port_total', formData.port_total);
       submitData.append('lcpnap_name', formData.lcpnap_name);
+      submitData.append('location', formData.location || formData.lcpnap_name);
       submitData.append('coordinates', formData.coordinates);
       if (formData.image) submitData.append('image', formData.image as any);
       if (formData.image_2) submitData.append('image_2', formData.image_2 as any);
@@ -509,13 +518,19 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       setShowLoadingModal(false);
       setResultType('error');
 
-      const message = error?.response?.data?.message || error?.message || 'Failed to save';
+      const data = error?.response?.data;
+      const message = data?.message || error?.message || 'Failed to save';
 
       if (message.toLowerCase().includes('already exist') || message.toLowerCase().includes('duplicate') || message.toLowerCase().includes('existing')) {
         setResultMessage(`LCPNAP Name ${formData.lcpnap_name} already existing`);
       } else {
-        const errorDetails = error?.response?.data?.error || '';
-        setResultMessage(`Error: ${message}${errorDetails ? ` - ${errorDetails}` : ''}`);
+        let details = '';
+        if (data?.errors) {
+          details = Object.entries(data.errors)
+            .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : val}`)
+            .join('\n');
+        }
+        setResultMessage(`Error: ${message}${details ? `\n\n${details}` : ''}`);
       }
 
       setShowResultModal(true);

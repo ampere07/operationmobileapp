@@ -62,7 +62,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('A4', 'portrait');
+            $this->dompdf->setPaper('letter', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();
@@ -133,7 +133,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('A4', 'portrait');
+            $this->dompdf->setPaper('letter', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();
@@ -194,7 +194,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('A4', 'portrait');
+            $this->dompdf->setPaper('letter', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();

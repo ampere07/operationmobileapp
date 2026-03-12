@@ -14,19 +14,18 @@ class EmailTemplateController extends Controller
     {
         try {
             $templates = EmailTemplate::orderBy('Template_Code')->get();
-
+            
             return response()->json([
                 'success' => true,
                 'data' => $templates,
                 'count' => $templates->count()
             ]);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error fetching email templates', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch email templates',
@@ -88,13 +87,12 @@ class EmailTemplateController extends Controller
                 'message' => 'Email template created successfully',
                 'data' => $template
             ], 201);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error creating email template', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create email template',
@@ -107,7 +105,7 @@ class EmailTemplateController extends Controller
     {
         try {
             $template = EmailTemplate::where('Template_Code', $templateCode)->first();
-
+            
             if (!$template) {
                 return response()->json([
                     'success' => false,
@@ -119,13 +117,12 @@ class EmailTemplateController extends Controller
                 'success' => true,
                 'data' => $template
             ]);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error fetching email template', [
                 'template_code' => $templateCode,
                 'error' => $e->getMessage()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch email template',
@@ -138,7 +135,7 @@ class EmailTemplateController extends Controller
     {
         try {
             $template = EmailTemplate::where('Template_Code', $templateCode)->first();
-
+            
             if (!$template) {
                 return response()->json([
                     'success' => false,
@@ -229,14 +226,13 @@ class EmailTemplateController extends Controller
                 'message' => 'Email template updated successfully',
                 'data' => $template->fresh()
             ]);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error updating email template', [
                 'template_code' => $templateCode,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update email template',
@@ -249,7 +245,7 @@ class EmailTemplateController extends Controller
     {
         try {
             $template = EmailTemplate::where('Template_Code', $templateCode)->first();
-
+            
             if (!$template) {
                 return response()->json([
                     'success' => false,
@@ -267,14 +263,13 @@ class EmailTemplateController extends Controller
                 'success' => true,
                 'message' => 'Email template deleted successfully'
             ]);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error deleting email template', [
                 'template_code' => $templateCode,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete email template',
@@ -287,7 +282,7 @@ class EmailTemplateController extends Controller
     {
         try {
             $template = EmailTemplate::where('Template_Code', $templateCode)->first();
-
+            
             if (!$template) {
                 return response()->json([
                     'success' => false,
@@ -308,13 +303,12 @@ class EmailTemplateController extends Controller
                 'message' => 'Template status updated successfully',
                 'data' => $template
             ]);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Error toggling template status', [
                 'template_code' => $templateCode,
                 'error' => $e->getMessage()
             ]);
-
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update template status',
@@ -323,3 +317,4 @@ class EmailTemplateController extends Controller
         }
     }
 }
+

@@ -118,7 +118,7 @@ const initialVisibility = defaultFields.reduce((acc: Record<string, boolean>, fi
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
   try {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.replace(' ', 'T'));
     if (isNaN(d.getTime())) return dateStr;
     const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
     const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -131,7 +131,7 @@ const formatDate = (dateStr?: string | null): string => {
 const formatDateOnly = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   try {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.replace(' ', 'T'));
     if (isNaN(d.getTime())) return dateStr;
     return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
   } catch (e) {
@@ -227,6 +227,21 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isStarted && !isEnded) {
+      interval = setInterval(() => {
+        setNow(new Date());
+      }, 1000);
+    } else {
+      setNow(new Date());
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isStarted, isEnded]);
 
   useEffect(() => {
     setIsStarted(!!(serviceOrder as any).start_time);
@@ -348,7 +363,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const valStyle = [styles.valueText, { color: '#111827' }];
 
   const isFieldEmpty = useCallback((fieldKey: string): boolean => {
-    if (fieldKey === 'duration') return !(serviceOrder as any).start_time || !(serviceOrder as any).end_time;
+    if (fieldKey === 'duration') return !(serviceOrder as any).start_time;
     if (fieldKey === 'startTime') return !(serviceOrder as any).start_time;
     if (fieldKey === 'endTime') return !(serviceOrder as any).end_time;
 
@@ -370,17 +385,22 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   }, [serviceOrder]);
 
   const getDurationString = (start?: string | null, end?: string | null): string => {
-    if (!start || !end) return 'N/A';
-    const startTime = new Date(start.replace(' ', 'T')).getTime();
-    const endTime = new Date(end.replace(' ', 'T')).getTime();
-    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
-    
-    const diff = Math.max(0, endTime - startTime);
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
-    return `${hours}h ${minutes}m ${seconds}s`;
+    if (!start) return 'N/A';
+    try {
+      const startTime = new Date(start.replace(' ', 'T')).getTime();
+      const endTime = end ? new Date(end.replace(' ', 'T')).getTime() : now.getTime();
+      
+      if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+      
+      const diff = Math.max(0, endTime - startTime);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      return `${hours}h ${minutes}m ${seconds}s`;
+    } catch (e) {
+      return 'N/A';
+    }
   };
 
   const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
@@ -437,7 +457,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
     clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
     serviceCharge: () => <Text style={valStyle}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
-  }), [serviceOrder, userRole, userRoleId, isFieldEmpty]);
+  }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded]);
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>

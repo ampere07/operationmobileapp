@@ -1125,22 +1125,24 @@ Route::post('/login', function (Request $request) {
 });
 
 Route::post('/forgot-password', function (Request $request) {
-    $accountNo = $request->input('account_no');
+    $identifier = $request->input('email') ?: $request->input('account_no');
     
-    if (!$accountNo) {
+    if (!$identifier) {
         return response()->json([
             'status' => 'error',
-            'message' => 'Account number is required'
+            'message' => 'Email address or account number is required'
         ], 400);
     }
     
-    // Account Number maps to username in the users table
-    $user = \App\Models\User::where('username', $accountNo)->first();
+    // Find user by username (account number) or email address
+    $user = \App\Models\User::where('username', $identifier)
+               ->orWhere('email_address', $identifier)
+               ->first();
     
     if (!$user) {
         return response()->json([
             'status' => 'error',
-            'message' => 'Account number not found'
+            'message' => 'Account or email not found'
         ], 404);
     }
     
@@ -1151,38 +1153,13 @@ Route::post('/forgot-password', function (Request $request) {
         ], 400);
     }
     
-    // For customers, the password is typically their contact number.
-    // Since password_hash is hashed, we send the contact_number which is the common practice in this system.
-    $password = $user->contact_number ?: 'N/A';
-    
     try {
         $emailQueueService = app(\App\Services\EmailQueueService::class);
-        $emailQueueService->queueEmail([
-            'account_no' => $user->username,
-            'recipient_email' => $user->email_address,
-            'subject' => 'Account Recovery - ATSS Fiber',
-            'body_html' => "
-                <div style='font-family: Arial, sans-serif; color: #333;'>
-                    <h2>Account Recovery</h2>
-                    <p>Hello <strong>{$user->full_name}</strong>,</p>
-                    <p>We received a request for your account details. Here is your login information:</p>
-                    <div style='background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;'>
-                        <p style='margin: 5px 0;'><strong>Account Number:</strong> {$user->username}</p>
-                        <p style='margin: 5px 0;'><strong>Password:</strong> {$password}</p>
-                    </div>
-                    <p>If you did not request this information, please ignore this email.</p>
-                    <br>
-                    <p>Best regards,<br><strong>ATSS Fiber Team</strong></p>
-                </div>
-            ",
-            'email_sender' => 'billing@atssfiber.ph',
-            'reply_to' => 'billing@atssfiber.ph',
-            'sender_name' => 'ATSS Fiber'
-        ]);
+        $emailQueueService->sendUserCredentials($user);
         
         return response()->json([
             'status' => 'success',
-            'message' => 'Your account number and password have been sent to your registered email address.'
+            'message' => 'Your account details have been sent to your registered email address.'
         ]);
     } catch (\Exception $e) {
         \Log::error('Forgot password email queuing failed', ['error' => $e->getMessage()]);
@@ -2182,6 +2159,7 @@ Route::prefix('email-queue')->group(function () {
     Route::post('/retry-failed', [EmailQueueController::class, 'retryFailed']);
     Route::post('/{id}/retry', [EmailQueueController::class, 'retry']);
     Route::delete('/{id}', [EmailQueueController::class, 'delete']);
+    Route::post('/send-credentials/{userId}', [EmailQueueController::class, 'sendUserCredentials']);
 });
 
 // Settings Image Size Management Routes

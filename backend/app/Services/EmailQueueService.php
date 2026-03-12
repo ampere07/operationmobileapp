@@ -198,5 +198,42 @@ class EmailQueueService
 
         return $text;
     }
+
+    /**
+     * Send credentials to a user.
+     * 
+     * @param \App\Models\User $user
+     * @return EmailQueue|null
+     */
+    public function sendUserCredentials(\App\Models\User $user): ?EmailQueue
+    {
+        // For customers, the password is typically their contact number.
+        $password = $user->contact_number ?: 'N/A';
+        
+        return $this->queueEmail([
+            'account_no' => $user->username,
+            'recipient_email' => $user->email_address,
+            'subject' => 'Account Credentials - ATSS Fiber',
+            'body_html' => "
+                <div style='font-family: Arial, sans-serif; color: #333; line-height: 1.6;'>
+                    <h2 style='color: #7c3aed;'>Welcome to ATSS Fiber</h2>
+                    <p>Hello <strong>{$user->full_name}</strong>,</p>
+                    <p>Your account has been activated. Below are your login credentials for our customer portal:</p>
+                    <div style='background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #7c3aed;'>
+                        <p style='margin: 5px 0;'><strong>Account Number:</strong> <code style='background: #eee; padding: 2px 4px; border-radius: 4px;'>{$user->username}</code></p>
+                        <p style='margin: 5px 0;'><strong>Password:</strong> <code style='background: #eee; padding: 2px 4px; border-radius: 4px;'>{$password}</code></p>
+                    </div>
+                    <p>Please keep these credentials secure. You can use them to log in to our portal to view your billing statements and manage your account.</p>
+                    <br>
+                    <p>Best regards,<br><strong>ATSS Fiber Team</strong></p>
+                    <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
+                    <p style='font-size: 11px; color: #666;'>This is an automated message, please do not reply directly to this email.</p>
+                </div>
+            ",
+            'email_sender' => 'billing@atssfiber.ph',
+            'reply_to' => 'billing@atssfiber.ph',
+            'sender_name' => 'ATSS Fiber'
+        ]);
+    }
 }
 

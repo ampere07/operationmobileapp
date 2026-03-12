@@ -191,7 +191,8 @@ class ServiceOrderApiController extends Controller
                 'start_time' => 'nullable|date',
                 'end_time' => 'nullable|date',
                 'created_by_user' => 'nullable|string|max:255',
-                'updated_by_user' => 'nullable|string|max:255'
+                'updated_by_user' => 'nullable|string|max:255',
+                'proof_image_url' => 'nullable|string|max:255'
             ]);
 
             // Enforce limit: 5 tickets per day per account, with 1 hour interval
@@ -266,6 +267,7 @@ class ServiceOrderApiController extends Controller
                 'end_time' => $validated['end_time'] ?? null,
                 'created_by_user' => $validated['created_by_user'] ?? null,
                 'updated_by_user' => $validated['updated_by_user'] ?? null,
+                'proof_image_url' => $request->input('proof_image_url'),
                 'created_at' => now(),
                 'updated_at' => now()
             ];
@@ -414,6 +416,7 @@ class ServiceOrderApiController extends Controller
                     'so.image1_url',
                     'so.image2_url',
                     'so.image3_url',
+                    'so.proof_image_url',
                     'so.status',
                     'so.start_time',
                     'so.end_time',
@@ -500,6 +503,7 @@ class ServiceOrderApiController extends Controller
                 'image1_url',
                 'image2_url',
                 'image3_url',
+                'proof_image_url',
                 'status',
                 'start_time',
                 'end_time',

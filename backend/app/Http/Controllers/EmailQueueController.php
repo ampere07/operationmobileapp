@@ -177,4 +177,38 @@ class EmailQueueController extends Controller
 
         return response()->json($stats);
     }
+
+    /**
+     * Send credentials to a specific user.
+     * 
+     * @param int $userId
+     * @return JsonResponse
+     */
+    public function sendUserCredentials(int $userId): JsonResponse
+    {
+        try {
+            $user = \App\Models\User::findOrFail($userId);
+            
+            if (!$user->email_address) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User does not have an email address'
+                ], 400);
+            }
+
+            $email = $this->emailQueueService->sendUserCredentials($user);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Credentials email queued successfully',
+                'data' => $email
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to queue credentials email',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

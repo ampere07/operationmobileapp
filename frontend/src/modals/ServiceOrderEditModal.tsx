@@ -87,6 +87,7 @@ interface ServiceOrderEditFormData {
 
   newLcpnap: string;
   fullAddress: string;
+  proofImage: string;
 }
 
 interface ImageFiles {
@@ -94,6 +95,7 @@ interface ImageFiles {
   modemSetupFile: ImagePicker.ImagePickerAsset | null;
   timeOutFile: ImagePicker.ImagePickerAsset | null;
   clientSignatureFile: ImagePicker.ImagePickerAsset | null;
+  proofImageFile: ImagePicker.ImagePickerAsset | null;
 }
 
 const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
@@ -474,7 +476,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
-  const currentUserEmail = currentUser?.email || currentUser?.email_address || 'unknown@ampere.com';
+  const currentUserEmail = currentUser?.email_address || currentUser?.email || 'unknown@ampere.com';
   const isTechnician = currentUser?.role_id === 2 || (typeof currentUser?.role === 'string' && currentUser.role.toLowerCase() === 'technician') || (typeof currentUser?.role === 'object' && currentUser.role.role_name.toLowerCase() === 'technician');
 
   const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
@@ -541,7 +543,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     newPlan: '',
 
     newLcpnap: '',
-    fullAddress: ''
+    fullAddress: '',
+    proofImage: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -550,7 +553,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     timeInFile: null,
     modemSetupFile: null,
     timeOutFile: null,
-    clientSignatureFile: null
+    clientSignatureFile: null,
+    proofImageFile: null
   });
 
   // Signature Drawing State
@@ -940,10 +944,22 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
         routerModel: serviceOrderData.routerModel || serviceOrderData.router_model || '',
         newLcpnap: serviceOrderData.newLcpnap || serviceOrderData.new_lcpnap || '',
-        fullAddress: serviceOrderData.fullAddress || serviceOrderData.full_address || ''
+        fullAddress: serviceOrderData.fullAddress || serviceOrderData.full_address || '',
+        proofImage: serviceOrderData.proofImage || serviceOrderData.proof_image_url || serviceOrderData.proof_image || '',
+        modifiedBy: currentUserEmail
       }));
     }
   }, [serviceOrderData, isOpen, currentUserEmail]);
+
+  // Sync modifiedBy with currentUserEmail when user is loaded
+  useEffect(() => {
+    if (currentUserEmail && currentUserEmail !== 'unknown@ampere.com') {
+      setFormData(prev => ({
+        ...prev,
+        modifiedBy: currentUserEmail
+      }));
+    }
+  }, [currentUserEmail]);
 
   // Save draft to AsyncStorage - debounced to prevent async storm on every keystroke
   useEffect(() => {
@@ -1163,6 +1179,20 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         if (formData.repairCategory === 'Replace Router' && !formData.newRouterModemSN) {
           newErrors.newRouterModemSN = 'New Router Modem SN is required';
         }
+
+        // Image and Signature Validations for 'Done'
+        if (!formData.timeIn && !imageFiles.timeInFile) {
+          newErrors.timeInFile = 'Time In Image is required';
+        }
+        if (!formData.modemSetupImage && !imageFiles.modemSetupFile) {
+          newErrors.modemSetupFile = 'Modem Setup Image is required';
+        }
+        if (!formData.timeOut && !imageFiles.timeOutFile) {
+          newErrors.timeOutFile = 'Time Out Image is required';
+        }
+        if (!formData.clientSignature && !imageFiles.clientSignatureFile) {
+          newErrors.clientSignatureFile = 'Client Signature is required';
+        }
       } else if (formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') {
         if (!formData.visitBy) {
           newErrors.visitBy = 'Visit By is required';
@@ -1174,6 +1204,13 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         if (!formData.visitWithOther) {
           newErrors.visitWithOther = 'Visit With Other is required';
         }
+      }
+    }
+
+    // Proof Image validation for failures
+    if (formData.supportStatus === 'Failed' || (formData.supportStatus === 'For Visit' && formData.visitStatus === 'Failed')) {
+      if (!formData.proofImage && !imageFiles.proofImageFile) {
+        newErrors.proofImageFile = 'Proof Image is required';
       }
     }
 
@@ -1286,7 +1323,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         timeInFile: 'image1_url',
         modemSetupFile: 'image2_url',
         timeOutFile: 'image3_url',
-        clientSignatureFile: 'client_signature_url'
+        clientSignatureFile: 'client_signature_url',
+        proofImageFile: 'proof_image_url'
       };
 
       for (const key of fileKeys) {
@@ -1310,6 +1348,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         image1_url: uploadedUrls.image1_url || updatedFormData.timeIn,
         image2_url: uploadedUrls.image2_url || updatedFormData.modemSetupImage,
         image3_url: uploadedUrls.image3_url || updatedFormData.timeOut,
+        proof_image_url: uploadedUrls.proof_image_url || updatedFormData.proofImage || '',
         assigned_email: updatedFormData.assignedEmail,
         concern: updatedFormData.concern,
         concern_remarks: updatedFormData.concernRemarks,
@@ -1844,6 +1883,19 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                     {renderPicker('supportStatus', ['Resolved', 'Failed', 'In Progress', 'For Visit'], 'Support Status')}
 
+                    {formData.supportStatus === 'Failed' && (
+                      <View style={styles.inputGroup}>
+                        <ImagePreview
+                          label="Proof Image *"
+                          imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage}
+                          onUpload={(file) => handleImageUpload('proofImageFile', file)}
+                          error={errors.proofImageFile}
+                          isDarkMode={isDarkMode}
+                          colorPrimary={colorPalette?.primary}
+                        />
+                      </View>
+                    )}
+
                     {formData.supportStatus === 'For Visit' && (
                       <>
                         {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
@@ -1999,7 +2051,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             {renderInput('visitRemarks', 'Visit Remarks')}
 
                             <View style={[styles.inputGroup, { zIndex: 50 }]}>
-                              {renderLabel('Client Signature')}
+                              {renderLabel('Client Signature', true)}
                               {!isDrawingSignature ? (
                                 <View>
                                   <Pressable
@@ -2056,6 +2108,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                     </Pressable>
                                   </View>
                                 </View>
+                              )}
+                              {errors.clientSignatureFile && (
+                                <Text style={styles.errorText}>{errors.clientSignatureFile}</Text>
                               )}
                             </View>
 
@@ -2136,7 +2191,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                             <View style={styles.inputGroup}>
                               <ImagePreview
-                                label="Time In Image"
+                                label="Time In Image *"
                                 imageUrl={imageFiles.timeInFile?.uri || formData.timeIn}
                                 onUpload={(file) => handleImageUpload('timeInFile', file)}
                                 error={errors.timeInFile}
@@ -2147,7 +2202,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                             <View style={styles.inputGroup}>
                               <ImagePreview
-                                label="Modem Setup Image"
+                                label="Modem Setup Image *"
                                 imageUrl={imageFiles.modemSetupFile?.uri || formData.modemSetupImage}
                                 onUpload={(file) => handleImageUpload('modemSetupFile', file)}
                                 error={errors.modemSetupFile}
@@ -2236,6 +2291,19 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                             </View>
 
                             {renderInput('visitRemarks', 'Visit Remarks')}
+
+                            {formData.visitStatus === 'Failed' && (
+                              <View style={styles.inputGroup}>
+                                <ImagePreview
+                                  label="Proof Image *"
+                                  imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage}
+                                  onUpload={(file) => handleImageUpload('proofImageFile', file)}
+                                  error={errors.proofImageFile}
+                                  isDarkMode={isDarkMode}
+                                  colorPrimary={colorPalette?.primary}
+                                />
+                              </View>
+                            )}
                           </>
                         )}
                       </>
