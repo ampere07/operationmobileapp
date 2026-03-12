@@ -404,6 +404,24 @@ const JobOrderPage: React.FC = () => {
         if (!matchesAgent) return false;
       }
 
+      // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
+      if (userRoleId === 2) {
+        const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase();
+        if (onsiteStatus === 'done' || onsiteStatus === 'completed') {
+          // Use updated_at or EndTimeStamp to determine when it was completed
+          const completionTime = jobOrder.Updated_At || jobOrder.updated_at || jobOrder.EndTimeStamp || jobOrder.end_timestamp;
+          if (completionTime) {
+            const completionDate = new Date(completionTime);
+            const today = new Date();
+            const isToday = completionDate.getFullYear() === today.getFullYear() &&
+              completionDate.getMonth() === today.getMonth() &&
+              completionDate.getDate() === today.getDate();
+
+            if (!isToday) return false;
+          }
+        }
+      }
+
       // Apply funnel filters
       for (const key in filterValues) {
         const filter = filterValues[key];

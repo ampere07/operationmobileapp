@@ -144,7 +144,28 @@ const WorkOrderPage: React.FC = () => {
       const meName = userName.toLowerCase().trim();
       filtered = filtered.filter((wo: WorkOrder) => {
         const targetAssign = (wo.assign_to || '').toLowerCase().trim();
-        return (meEmail && targetAssign === meEmail) || (meName && targetAssign === meName);
+        const matchesAssignment = (meEmail && targetAssign === meEmail) || (meName && targetAssign === meName);
+
+        if (!matchesAssignment) return false;
+
+        // Technician (Role 2) only sees "done" or "completed" status for 1 day (today)
+        if (roleIdNum === 2) {
+          const status = (wo.work_status || '').toLowerCase().trim();
+          if (status === 'done' || status === 'completed') {
+            const completionTime = wo.end_time || wo.updated_date;
+            if (completionTime) {
+              const completionDate = new Date(completionTime);
+              const today = new Date();
+              const isToday = completionDate.getFullYear() === today.getFullYear() &&
+                completionDate.getMonth() === today.getMonth() &&
+                completionDate.getDate() === today.getDate();
+
+              if (!isToday) return false;
+            }
+          }
+        }
+
+        return true;
       });
     }
 

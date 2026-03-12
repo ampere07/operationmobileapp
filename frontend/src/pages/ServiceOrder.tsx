@@ -281,21 +281,24 @@ const ServiceOrderPage: React.FC = () => {
 
     const lowerSearch = debouncedSearch.toLowerCase();
     const isSearchEmpty = lowerSearch === '';
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     return serviceOrders
       .filter(serviceOrder => {
-        // 1. Technician 7-Day Filter for 'Resolved' tickets
-        if (isTechnician) {
+        // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
+        if (userRoleId === 2) {
+          const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
           const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
-          if (supportStatus === 'resolved') {
-            const updatedAt = serviceOrder.rawUpdatedAt;
-            if (updatedAt) {
-              const updatedDate = new Date(updatedAt);
-              if (!isNaN(updatedDate.getTime()) && updatedDate < sevenDaysAgo) {
-                return false;
-              }
+
+          if (visitStatus === 'done' || visitStatus === 'completed' || supportStatus === 'resolved' || supportStatus === 'completed' || supportStatus === 'done') {
+            const completionTime = serviceOrder.rawUpdatedAt || serviceOrder.end_time;
+            if (completionTime) {
+              const completionDate = new Date(completionTime);
+              const today = new Date();
+              const isToday = completionDate.getFullYear() === today.getFullYear() &&
+                completionDate.getMonth() === today.getMonth() &&
+                completionDate.getDate() === today.getDate();
+
+              if (!isToday) return false;
             }
           }
         }
