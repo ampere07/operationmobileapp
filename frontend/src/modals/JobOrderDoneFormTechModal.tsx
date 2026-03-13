@@ -926,11 +926,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (selectedItems.length === 0 && !hasNoneItem) {
         newErrors.items = 'At least one item or "None" is required';
       } else {
-      selectedItems.forEach((item, idx) => {
-          if (!item.quantity || parseInt(item.quantity) <= 0) {
-            newErrors[`quantity_${idx}`] = 'Valid quantity is required';
-            // Also set a general error message if it's the first problem found
-            if (!newErrors.items) newErrors.items = `Quantity required for ${item.itemId}`;
+        orderItems.forEach((item, index) => {
+          if (item.itemId && item.itemId !== 'None') {
+            if (!item.quantity || parseInt(item.quantity) <= 0) {
+              newErrors[`quantity_${index}`] = 'Valid quantity is required';
+              if (!newErrors.items) newErrors.items = `Quantity required for ${item.itemId}`;
+            }
           }
         });
       }
@@ -2664,6 +2665,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Box Reading Image *"
                           onUpload={(file) => handleImageUpload('boxReadingImage', file)}
                           error={errors.boxReadingImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
 
                         <ImagePreview
@@ -2671,6 +2673,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Router Reading Image *"
                           onUpload={(file) => handleImageUpload('routerReadingImage', file)}
                           error={errors.routerReadingImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
 
                         {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
@@ -2679,6 +2682,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             label="Port Label Image *"
                             onUpload={(file) => handleImageUpload('portLabelImage', file)}
                             error={errors.portLabelImage}
+                            colorPrimary={colorPalette?.primary || '#7c3aed'}
                           />
                         )}
 
@@ -2687,6 +2691,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Setup Image *"
                           onUpload={(file) => handleImageUpload('setupImage', file)}
                           error={errors.setupImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
 
                         <ImagePreview
@@ -2694,6 +2699,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Signed Contract Image *"
                           onUpload={(file) => handleImageUpload('signedContractImage', file)}
                           error={errors.signedContractImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
 
                         <View style={styles.inputGroup}>
@@ -2782,6 +2788,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Speed Test Image *"
                           onUpload={(file) => handleImageUpload('speedTestImage', file)}
                           error={errors.speedTestImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
 
                         <View style={styles.inputGroup}>
@@ -2833,7 +2840,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                   )}
                                 </View>
 
-                                {item.itemId && (
+                                {item.itemId && item.itemId !== 'None' && (
                                   <View style={styles.itemQtyContainer}>
                                     <TextInput
                                       keyboardType="numeric"
@@ -3082,6 +3089,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           label="Proof Image"
                           onUpload={(file) => handleImageUpload('proofImage', file)}
                           error={errors.proofImage}
+                          colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
                       </View>
                     )}

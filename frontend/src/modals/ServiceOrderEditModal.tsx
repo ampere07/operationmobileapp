@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#f97316',
+    backgroundColor: '#7c3aed',
   },
   emptyDropdown: {
     paddingHorizontal: 16,
@@ -1647,7 +1647,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           styles.miniModalItem,
           {
             backgroundColor: pressed
-              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
               : 'transparent'
           }
         ]}
@@ -1662,7 +1662,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           {item.lcpnap_name}
         </Text>
         {isSelected && (
-          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+          <Check size={24} color={activeColor} />
         )}
       </Pressable>
     );
@@ -1682,7 +1682,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           styles.miniModalItem,
           {
             backgroundColor: pressed
-              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
               : 'transparent'
           }
         ]}
@@ -1697,7 +1697,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           {item.model}
         </Text>
         {isSelected && (
-          <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+          <Check size={24} color={activeColor} />
         )}
       </Pressable>
     );
@@ -1721,14 +1721,14 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
           styles.miniModalItem,
           {
             backgroundColor: pressed
-              ? (isDarkMode ? 'rgba(124, 58, 237, 0.1)' : '#f3f4f6')
+              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
               : 'transparent'
           }
         ]}
       >
         <Text style={[styles.miniModalItemText, {
           color: isSelected
-            ? (colorPalette?.primary || '#7c3aed')
+            ? activeColor
             : (isDarkMode ? '#e5e7eb' : '#374151'),
           fontWeight: isSelected ? '700' : 'bold',
           flex: 1
@@ -1743,7 +1743,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
             />
           )}
           {isSelected && (
-            <Check size={24} color={colorPalette?.primary || '#7c3aed'} />
+            <Check size={24} color={activeColor} />
           )}
         </View>
       </Pressable>
@@ -2114,7 +2114,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                     <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}>
                                       <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text>
                                     </Pressable>
-                                    <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#10b981', borderRadius: 6 }}>
+                                    <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: activeColor, borderRadius: 6 }}>
                                       <Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text>
                                     </Pressable>
                                   </View>
@@ -2165,20 +2165,22 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                       </Pressable>
                                     </View>
 
-                                    <View style={styles.itemQtyContainer}>
-                                      <TextInput
-                                        style={[styles.textInput, {
-                                          borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                          color: isDarkMode ? '#ffffff' : '#111827'
-                                        }]}
-                                        placeholder="Qty"
-                                        placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-                                        value={item.quantity}
-                                        keyboardType="numeric"
-                                        onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
-                                      />
-                                    </View>
+                                    {item.itemId && item.itemId !== 'None' && (
+                                      <View style={styles.itemQtyContainer}>
+                                        <TextInput
+                                          style={[styles.textInput, {
+                                            borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                            color: isDarkMode ? '#ffffff' : '#111827'
+                                          }]}
+                                          placeholder="Qty"
+                                          placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                                          value={item.quantity}
+                                          keyboardType="numeric"
+                                          onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
+                                        />
+                                      </View>
+                                    )}
 
                                     {orderItems.length > 1 && (
                                       <Pressable

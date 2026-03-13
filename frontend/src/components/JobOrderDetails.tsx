@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
@@ -352,7 +352,15 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   };
 
   const handleDoneClick = () => {
-    if (userRole === 'technician') {
+    if (userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2') {
+      if (!isStarted) {
+        Alert.alert(
+          'Action Required',
+          'You need to start the job order first.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       setIsDoneTechModalOpen(true);
     } else {
       setIsDoneModalOpen(true);
@@ -792,7 +800,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
-          {userRoleId === 2 && !isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
+          {!isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <>
               {!isStarted && (
                 <Pressable

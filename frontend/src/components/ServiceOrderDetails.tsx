@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
@@ -293,7 +293,20 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     AsyncStorage.setItem(FIELD_ORDER_KEY, JSON.stringify(fieldOrder));
   }, [fieldOrder]);
 
-  const handleEditClick = useCallback(() => setIsEditModalOpen(true), []);
+  const handleEditClick = useCallback(() => {
+    if (userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2') {
+      if (!isStarted) {
+        Alert.alert(
+          'Action Required',
+          'You need to start the service order first.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+    setIsEditModalOpen(true);
+  }, [isStarted, userRole, userRoleId]);
+
   const handleCloseEditModal = useCallback(() => setIsEditModalOpen(false), []);
   const handleSaveEdit = useCallback(() => {
     setIsEditModalOpen(false);
@@ -511,7 +524,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          {!isStarted && (userRole?.toLowerCase() !== 'agent') && (
+          {!isStarted && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
               onPress={handleStartTimer}
