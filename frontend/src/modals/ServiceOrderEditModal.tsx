@@ -588,6 +588,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   const [isContentReady, setIsContentReady] = useState(false);
   const initialDataLoadedRef = useRef(false);
 
+  const formatMySQLDate = () => {
+    const now = new Date();
+    return now.getFullYear() + '-' + 
+      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(now.getDate()).padStart(2, '0') + ' ' + 
+      String(now.getHours()).padStart(2, '0') + ':' + 
+      String(now.getMinutes()).padStart(2, '0') + ':' + 
+      String(now.getSeconds()).padStart(2, '0');
+  };
+
   useEffect(() => {
     if (isOpen) {
       initialDataLoadedRef.current = false;
@@ -1370,7 +1380,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         old_port: updatedFormData.port,
         old_vlan: updatedFormData.vlan,
         old_lcpnap: serviceOrderData?.old_lcpnap || serviceOrderData?.lcpnap || '',
-        old_router_modem_sn: updatedFormData.routerModemSN
+        old_router_modem_sn: updatedFormData.routerModemSN,
+        end_time: formatMySQLDate()
       };
 
       const response = await apiClient.put(`/service-orders/${serviceOrderId}`, updateData);
@@ -1791,7 +1802,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
-                  {serviceOrderData?.ticket_id || serviceOrderData?.id} | {formData.fullName}
+                  {formData.fullName}
                 </Text>
               </View>
 

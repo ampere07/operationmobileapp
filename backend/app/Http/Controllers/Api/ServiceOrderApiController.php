@@ -706,6 +706,26 @@ class ServiceOrderApiController extends Controller
             }
 
             DB::table('service_orders')->where('id', $id)->update($data);
+            
+            // Sync with job_orders table for timer fields
+            if ($request->has('start_time') || $request->has('end_time')) {
+                $billingAccountForJobOrder = DB::table('billing_accounts')
+                    ->where('account_no', $serviceOrder->account_no)
+                    ->first();
+
+                if ($billingAccountForJobOrder) {
+                    $syncData = [];
+                    if ($request->has('start_time')) $syncData['start_time'] = $request->input('start_time');
+                    if ($request->has('end_time')) $syncData['end_time'] = $request->input('end_time');
+                    $syncData['updated_at'] = now();
+
+                    DB::table('job_orders')
+                        ->where('account_id', $billingAccountForJobOrder->id)
+                        ->update($syncData);
+                    
+                    Log::info('[API SERVICE ORDER] Synced job_orders timer fields for account_id ' . $billingAccountForJobOrder->id);
+                }
+            }
 
             // Trigger Reconnection if concern is 'Reconnect'
             $currentConcern = trim($request->input('concern'));

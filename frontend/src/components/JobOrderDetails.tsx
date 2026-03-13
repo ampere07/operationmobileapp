@@ -564,28 +564,6 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     }
   };
 
-  const handleEndTimer = async () => {
-    try {
-      setLoading(true);
-      if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
-
-      const currentTime = formatMySQLDate();
-      await updateJobOrder(jobOrder.id, {
-        end_time: currentTime,
-      } as any);
-
-      (jobOrder as any).end_time = currentTime;
-      setIsEnded(true);
-      setSuccessMessage('Timer ended successfully!');
-      setShowSuccessModal(true);
-      silentRefresh();
-    } catch (err: any) {
-      setError(`Failed to end timer: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getDurationString = (start?: string | null, end?: string | null): string => {
     if (!start || !end) return 'N/A';
     const startTime = new Date(start.replace(' ', 'T')).getTime();
@@ -816,21 +794,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         <View style={st.headerActions}>
           {userRoleId === 2 && !isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
             <>
-              {!isStarted ? (
+              {!isStarted && (
                 <Pressable
                   style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
                   onPress={handleStartTimer}
                   disabled={loading}
                 >
                   <Play width={18} height={18} color="#ffffff" />
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
-                  onPress={handleEndTimer}
-                  disabled={loading}
-                >
-                  <Square width={18} height={18} color="#ffffff" />
                 </Pressable>
               )}
             </>

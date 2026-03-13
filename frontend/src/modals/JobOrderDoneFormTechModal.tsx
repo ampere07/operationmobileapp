@@ -1119,6 +1119,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         return;
       }
 
+      const now = new Date();
+      const currentDateTime = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(now.getDate()).padStart(2, '0') + ' ' + 
+        String(now.getHours()).padStart(2, '0') + ':' + 
+        String(now.getMinutes()).padStart(2, '0') + ':' + 
+        String(now.getSeconds()).padStart(2, '0');
+
       const jobOrderUpdateData: any = {
         date_installed: updatedFormData.dateInstalled,
         usage_type: updatedFormData.usageType,
@@ -1130,7 +1138,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         visit_with: updatedFormData.visit_with,
         visit_with_other: updatedFormData.visit_with_other,
         updated_by_user_email: updatedFormData.modifiedBy,
-        desired_plan: updatedFormData.choosePlan
+        desired_plan: updatedFormData.choosePlan,
+        end_time: currentDateTime
       };
 
       if (updatedFormData.onsiteStatus === 'Done') {

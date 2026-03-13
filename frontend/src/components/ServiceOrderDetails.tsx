@@ -219,10 +219,25 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+
+  // Sync props to state if props change
+  useEffect(() => {
+    if (userRoleProp) setUserRole(userRoleProp);
+  }, [userRoleProp]);
+
+  useEffect(() => {
+    if (userRoleIdProp !== undefined) setUserRoleId(userRoleIdProp);
+  }, [userRoleIdProp]);
   const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean>>(initialVisibility);
   const [fieldOrder, setFieldOrder] = useState<string[]>(defaultFields);
-  const [isStarted, setIsStarted] = useState(!!(serviceOrder as any).start_time);
-  const [isEnded, setIsEnded] = useState(!!(serviceOrder as any).end_time);
+  const checkIsStarted = (time?: string | null) => {
+    if (!time) return false;
+    const lowerTime = String(time).toLowerCase().trim();
+    return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+  };
+
+  const [isStarted, setIsStarted] = useState(checkIsStarted((serviceOrder as any).start_time));
+  const [isEnded, setIsEnded] = useState(checkIsStarted((serviceOrder as any).end_time));
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -244,8 +259,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   }, [isStarted, isEnded]);
 
   useEffect(() => {
-    setIsStarted(!!(serviceOrder as any).start_time);
-    setIsEnded(!!(serviceOrder as any).end_time);
+    setIsStarted(checkIsStarted((serviceOrder as any).start_time));
+    setIsEnded(checkIsStarted((serviceOrder as any).end_time));
   }, [serviceOrder]);
 
   useEffect(() => {
@@ -490,32 +505,20 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
           </Pressable>
           <View style={styles.centeredTitle}>
             <Text style={[styles.headerTitle, { fontSize: isMobile ? 14 : 18, color: '#111827' }]} numberOfLines={1} selectable={true}>
-              {serviceOrder.accountNumber} | {serviceOrder.fullName}
+              {serviceOrder.fullName}
             </Text>
           </View>
         </View>
 
         <View style={styles.headerActions}>
-          {userRoleId === 2 && !isEnded && (
-            <>
-              {!isStarted ? (
-                <Pressable
-                  style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
-                  onPress={handleStartTimer}
-                  disabled={loading}
-                >
-                  <Play width={18} height={18} color="#ffffff" />
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#ef4444' }]}
-                  onPress={handleEndTimer}
-                  disabled={loading}
-                >
-                  <Square width={18} height={18} color="#ffffff" />
-                </Pressable>
-              )}
-            </>
+          {!isStarted && (userRole?.toLowerCase() !== 'agent') && (
+            <Pressable
+              style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
+              onPress={handleStartTimer}
+              disabled={loading}
+            >
+              <Play width={18} height={18} color="#ffffff" />
+            </Pressable>
           )}
 
           {userRole !== 'agent' && userRoleId !== 4 && (
