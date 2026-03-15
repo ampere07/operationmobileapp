@@ -32,6 +32,10 @@ class PaymentPortalLogsController extends Controller
                     'customers.desired_plan as plan'
                 )
                 ->orderBy('payment_portal_logs.date_time', 'desc');
+            
+            if ($request->has('updated_since')) {
+                $query->where('payment_portal_logs.updated_at', '>', $request->input('updated_since'));
+            }
 
             // Optional filters
             if ($request->has('status')) {

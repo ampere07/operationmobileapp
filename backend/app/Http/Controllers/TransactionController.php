@@ -13,14 +13,21 @@ use App\Events\TransactionUpdated;
 
 class TransactionController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
-            $limit = request()->input('limit');
-            $offset = request()->input('offset');
+            $limit = $request->input('limit');
+            $offset = $request->input('offset');
 
-            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request'])
-                ->orderBy('created_at', 'desc')
+            $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request']);
+
+            if ($request->has('updated_since')) {
+                $query->where('updated_at', '>', $request->input('updated_since'));
+                // Increase limit for updates to ensure we get all recent changes
+                $limit = $request->input('limit', 1000);
+            }
+
+            $query->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc');
 
             if ($limit && $limit > 0) {

@@ -14,23 +14,28 @@ use App\Events\TransactionUpdated;
 
 class TransactionRevertController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
-            $reverts = TransactionRevert::with([
+            $query = TransactionRevert::with([
                 'transaction.account.customer',
                 'transaction.processor',
                 'transaction.paymentMethodInfo',
                 'requester',
                 'updater'
-            ])
-                ->orderBy('created_at', 'desc')
-                ->get();
+            ]);
+
+            if ($request->has('updated_since')) {
+                $query->where('updated_at', '>', $request->input('updated_since'));
+            }
+
+            $reverts = $query->orderBy('created_at', 'desc')->get();
 
             return response()->json([
                 'success' => true,
                 'data' => $reverts,
-                'count' => $reverts->count()
+                'count' => $reverts->count(),
+                'server_time' => now()->toISOString()
             ]);
         } catch (\Exception $e) {
             \Log::error('Error fetching transaction reverts: ' . $e->getMessage());

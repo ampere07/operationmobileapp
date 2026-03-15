@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SystemConfig;
+use App\Models\FormUI;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -76,11 +77,11 @@ class SystemConfigController extends Controller
     public function getLogo()
     {
         try {
-            $config = SystemConfig::where('config_key', 'image_logo')->first();
+            $config = FormUI::first();
             
             return response()->json([
                 'success' => true,
-                'data' => $config ? $config->config_value : null
+                'data' => $config ? $config->logo_url : null
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching logo: ' . $e->getMessage());
@@ -119,6 +120,13 @@ class SystemConfigController extends Controller
                 ]
             );
 
+            // Update form_ui table - only one entry should exist
+            if (FormUI::exists()) {
+                FormUI::query()->update(['logo_url' => $uploadResult['direct_link']]);
+            } else {
+                FormUI::create(['logo_url' => $uploadResult['direct_link']]);
+            }
+
             Log::info('Logo uploaded successfully', [
                 'file_id' => $uploadResult['file_id'],
                 'direct_link' => $uploadResult['direct_link'],
@@ -151,6 +159,9 @@ class SystemConfigController extends Controller
                 $config->config_value = null;
                 $config->updated_by = $request->query('updated_by', 'system');
                 $config->save();
+
+                // Update form_ui table
+                FormUI::query()->update(['logo_url' => null]);
 
                 return response()->json([
                     'success' => true,

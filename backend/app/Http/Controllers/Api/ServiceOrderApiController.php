@@ -43,6 +43,13 @@ class ServiceOrderApiController extends Controller
                 $query->where('so.support_status', $request->input('support_status'));
             }
 
+            if ($request->has('updated_since')) {
+                $query->where('so.updated_at', '>', $request->input('updated_since'));
+                // When fetching only updates, we typically want everything since the last sync
+                // instead of paged chunks, if limit isn't explicitly set low.
+                $limit = $request->input('limit', 1000); 
+            }
+
             $userRole = strtolower($request->query('user_role', ''));
             $userEmail = $request->query('user_email', '');
 
@@ -706,7 +713,7 @@ class ServiceOrderApiController extends Controller
             }
 
             DB::table('service_orders')->where('id', $id)->update($data);
-            
+
             // Sync with job_orders table for timer fields
             if ($request->has('start_time') || $request->has('end_time')) {
                 $billingAccountForJobOrder = DB::table('billing_accounts')
@@ -715,14 +722,16 @@ class ServiceOrderApiController extends Controller
 
                 if ($billingAccountForJobOrder) {
                     $syncData = [];
-                    if ($request->has('start_time')) $syncData['start_time'] = $request->input('start_time');
-                    if ($request->has('end_time')) $syncData['end_time'] = $request->input('end_time');
+                    if ($request->has('start_time'))
+                        $syncData['start_time'] = $request->input('start_time');
+                    if ($request->has('end_time'))
+                        $syncData['end_time'] = $request->input('end_time');
                     $syncData['updated_at'] = now();
 
                     DB::table('job_orders')
                         ->where('account_id', $billingAccountForJobOrder->id)
                         ->update($syncData);
-                    
+
                     Log::info('[API SERVICE ORDER] Synced job_orders timer fields for account_id ' . $billingAccountForJobOrder->id);
                 }
             }

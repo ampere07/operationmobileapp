@@ -37,9 +37,9 @@ class GoogleDrivePdfGenerationService
         try {
             $documentType = $invoice ? 'INVOICE' : 'SOA';
             $templateCode = $documentType . '_TEMPLATE';
-            
+
             $pdfData = $this->preparePdfData($account, $invoice, $soa);
-            
+
             Log::info('GoogleDrive PDF data prepared', [
                 'document_type' => $documentType,
                 'account_no' => $account->account_no,
@@ -49,7 +49,7 @@ class GoogleDrivePdfGenerationService
                 'Amount_Discounts_value' => $pdfData['Amount_Discounts'] ?? 'NOT SET',
                 'Amount_Rebates_value' => $pdfData['Amount_Rebates'] ?? 'NOT SET',
             ]);
-            
+
             $template = EmailTemplate::where('Template_Code', $templateCode)
                 ->where('Is_Active', true)
                 ->first();
@@ -62,7 +62,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('letter', 'portrait');
+            $this->dompdf->setPaper('A4', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();
@@ -118,9 +118,9 @@ class GoogleDrivePdfGenerationService
     {
         try {
             $account = $invoice->billingAccount;
-            
+
             $pdfData = $this->prepareOverduePdfData($account, $invoice);
-            
+
             $template = EmailTemplate::where('Template_Code', 'OVERDUE_DESIGN')
                 ->where('Is_Active', true)
                 ->first();
@@ -133,7 +133,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('letter', 'portrait');
+            $this->dompdf->setPaper('A4', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();
@@ -179,9 +179,9 @@ class GoogleDrivePdfGenerationService
     {
         try {
             $account = $invoice->billingAccount;
-            
+
             $pdfData = $this->prepareDcNoticePdfData($account, $invoice);
-            
+
             $template = EmailTemplate::where('Template_Code', 'DCNOTICE_DESIGN')
                 ->where('Is_Active', true)
                 ->first();
@@ -194,7 +194,7 @@ class GoogleDrivePdfGenerationService
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
-            $this->dompdf->setPaper('letter', 'portrait');
+            $this->dompdf->setPaper('A4', 'portrait');
             $this->dompdf->render();
 
             $pdfContent = $this->dompdf->output();
@@ -239,49 +239,49 @@ class GoogleDrivePdfGenerationService
     protected function ensureSOAFolderExists(): string
     {
         $soaFolderId = $this->googleDriveService->findFolder('Statement of Account');
-        
+
         if (!$soaFolderId) {
             $soaFolderId = $this->googleDriveService->createFolder('Statement of Account');
             Log::info('Created Statement of Account folder in Google Drive', [
                 'folder_id' => $soaFolderId
             ]);
         }
-        
+
         return $soaFolderId;
     }
 
     protected function ensureOverdueFolderExists(): string
     {
         $overdueFolderId = $this->googleDriveService->findFolder('Overdue Notices');
-        
+
         if (!$overdueFolderId) {
             $overdueFolderId = $this->googleDriveService->createFolder('Overdue Notices');
             Log::info('Created Overdue Notices folder in Google Drive', [
                 'folder_id' => $overdueFolderId
             ]);
         }
-        
+
         return $overdueFolderId;
     }
 
     protected function ensureDcNoticeFolderExists(): string
     {
         $dcNoticeFolderId = $this->googleDriveService->findFolder('DC Notices');
-        
+
         if (!$dcNoticeFolderId) {
             $dcNoticeFolderId = $this->googleDriveService->createFolder('DC Notices');
             Log::info('Created DC Notices folder in Google Drive', [
                 'folder_id' => $dcNoticeFolderId
             ]);
         }
-        
+
         return $dcNoticeFolderId;
     }
 
     protected function ensureAccountFolderExists(string $parentFolderId, string $accountNo): string
     {
         $accountFolderId = $this->googleDriveService->findFolder($accountNo, $parentFolderId);
-        
+
         if (!$accountFolderId) {
             $accountFolderId = $this->googleDriveService->createFolder($accountNo, $parentFolderId);
             Log::info('Created account folder in Google Drive', [
@@ -290,7 +290,7 @@ class GoogleDrivePdfGenerationService
                 'parent_folder_id' => $parentFolderId
             ]);
         }
-        
+
         return $accountFolderId;
     }
 
@@ -299,7 +299,7 @@ class GoogleDrivePdfGenerationService
         try {
             $soaFolderId = $this->ensureSOAFolderExists();
             $accountFolderId = $this->googleDriveService->findFolder($accountNo, $soaFolderId);
-            
+
             if (!$accountFolderId) {
                 Log::warning('Account folder not found in Google Drive', [
                     'account_no' => $accountNo
@@ -308,18 +308,18 @@ class GoogleDrivePdfGenerationService
             }
 
             $files = $this->googleDriveService->listFilesInFolder($accountFolderId);
-            
+
             foreach ($files as $file) {
                 if ($file->name === $filename) {
                     $fileId = $file->id;
                     $fileUrl = 'https://drive.google.com/file/d/' . $fileId . '/view';
-                    
+
                     Log::info('Found PDF in Google Drive', [
                         'account_no' => $accountNo,
                         'filename' => $filename,
                         'file_id' => $fileId
                     ]);
-                    
+
                     return [
                         'file_id' => $fileId,
                         'url' => $fileUrl,
@@ -412,7 +412,7 @@ class GoogleDrivePdfGenerationService
             $billingConfig = \App\Models\BillingConfig::first();
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
             $dcDate = $dueDate->copy()->addDays($disconnectionDay);
-            
+
             $data = array_merge($data, [
                 'SOA_No' => $soa->id,
                 'Prev_Balance' => number_format($soa->balance_from_previous_bill, 2),
@@ -440,23 +440,23 @@ class GoogleDrivePdfGenerationService
             ]);
 
             // Row templates for dynamic content (backward compatibility)
-            $data['Row_Discounts'] = $soa->discounts > 0 
-                ? "<tr><td>- Discounts</td><td align='right'>" . number_format($soa->discounts, 2) . "</td></tr>" 
+            $data['Row_Discounts'] = $soa->discounts > 0
+                ? "<tr><td>- Discounts</td><td align='right'>" . number_format($soa->discounts, 2) . "</td></tr>"
                 : "";
-            $data['Row_Rebates'] = $soa->rebate > 0 
-                ? "<tr><td>- Rebates</td><td align='right'>" . number_format($soa->rebate, 2) . "</td></tr>" 
+            $data['Row_Rebates'] = $soa->rebate > 0
+                ? "<tr><td>- Rebates</td><td align='right'>" . number_format($soa->rebate, 2) . "</td></tr>"
                 : "";
-            $data['Row_Service'] = $soa->service_charge > 0 
-                ? "<tr><td>Service Charge</td><td align='right'>" . number_format($soa->service_charge, 2) . "</td></tr>" 
+            $data['Row_Service'] = $soa->service_charge > 0
+                ? "<tr><td>Service Charge</td><td align='right'>" . number_format($soa->service_charge, 2) . "</td></tr>"
                 : "";
-            $data['Row_Staggered'] = $soa->staggered > 0 
-                ? "<tr><td>Staggered Payment</td><td align='right'>" . number_format($soa->staggered, 2) . "</td></tr>" 
+            $data['Row_Staggered'] = $soa->staggered > 0
+                ? "<tr><td>Staggered Payment</td><td align='right'>" . number_format($soa->staggered, 2) . "</td></tr>"
                 : "";
         }
 
         if ($invoice) {
             $dueDate = \Carbon\Carbon::parse($invoice->due_date);
-            
+
             $data = array_merge($data, [
                 'Invoice_No' => $invoice->id,
                 'Invoice_Balance' => number_format($invoice->invoice_balance, 2),

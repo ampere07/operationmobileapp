@@ -7,10 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class WorkOrder extends Model
 {
     protected $table = 'work_order';
-    
+
     const CREATED_AT = 'requested_date';
     const UPDATED_AT = 'updated_date';
-    
+
     protected $fillable = [
         'instructions',
         'report_to',

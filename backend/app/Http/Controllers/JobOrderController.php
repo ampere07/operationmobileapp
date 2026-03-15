@@ -62,6 +62,12 @@ class JobOrderController extends Controller
                 ]);
             }
 
+            if ($request->has('updated_since')) {
+                $query->where('updated_at', '>', $request->input('updated_since'));
+                // Increase limit for updates to ensure we get all recent changes
+                $limit = $request->input('limit', 1000);
+            }
+
             // Apply search filter
             if ($search) {
                 $query->where(function ($q) use ($search) {

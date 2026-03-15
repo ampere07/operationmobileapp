@@ -156,7 +156,7 @@ class MonitorController extends Controller
                     // OPTIONAL barangay filtering via customers table
                     ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                     ->select(
-                        DB::raw("COALESCE(billing_status.status_name, 'Unknown') as label"),
+                        DB::raw("COALESCE(billing_status.status_name, 'Regular') as label"),
                         DB::raw('COUNT(*) as value')
                     )
                     ->groupBy('billing_status.status_name');
@@ -188,14 +188,14 @@ class MonitorController extends Controller
             if ($action === 'app_status') {
                 $qb = DB::table('applications')
                     ->select(
-                        DB::raw("COALESCE(status, 'Unknown') as label"),
+                        DB::raw("COALESCE(status, 'Pending') as label"),
                         DB::raw('COUNT(*) as value')
                     );
 
                 $applyScope($qb, 'applications.timestamp');
                 $applyBarangayOnApplications($qb, 'applications.barangay');
 
-                $qb->groupBy('applications.status');
+                $qb->groupBy(DB::raw("COALESCE(status, 'Pending')"));
 
                 $response['data'] = $qb->get();
                 $response['status'] = 'success';

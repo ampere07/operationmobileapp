@@ -42,9 +42,12 @@ class BillingController extends Controller
             $updatedSince = $request->get('updated_since');
             if ($updatedSince) {
                 $query->where(function ($q) use ($updatedSince) {
-                    $q->where('billing_accounts.updated_at', '>=', $updatedSince)
+                    $q->where('billing_accounts.updated_at', '>', $updatedSince)
                       ->orWhereHas('customer', function ($cq) use ($updatedSince) {
-                          $cq->where('updated_at', '>=', $updatedSince);
+                          $cq->where('updated_at', '>', $updatedSince);
+                      })
+                      ->orWhereHas('technicalDetails', function ($tq) use ($updatedSince) {
+                          $tq->where('updated_at', '>', $updatedSince);
                       });
                 });
 

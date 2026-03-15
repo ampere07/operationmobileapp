@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class JobOrder extends Model
 {
     protected $table = 'job_orders';
-    
+
     protected $fillable = [
         'application_id',
         'account_id',
@@ -72,17 +72,16 @@ class JobOrder extends Model
 
     public function application()
     {
-        return $this->belongsTo(Application::class, 'application_id', 'id');
+        return $this->belongsTo(Application::class , 'application_id', 'id');
     }
 
     public function items()
     {
-        return $this->hasMany(JobOrderItem::class, 'job_order_id', 'id');
+        return $this->hasMany(JobOrderItem::class , 'job_order_id', 'id');
     }
 
     public function lcpnapLocation()
     {
-        return $this->belongsTo(LCPNAPLocation::class, 'lcpnap', 'lcpnap_name');
+        return $this->belongsTo(LCPNAPLocation::class , 'lcpnap', 'lcpnap_name');
     }
 }
-

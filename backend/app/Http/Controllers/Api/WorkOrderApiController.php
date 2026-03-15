@@ -34,6 +34,12 @@ class WorkOrderApiController extends Controller
             if (!empty($status) && strtolower($status) !== 'all') {
                 $query->where('work_status', $status);
             }
+
+            if ($request->has('updated_since')) {
+                $query->where('updated_at', '>', $request->input('updated_since'));
+                // increase limit for updates
+                $limit = $request->input('limit', 1000);
+            }
             
             $totalItems = $query->count();
             $totalPages = ceil($totalItems / $limit);
