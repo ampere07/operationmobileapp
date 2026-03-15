@@ -1,34 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Keyboard, StyleSheet, InteractionManager } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from 'expo-image-picker';
-import ImagePreview from '../components/ImagePreview';
+import React, { useCallback, useMemo } from 'react';
+import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet, Alert } from 'react-native';
 import { X, ChevronDown, Search, Check, ChevronLeft } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignatureScreen from 'react-native-signature-canvas';
-import * as ExpoFileSystem from 'expo-file-system/legacy';
 
-import apiClient from '../config/api';
-import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
-import { createServiceOrderItems, ServiceOrderItem, deleteServiceOrderItems } from '../services/serviceOrderItemService';
-import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { concernService, Concern } from '../services/concernService';
-import { getUsedPorts } from '../services/portService';
-import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
-
-import { routerModelService, RouterModel } from '../services/routerModelService';
-
-// Define UserData interface locally if not available in '../types/api'
-interface UserData {
-  email?: string;
-  email_address?: string;
-  role?: string | { role_name: string };
-  role_id?: number;
-  first_name?: string;
-  last_name?: string;
-  username?: string;
-}
+import ImagePreview from '../components/ImagePreview';
+import { SearchablePicker, SearchablePickerTrigger } from '../components/SearchablePicker';
+import { useServiceOrderEdit, ServiceOrderEditFormData, OrderItem, ImageFiles } from '../hooks/useServiceOrderEdit';
 
 interface ServiceOrderEditModalProps {
   isOpen: boolean;
@@ -37,1789 +14,89 @@ interface ServiceOrderEditModalProps {
   serviceOrderData?: any;
 }
 
-interface OrderItem {
-  itemId: string;
-  quantity: string;
-}
-
-interface ServiceOrderEditFormData {
-  accountNo: string;
-  dateInstalled: string;
-  fullName: string;
-  contactNumber: string;
-  emailAddress: string;
-  plan: string;
-
-  username: string;
-  connectionType: string;
-  routerModemSN: string;
-  lcp: string;
-  nap: string;
-  port: string;
-  vlan: string;
-  supportStatus: string;
-  visitStatus: string;
-  repairCategory: string;
-  visitBy: string;
-  visitWith: string;
-  visitWithOther: string;
-  visitRemarks: string;
-  clientSignature: string;
-  itemName1: string;
-  timeIn: string;
-  modemSetupImage: string;
-  timeOut: string;
-  assignedEmail: string;
-  concern: string;
-  concernRemarks: string;
-  modifiedBy: string;
-  modifiedDate: string;
-  supportRemarks: string;
-  serviceCharge: string;
-  status: string;
-  newRouterModemSN: string;
-  newLcp: string;
-  newNap: string;
-  newPort: string;
-  newVlan: string;
-  routerModel: string;
-  newPlan: string;
-
-  newLcpnap: string;
-  fullAddress: string;
-  proofImage: string;
-}
-
-interface ImageFiles {
-  timeInFile: ImagePicker.ImagePickerAsset | null;
-  modemSetupFile: ImagePicker.ImagePickerAsset | null;
-  timeOutFile: ImagePicker.ImagePickerAsset | null;
-  clientSignatureFile: ImagePicker.ImagePickerAsset | null;
-  proofImageFile: ImagePicker.ImagePickerAsset | null;
-}
-
-const convertGoogleDriveUrl = (url: string | null | undefined): string | null => {
-  if (!url) return null;
-  const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (fileIdMatch && fileIdMatch[1]) {
-    return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
-  }
-  const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (idMatch && idMatch[1]) {
-    return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
-  }
-  return url;
-};
-
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    height: '95%',
-    width: '100%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-  },
-  headerTitleContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginRight: 12,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  saveButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  required: {
-    color: '#ef4444',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  connectionTypeContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  connectionTypeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  signatureContainer: {
-    height: 160,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  signaturePlaceholder: {
-    alignItems: 'center',
-  },
-  signatureText: {
-    fontSize: 14,
-  },
-  signatureImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-  },
-  clearSignatureButton: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: '#ef4444',
-    borderRadius: 6,
-  },
-  clearSignatureText: {
-    color: '#ffffff',
-    fontSize: 12,
-  },
-  signatureCanvasContainer: {
-    height: 288,
-    borderWidth: 1,
-    backgroundColor: '#ffffff',
-    marginBottom: 8,
-    overflow: 'hidden',
-    borderRadius: 8,
-  },
-  signatureCloseButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    padding: 4,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 9999,
-    zIndex: 10,
-  },
-  itemRow: {
-    zIndex: 10,
-    marginBottom: 16,
-  },
-  itemRowContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  itemSearchContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-  },
-  itemSelectText: {
-    fontSize: 16,
-  },
-  dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    zIndex: 999,
-    overflow: 'hidden',
-    elevation: 1000,
-  },
-  dropdownSearchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dropdownSearchInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
-  },
-  dropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  dropdownItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-  },
-  dropdownItemImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-    resizeMode: 'cover',
-  },
-  dropdownSelectedIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#7c3aed',
-  },
-  emptyDropdown: {
-    paddingHorizontal: 16,
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
-  emptyDropdownText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  itemQtyContainer: {
-    width: 96,
-  },
-  itemRemoveButton: {
-    padding: 12,
-  },
-  miniModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  miniModalContent_mini: {
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '80%',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  miniModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  miniModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  miniModalClose: {
-    padding: 4,
-  },
-  miniModalSearchContainer: {
-    padding: 12,
-  },
-  miniModalSearchInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingHorizontal: 12,
-  },
-  miniModalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 40,
-  },
-  miniModalItemText: {
-    fontSize: 24,
-    textAlign: 'left',
-  },
-  miniModalEmpty: {
-    padding: 24,
-    alignItems: 'center',
-  },
-});
-
-const FormInput = React.memo(({ field, placeholder, editable = true, keyboardType = 'default', value, error, isDarkMode, onChangeText }: any) => {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-        {placeholder.replace('Enter ', '')} {editable && field !== 'dateInstalled' && <Text style={styles.required}>*</Text>}
-      </Text>
-      <TextInput
-        style={[styles.textInput, {
-          backgroundColor: !editable ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-          color: !editable ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
-          borderColor: error ? '#ef4444' : (!editable ? (isDarkMode ? '#4b5563' : '#e5e7eb') : (isDarkMode ? '#374151' : '#d1d5db'))
-        }]}
-        value={String(value || '')}
-        onChangeText={(text) => onChangeText(field, text)}
-        placeholder={placeholder}
-        placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-        editable={editable}
-        keyboardType={keyboardType}
-      />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-});
-
-const FormPicker = React.memo(({ field, label, items, value, error, enabled = true, isDarkMode, onChangeValue }: any) => {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-        {label}
-      </Text>
-      <View style={[styles.pickerContainer, {
-        borderColor: error ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-      }]}>
-        <Picker
-          selectedValue={value}
-          onValueChange={(val) => onChangeValue(field, val)}
-          enabled={enabled}
-          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-          style={{ color: isDarkMode ? '#fff' : '#000' }}
-        >
-          <Picker.Item label={`Select ${label}`} value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-          {items.map((item: any, idx: number) => (
-            <Picker.Item key={idx} label={item.label || item} value={item.value || item} color={isDarkMode ? '#fff' : '#000'} />
-          ))}
-        </Picker>
-      </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
-});
-
 const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
   isOpen,
   onClose,
   onSave,
   serviceOrderData
 }) => {
-  const serviceOrderId = serviceOrderData?.id;
   const isDarkMode = false; // Forced light mode as per user request
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  
+  const {
+    formData, errors, loading, isContentReady, colorPalette, isTechnician, currentUserEmail,
+    handleInputChange, handleImageUpload, handleSave,
+    activePicker, setActivePicker, searchQueries, setSearchQueries, filtered,
+    orderItems, setOrderItems, activeItemIndex, setActiveItemIndex, handleItemChange,
+    imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled,
+    activeTechField, setActiveTechField, setFormData
+  } = useServiceOrderEdit(isOpen, serviceOrderData, onClose, onSave);
 
-  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
-  const currentUserEmail = currentUser?.email_address || currentUser?.email || 'unknown@ampere.com';
-  const isTechnician = currentUser?.role_id === 2 || (typeof currentUser?.role === 'string' && currentUser.role.toLowerCase() === 'technician') || (typeof currentUser?.role === 'object' && currentUser.role.role_name.toLowerCase() === 'technician');
-
-  const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
-  const [usedPorts, setUsedPorts] = useState<string[]>([]);
-  const [totalPorts, setTotalPorts] = useState<number>(32);
-  const [lcpnaps, setLcpnaps] = useState<LCPNAP[]>([]);
-  const [vlans, setVlans] = useState<string[]>([]);
-  const [concerns, setConcerns] = useState<Concern[]>([]);
-  const [plans, setPlans] = useState<Array<{ name: string; price: string | number }>>([]);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [routerModels, setRouterModels] = useState<RouterModel[]>([]);
-
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([{ itemId: '', quantity: '' }]);
-
-  const [formData, setFormData] = useState<ServiceOrderEditFormData>({
-    accountNo: '',
-    dateInstalled: '',
-    fullName: '',
-    contactNumber: '',
-    emailAddress: '',
-    plan: '',
-
-    username: '',
-    connectionType: '',
-    routerModemSN: '',
-    lcp: '',
-    nap: '',
-    port: '',
-    vlan: '',
-    supportStatus: 'In Progress',
-    visitStatus: 'In Progress',
-    repairCategory: '',
-    visitBy: '',
-    visitWith: '',
-    visitWithOther: '',
-    visitRemarks: '',
-    clientSignature: '',
-    itemName1: '',
-    timeIn: '',
-    modemSetupImage: '',
-    timeOut: '',
-    assignedEmail: '',
-    concern: '',
-    concernRemarks: '',
-    modifiedBy: currentUserEmail,
-    modifiedDate: new Date().toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    }),
-    supportRemarks: '',
-    serviceCharge: '0.00',
-    status: 'unused',
-    newRouterModemSN: '',
-    newLcp: '',
-    newNap: '',
-    newPort: '',
-    newVlan: '',
-    routerModel: '',
-    newPlan: '',
-
-    newLcpnap: '',
-    fullAddress: '',
-    proofImage: ''
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [imageFiles, setImageFiles] = useState<ImageFiles>({
-    timeInFile: null,
-    modemSetupFile: null,
-    timeOutFile: null,
-    clientSignatureFile: null,
-    proofImageFile: null
-  });
-
-  // Signature Drawing State
-  const signatureRef = useRef<any>(null);
-  const [isDrawingSignature, setIsDrawingSignature] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
-
-  const [itemSearchModal, setItemSearchModal] = useState('');
-  const [lcpnapSearch, setLcpnapSearch] = useState('');
-  const [routerModelSearch, setRouterModelSearch] = useState('');
-  const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
-  const [isRouterModelMiniModalVisible, setIsRouterModelMiniModalVisible] = useState(false);
-  const [isItemMiniModalVisible, setIsItemMiniModalVisible] = useState(false);
-  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
-
-  // ─── Crash-prevention refs ─────────────────────────────────────────────────
-  // isMountedRef: set false on unmount so no setState fires after destruction
-  const isMountedRef = useRef(true);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
-
-  // openCycleRef: incremented each time isOpen becomes true.
-  // Every async fetch captures this snapshot; a mismatch means the modal
-  // was closed (or re-opened) before the fetch finished – discard results.
-  const openCycleRef = useRef(0);
-  // ───────────────────────────────────────────────────────────────────────────
-
-  // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
-  const [isContentReady, setIsContentReady] = useState(false);
-  const initialDataLoadedRef = useRef(false);
-
-  const formatMySQLDate = () => {
-    const now = new Date();
-    return now.getFullYear() + '-' + 
-      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(now.getDate()).padStart(2, '0') + ' ' + 
-      String(now.getHours()).padStart(2, '0') + ':' + 
-      String(now.getMinutes()).padStart(2, '0') + ':' + 
-      String(now.getSeconds()).padStart(2, '0');
-  };
-
-  useEffect(() => {
-    if (isOpen) {
-      initialDataLoadedRef.current = false;
-      // Use InteractionManager for better performance during modal transition,
-      // but add a safety fallback timeout in case InteractionManager is blocked.
-      const handle = InteractionManager.runAfterInteractions(() => {
-        if (isMountedRef.current) {
-          setIsContentReady(true);
-        }
-      });
-
-      const safetyTimeout = setTimeout(() => {
-        if (isMountedRef.current) {
-          setIsContentReady(true);
-        }
-      }, 500); // 500ms safety fallback
-
-      return () => {
-        handle.cancel();
-        clearTimeout(safetyTimeout);
-      };
-    } else {
-      setIsContentReady(false);
-      initialDataLoadedRef.current = false;
-    }
-  }, [isOpen]);
-
-  // Load User Data and Theme - batched with Promise.allSettled
-  useEffect(() => {
-    let cancelled = false;
-    const loadSettings = async () => {
-      const [authResult, paletteResult] = await Promise.allSettled([
-        AsyncStorage.getItem('authData'),
-        settingsColorPaletteService.getActive(),
-      ]);
-      if (cancelled) return;
-
-      if (authResult.status === 'fulfilled' && authResult.value) {
-        try {
-          setCurrentUser(JSON.parse(authResult.value));
-        } catch (error) { }
-      }
-      if (paletteResult.status === 'fulfilled') {
-        setColorPalette(paletteResult.value);
-      }
-    };
-    loadSettings();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Consolidated data fetching - all independent API calls batched into one effect
-  // This prevents multiple simultaneous state update storms that crash the app
-  useEffect(() => {
-    if (!isOpen) return;
-
-    // Bump session counter every open so stale fetches self-discard
-    openCycleRef.current += 1;
-    const session = openCycleRef.current;
-    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
-    const controller = new AbortController();
-
-    const fetchAllData = async () => {
-      // Fire all independent API calls in parallel with Promise.allSettled
-      // so one failure doesn't block the rest
-      const [
-        inventoryResult,
-        technicianResult,
-        technicalDetailsResult,
-        concernResult,
-      ] = await Promise.allSettled([
-        getAllInventoryItems('', 1, 1000),
-        apiClient.get<{ success: boolean; data: any[] }>('/users', { signal: controller.signal }),
-        Promise.all([
-          apiClient.get<{ success: boolean; data: any[] }>('/vlan', { signal: controller.signal }),
-          getAllLCPNAPs('', 1, 1000),
-          apiClient.get<{ success: boolean; data: any[] }>('/plans', { signal: controller.signal }),
-        ]),
-        concernService.getAllConcerns(),
-      ]);
-
-      if (!isCurrentSession()) return;
-
-      // Inventory Items & Router Models
-      if (inventoryResult.status === 'fulfilled') {
-        const response = inventoryResult.value;
-        if (response.success && Array.isArray(response.data)) {
-          // Normal Items (Category 1)
-          const filteredItems = response.data.filter(item => {
-            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
-            return catId === 1 || String(catId) === '1';
-          });
-          setInventoryItems(filteredItems);
-
-          // Router Models (Category 11)
-          const combinedRouterModels = response.data
-            .filter(item => {
-              if (!item) return false;
-              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
-              return (catId === 11 || String(catId) === '11') && item.item_name;
-            })
-            .map((item, index) => ({
-              model: item.item_name,
-              brand: 'Inventory',
-              description: item.item_description || '',
-              id: index
-            }));
-          setRouterModels(combinedRouterModels);
-        } else {
-          setInventoryItems([]);
-          setRouterModels([]);
-        }
-      } else {
-        setInventoryItems([]);
-        setRouterModels([]);
-      }
-
-      // Technicians
-      if (technicianResult.status === 'fulfilled') {
-        const response = technicianResult.value;
-        if (response.data.success && Array.isArray(response.data.data)) {
-          const technicianUsers = response.data.data
-            .filter((user: any) => {
-              const role = typeof user.role === 'string' ? user.role : (user.role as any)?.role_name || '';
-              return role.toLowerCase() === 'technician';
-            })
-            .map((user: any) => {
-              const firstName = (user.first_name || '').trim();
-              const lastName = (user.last_name || '').trim();
-              const fullName = `${firstName} ${lastName}`.trim();
-              return {
-                email: user.email_address || user.email || '',
-                name: fullName || user.username || user.email_address || user.email || ''
-              };
-            })
-            .filter((tech: any) => tech.name);
-          setTechnicians(technicianUsers);
-        }
-      } else {
-        console.error('Error fetching technicians:', technicianResult.reason);
-      }
-
-      // Technical Details (VLAN, LCPNAPs, Plans)
-      if (technicalDetailsResult.status === 'fulfilled') {
-        const [vlanResponse, lcpnapsRes, planResponse] = technicalDetailsResult.value;
-
-        if (vlanResponse.data.success && Array.isArray(vlanResponse.data.data)) {
-          const vlanOptions = vlanResponse.data.data.map((item: any) => item.value).filter(Boolean);
-          setVlans(vlanOptions as string[]);
-        }
-
-        if (planResponse.data.success && Array.isArray(planResponse.data.data)) {
-          setPlans(planResponse.data.data.map((p: any) => ({
-            name: p.plan_name || p.name || '',
-            price: p.price || 0
-          })).filter((p: any) => p.name));
-        }
-
-        if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data)) {
-          setLcpnaps(lcpnapsRes.data);
-        }
-      } else {
-        console.error('Error fetching technical details:', technicalDetailsResult.reason);
-      }
-
-      // Concerns
-      if (concernResult.status === 'fulfilled') {
-        setConcerns(concernResult.value);
-      } else {
-        console.error('Error fetching concerns:', concernResult.reason);
-      }
-    };
-
-    fetchAllData();
-
-    // Fetch service order items separately (depends on serviceOrderData)
-    const fetchServiceOrderItems = async () => {
-      if (serviceOrderData && serviceOrderId) {
-        try {
-          const response = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`, {
-            signal: controller.signal
-          });
-          const data = response.data;
-
-          if (!isCurrentSession()) return;
-
-          if (data.success && Array.isArray(data.data)) {
-            const items = data.data;
-
-            if (items.length > 0) {
-              const uniqueItems = new Map();
-
-              items.forEach((item: any) => {
-                const key = item.item_name;
-                if (uniqueItems.has(key)) {
-                  const existing = uniqueItems.get(key);
-                  uniqueItems.set(key, {
-                    itemId: item.item_name || '',
-                    quantity: (parseInt(existing.quantity) + parseInt(item.quantity || 0)).toString()
-                  });
-                } else {
-                  uniqueItems.set(key, {
-                    itemId: item.item_name || '',
-                    quantity: item.quantity ? item.quantity.toString() : ''
-                  });
-                }
-              });
-
-              const formattedItems = Array.from(uniqueItems.values());
-              formattedItems.push({ itemId: '', quantity: '' });
-
-              setOrderItems(formattedItems);
-            } else {
-              setOrderItems([{ itemId: '', quantity: '' }]);
-            }
-          }
-        } catch (error: any) {
-          // Ignore AbortError – it's an intentional cancellation
-          if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED' && isCurrentSession()) {
-            setOrderItems([{ itemId: '', quantity: '' }]);
-          }
-        }
-      }
-    };
-
-    fetchServiceOrderItems();
-
-    return () => {
-      // Cancel in-flight HTTP requests immediately on cleanup
-      controller.abort();
-    };
-  }, [isOpen, serviceOrderData]);
-
-
-
-
-  // Used Ports Effect - separate because it depends on formData.newLcpnap
-  useEffect(() => {
-    if (!isOpen || !formData.newLcpnap) {
-      setUsedPorts([]);
-      setTotalPorts(32);
-      return;
-    }
-
-    const session = openCycleRef.current;
-    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
-    const controller = new AbortController();
-
-    const fetchUsedPortsFunc = async () => {
-      try {
-        // Also fetch total ports for this LCP-NAP
-        const lcpnapsRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
-
-        if (!isCurrentSession()) return;
-
-        if (lcpnapsRes.success && Array.isArray(lcpnapsRes.data) && lcpnapsRes.data.length > 0) {
-          const match = lcpnapsRes.data.find((item: any) => item.lcpnap_name === formData.newLcpnap);
-          if (match) {
-            setTotalPorts(match.port_total || 32);
-          }
-        }
-
-        const usedRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
-
-        if (!isCurrentSession()) return;
-
-        if (usedRes.success && usedRes.data) {
-          setUsedPorts(usedRes.data.used);
-          if (!totalPorts) setTotalPorts(usedRes.data.total);
-        } else {
-          setUsedPorts([]);
-          if (!totalPorts) setTotalPorts(32);
-        }
-      } catch (error: any) {
-        if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
-          console.error('Error fetching used ports/location:', error);
-          if (isCurrentSession()) {
-            setUsedPorts([]);
-            setTotalPorts(32);
-          }
-        }
-      }
-    };
-    fetchUsedPortsFunc();
-
-    return () => { controller.abort(); };
-  }, [isOpen, formData.newLcpnap, serviceOrderData?.id]);
-
-  // Initialize Form Data
-  useEffect(() => {
-    if (serviceOrderData && isOpen) {
-      // Helper to format date for input if needed
-      const formatDateForInput = (dateStr?: string): string => {
-        if (!dateStr) return '';
-        try {
-          const date = new Date(dateStr);
-          if (isNaN(date.getTime())) return dateStr.split(' ')[0].split('T')[0];
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          return `${year}-${month}-${day}`;
-        } catch (e) {
-          return dateStr ? dateStr.split(' ')[0].split('T')[0] : '';
-        }
-      };
-
-      const normalizePort = (rawPort: any) => {
-        if (!rawPort) return '';
-        const portNum = String(rawPort).toUpperCase().replace(/[^\d]/g, '');
-        return portNum ? `P${portNum.padStart(2, '0')}` : '';
-      };
-
-      setFormData(prev => ({
-        ...prev,
-        accountNo: serviceOrderData.accountNumber || serviceOrderData.account_no || '',
-        dateInstalled: formatDateForInput(serviceOrderData.dateInstalled || serviceOrderData.date_installed),
-        fullName: serviceOrderData.fullName || serviceOrderData.full_name || '',
-        contactNumber: serviceOrderData.contactNumber || serviceOrderData.contact_number || '',
-        emailAddress: serviceOrderData.emailAddress || serviceOrderData.email_address || '',
-        plan: serviceOrderData.plan || '',
-
-        username: serviceOrderData.username || '',
-        connectionType: serviceOrderData.connectionType || serviceOrderData.connection_type || '',
-        routerModemSN: serviceOrderData.routerModemSN || serviceOrderData.router_modem_sn || '',
-        lcp: serviceOrderData.lcp || '',
-        nap: serviceOrderData.nap || '',
-        port: normalizePort(serviceOrderData.port || serviceOrderData.PORT),
-        vlan: serviceOrderData.vlan || '',
-        supportStatus: (serviceOrderData.supportStatus || serviceOrderData.support_status) === 'Pending'
-          ? 'In Progress'
-          : (serviceOrderData.supportStatus || serviceOrderData.support_status || 'In Progress'),
-        visitStatus: serviceOrderData.visitStatus || serviceOrderData.visit_status === 'Pending' ? 'In Progress' : (serviceOrderData.visitStatus || serviceOrderData.visit_status || 'In Progress'),
-        repairCategory: serviceOrderData.repairCategory || serviceOrderData.repair_category || '',
-        visitBy: serviceOrderData.visitBy || serviceOrderData.visit_by || '',
-        visitWith: serviceOrderData.visitWith || serviceOrderData.visit_with || '',
-        visitWithOther: serviceOrderData.visitWithOther || serviceOrderData.visit_with_other || '',
-        visitRemarks: serviceOrderData.visitRemarks || serviceOrderData.visit_remarks || '',
-        clientSignature: serviceOrderData.clientSignature || serviceOrderData.client_signature_url || serviceOrderData.client_signature || '',
-        itemName1: serviceOrderData.itemName1 || serviceOrderData.item_name_1 || '',
-        timeIn: serviceOrderData.timeIn || serviceOrderData.image1_url || serviceOrderData.time_in || '',
-        modemSetupImage: serviceOrderData.modemSetupImage || serviceOrderData.image2_url || serviceOrderData.modem_setup_image || '',
-        timeOut: serviceOrderData.timeOut || serviceOrderData.image3_url || serviceOrderData.time_out || '',
-        assignedEmail: serviceOrderData.assignedEmail || serviceOrderData.assigned_email || '',
-        concern: serviceOrderData.concern || '',
-        concernRemarks: serviceOrderData.concernRemarks || serviceOrderData.concern_remarks || '',
-        supportRemarks: serviceOrderData.supportRemarks || serviceOrderData.support_remarks || '',
-        newPlan: serviceOrderData.new_plan || '',
-        serviceCharge: serviceOrderData.serviceCharge ? serviceOrderData.serviceCharge.toString().replace('₱', '').trim() : (serviceOrderData.service_charge ? serviceOrderData.service_charge.toString().replace('₱', '').trim() : '0.00'),
-        status: serviceOrderData.status || 'unused',
-        newRouterModemSN: serviceOrderData.newRouterModemSN || serviceOrderData.new_router_modem_sn || '',
-        newLcp: serviceOrderData.newLcp || serviceOrderData.new_lcp || '',
-        newNap: serviceOrderData.newNap || serviceOrderData.new_nap || '',
-        newPort: normalizePort(serviceOrderData.newPort || serviceOrderData.new_port),
-        newVlan: serviceOrderData.newVlan || serviceOrderData.new_vlan || '',
-
-        routerModel: serviceOrderData.routerModel || serviceOrderData.router_model || '',
-        newLcpnap: serviceOrderData.newLcpnap || serviceOrderData.new_lcpnap || '',
-        fullAddress: serviceOrderData.fullAddress || serviceOrderData.full_address || '',
-        proofImage: serviceOrderData.proofImage || serviceOrderData.proof_image_url || serviceOrderData.proof_image || '',
-        modifiedBy: currentUserEmail
-      }));
-    }
-  }, [serviceOrderData, isOpen, currentUserEmail]);
-
-  // Sync modifiedBy with currentUserEmail when user is loaded
-  useEffect(() => {
-    if (currentUserEmail && currentUserEmail !== 'unknown@ampere.com') {
-      setFormData(prev => ({
-        ...prev,
-        modifiedBy: currentUserEmail
-      }));
-    }
-  }, [currentUserEmail]);
-
-  // Save draft to AsyncStorage - debounced to prevent async storm on every keystroke
-  useEffect(() => {
-    if (!isOpen || !serviceOrderData || !serviceOrderId || !initialDataLoadedRef.current) return;
-
-    const timer = setTimeout(async () => {
-      try {
-        await AsyncStorage.setItem(`serviceOrderDraft_${serviceOrderId}`, JSON.stringify(formData));
-      } catch (error) {
-        console.error('Failed to save draft:', error);
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [formData, isOpen, serviceOrderData, serviceOrderId]);
-
-  // Save order items draft - debounced
-  useEffect(() => {
-    if (!isOpen || !serviceOrderData || !serviceOrderId || !initialDataLoadedRef.current) return;
-
-    const timer = setTimeout(async () => {
-      try {
-        await AsyncStorage.setItem(`serviceOrderItemsDraft_${serviceOrderId}`, JSON.stringify(orderItems));
-      } catch (error) {
-        console.error('Failed to save order items draft:', error);
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [orderItems, isOpen, serviceOrderData, serviceOrderId]);
-
-  // Load draft on open - runs after initial form data is set
-  useEffect(() => {
-    if (!isOpen || !serviceOrderData || !serviceOrderId) return;
-
-    const session = openCycleRef.current;
-    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
-
-    const timer = setTimeout(async () => {
-      try {
-        const savedDraft = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
-        const savedItemsDraft = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
-
-        if (!isCurrentSession()) return;
-
-        if (savedDraft) {
-          const parsedDraft = JSON.parse(savedDraft);
-          setFormData(prev => ({
-            ...prev,
-            ...parsedDraft
-          }));
-        }
-
-        if (savedItemsDraft) {
-          setOrderItems(JSON.parse(savedItemsDraft));
-        }
-      } catch (error) {
-        console.error('Failed to load draft:', error);
-      } finally {
-        // Mark initial load done so draft saves can start
-        if (isCurrentSession()) {
-          initialDataLoadedRef.current = true;
-        }
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [isOpen, serviceOrderData, serviceOrderId]);
-
-  const handleInputChange = useCallback((field: keyof ServiceOrderEditFormData, value: string) => {
-    setFormData(prev => {
-      const newState = { ...prev, [field]: value };
-      if (field === 'newLcp' || field === 'newNap' || field === 'newLcpnap') {
-        newState.newPort = '';
-      }
-
-      return newState;
-    });
-    setErrors(prev => {
-      if (prev[field]) {
-        return { ...prev, [field]: '' };
-      }
-      return prev;
-    });
-  }, []);
-
-  const handleImageUpload = useCallback((field: keyof ImageFiles, file: any) => {
-    setImageFiles(prev => ({ ...prev, [field]: file }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-  }, [errors]);
-
-  const uploadImageToGoogleDrive = async (asset: ImagePicker.ImagePickerAsset | { uri: string; mimeType?: string }): Promise<string> => {
-    const formData = new FormData();
-    const randomName = Math.random().toString(36).substring(7);
-    const filename = asset.uri.split('/').pop() || `signature_${randomName}.png`;
-    const fileType = (asset as any).mimeType || 'image/png';
-
-    formData.append('file', {
-      uri: asset.uri,
-      name: filename,
-      type: fileType,
-    } as any);
-
-    const response = await apiClient.post('/google-drive/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-
-    if (response.data.success && response.data.data?.url) {
-      return response.data.data.url;
-    }
-    throw new Error('Upload failed');
-  };
-
-  // Signature handlers
-  const handleSignatureOK = async (signature: string) => {
-    // signature is a base64 string provided by the component
-    setIsDrawingSignature(false);
-    setScrollEnabled(true);
-
-    // Save base64 to a temporary file because upload expects URI
-    try {
-      const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
-      // Remove data:image/png;base64, prefix
-      const base64Code = signature.replace('data:image/png;base64,', '');
-
-      await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, {
-        encoding: 'base64',
-      });
-
-      // Set into state logic similar to other images
-      // We'll treat it as clientSignatureFile
-      const asset = {
-        uri: path,
-        mimeType: 'image/png',
-        width: 500, // Dummy dimensions
-        height: 200
-      } as ImagePicker.ImagePickerAsset;
-
-      setImageFiles(prev => ({ ...prev, clientSignatureFile: asset }));
-      // Also update form data previews if needed, but we rely on imageFiles for upload
-    } catch (e) {
-      console.error('Error handling signature:', e);
-      Alert.alert('Error', 'Failed to save signature');
-    }
-  };
-
-  const handleSignatureClear = useCallback(() => {
-    if (signatureRef.current) {
-      signatureRef.current.clearSignature();
-    }
-    setImageFiles(prev => ({ ...prev, clientSignatureFile: null }));
-    setFormData(prev => ({ ...prev, clientSignature: '' }));
-  }, []);
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    // Only validate fields if they are both visible and editable.
-    // Read-only fields (accountNo, fullName, etc.) are removed from validation
-    // to prevent blocking the user if the backend data is missing or incomplete.
-
-    if (!formData.supportStatus) {
-      newErrors.supportStatus = 'Support Status is required';
-    }
-
-    if (!formData.concern) {
-      newErrors.concern = 'Concern is required';
-    }
-
-    if (formData.concern === 'Upgrade/Downgrade Plan' && !formData.newPlan) {
-      newErrors.newPlan = 'New Plan is required';
-    }
-
-    // Only validate visit-related fields if supportStatus is 'For Visit'
-    if (formData.supportStatus === 'For Visit') {
-      if (!formData.assignedEmail) {
-        newErrors.assignedEmail = 'Assigned Email is required';
-      }
-
-      // Logic matches conditional rendering in the ScrollView
-      if (formData.visitStatus === 'Done') {
-        const validItems = orderItems.filter(item => item.itemId && item.quantity && item.itemId !== 'None');
-        const hasNoneItem = orderItems.some(item => item.itemId === 'None');
-
-        if (validItems.length === 0 && !hasNoneItem) {
-          newErrors.items = 'At least one item or "None" is required';
-        }
-
-        // Additional row-level validation
-        orderItems.forEach((item, idx) => {
-          if (item.itemId && item.itemId !== 'None' && !item.quantity) {
-            newErrors.items = `Quantity required for ${item.itemId}`;
-          }
-        });
-
-        if (!formData.visitBy) {
-          newErrors.visitBy = 'Visit By is required';
-        }
-
-        // Technical fields for specific relocation categories
-        const relocationCategories = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'];
-        if (relocationCategories.includes(formData.repairCategory)) {
-          if (formData.repairCategory === 'Migrate' && !formData.newRouterModemSN) {
-            newErrors.newRouterModemSN = 'New Router Modem SN is required';
-          }
-          if (!formData.newLcpnap) newErrors.newLcpnap = 'New LCP-NAP is required';
-
-          if (!formData.newPort) {
-            newErrors.newPort = 'New Port is required';
-          } else if (usedPorts.some(p => p.toUpperCase() === formData.newPort.toUpperCase())) {
-            newErrors.newPort = 'This port is already taken';
-          }
-
-          // Router Model is NOT required for Relocate and Transfer LCP/NAP/PORT, only for Migrate
-          if (formData.repairCategory !== 'Relocate' && formData.repairCategory !== 'Transfer LCP/NAP/PORT' && !formData.routerModel) {
-            newErrors.routerModel = 'Router Model is required';
-          }
-        }
-
-        if (formData.repairCategory === 'Replace Router' && !formData.newRouterModemSN) {
-          newErrors.newRouterModemSN = 'New Router Modem SN is required';
-        }
-
-        // Image and Signature Validations for 'Done'
-        if (!formData.timeIn && !imageFiles.timeInFile) {
-          newErrors.timeInFile = 'Time In Image is required';
-        }
-        if (!formData.modemSetupImage && !imageFiles.modemSetupFile) {
-          newErrors.modemSetupFile = 'Modem Setup Image is required';
-        }
-        if (!formData.timeOut && !imageFiles.timeOutFile) {
-          newErrors.timeOutFile = 'Time Out Image is required';
-        }
-        if (!formData.clientSignature && !imageFiles.clientSignatureFile) {
-          newErrors.clientSignatureFile = 'Client Signature is required';
-        }
-      } else if (formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') {
-        if (!formData.visitBy) {
-          newErrors.visitBy = 'Visit By is required';
-        }
-        // These are specifically marked as required in the UI for Failure/Reschedule scenarios
-        if (!formData.visitWith) {
-          newErrors.visitWith = 'Visit With is required';
-        }
-        if (!formData.visitWithOther) {
-          newErrors.visitWithOther = 'Visit With Other is required';
-        }
-      }
-    }
-
-    // Proof Image validation for failures
-    if (formData.supportStatus === 'Failed' || (formData.supportStatus === 'For Visit' && formData.visitStatus === 'Failed')) {
-      if (!formData.proofImage && !imageFiles.proofImageFile) {
-        newErrors.proofImageFile = 'Proof Image is required';
-      }
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSave = async () => {
-    if (isDrawingSignature) {
-      Alert.alert('Signature Required', 'Please click the "Save" button below the signature pad first to confirm your signature.');
-      return;
-    }
-
-    const updatedFormData = {
-      ...formData,
-      modifiedBy: currentUserEmail,
-      modifiedDate: new Date().toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      })
-    };
-
-    setFormData(updatedFormData);
-    setLoading(true);
-
-    if (!validateForm()) {
-      setLoading(false);
-      Alert.alert('Validation Error', 'Please fill in all required fields.');
-      return;
-    }
-
-    try {
-      // SmartOLT and Technical Details Validation
-      if (updatedFormData.connectionType === 'Fiber') {
-        // Validate New Router Modem SN if provided
-        const isNewModemSnVisible = updatedFormData.visitStatus === 'Done' &&
-          (updatedFormData.repairCategory === 'Migrate' || updatedFormData.repairCategory === 'Replace Router' || updatedFormData.repairCategory === 'Relocate');
-
-        if (isNewModemSnVisible && updatedFormData.newRouterModemSN?.trim()) {
-          // 1. SmartOLT Validation Logic (Check if exists first)
-          try {
-            const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-              params: { sn: updatedFormData.newRouterModemSN }
-            });
-
-            if (!(smartOltResponse.data as any).success) {
-              setLoading(false);
-              const errorMsg = 'sn not existing in smart olt';
-              setErrors(prev => ({ ...prev, newRouterModemSN: errorMsg }));
-              Alert.alert('SmartOLT Verification Failed', errorMsg);
-              return;
-            }
-          } catch (error: any) {
-            console.error('[SMARTOLT VALIDATION] API Error:', error);
-            setLoading(false);
-            const errorMessage = error.response?.data?.message || 'Failed to validate New Modem SN with SmartOLT system.';
-            setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
-            Alert.alert('Validation Error', errorMessage);
-            return;
-          }
-
-          // 2. Duplicate SN Check (Technical Details)
-          try {
-            const duplicateResponse = await apiClient.get('/job-orders', {
-              params: {
-                search: updatedFormData.newRouterModemSN,
-                limit: 50
-              }
-            });
-
-            if (duplicateResponse.data && duplicateResponse.data.success && Array.isArray(duplicateResponse.data.data)) {
-              const isDuplicate = duplicateResponse.data.data.some((jo: any) => {
-                const joSN = jo.modem_sn || jo.Modem_SN || jo.modem_router_sn;
-                return String(joSN || '').trim().toLowerCase() === updatedFormData.newRouterModemSN.trim().toLowerCase();
-              });
-
-              if (isDuplicate) {
-                setLoading(false);
-                const errorMessage = 'Please check on Customer Details. SN Duplicate Detected.';
-                setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
-                Alert.alert('Validation Error', errorMessage);
-                return;
-              }
-            }
-          } catch (error) {
-            console.error('Error checking duplicate SN:', error);
-          }
-        }
-      }
-
-      // Clear drafts
-      if (serviceOrderId) {
-        try {
-          await AsyncStorage.removeItem(`serviceOrderDraft_${serviceOrderId}`);
-          await AsyncStorage.removeItem(`serviceOrderItemsDraft_${serviceOrderId}`);
-        } catch (e) {
-          console.error('Error clearing draft:', e);
-        }
-      }
-
-      // Upload Images
-      const uploadedUrls: any = {};
-      const fileKeys: (keyof ImageFiles)[] = ['timeInFile', 'modemSetupFile', 'timeOutFile', 'clientSignatureFile'];
-      const urlKeys = {
-        timeInFile: 'image1_url',
-        modemSetupFile: 'image2_url',
-        timeOutFile: 'image3_url',
-        clientSignatureFile: 'client_signature_url',
-        proofImageFile: 'proof_image_url'
-      };
-
-      for (const key of fileKeys) {
-        if (imageFiles[key]) {
-          uploadedUrls[urlKeys[key]] = await uploadImageToGoogleDrive(imageFiles[key]!);
-        }
-      }
-
-      // Update Service Order
-      // Only send fields that exist in the service_orders table schema
-      const updateData: any = {
-        account_no: updatedFormData.accountNo,
-        support_status: updatedFormData.supportStatus,
-        visit_status: updatedFormData.visitStatus,
-        repair_category: updatedFormData.repairCategory,
-        visit_by_user: updatedFormData.visitBy,
-        visit_with: updatedFormData.visitWith,
-        visit_with_other: updatedFormData.visitWithOther,
-        visit_remarks: updatedFormData.visitRemarks,
-        client_signature_url: uploadedUrls.client_signature_url || updatedFormData.clientSignature || '',
-        image1_url: uploadedUrls.image1_url || updatedFormData.timeIn,
-        image2_url: uploadedUrls.image2_url || updatedFormData.modemSetupImage,
-        image3_url: uploadedUrls.image3_url || updatedFormData.timeOut,
-        proof_image_url: uploadedUrls.proof_image_url || updatedFormData.proofImage || '',
-        assigned_email: updatedFormData.assignedEmail,
-        concern: updatedFormData.concern,
-        concern_remarks: updatedFormData.concernRemarks,
-        updated_by_user: currentUserEmail,
-        support_remarks: updatedFormData.supportRemarks,
-        service_charge: parseFloat(updatedFormData.serviceCharge),
-        status: updatedFormData.status,
-        new_router_modem_sn: updatedFormData.newRouterModemSN,
-        new_lcp: updatedFormData.newLcp,
-        new_nap: updatedFormData.newNap,
-        new_lcpnap: updatedFormData.newLcpnap,
-        new_port: updatedFormData.newPort,
-        new_vlan: updatedFormData.newVlan,
-        router_model: updatedFormData.routerModel,
-        new_plan: updatedFormData.newPlan,
-        // Save old values when doing a relocation/migration/transfer
-        old_lcp: updatedFormData.lcp,
-        old_nap: updatedFormData.nap,
-        old_port: updatedFormData.port,
-        old_vlan: updatedFormData.vlan,
-        old_lcpnap: serviceOrderData?.old_lcpnap || serviceOrderData?.lcpnap || '',
-        old_router_modem_sn: updatedFormData.routerModemSN,
-        end_time: formatMySQLDate()
-      };
-
-      const response = await apiClient.put(`/service-orders/${serviceOrderId}`, updateData);
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Service order update failed');
-      }
-
-      // Save Items
-      const validItems = orderItems.filter(i => i.itemId && i.itemId.trim() !== '');
-      if (validItems.length > 0) {
-        try {
-          const existing = await apiClient.get(`/service-order-items?service_order_id=${serviceOrderId}`);
-          if (existing.data.success && existing.data.data.length > 0) {
-            for (const item of existing.data.data) {
-              try {
-                await apiClient.delete(`/service-order-items/${item.id}`);
-              } catch (e) { }
-            }
-          }
-        } catch (e) { }
-
-        const newItems: ServiceOrderItem[] = validItems.map(i => ({
-          service_order_id: parseInt(String(serviceOrderId)),
-          item_name: i.itemId,
-          quantity: parseInt(i.quantity) || 1
-        }));
-        await createServiceOrderItems(newItems);
-      }
-
-      let successMessage = 'Service Order updated successfully!';
-
-      // Reconnection Messages
-      if (response.data.reconnect_status === 'success') {
-        if (updatedFormData.concern === 'Upgrade/Downgrade Plan') {
-          successMessage = 'Plan upgraded and User reconnected successfully!';
-        } else {
-          successMessage = 'Service Order updated and User reconnected successfully!';
-        }
-      } else if (response.data.reconnect_status === 'balance_positive') {
-        successMessage = 'Service Order updated. Reconnection skipped: Account has a remaining balance.';
-      } else if (response.data.reconnect_status === 'failed') {
-        successMessage = 'Service Order updated, but reconnection failed. Please check technical details.';
-      }
-
-      // Migration / Relocation Messages
-      if (response.data.migration_status === 'success') {
-        successMessage += '\n\nRADIUS account updated/relocated successfully!';
-      } else if (response.data.migration_status === 'failed') {
-        successMessage += '\n\nWarning: Failed to update RADIUS account for relocation.';
-      }
-
-      // Pullout Messages
-      if (response.data.pullout_status === 'success') {
-        successMessage += '\n\nRADIUS account disabled for pullout and port cleared.';
-      }
-
-      onSave(updatedFormData);
-      Alert.alert('Success', successMessage);
-      onClose();
-
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert('Error', error.message || 'Failed to update service order');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleItemChange = useCallback((index: number, field: keyof OrderItem, value: string) => {
-    setOrderItems(prevItems => {
-      const newItems = prevItems.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      );
-
-      // Auto-add new row if item selected in the last row
-      if (field === 'itemId' && value && index === prevItems.length - 1) {
-        return [...newItems, { itemId: '', quantity: '' }];
-      }
-
-      return newItems;
-    });
-  }, []);
-
-  // Memoize filtered lists to prevent expensive re-computation on every render
-  const filteredInventoryItems = useMemo(() =>
-    inventoryItems.filter(invItem => invItem.item_name.toLowerCase().includes(itemSearchModal.toLowerCase())),
-    [inventoryItems, itemSearchModal]
-  );
-
-  const visitByTechnicians = useMemo(() =>
-    technicians.filter(t => t.name !== formData.visitWith && t.name !== formData.visitWithOther),
-    [technicians, formData.visitWith, formData.visitWithOther]
-  );
-
-  const visitWithTechnicians = useMemo(() =>
-    technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWithOther),
-    [technicians, formData.visitBy, formData.visitWithOther]
-  );
-
-  const visitWithOtherTechnicians = useMemo(() =>
-    technicians.filter(t => t.name !== formData.visitBy && t.name !== formData.visitWith),
-    [technicians, formData.visitBy, formData.visitWith]
-  );
-
-  const failedVisitWithTechnicians = useMemo(() =>
-    technicians.filter(t => t.name !== formData.visitBy),
-    [technicians, formData.visitBy]
-  );
-
-  const filteredLcpnaps = useMemo(() => {
-    const query = lcpnapSearch.toLowerCase();
-    return lcpnaps
-      .filter(ln => ln && ln.lcpnap_name && ln.lcpnap_name.toLowerCase().includes(query))
-      .slice(0, 50);
-  }, [lcpnaps, lcpnapSearch]);
-
-  const filteredRouterModels = useMemo(() => {
-    const query = routerModelSearch.toLowerCase();
-    return routerModels
-      .filter(rm => rm && rm.model && rm.model.toLowerCase().includes(query))
-      .slice(0, 50);
-  }, [routerModels, routerModelSearch]);
-
-  // Memoize ports array to avoid recreating on every render
-  const availablePorts = useMemo(() => {
-    return Array.from({ length: totalPorts }, (_, i) => {
-      return `P${(i + 1).toString().padStart(2, '0')}`;
-    });
-  }, [totalPorts]);
-
-  // Render Helpers
   const activeColor = colorPalette?.primary || '#7c3aed';
-
-  const renderLabel = (text: string, required = false) => (
-    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-      {text} {required && <Text style={styles.required}>*</Text>}
-    </Text>
-  );
 
   const renderInput = useCallback((
     field: keyof ServiceOrderEditFormData,
-    placeholder: string,
-    editable = true,
-    keyboardType: 'default' | 'numeric' | 'email-address' = 'default'
-  ) => (
-    <FormInput
-      field={field}
-      placeholder={placeholder}
-      editable={editable}
-      keyboardType={keyboardType}
-      value={formData[field]}
-      error={errors[field]}
-      isDarkMode={isDarkMode}
-      onChangeText={handleInputChange}
-    />
-  ), [formData, errors, isDarkMode, handleInputChange]);
-
-  const renderPicker = useCallback((
-    field: keyof ServiceOrderEditFormData,
-    items: string[],
     label: string,
-    enabled = true
+    editable = true,
+    keyboardType: 'default' | 'numeric' | 'email-address' = 'default',
+    multiline = false
   ) => (
-    <FormPicker
-      field={field}
-      label={label}
-      items={items}
-      value={formData[field]}
-      error={errors[field]}
-      enabled={enabled}
-      isDarkMode={isDarkMode}
-      onChangeValue={handleInputChange}
-    />
+    <View style={styles.inputGroup}>
+      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+        {label} {editable && !['accountNo', 'dateInstalled', 'fullName', 'contactNumber', 'emailAddress', 'plan', 'username', 'modifiedBy'].includes(field) && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TextInput
+        style={[styles.textInput, {
+          backgroundColor: !editable ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
+          color: !editable ? (isDarkMode ? '#9ca3af' : '#6b7280') : (isDarkMode ? '#ffffff' : '#111827'),
+          borderColor: errors[field] ? '#ef4444' : (!editable ? (isDarkMode ? '#4b5563' : '#e5e7eb') : (isDarkMode ? '#374151' : '#d1d5db')),
+          textAlignVertical: multiline ? 'top' : 'center',
+          height: multiline ? 80 : 50
+        }]}
+        value={String(formData[field] || '')}
+        onChangeText={(text) => handleInputChange(field, text)}
+        placeholder={`Enter ${label}`}
+        placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+        editable={editable}
+        keyboardType={keyboardType}
+        multiline={multiline}
+      />
+      {errors[field] ? <Text style={styles.errorText}>{errors[field]}</Text> : null}
+    </View>
   ), [formData, errors, isDarkMode, handleInputChange]);
 
-  const renderLcpNapPicker = () => (
-    <View style={styles.inputGroup}>
-      {renderLabel('New LCP-NAP', true)}
-      <Pressable
-        onPress={() => {
-          setIsLcpnapMiniModalVisible(true);
-          setLcpnapSearch('');
-        }}
-        style={[styles.searchContainer, {
-          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-          borderColor: errors.newLcpnap ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-          height: 50,
-        }]}
-      >
-        <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-        <Text style={{
-          flex: 1,
-          paddingHorizontal: 12,
-          color: formData.newLcpnap ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
-          fontSize: 16
-        }}>
-          {formData.newLcpnap || "Select LCP-NAP"}
-        </Text>
-        <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-      </Pressable>
-      {errors.newLcpnap && (
-        <Text style={styles.errorText}>{errors.newLcpnap}</Text>
-      )}
-    </View>
-  );
-
-  const renderNewPortPicker = () => {
-    return (
-      <View style={styles.inputGroup}>
-        {renderLabel('New Port', true)}
-        <View style={[styles.pickerContainer, {
-          borderColor: errors.newPort ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-        }]}>
-          <Picker
-            selectedValue={formData.newPort}
-            onValueChange={(val) => handleInputChange('newPort', val)}
-            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-            style={{ color: isDarkMode ? '#fff' : '#000' }}
-          >
-            <Picker.Item label="Select Port" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-            {availablePorts.map((port) => {
-              const isUsed = usedPorts.some(up => up.toUpperCase() === port.toUpperCase());
-              if (isUsed) return null; // Hide used ports strictly, even if selected in draft, because they are taken by someone else
-              return <Picker.Item key={port} label={port} value={port} color={isDarkMode ? '#fff' : '#000'} />;
-            })}
-          </Picker>
-        </View>
-        {errors.newPort && (
-          <Text style={styles.errorText}>{errors.newPort}</Text>
-        )}
-      </View>
-    );
-  };
-
-  const renderListSeparator = useCallback(() => <View style={{ height: 16 }} />, []);
-
-  const renderListEmpty = useCallback(() => (
-    <View style={styles.miniModalEmpty}>
-      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-    </View>
-  ), [isDarkMode]);
-
-  const renderLcpnapItem = useCallback(({ item }: any) => {
-    const isSelected = formData.newLcpnap === item.lcpnap_name;
-    return (
-      <Pressable
-        onPress={() => {
-          setFormData(prev => ({
-            ...prev,
-            newLcpnap: item.lcpnap_name,
-            newLcp: item.lcp || '',
-            newNap: item.nap || '',
-            newPort: ''
-          }));
-          setErrors(prev => ({ ...prev, newLcpnap: '' }));
-          setIsLcpnapMiniModalVisible(false);
-          setLcpnapSearch('');
-          Keyboard.dismiss();
-        }}
-        style={({ pressed }) => [
-          styles.miniModalItem,
-          {
-            backgroundColor: pressed
-              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
-              : 'transparent'
-          }
-        ]}
-      >
-        <Text style={[styles.miniModalItemText, {
-          color: isSelected
-            ? (colorPalette?.primary || '#7c3aed')
-            : (isDarkMode ? '#e5e7eb' : '#374151'),
-          fontWeight: isSelected ? '700' : 'bold',
-          flex: 1
-        }]}>
-          {item.lcpnap_name}
-        </Text>
-        {isSelected && (
-          <Check size={24} color={activeColor} />
-        )}
-      </Pressable>
-    );
-  }, [formData.newLcpnap, isDarkMode, colorPalette?.primary]);
-
-  const renderRouterModelItem = useCallback(({ item }: any) => {
-    const isSelected = formData.routerModel === item.model;
-    return (
-      <Pressable
-        onPress={() => {
-          handleInputChange('routerModel', item.model);
-          setIsRouterModelMiniModalVisible(false);
-          setRouterModelSearch('');
-          Keyboard.dismiss();
-        }}
-        style={({ pressed }) => [
-          styles.miniModalItem,
-          {
-            backgroundColor: pressed
-              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
-              : 'transparent'
-          }
-        ]}
-      >
-        <Text style={[styles.miniModalItemText, {
-          color: isSelected
-            ? (colorPalette?.primary || '#7c3aed')
-            : (isDarkMode ? '#e5e7eb' : '#374151'),
-          fontWeight: isSelected ? '700' : 'bold',
-          flex: 1
-        }]}>
-          {item.model}
-        </Text>
-        {isSelected && (
-          <Check size={24} color={activeColor} />
-        )}
-      </Pressable>
-    );
-  }, [formData.routerModel, isDarkMode, colorPalette?.primary, handleInputChange]);
-
-  const renderInventoryItem = useCallback(({ item }: any) => {
-    const currentItemId = activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '';
-    const isSelected = currentItemId === item.item_name;
-    return (
-      <Pressable
-        onPress={() => {
-          if (activeItemIndex !== null) {
-            handleItemChange(activeItemIndex, 'itemId', item.item_name);
-          }
-          setIsItemMiniModalVisible(false);
-          setItemSearchModal('');
-          setActiveItemIndex(null);
-          Keyboard.dismiss();
-        }}
-        style={({ pressed }) => [
-          styles.miniModalItem,
-          {
-            backgroundColor: pressed
-              ? (isDarkMode ? activeColor + '1A' : '#f3f4f6')
-              : 'transparent'
-          }
-        ]}
-      >
-        <Text style={[styles.miniModalItemText, {
-          color: isSelected
-            ? activeColor
-            : (isDarkMode ? '#e5e7eb' : '#374151'),
-          fontWeight: isSelected ? '700' : 'bold',
-          flex: 1
-        }]}>
-          {item.item_name}
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {item.image_url && (
-            <Image
-              source={{ uri: convertGoogleDriveUrl(item.image_url) || undefined }}
-              style={{ width: 40, height: 40, borderRadius: 6, backgroundColor: '#f3f4f6', resizeMode: 'cover' }}
-            />
-          )}
-          {isSelected && (
-            <Check size={24} color={activeColor} />
-          )}
-        </View>
-      </Pressable>
-    );
-  }, [activeItemIndex, orderItems, isDarkMode, colorPalette?.primary, handleItemChange]);
-
+  const renderPickerTrigger = useCallback((field: string, label: string, value: string, placeholder: string, required = false) => (
+    <SearchablePickerTrigger
+      label={label}
+      value={value}
+      onPress={() => {
+        setActivePicker(field);
+        setSearchQueries({ ...searchQueries, [field]: '' });
+      }}
+      error={errors[field]}
+      isDarkMode={isDarkMode}
+      placeholder={placeholder}
+      required={required}
+    />
+  ), [errors, isDarkMode, searchQueries, setActivePicker, setSearchQueries]);
 
   if (!isOpen) return null;
 
   return (
     <>
-      <Modal
-        visible={isOpen}
-        transparent={true}
-        animationType="slide"
-        statusBarTranslucent={true}
-        onRequestClose={onClose}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
+      <Modal visible={isOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
-
+            
             {/* Header */}
-            <View style={[styles.header, {
-              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-              borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
-              position: 'relative',
-              justifyContent: 'center',
-              height: 60,
-              paddingHorizontal: 0
-            }]}>
-              <Pressable
-                onPress={onClose}
-                disabled={loading}
-                style={{
-                  position: 'absolute',
-                  left: 16,
-                  zIndex: 10,
-                  padding: 8
-                }}
-              >
+            <View style={[styles.header, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Pressable onPress={onClose} disabled={loading} style={styles.headerLeftAction}>
                 <ChevronLeft size={28} color={activeColor} />
               </Pressable>
-
-              <View style={{
-                position: 'absolute',
-                left: 60,
-                right: 80, // Leave space for Save button
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Text
-                  style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827', textAlign: 'center', fontSize: 18 }]}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {formData.fullName}
-                </Text>
+              <View style={styles.headerTitleContainer}>
+                <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]} numberOfLines={1}>{formData.fullName}</Text>
               </View>
-
-              <View style={{
-                position: 'absolute',
-                right: 16,
-                zIndex: 10
-              }}>
-                <Pressable
-                  onPress={handleSave}
-                  disabled={loading}
-                  style={[styles.saveButton, {
-                    backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : activeColor,
-                    paddingVertical: 8,
-                    paddingHorizontal: 16
-                  }]}
-                >
+              <View style={styles.headerRightAction}>
+                <Pressable onPress={handleSave} disabled={loading} style={[styles.saveButton, { backgroundColor: loading ? '#9ca3af' : activeColor }]}>
                   {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>Save</Text>}
                 </Pressable>
               </View>
@@ -1827,570 +104,210 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
             <View style={styles.contentContainer}>
               {!isContentReady ? (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 }}>
+                <View style={styles.loadingOverlay}>
                   <ActivityIndicator size="large" color={activeColor} />
-                  <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280', marginTop: 12, fontSize: 14 }}>Loading form...</Text>
+                  <Text style={styles.loadingText}>Loading form...</Text>
                 </View>
               ) : (
-                <ScrollView
-                  style={styles.contentContainer}
-                  contentContainerStyle={styles.scrollViewContent}
-                  scrollEnabled={scrollEnabled}
-                  keyboardShouldPersistTaps="handled"
-                  removeClippedSubviews={true}
-                >
+                <ScrollView style={styles.contentContainer} contentContainerStyle={styles.scrollViewContent} scrollEnabled={scrollEnabled} keyboardShouldPersistTaps="handled">
+                  
+                  {/* Base Info */}
+                  {renderInput('accountNo', 'Account No', false)}
+                  {renderInput('dateInstalled', 'Date Installed', false)}
+                  {renderInput('fullName', 'Full Name', false)}
+                  {renderInput('contactNumber', 'Contact Number', false)}
+                  {renderInput('emailAddress', 'Email Address', false)}
+                  {renderInput('plan', 'Plan', false)}
+                  {renderInput('username', 'Username', false)}
+                  {renderInput('fullAddress', 'Full Address', false, 'default', true)}
+
+                  {/* Connection Type */}
                   <View style={styles.inputGroup}>
-
-                    {renderInput('accountNo', 'Account No', false)}
-                    {renderInput('dateInstalled', 'Date Installed', false)}
-
-                    {renderInput('fullName', 'Full Name', false)}
-                    {renderInput('contactNumber', 'Contact Number', false)}
-                    {renderInput('emailAddress', 'Email Address', false)}
-                    {renderInput('plan', 'Plan', false)}
-                    {renderInput('username', 'Username', false)}
-
-                    <View style={styles.inputGroup}>
-                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Full Address</Text>
-                      <TextInput
-                        value={formData.fullAddress}
-                        editable={false}
-                        multiline={true}
-                        numberOfLines={2}
-                        placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                        style={[styles.textInput, {
-                          backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                          borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                          color: isDarkMode ? '#9ca3af' : '#6b7280',
-                          textAlignVertical: 'top'
+                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
+                    <View style={styles.connectionTypeContainer}>
+                      <Pressable
+                        onPress={() => handleInputChange('connectionType', 'Fiber')}
+                        style={[styles.connectionTypeButton, {
+                          backgroundColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
+                          borderColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
                         }]}
+                      >
+                        <Text style={{ color: formData.connectionType === 'Fiber' ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'), fontWeight: '500' }}>Fiber</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* READ ONLY TECH INFO */}
+                  {renderInput('routerModemSN', 'Router/Modem SN', false)}
+                  {renderInput('lcp', 'LCP', false)}
+                  {renderInput('nap', 'NAP', false)}
+                  {renderInput('port', 'PORT', false)}
+                  {renderInput('vlan', 'VLAN', false)}
+
+                  {/* STATUS SECTION */}
+                  {renderPickerTrigger('supportStatus', 'Support Status', formData.supportStatus, 'Select Support Status', true)}
+
+                  {formData.supportStatus === 'Failed' && (
+                    <ImagePreview
+                      label="Proof Image *"
+                      imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage}
+                      onUpload={(file) => handleImageUpload('proofImageFile', file)}
+                      error={errors.proofImageFile}
+                      isDarkMode={isDarkMode}
+                      colorPrimary={activeColor}
+                    />
+                  )}
+
+                  {formData.supportStatus === 'For Visit' && (
+                    <>
+                      {renderPickerTrigger('visitStatus', 'Visit Status', formData.visitStatus, 'Select Visit Status', true)}
+                      
+                      <SearchablePickerTrigger
+                        label="Assigned Email"
+                        value={formData.assignedEmail}
+                        onPress={() => setActivePicker('assignedEmail')}
+                        error={errors.assignedEmail}
+                        isDarkMode={isDarkMode}
+                        placeholder="Select Technician"
+                        required={true}
                       />
-                    </View>
 
-                    {/* Connection Type */}
-                    <View style={styles.inputGroup}>
-                      <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
-                      <View style={styles.connectionTypeContainer}>
-                        <Pressable
-                          onPress={() => handleInputChange('connectionType', 'Fiber')}
-                          style={[styles.connectionTypeButton, {
-                            backgroundColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
-                            borderColor: formData.connectionType === 'Fiber' ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
-                          }]}
-                        >
-                          <Text style={{
-                            color: formData.connectionType === 'Fiber' ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'),
-                            fontWeight: '500'
-                          }}>Fiber</Text>
-                        </Pressable>
-                      </View>
-                    </View>
+                      {formData.visitStatus === 'Done' && (
+                        <>
+                          {renderPickerTrigger('repairCategory', 'Repair Category', formData.repairCategory, 'Select Repair Category', true)}
 
-                    {renderInput('routerModemSN', 'Router/Modem SN', false)}
-                    {renderInput('lcp', 'LCP', false)}
-                    {renderInput('nap', 'NAP', false)}
-                    {renderInput('port', 'PORT', false)}
-                    {renderInput('vlan', 'VLAN', false)}
-
-                    {renderPicker('supportStatus', ['Resolved', 'Failed', 'In Progress', 'For Visit'], 'Support Status')}
-
-                    {formData.supportStatus === 'Failed' && (
-                      <View style={styles.inputGroup}>
-                        <ImagePreview
-                          label="Proof Image *"
-                          imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage}
-                          onUpload={(file) => handleImageUpload('proofImageFile', file)}
-                          error={errors.proofImageFile}
-                          isDarkMode={isDarkMode}
-                          colorPrimary={colorPalette?.primary}
-                        />
-                      </View>
-                    )}
-
-                    {formData.supportStatus === 'For Visit' && (
-                      <>
-                        {renderPicker('visitStatus', ['Done', 'In Progress', 'Failed', 'Reschedule'], 'Visit Status')}
-
-                        <View style={styles.inputGroup}>
-                          {renderLabel('Assigned Email', true)}
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.assignedEmail ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.assignedEmail}
-                              onValueChange={(val) => handleInputChange('assignedEmail', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Technician" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {technicians.map((t, i) => (
-                                <Picker.Item key={`tech-${i}`} label={t.name} value={t.email} color={isDarkMode ? '#fff' : '#000'} />
-                              ))}
-                            </Picker>
-                          </View>
-                          {errors.assignedEmail && (
-                            <Text style={styles.errorText}>{errors.assignedEmail}</Text>
+                          {['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory) && (
+                            <>
+                              {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
+                              {renderPickerTrigger('lcpnaps', 'New LCP-NAP', formData.newLcpnap, 'Select LCP-NAP', true)}
+                              {renderPickerTrigger('port', 'New Port', formData.newPort, 'Select Port', true)}
+                              {renderPickerTrigger('vlan', 'New VLAN', formData.newVlan, 'Select VLAN', true)}
+                              
+                              {formData.repairCategory === 'Migrate' && renderPickerTrigger('routerModels', 'Router Model', formData.routerModel, 'Select Router Model', true)}
+                            </>
                           )}
-                        </View>
 
-                        {formData.visitStatus === 'Done' && (
-                          <>
-                            {renderPicker('repairCategory', ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'], 'Repair Category')}
+                          {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
+                            formData.repairCategory === 'Replace Router' && renderInput('newRouterModemSN', 'New Router SN')
+                          )}
 
-                            {(formData.repairCategory === 'Migrate' || formData.repairCategory === 'Relocate' || formData.repairCategory === 'Transfer LCP/NAP/PORT') && (
-                              <>
-                                {formData.repairCategory === 'Migrate' && renderInput('newRouterModemSN', 'New Router SN')}
-                                {renderLcpNapPicker()}
-                                {renderNewPortPicker()}
-                                {renderPicker('newVlan', vlans, 'New VLAN')}
+                          {formData.repairCategory === 'Update Vlan' && renderPickerTrigger('vlan', 'New VLAN', formData.newVlan, 'Select VLAN', true)}
 
-                                {/* Router Model Selection — hidden for Relocate and Transfer LCP/NAP/PORT */}
-                                {formData.repairCategory !== 'Relocate' && formData.repairCategory !== 'Transfer LCP/NAP/PORT' && (
-                                  <View style={styles.inputGroup}>
-                                    {renderLabel('Router Model', true)}
-                                    <Pressable
-                                      onPress={() => {
-                                        setIsRouterModelMiniModalVisible(true);
-                                        setRouterModelSearch('');
-                                      }}
-                                      style={[styles.searchContainer, {
-                                        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                        borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                        height: 50,
-                                      }]}
-                                    >
-                                      <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                      <Text style={{
-                                        flex: 1,
-                                        paddingHorizontal: 12,
-                                        color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280'),
-                                        fontSize: 16
-                                      }}>
-                                        {formData.routerModel || "Select Router Model"}
-                                      </Text>
-                                      <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                    </Pressable>
-                                    {errors.routerModel && (
-                                      <Text style={styles.errorText}>{errors.routerModel}</Text>
-                                    )}
-                                  </View>
-                                )}
-                              </>
+                          {/* VISIT BY / WITH */}
+                          <SearchablePickerTrigger label="Visit By" value={formData.visitBy} onPress={() => { setActiveTechField('visitBy'); setActivePicker('technician'); }} error={errors.visitBy} isDarkMode={isDarkMode} required />
+                          <SearchablePickerTrigger label="Visit With" value={formData.visitWith} onPress={() => { setActiveTechField('visitWith'); setActivePicker('technician'); }} error={errors.visitWith} isDarkMode={isDarkMode} />
+                          <SearchablePickerTrigger label="Visit With Other" value={formData.visitWithOther} onPress={() => { setActiveTechField('visitWithOther'); setActivePicker('technician'); }} error={errors.visitWithOther} isDarkMode={isDarkMode} />
+
+                          {renderInput('visitRemarks', 'Visit Remarks')}
+
+                          {/* SIGNATURE SECTION */}
+                          <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature <Text style={styles.required}>*</Text></Text>
+                            {!isDrawingSignature ? (
+                              <View>
+                                <Pressable 
+                                  onPress={() => setIsDrawingSignature(true)} 
+                                  style={[styles.signatureContainer, { borderColor: isDarkMode ? '#4b5563' : '#9ca3af', backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb' }]}
+                                >
+                                  {(imageFiles.clientSignatureFile || formData.clientSignature) ? (
+                                    <Image source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }} style={styles.signatureImage} />
+                                  ) : (
+                                    <View style={styles.signaturePlaceholder}><Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text></View>
+                                  )}
+                                </Pressable>
+                              </View>
+                            ) : (
+                              <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
+                                <View style={{ flex: 1 }}>
+                                  <SignatureScreen
+                                    ref={signatureRef}
+                                    onOK={handleSignatureOK}
+                                    onEmpty={() => Alert.alert('Empty', 'Please sign the canvas before saving.')}
+                                    style={{ flex: 1 }}
+                                  />
+                                  <Pressable onPress={() => setIsDrawingSignature(false)} style={styles.signatureCloseButton}><X size={20} color="#000" /></Pressable>
+                                </View>
+                                <View style={styles.signatureFooter}>
+                                  <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}><Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text></Pressable>
+                                  <Pressable onPress={() => signatureRef.current?.readSignature()} style={[styles.saveButton, { backgroundColor: activeColor }]}><Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text></Pressable>
+                                </View>
+                              </View>
                             )}
-                            {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
-                              <>
-                                {formData.repairCategory === 'Replace Router' && renderInput('newRouterModemSN', 'New Router SN')}
-                              </>
-                            )}
-                            {formData.repairCategory === 'Update Vlan' && renderPicker('newVlan', vlans, 'New VLAN')}
+                            {errors.clientSignatureFile && <Text style={styles.errorText}>{errors.clientSignatureFile}</Text>}
+                          </View>
 
-                            {/* Visit By */}
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit By', true)}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: errors.visitBy ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitBy}
-                                  onValueChange={(val) => handleInputChange('visitBy', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  {visitByTechnicians.map((t, i) => (
-                                    <Picker.Item key={`visitby-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
-                              {errors.visitBy && (
-                                <Text style={styles.errorText}>{errors.visitBy}</Text>
-                              )}
-                            </View>
-
-                            {/* Visit With */}
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit With')}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: errors.visitWith ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitWith}
-                                  onValueChange={(val) => handleInputChange('visitWith', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                                  {visitWithTechnicians.map((t, i) => (
-                                    <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
-                              {errors.visitWith && (
-                                <Text style={styles.errorText}>{errors.visitWith}</Text>
-                              )}
-                            </View>
-
-                            {/* Visit With Other */}
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit With Other')}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: errors.visitWithOther ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitWithOther}
-                                  onValueChange={(val) => handleInputChange('visitWithOther', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                                  {visitWithOtherTechnicians.map((t, i) => (
-                                    <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
-                              {errors.visitWithOther && (
-                                <Text style={styles.errorText}>{errors.visitWithOther}</Text>
-                              )}
-                            </View>
-
-                            {renderInput('visitRemarks', 'Visit Remarks')}
-
-                            <View style={[styles.inputGroup, { zIndex: 50 }]}>
-                              {renderLabel('Client Signature', true)}
-                              {!isDrawingSignature ? (
-                                <View>
+                          {/* ITEMS SECTION */}
+                          <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Items <Text style={styles.required}>*</Text></Text>
+                            {orderItems.map((item, idx) => (
+                              <View key={idx} style={styles.itemRow}>
+                                <View style={styles.itemRowContent}>
                                   <Pressable
-                                    onPress={() => setIsDrawingSignature(true)}
-                                    style={[styles.signatureContainer, {
-                                      borderColor: isDarkMode ? '#4b5563' : '#9ca3af',
-                                      backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
-                                    }]}
+                                    onPress={() => { setActiveItemIndex(idx); setActivePicker('inventory'); }}
+                                    style={[styles.itemPickerTrigger, { borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}
                                   >
-                                    {imageFiles.clientSignatureFile || formData.clientSignature ? (
-                                      <Image
-                                        source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }}
-                                        style={styles.signatureImage}
-                                      />
+                                    <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                    <Text style={[styles.itemSelectText, { flex: 1, paddingHorizontal: 8, color: item.itemId ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280') }]} numberOfLines={1}>
+                                      {item.itemId || 'Select Item...'}
+                                    </Text>
+                                    {item.itemId ? (
+                                      <Pressable onPress={() => handleItemChange(idx, 'itemId', '')} hitSlop={8} style={{ padding: 2 }}><X size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} /></Pressable>
                                     ) : (
-                                      <View style={styles.signaturePlaceholder}>
-                                        <Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text>
-                                      </View>
+                                      <ChevronDown size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
                                     )}
                                   </Pressable>
-                                  {imageFiles.clientSignatureFile && (
-                                    <Pressable onPress={handleSignatureClear} style={styles.clearSignatureButton}>
-                                      <Text style={styles.clearSignatureText}>Clear Signature</Text>
-                                    </Pressable>
+
+                                  {item.itemId && item.itemId !== 'None' && (
+                                    <TextInput
+                                      style={[styles.itemQtyInput, { borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]}
+                                      placeholder="Qty" placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                                      value={item.quantity} keyboardType="numeric" onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
+                                    />
+                                  )}
+
+                                  {orderItems.length > 1 && (
+                                    <Pressable onPress={() => { const n = [...orderItems]; n.splice(idx, 1); setOrderItems(n); }} style={styles.itemRemoveButton}><X size={20} color="#ef4444" /></Pressable>
                                   )}
                                 </View>
-                              ) : (
-                                <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db', flexDirection: 'column' }]}>
-                                  <View style={{ flex: 1 }}>
-                                    <SignatureScreen
-                                      ref={signatureRef}
-                                      onOK={handleSignatureOK}
-                                      onEmpty={() => { Alert.alert('Empty', 'Please sign the canvas before saving.'); }}
-                                      onBegin={() => setScrollEnabled(false)}
-                                      onEnd={() => setScrollEnabled(true)}
-                                      webStyle={`.m-signature-pad--footer {display: none;} .m-signature-pad {box-shadow: none; border: none;} .m-signature-pad--body {border: none;} body,html {width: 100%; height: 100%; margin: 0; padding: 0;}`}
-                                    />
-                                    <Pressable
-                                      onPress={() => {
-                                        setIsDrawingSignature(false);
-                                        setScrollEnabled(true);
-                                      }}
-                                      style={styles.signatureCloseButton}
-                                    >
-                                      <X size={20} color="#000" />
-                                    </Pressable>
-                                  </View>
-                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: isDarkMode ? '#4b5563' : '#e5e7eb', backgroundColor: isDarkMode ? '#374151' : '#f9fafb' }}>
-                                    <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}>
-                                      <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text>
-                                    </Pressable>
-                                    <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: activeColor, borderRadius: 6 }}>
-                                      <Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text>
-                                    </Pressable>
-                                  </View>
-                                </View>
-                              )}
-                              {errors.clientSignatureFile && (
-                                <Text style={styles.errorText}>{errors.clientSignatureFile}</Text>
-                              )}
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Items', true)}
-                              {orderItems.map((item, idx) => (
-                                <View key={idx} style={styles.itemRow}>
-                                  <View style={styles.itemRowContent}>
-                                    <View style={styles.itemSearchContainer}>
-                                      {/* Item trigger button — same pattern as LCP-NAP */}
-                                      <Pressable
-                                        onPress={() => {
-                                          setActiveItemIndex(idx);
-                                          setItemSearchModal('');
-                                          setIsItemMiniModalVisible(true);
-                                        }}
-                                        style={[styles.searchContainer, {
-                                          borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                                        }]}
-                                      >
-                                        <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                        <Text style={[styles.itemSelectText, {
-                                          flex: 1,
-                                          paddingHorizontal: 8,
-                                          color: item.itemId ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9ca3af' : '#6b7280')
-                                        }]}>
-                                          {item.itemId || 'Select Item...'}
-                                        </Text>
-                                        {item.itemId ? (
-                                          <Pressable
-                                            onPress={() => handleItemChange(idx, 'itemId', '')}
-                                            hitSlop={8}
-                                            style={{ padding: 2 }}
-                                          >
-                                            <X size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                          </Pressable>
-                                        ) : (
-                                          <ChevronDown size={18} color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                        )}
-                                      </Pressable>
-                                    </View>
-
-                                    {item.itemId && item.itemId !== 'None' && (
-                                      <View style={styles.itemQtyContainer}>
-                                        <TextInput
-                                          style={[styles.textInput, {
-                                            borderColor: errors.items ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                            color: isDarkMode ? '#ffffff' : '#111827'
-                                          }]}
-                                          placeholder="Qty"
-                                          placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-                                          value={item.quantity}
-                                          keyboardType="numeric"
-                                          onChangeText={(t) => handleItemChange(idx, 'quantity', t)}
-                                        />
-                                      </View>
-                                    )}
-
-                                    {orderItems.length > 1 && (
-                                      <Pressable
-                                        onPress={() => {
-                                          const newItems = [...orderItems];
-                                          newItems.splice(idx, 1);
-                                          setOrderItems(newItems);
-                                        }}
-                                        style={styles.itemRemoveButton}
-                                      >
-                                        <X size={20} color="#ef4444" />
-                                      </Pressable>
-                                    )}
-                                  </View>
-                                </View>
-                              ))}
-                              {errors.items && (
-                                <Text style={styles.errorText}>{errors.items}</Text>
-                              )}
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              <ImagePreview
-                                label="Time In Image *"
-                                imageUrl={imageFiles.timeInFile?.uri || formData.timeIn}
-                                onUpload={(file) => handleImageUpload('timeInFile', file)}
-                                error={errors.timeInFile}
-                                isDarkMode={isDarkMode}
-                                colorPrimary={colorPalette?.primary}
-                              />
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              <ImagePreview
-                                label="Modem Setup Image *"
-                                imageUrl={imageFiles.modemSetupFile?.uri || formData.modemSetupImage}
-                                onUpload={(file) => handleImageUpload('modemSetupFile', file)}
-                                error={errors.modemSetupFile}
-                                isDarkMode={isDarkMode}
-                                colorPrimary={colorPalette?.primary}
-                              />
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              <ImagePreview
-                                label="Time Out Image"
-                                imageUrl={imageFiles.timeOutFile?.uri || formData.timeOut}
-                                onUpload={(file) => handleImageUpload('timeOutFile', file)}
-                                error={errors.timeOutFile}
-                                isDarkMode={isDarkMode}
-                                colorPrimary={colorPalette?.primary}
-                              />
-                            </View>
-                          </>
-                        )}
-
-                        {/* Failed/Reschedule Fields */}
-                        {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
-                          <>
-                            {/* Visit By/With/Other/Remarks for Reschedule/Failed */}
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit By', true)}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitBy}
-                                  onValueChange={(val) => handleInputChange('visitBy', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit By" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  {technicians.map((t, i) => (
-                                    <Picker.Item key={`resched-visitby-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
                               </View>
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit With', true)}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitWith}
-                                  onValueChange={(val) => handleInputChange('visitWith', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit With" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                                  {failedVisitWithTechnicians.map((t, i) => (
-                                    <Picker.Item key={i} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                              {renderLabel('Visit With Other', true)}
-                              <View style={[styles.pickerContainer, {
-                                borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                              }]}>
-                                <Picker
-                                  selectedValue={formData.visitWithOther}
-                                  onValueChange={(val) => handleInputChange('visitWithOther', val)}
-                                  dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                >
-                                  <Picker.Item label="Select Visit With Other" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                                  <Picker.Item label="None" value="None" color={isDarkMode ? '#fff' : '#000'} />
-                                  {failedVisitWithTechnicians.map((t, i) => (
-                                    <Picker.Item key={`resched-visitother-${i}`} label={t.name} value={t.name} color={isDarkMode ? '#fff' : '#000'} />
-                                  ))}
-                                </Picker>
-                              </View>
-                            </View>
-
-                            {renderInput('visitRemarks', 'Visit Remarks')}
-
-                            {formData.visitStatus === 'Failed' && (
-                              <View style={styles.inputGroup}>
-                                <ImagePreview
-                                  label="Proof Image *"
-                                  imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage}
-                                  onUpload={(file) => handleImageUpload('proofImageFile', file)}
-                                  error={errors.proofImageFile}
-                                  isDarkMode={isDarkMode}
-                                  colorPrimary={colorPalette?.primary}
-                                />
-                              </View>
-                            )}
-                          </>
-                        )}
-                      </>
-                    )}
-
-                    {/* Concern */}
-                    <View style={styles.inputGroup}>
-                      {renderLabel('Concern', true)}
-                      {isTechnician ? (
-                        <TextInput
-                          style={[styles.textInput, {
-                            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                            borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                            color: isDarkMode ? '#9ca3af' : '#6b7280'
-                          }]}
-                          value={formData.concern}
-                          editable={false}
-                        />
-                      ) : (
-                        <>
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.concern ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.concern}
-                              onValueChange={(val) => handleInputChange('concern', val)}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                            >
-                              <Picker.Item label="Select Concern" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                              {concerns.map((c, i) => <Picker.Item key={`concern-${c.id || i}`} label={c.concern_name} value={c.concern_name} color={isDarkMode ? '#fff' : '#000'} />)}
-                            </Picker>
+                            ))}
+                            {errors.items && <Text style={styles.errorText}>{errors.items}</Text>}
                           </View>
-                          {errors.concern && (
-                            <Text style={styles.errorText}>{errors.concern}</Text>
+
+                          <ImagePreview label="Time In Image *" imageUrl={imageFiles.timeInFile?.uri || formData.timeIn} onUpload={(file) => handleImageUpload('timeInFile', file)} error={errors.timeInFile} isDarkMode={isDarkMode} colorPrimary={activeColor} />
+                          <ImagePreview label="Modem Setup Image *" imageUrl={imageFiles.modemSetupFile?.uri || formData.modemSetupImage} onUpload={(file) => handleImageUpload('modemSetupFile', file)} error={errors.modemSetupFile} isDarkMode={isDarkMode} colorPrimary={activeColor} />
+                          <ImagePreview label="Time Out Image" imageUrl={imageFiles.timeOutFile?.uri || formData.timeOut} onUpload={(file) => handleImageUpload('timeOutFile', file)} error={errors.timeOutFile} isDarkMode={isDarkMode} colorPrimary={activeColor} />
+                        </>
+                      )}
+
+                      {(formData.visitStatus === 'Reschedule' || formData.visitStatus === 'Failed') && (
+                        <>
+                          <SearchablePickerTrigger label="Visit By" value={formData.visitBy} onPress={() => { setActiveTechField('visitBy'); setActivePicker('technician'); }} error={errors.visitBy} isDarkMode={isDarkMode} required />
+                          <SearchablePickerTrigger label="Visit With" value={formData.visitWith} onPress={() => { setActiveTechField('visitWith'); setActivePicker('technician'); }} error={errors.visitWith} isDarkMode={isDarkMode} required />
+                          <SearchablePickerTrigger label="Visit With Other" value={formData.visitWithOther} onPress={() => { setActiveTechField('visitWithOther'); setActivePicker('technician'); }} error={errors.visitWithOther} isDarkMode={isDarkMode} required />
+                          {renderInput('visitRemarks', 'Visit Remarks')}
+                          {formData.visitStatus === 'Failed' && (
+                            <ImagePreview label="Proof Image *" imageUrl={imageFiles.proofImageFile?.uri || formData.proofImage} onUpload={(file) => handleImageUpload('proofImageFile', file)} error={errors.proofImageFile} isDarkMode={isDarkMode} colorPrimary={activeColor} />
                           )}
                         </>
                       )}
-                    </View>
+                    </>
+                  )}
 
-                    {formData.concern === 'Upgrade/Downgrade Plan' && (
-                      <View style={styles.inputGroup}>
-                        {renderLabel('New Plan', true)}
-                        <View style={[styles.pickerContainer, {
-                          borderColor: errors.newPlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                          backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                        }]}>
-                          <Picker
-                            selectedValue={formData.newPlan}
-                            onValueChange={(val) => handleInputChange('newPlan', val)}
-                            dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                            style={{ color: isDarkMode ? '#fff' : '#000' }}
-                          >
-                            <Picker.Item label="Select New Plan" value="" color={isDarkMode ? '#9ca3af' : '#6b7280'} />
-                            {plans.map((p, idx) => {
-                              const formattedPrice = parseFloat(p.price.toString());
-                              const displayValue = `${p.name} - ${formattedPrice}`;
-                              return <Picker.Item key={idx} label={displayValue} value={displayValue} color={isDarkMode ? '#fff' : '#000'} />;
-                            })}
-                          </Picker>
-                        </View>
-                        {errors.newPlan && (
-                          <Text style={styles.errorText}>{errors.newPlan}</Text>
-                        )}
-                      </View>
-                    )}
-
-                    {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
-                    {renderInput('modifiedBy', 'Modified By', false)}
-                    {renderInput('supportRemarks', 'Support Remarks')}
-                    {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
-
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Concern <Text style={styles.required}>*</Text></Text>
+                    {isTechnician ? (
+                      <TextInput style={[styles.textInput, { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6', color: isDarkMode ? '#9ca3af' : '#6b7280' }]} value={formData.concern} editable={false} />
+                    ) : renderPickerTrigger('concern', 'Concern', formData.concern, 'Select Concern', true)}
                   </View>
+
+                  {formData.concern === 'Upgrade/Downgrade Plan' && renderPickerTrigger('plan', 'New Plan', formData.newPlan, 'Select New Plan', true)}
+
+                  {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
+                  {renderInput('modifiedBy', 'Modified By', false)}
+                  {renderInput('supportRemarks', 'Support Remarks')}
+                  {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
+
                 </ScrollView>
               )}
             </View>
@@ -2398,169 +315,210 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* LCP-NAP Mini Modal */}
-      <Modal
-        visible={isLcpnapMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsLcpnapMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP-NAP</Text>
-              <Pressable onPress={() => setIsLcpnapMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
+      {/* RENDER DYNAMIC PICKERS */}
+      <SearchablePicker
+        isOpen={activePicker === 'supportStatus'}
+        onClose={() => setActivePicker(null)}
+        title="Select Support Status"
+        data={filtered.supportStatuses}
+        onSelect={(val) => { handleInputChange('supportStatus', val); setActivePicker(null); }}
+        searchValue={searchQueries.supportStatus || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, supportStatus: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.supportStatus}
+        activeColor={activeColor}
+      />
 
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search LCP-NAP..."
-                  value={lcpnapSearch}
-                  onChangeText={setLcpnapSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  autoFocus={isLcpnapMiniModalVisible}
-                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                />
-                {lcpnapSearch.length > 0 && (
-                  <Pressable onPress={() => setLcpnapSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
-              </View>
-            </View>
+      <SearchablePicker
+        isOpen={activePicker === 'visitStatus'}
+        onClose={() => setActivePicker(null)}
+        title="Select Visit Status"
+        data={filtered.visitStatuses}
+        onSelect={(val) => { handleInputChange('visitStatus', val); setActivePicker(null); }}
+        searchValue={searchQueries.visitStatus || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, visitStatus: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.visitStatus}
+        activeColor={activeColor}
+      />
 
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredLcpnaps}
-                keyExtractor={(item) => item.id.toString()}
-                ItemSeparatorComponent={renderListSeparator}
-                renderItem={renderLcpnapItem}
-                ListEmptyComponent={renderListEmpty}
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <SearchablePicker
+        isOpen={activePicker === 'assignedEmail'}
+        onClose={() => setActivePicker(null)}
+        title="Select Technician"
+        data={filtered.assignedEmails}
+        onSelect={(t) => { handleInputChange('assignedEmail', t.email); setActivePicker(null); }}
+        searchValue={searchQueries.assignedEmail || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, assignedEmail: t })}
+        keyExtractor={(t) => t.email}
+        itemTextKey="name"
+        itemValueKey="email"
+        selectedItemValue={formData.assignedEmail}
+        activeColor={activeColor}
+      />
 
-      {/* Router Model Mini Modal */}
-      <Modal
-        visible={isRouterModelMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsRouterModelMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Router Model</Text>
-              <Pressable onPress={() => setIsRouterModelMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
+      <SearchablePicker
+        isOpen={activePicker === 'repairCategory'}
+        onClose={() => setActivePicker(null)}
+        title="Select Repair Category"
+        data={filtered.repairCategories}
+        onSelect={(val) => { handleInputChange('repairCategory', val); setActivePicker(null); }}
+        searchValue={searchQueries.repairCategory || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, repairCategory: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.repairCategory}
+        activeColor={activeColor}
+      />
 
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search Router Model..."
-                  value={routerModelSearch}
-                  onChangeText={setRouterModelSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  autoFocus={isRouterModelMiniModalVisible}
-                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                />
-                {routerModelSearch.length > 0 && (
-                  <Pressable onPress={() => setRouterModelSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
-              </View>
-            </View>
+      <SearchablePicker
+        isOpen={activePicker === 'lcpnaps'}
+        onClose={() => setActivePicker(null)}
+        title="Select LCP-NAP"
+        data={filtered.lcpnaps}
+        onSelect={(item) => { 
+          setFormData((prev: ServiceOrderEditFormData) => ({ ...prev, newLcpnap: item.lcpnap_name, newLcp: item.lcp || '', newNap: item.nap || '', newPort: '' }));
+          setActivePicker(null); 
+        }}
+        searchValue={searchQueries.lcpnaps || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, lcpnaps: t })}
+        keyExtractor={(i) => i.id.toString()}
+        itemTextKey="lcpnap_name"
+        selectedItemValue={formData.newLcpnap}
+        activeColor={activeColor}
+      />
 
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredRouterModels}
-                keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
-                ItemSeparatorComponent={renderListSeparator}
-                renderItem={renderRouterModelItem}
-                ListEmptyComponent={renderListEmpty}
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <SearchablePicker
+        isOpen={activePicker === 'port'}
+        onClose={() => setActivePicker(null)}
+        title="Select Port"
+        data={filtered.ports}
+        onSelect={(val) => { handleInputChange('newPort', val); setActivePicker(null); }}
+        searchValue={searchQueries.port || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, port: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.newPort}
+        activeColor={activeColor}
+      />
 
-      {/* Item Selection Mini-Modal */}
-      <Modal
-        visible={isItemMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsItemMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent_mini, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Item</Text>
-              <Pressable onPress={() => setIsItemMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
+      <SearchablePicker
+        isOpen={activePicker === 'vlan'}
+        onClose={() => setActivePicker(null)}
+        title="Select VLAN"
+        data={filtered.vlans}
+        onSelect={(val) => { handleInputChange('newVlan', val); setActivePicker(null); }}
+        searchValue={searchQueries.vlan || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, vlan: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.newVlan}
+        activeColor={activeColor}
+      />
 
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search items..."
-                  value={itemSearchModal}
-                  onChangeText={setItemSearchModal}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  autoFocus={isItemMiniModalVisible}
-                  style={[styles.miniModalSearchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                />
-                {itemSearchModal.length > 0 && (
-                  <Pressable onPress={() => setItemSearchModal('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
-              </View>
-            </View>
+      <SearchablePicker
+        isOpen={activePicker === 'routerModels'}
+        onClose={() => setActivePicker(null)}
+        title="Select Router Model"
+        data={filtered.routerModels}
+        onSelect={(item) => { handleInputChange('routerModel', item.model); setActivePicker(null); }}
+        searchValue={searchQueries.routerModels || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, routerModels: t })}
+        keyExtractor={(i) => i.model}
+        itemTextKey="model"
+        selectedItemValue={formData.routerModel}
+        activeColor={activeColor}
+      />
 
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={[
-                  ...('None'.toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
-                  ...filteredInventoryItems
-                ]}
-                keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={renderListSeparator}
-                renderItem={renderInventoryItem}
-                ListEmptyComponent={renderListEmpty}
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <SearchablePicker
+        isOpen={activePicker === 'technician'}
+        onClose={() => { setActivePicker(null); setActiveTechField(null); }}
+        title="Select Technician"
+        data={filtered.technicians}
+        onSelect={(t) => { if (activeTechField) handleInputChange(activeTechField, t.name); setActivePicker(null); setActiveTechField(null); }}
+        searchValue={searchQueries.technician || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, technician: t })}
+        keyExtractor={(t, idx) => t.email || idx.toString()}
+        itemTextKey="name"
+        selectedItemValue={activeTechField ? formData[activeTechField] : ''}
+        activeColor={activeColor}
+      />
+
+      <SearchablePicker
+        isOpen={activePicker === 'inventory'}
+        onClose={() => { setActivePicker(null); setActiveItemIndex(null); }}
+        title="Select Item"
+        data={filtered.inventory}
+        onSelect={(item) => { if (activeItemIndex !== null) handleItemChange(activeItemIndex, 'itemId', item.item_name); setActivePicker(null); setActiveItemIndex(null); }}
+        searchValue={searchQueries.inventory || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, inventory: t })}
+        keyExtractor={(i, idx) => i.id?.toString() || idx.toString()}
+        itemTextKey="item_name"
+        selectedItemValue={activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : ''}
+        activeColor={activeColor}
+      />
+
+      <SearchablePicker
+        isOpen={activePicker === 'concern'}
+        onClose={() => setActivePicker(null)}
+        title="Select Concern"
+        data={filtered.concerns}
+        onSelect={(c) => { handleInputChange('concern', c.concern_name); setActivePicker(null); }}
+        searchValue={searchQueries.concern || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, concern: t })}
+        keyExtractor={(i) => i.id.toString()}
+        itemTextKey="concern_name"
+        selectedItemValue={formData.concern}
+        activeColor={activeColor}
+      />
+
+      <SearchablePicker
+        isOpen={activePicker === 'plan'}
+        onClose={() => setActivePicker(null)}
+        title="Select New Plan"
+        data={filtered.plans}
+        onSelect={(p) => { handleInputChange('newPlan', p); setActivePicker(null); }}
+        searchValue={searchQueries.plan || ''}
+        onSearchChange={(t) => setSearchQueries({ ...searchQueries, plan: t })}
+        keyExtractor={(i) => i}
+        selectedItemValue={formData.newPlan}
+        activeColor={activeColor}
+      />
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  modalContent: { height: '95%', width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  header: { height: 60, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderBottomWidth: 1 },
+  headerLeftAction: { position: 'absolute', left: 16, zIndex: 10, padding: 8 },
+  headerRightAction: { position: 'absolute', right: 16, zIndex: 10 },
+  headerTitleContainer: { flex: 1, marginHorizontal: 60, alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '600' },
+  saveButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  saveButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '500' },
+  contentContainer: { flex: 1 },
+  scrollViewContent: { padding: 24, paddingBottom: 40 },
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  required: { color: '#ef4444' },
+  textInput: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
+  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  connectionTypeContainer: { flexDirection: 'row', gap: 8 },
+  connectionTypeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  loadingOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  loadingText: { color: '#6b7280', marginTop: 12, fontSize: 14 },
+  signatureContainer: { height: 160, borderWidth: 1, borderStyle: 'dotted', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  signaturePlaceholder: { alignItems: 'center' },
+  signatureText: { fontSize: 14 },
+  signatureImage: { width: '100%', height: '100%', resizeMode: 'contain' },
+  signatureCanvasContainer: { height: 288, borderWidth: 1, backgroundColor: '#ffffff', marginBottom: 8, overflow: 'hidden', borderRadius: 8 },
+  signatureCloseButton: { position: 'absolute', top: 8, right: 8, padding: 4, backgroundColor: '#e5e7eb', borderRadius: 9999, zIndex: 10 },
+  signatureFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: '#e5e7eb' },
+  itemRow: { marginBottom: 16 },
+  itemRowContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  itemPickerTrigger: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12, borderWidth: 1, borderRadius: 8, height: 50 },
+  itemSelectText: { fontSize: 16, paddingHorizontal: 8 },
+  itemQtyInput: { width: 80, height: 50, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
+  itemRemoveButton: { padding: 8 },
+});
 
 export default ServiceOrderEditModal;

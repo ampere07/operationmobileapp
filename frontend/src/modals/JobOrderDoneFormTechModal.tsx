@@ -269,6 +269,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [usedPorts, setUsedPorts] = useState<Set<string>>(new Set());
 
   const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
+  const [isUsageTypeMiniModalVisible, setIsUsageTypeMiniModalVisible] = useState(false);
+  const [isPortMiniModalVisible, setIsPortMiniModalVisible] = useState(false);
+  const [isVlanMiniModalVisible, setIsVlanMiniModalVisible] = useState(false);
+  const [isTechMiniModalVisible, setIsTechMiniModalVisible] = useState(false);
+
+  const [usageTypeSearch, setUsageTypeSearch] = useState('');
+  const [portSearch, setPortSearch] = useState('');
+  const [vlanSearch, setVlanSearch] = useState('');
+  const [techSearch, setTechSearch] = useState('');
+  const [activeTechField, setActiveTechField] = useState<'visit_by' | 'visit_with' | 'visit_with_other' | null>(null);
+
   const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isDoneRendering, setIsDoneRendering] = useState(false);
@@ -1598,6 +1609,83 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     Keyboard.dismiss();
   }, [activeItemIndex, handleItemChange]);
 
+  const handleUsageTypeItemPress = useCallback((name: string) => {
+    handleInputChange('usageType', name);
+    setIsUsageTypeMiniModalVisible(false);
+    setUsageTypeSearch('');
+    Keyboard.dismiss();
+  }, [handleInputChange]);
+
+  const handlePortItemPress = useCallback((name: string) => {
+    handleInputChange('port', name);
+    setIsPortMiniModalVisible(false);
+    setPortSearch('');
+    Keyboard.dismiss();
+  }, [handleInputChange]);
+
+  const handleVlanItemPress = useCallback((name: string) => {
+    handleInputChange('vlan', name);
+    setIsVlanMiniModalVisible(false);
+    setVlanSearch('');
+    Keyboard.dismiss();
+  }, [handleInputChange]);
+
+  const handleTechItemPress = useCallback((name: string) => {
+    if (activeTechField) {
+      handleInputChange(activeTechField, name);
+    }
+    setIsTechMiniModalVisible(false);
+    setTechSearch('');
+    setActiveTechField(null);
+    Keyboard.dismiss();
+  }, [activeTechField, handleInputChange]);
+
+  const filteredUsageTypes = useMemo(() => {
+    const query = usageTypeSearch.toLowerCase();
+    return usageTypes
+      .map(ut => String(ut.usage_name || (ut as any).Usage_Name))
+      .filter(name => name.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [usageTypes, usageTypeSearch]);
+
+  const availablePorts = useMemo(() => {
+    const ports = Array.from({ length: portTotal }, (_, i) => `P${(i + 1).toString().padStart(2, '0')}`);
+    return ports.filter(p => !usedPorts.has(p));
+  }, [portTotal, usedPorts]);
+
+  const filteredPorts = useMemo(() => {
+    const query = portSearch.toLowerCase();
+    return availablePorts
+      .filter(p => p.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [availablePorts, portSearch]);
+
+  const filteredVlans = useMemo(() => {
+    const query = vlanSearch.toLowerCase();
+    return vlans
+      .filter(vlan => vlan.value != null)
+      .map(vlan => vlan.value!.toString())
+      .filter(v => v.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [vlans, vlanSearch]);
+
+  const filteredTechs = useMemo(() => {
+    const query = techSearch.toLowerCase();
+    let list = technicians;
+    if (activeTechField === 'visit_by') list = visitByTechnicians;
+    else if (activeTechField === 'visit_with') list = visitWithTechnicians;
+    else if (activeTechField === 'visit_with_other') list = visitWithOtherTechnicians;
+    
+    // Add "None" for Visit With and Visit With Other
+    const finalList = (activeTechField === 'visit_with' || activeTechField === 'visit_with_other')
+      ? [{ name: 'None', email: '' }, ...list]
+      : list;
+
+    return finalList
+      .filter(t => t.name.toLowerCase().includes(query))
+      .slice(0, 50);
+  }, [technicians, techSearch, activeTechField, visitByTechnicians, visitWithTechnicians, visitWithOtherTechnicians]);
+
   const renderLcpnapItem = useCallback(({ item, extraData }: any) => {
     const name = item.lcpnap_name || item.name || '';
     if (!name) return null;
@@ -1896,6 +1984,272 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         </View>
       </Modal>
 
+      {/* ─── Usage Type Mini Modal ──────────────────────────────────── */}
+      <Modal
+        visible={isUsageTypeMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+        onRequestClose={() => setIsUsageTypeMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Usage Type</Text>
+              <Pressable onPress={() => setIsUsageTypeMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search Usage Type..."
+                  value={usageTypeSearch}
+                  onChangeText={setUsageTypeSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  autoFocus={isUsageTypeMiniModalVisible}
+                />
+                {usageTypeSearch.length > 0 && (
+                  <Pressable onPress={() => setUsageTypeSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredUsageTypes}
+                extraData={{ selectedValue: formData.usageType, onPress: handleUsageTypeItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                // @ts-ignore
+                estimatedItemSize={60}
+                keyExtractor={(item, index) => index.toString()}
+                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                renderItem={({ item, extraData }) => (
+                  <MiniModalItem
+                    label={item}
+                    isSelected={extraData.selectedValue === item}
+                    onPress={extraData.onPress}
+                    isDarkMode={extraData.isDarkMode}
+                    primaryColor={extraData.primaryColor}
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Port Mini Modal ────────────────────────────────────────── */}
+      <Modal
+        visible={isPortMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+        onRequestClose={() => setIsPortMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select PORT</Text>
+              <Pressable onPress={() => setIsPortMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search PORT..."
+                  value={portSearch}
+                  onChangeText={setPortSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  autoFocus={isPortMiniModalVisible}
+                />
+                {portSearch.length > 0 && (
+                  <Pressable onPress={() => setPortSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredPorts}
+                extraData={{ selectedValue: formData.port, onPress: handlePortItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                // @ts-ignore
+                estimatedItemSize={60}
+                keyExtractor={(item, index) => index.toString()}
+                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                renderItem={({ item, extraData }) => (
+                  <MiniModalItem
+                    label={item}
+                    isSelected={extraData.selectedValue === item}
+                    onPress={extraData.onPress}
+                    isDarkMode={extraData.isDarkMode}
+                    primaryColor={extraData.primaryColor}
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Vlan Mini Modal ────────────────────────────────────────── */}
+      <Modal
+        visible={isVlanMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+        onRequestClose={() => setIsVlanMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select VLAN</Text>
+              <Pressable onPress={() => setIsVlanMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search VLAN..."
+                  value={vlanSearch}
+                  onChangeText={setVlanSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  autoFocus={isVlanMiniModalVisible}
+                />
+                {vlanSearch.length > 0 && (
+                  <Pressable onPress={() => setVlanSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredVlans}
+                extraData={{ selectedValue: formData.vlan, onPress: handleVlanItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                // @ts-ignore
+                estimatedItemSize={60}
+                keyExtractor={(item, index) => index.toString()}
+                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                renderItem={({ item, extraData }) => (
+                  <MiniModalItem
+                    label={item}
+                    isSelected={extraData.selectedValue === item}
+                    onPress={extraData.onPress}
+                    isDarkMode={extraData.isDarkMode}
+                    primaryColor={extraData.primaryColor}
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Technician Mini Modal ──────────────────────────────────── */}
+      <Modal
+        visible={isTechMiniModalVisible}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+        onRequestClose={() => setIsTechMiniModalVisible(false)}
+      >
+        <View style={styles.miniModalOverlay}>
+          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+                {activeTechField === 'visit_by' ? 'Select Visit By' : activeTechField === 'visit_with' ? 'Select Visit With' : 'Select Visit With (Other)'}
+              </Text>
+              <Pressable onPress={() => setIsTechMiniModalVisible(false)} style={styles.miniModalClose}>
+                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+              </Pressable>
+            </View>
+            <View style={styles.miniModalSearchContainer}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+              }]}>
+                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                <TextInput
+                  placeholder="Search Technician..."
+                  value={techSearch}
+                  onChangeText={setTechSearch}
+                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  autoFocus={isTechMiniModalVisible}
+                />
+                {techSearch.length > 0 && (
+                  <Pressable onPress={() => setTechSearch('')}>
+                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            <View style={{ height: 350, width: '100%' }}>
+              <FlashList
+                data={filteredTechs}
+                extraData={{ selectedValue: activeTechField ? formData[activeTechField] : '', onPress: handleTechItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
+                // @ts-ignore
+                estimatedItemSize={60}
+                keyExtractor={(item, index) => item.email || index.toString()}
+                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                renderItem={({ item, extraData }) => (
+                  <MiniModalItem
+                    label={item.name}
+                    isSelected={extraData.selectedValue === item.name}
+                    onPress={extraData.onPress}
+                    isDarkMode={extraData.isDarkMode}
+                    primaryColor={extraData.primaryColor}
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.miniModalEmpty}>
+                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                  </View>
+                }
+                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ─── Main Form Modal ─────────────────────────────────────────── */}
       <Modal
         visible={isOpen}
@@ -2136,47 +2490,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             Usage Type<Text style={styles.required}>*</Text>
                           </Text>
                           <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.usageType ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.usageType}
-                                onValueChange={(value) => handleInputChange('usageType', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              >
-                                <Picker.Item key="default" label="Select Usage Type" value="" enabled={false} />
-                                {(() => {
-                                  if (!formData.usageType) return null;
-                                  const val = String(formData.usageType);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low === '' || low.includes('undefined')) return null;
-
-                                  const isExisting = usageTypes.some(ut => {
-                                    const name = String(ut.usage_name || (ut as any).Usage_Name || '').trim().toLowerCase();
-                                    return name === low;
-                                  });
-                                  if (isExisting) return null;
-
-                                  return <Picker.Item key="custom" label={val} value={val} />;
-                                })()}
-                                {usageTypes
-                                  .filter(ut => {
-                                    const val = ut.usage_name || (ut as any).Usage_Name || (ut as any).usageName;
-                                    if (!val) return false;
-                                    const name = String(val).trim().toLowerCase();
-                                    return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-                                  })
-                                  .map((usageType) => (
-                                    <Picker.Item
-                                      key={usageType.id || usageType.usage_name}
-                                      label={String(usageType.usage_name || (usageType as any).Usage_Name)}
-                                      value={String(usageType.usage_name || (usageType as any).Usage_Name)}
-                                    />
-                                  ))}
-                              </Picker>
-                            </View>
+                            <Pressable
+                              onPress={() => setIsUsageTypeMiniModalVisible(true)}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.usageType ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.usageType ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.usageType || "Select Usage Type..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
                           {errors.usageType && (
                             <View style={styles.errorContainer}>
@@ -2416,41 +2748,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 PORT<Text style={styles.required}>*</Text>
                               </Text>
                               <View>
-                                <View style={[styles.pickerContainer, {
-                                  borderColor: errors.port ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                                }]}>
-                                  <Picker
-                                    selectedValue={formData.port}
-                                    onValueChange={(value) => handleInputChange('port', value)}
-                                    style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                    dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  >
-                                    <Picker.Item label="Select PORT" value="" enabled={false} />
-                                    {(() => {
-                                      if (!formData.port) return null;
-                                      const p = String(formData.port);
-                                      const low = p.toLowerCase().trim();
-                                      if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-
-                                      const isGenerated = Array.from({ length: portTotal }).some((_, i) => `p${(i + 1).toString().padStart(2, '0')}` === p);
-                                      if (isGenerated) return null;
-
-                                      return <Picker.Item label={p} value={p} />;
-                                    })()}
-                                    {Array.from({ length: portTotal }, (_, i) => {
-                                      const portVal = `P${(i + 1).toString().padStart(2, '0')}`;
-
-                                      if (usedPorts.has(portVal)) {
-                                        return null;
-                                      }
-
-                                      return (
-                                        <Picker.Item key={portVal} label={portVal} value={portVal} />
-                                      );
-                                    })}
-                                  </Picker>
-                                </View>
+                                <Pressable
+                                  onPress={() => setIsPortMiniModalVisible(true)}
+                                  style={[styles.searchContainer, {
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    borderColor: errors.port ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                    paddingVertical: 12
+                                  }]}
+                                >
+                                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  <Text style={{
+                                    flex: 1,
+                                    paddingHorizontal: 12,
+                                    color: formData.port ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                    fontSize: 14
+                                  }}>
+                                    {formData.port || "Select PORT..."}
+                                  </Text>
+                                  <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                </Pressable>
                               </View>
                               {errors.port && (
                                 <View style={styles.errorContainer}>
@@ -2467,36 +2783,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                                 VLAN<Text style={styles.required}>*</Text>
                               </Text>
                               <View>
-                                <View style={[styles.pickerContainer, {
-                                  borderColor: errors.vlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                                }]}>
-                                  <Picker
-                                    selectedValue={formData.vlan}
-                                    onValueChange={(value) => handleInputChange('vlan', value)}
-                                    style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                    dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                                  >
-                                    <Picker.Item key="default" label="Select VLAN" value="" enabled={false} />
-                                    {(() => {
-                                      if (!formData.vlan) return null;
-                                      const v = String(formData.vlan);
-                                      const low = v.toLowerCase().trim();
-                                      if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-
-                                      const isExisting = vlans.some(vlan => vlan.value != null && vlan.value.toString() === v);
-                                      if (isExisting) return null;
-
-                                      return <Picker.Item key="custom" label={v} value={v} />;
-                                    })()}
-                                    {vlans.map((vlan) => {
-                                      if (vlan.value == null) return null;
-                                      return (
-                                        <Picker.Item key={vlan.vlan_id} label={vlan.value.toString()} value={vlan.value.toString()} />
-                                      );
-                                    })}
-                                  </Picker>
-                                </View>
+                                <Pressable
+                                  onPress={() => setIsVlanMiniModalVisible(true)}
+                                  style={[styles.searchContainer, {
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    borderColor: errors.vlan ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                    paddingVertical: 12
+                                  }]}
+                                >
+                                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                  <Text style={{
+                                    flex: 1,
+                                    paddingHorizontal: 12,
+                                    color: formData.vlan ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                    fontSize: 14
+                                  }}>
+                                    {formData.vlan || "Select VLAN..."}
+                                  </Text>
+                                  <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                </Pressable>
                               </View>
                               {errors.vlan && (
                                 <View style={styles.errorContainer}>
@@ -2515,30 +2820,28 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             Visit By<Text style={styles.required}>*</Text>
                           </Text>
                           <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_by}
-                                onValueChange={(value) => handleInputChange('visit_by', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              >
-                                <Picker.Item key="default" label="Select Visit By" value="" enabled={false} />
-                                {(() => {
-                                  if (!formData.visit_by) return null;
-                                  const val = String(formData.visit_by);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item key="custom" label={val} value={val} />;
-                                })()}
-                                {visitByTechnicians.map((technician, index) => (
-                                  <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
-                            </View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_by');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_by ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_by || "Select Visit By..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
                           {errors.visit_by && (
                             <View style={styles.errorContainer}>
@@ -2555,32 +2858,28 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             Visit With<Text style={styles.required}>*</Text>
                           </Text>
                           <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_with}
-                                onValueChange={(value) => handleInputChange('visit_with', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              >
-                                <Picker.Item label="Select Visit With" value="" enabled={false} />
-                                <Picker.Item label="None" value="None" />
-                                {(() => {
-                                  if (!formData.visit_with) return null;
-                                  const val = String(formData.visit_with);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (val === 'None' || val === '') return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item label={val} value={val} />;
-                                })()}
-                                {visitWithTechnicians.map((technician, index) => (
-                                  <Picker.Item key={index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
-                            </View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_with');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_with ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_with || "Select Visit With..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
                           {errors.visit_with && (
                             <View style={styles.errorContainer}>
@@ -2597,32 +2896,28 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             Visit With(Other)<Text style={styles.required}>*</Text>
                           </Text>
                           <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_with_other}
-                                onValueChange={(value) => handleInputChange('visit_with_other', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              >
-                                <Picker.Item label="Visit With(Other)" value="" enabled={false} />
-                                <Picker.Item label="None" value="None" />
-                                {(() => {
-                                  if (!formData.visit_with_other) return null;
-                                  const val = String(formData.visit_with_other);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (val === 'None' || val === '') return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item label={val} value={val} />;
-                                })()}
-                                {visitWithOtherTechnicians.map((technician, index) => (
-                                  <Picker.Item key={index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
-                            </View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_with_other');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_with_other ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_with_other || "Visit With(Other)..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
                           {errors.visit_with_other && (
                             <View style={styles.errorContainer}>
@@ -2901,129 +3196,119 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                     {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
                       <View style={styles.inputGroup}>
-                        <View style={styles.inputGroup}>
-                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                            Visit By<Text style={styles.required}>*</Text>
-                          </Text>
-                          <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_by}
-                                onValueChange={(value) => handleInputChange('visit_by', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                          <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                              Visit By<Text style={styles.required}>*</Text>
+                            </Text>
+                            <View>
+                              <Pressable
+                                onPress={() => {
+                                  setActiveTechField('visit_by');
+                                  setIsTechMiniModalVisible(true);
+                                }}
+                                style={[styles.searchContainer, {
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                  borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                  paddingVertical: 12
+                                }]}
                               >
-                                <Picker.Item label="Select Visit By" value="" enabled={false} />
-                                {(() => {
-                                  if (!formData.visit_by) return null;
-                                  const val = String(formData.visit_by);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item label={val} value={val} />;
-                                })()}
-                                {failedVisitByTechnicians.map((technician, index) => (
-                                  <Picker.Item key={index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
+                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                <Text style={{
+                                  flex: 1,
+                                  paddingHorizontal: 12,
+                                  color: formData.visit_by ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                  fontSize: 14
+                                }}>
+                                  {formData.visit_by || "Select Visit By..."}
+                                </Text>
+                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              </Pressable>
                             </View>
-                          </View>
-                          {errors.visit_by && (
-                            <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                <Text style={styles.errorIconText}>!</Text>
+                            {errors.visit_by && (
+                              <View style={styles.errorContainer}>
+                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                  <Text style={styles.errorIconText}>!</Text>
+                                </View>
+                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
-                            </View>
-                          )}
-                        </View>
+                            )}
+                          </View>
 
-                        <View style={styles.inputGroup}>
-                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                            Visit With<Text style={styles.required}>*</Text>
-                          </Text>
-                          <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_with}
-                                onValueChange={(value) => handleInputChange('visit_with', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                          <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                              Visit With<Text style={styles.required}>*</Text>
+                            </Text>
+                            <View>
+                              <Pressable
+                                onPress={() => {
+                                  setActiveTechField('visit_with');
+                                  setIsTechMiniModalVisible(true);
+                                }}
+                                style={[styles.searchContainer, {
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                  borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                  paddingVertical: 12
+                                }]}
                               >
-                                <Picker.Item key="default" label="Select Visit With" value="" enabled={false} />
-                                <Picker.Item key="none" label="None" value="None" />
-                                {(() => {
-                                  if (!formData.visit_with) return null;
-                                  const val = String(formData.visit_with);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (val === 'None' || val === '') return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item key="custom" label={val} value={val} />;
-                                })()}
-                                {failedVisitWithTechnicians.map((technician, index) => (
-                                  <Picker.Item key={technician.email || index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
+                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                <Text style={{
+                                  flex: 1,
+                                  paddingHorizontal: 12,
+                                  color: formData.visit_with ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                  fontSize: 14
+                                }}>
+                                  {formData.visit_with || "Select Visit With..."}
+                                </Text>
+                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              </Pressable>
                             </View>
-                          </View>
-                          {errors.visit_with && (
-                            <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                <Text style={styles.errorIconText}>!</Text>
+                            {errors.visit_with && (
+                              <View style={styles.errorContainer}>
+                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                  <Text style={styles.errorIconText}>!</Text>
+                                </View>
+                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
-                            </View>
-                          )}
-                        </View>
+                            )}
+                          </View>
 
-                        <View style={styles.inputGroup}>
-                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                            Visit With(Other)<Text style={styles.required}>*</Text>
-                          </Text>
-                          <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.visit_with_other}
-                                onValueChange={(value) => handleInputChange('visit_with_other', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
+                          <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                              Visit With(Other)<Text style={styles.required}>*</Text>
+                            </Text>
+                            <View>
+                              <Pressable
+                                onPress={() => {
+                                  setActiveTechField('visit_with_other');
+                                  setIsTechMiniModalVisible(true);
+                                }}
+                                style={[styles.searchContainer, {
+                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                  borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                  paddingVertical: 12
+                                }]}
                               >
-                                <Picker.Item label="Visit With(Other)" value="" enabled={false} />
-                                <Picker.Item label="None" value="None" />
-                                {(() => {
-                                  if (!formData.visit_with_other) return null;
-                                  const val = String(formData.visit_with_other);
-                                  const low = val.toLowerCase().trim();
-                                  if (low === 'undefined' || low === 'null' || low.includes('undefined')) return null;
-                                  if (val === 'None' || val === '') return null;
-                                  if (technicians.some(t => t.name === val)) return null;
-                                  return <Picker.Item label={val} value={val} />;
-                                })()}
-                                {failedVisitWithOtherTechnicians.map((technician, index) => (
-                                  <Picker.Item key={index} label={technician.name} value={technician.name} />
-                                ))}
-                              </Picker>
+                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                                <Text style={{
+                                  flex: 1,
+                                  paddingHorizontal: 12,
+                                  color: formData.visit_with_other ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                  fontSize: 14
+                                }}>
+                                  {formData.visit_with_other || "Visit With(Other)..."}
+                                </Text>
+                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              </Pressable>
                             </View>
-                          </View>
-                          {errors.visit_with_other && (
-                            <View style={styles.errorContainer}>
-                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                <Text style={styles.errorIconText}>!</Text>
+                            {errors.visit_with_other && (
+                              <View style={styles.errorContainer}>
+                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                  <Text style={styles.errorIconText}>!</Text>
+                                </View>
+                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
                               </View>
-                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
-                            </View>
-                          )}
-                        </View>
+                            )}
+                          </View>
 
                         <View style={styles.inputGroup}>
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
