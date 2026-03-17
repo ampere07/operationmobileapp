@@ -328,16 +328,35 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     setScrollEnabled(true);
     try {
       const path = `${(ExpoFileSystem as any).cacheDirectory}signature_${Date.now()}.png`;
-      await (ExpoFileSystem as any).writeAsStringAsync(path, signature.replace('data:image/png;base64,', ''), { encoding: 'base64' });
-      setImageFiles(prev => ({ ...prev, clientSignatureFile: { uri: path, mimeType: 'image/png' } as any }));
+      const base64Code = signature.replace('data:image/png;base64,', '');
+      await (ExpoFileSystem as any).writeAsStringAsync(path, base64Code, { encoding: 'base64' });
+      
+      const file = {
+        uri: path,
+        name: `signature_${Date.now()}.png`,
+        type: 'image/png',
+        size: base64Code.length * 0.75 // Approximate size
+      };
+
+      setImageFiles(prev => ({ ...prev, clientSignatureFile: file as any }));
     } catch (e) {
+      console.error('Error handling signature:', e);
       Alert.alert('Error', 'Failed to save signature');
     }
   };
 
   const handleItemChange = useCallback((index: number, field: keyof OrderItem, value: string) => {
     setOrderItems(prev => {
-      const next = prev.map((item, i) => i === index ? { ...item, [field]: value } : item);
+      const next = prev.map((item, i) => {
+        if (i === index) {
+          const updatedItem = { ...item, [field]: value };
+          if (field === 'itemId' && value === 'None') {
+            updatedItem.quantity = '';
+          }
+          return updatedItem;
+        }
+        return item;
+      });
       if (field === 'itemId' && value && index === prev.length - 1) next.push({ itemId: '', quantity: '' });
       return next;
     });
@@ -357,14 +376,32 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     }
 
     try {
-      // SN Validation
-      if (finalData.connectionType === 'Fiber') {
-        const isNewModemSnVisible = finalData.visitStatus === 'Done' && ['Migrate', 'Replace Router', 'Relocate'].includes(finalData.repairCategory);
-        if (isNewModemSnVisible && finalData.newRouterModemSN?.trim()) {
+      // 1. Duplicate SN Check
+      const isNewModemSnVisible = finalData.visitStatus === 'Done' && ['Migrate', 'Replace Router', 'Relocate'].includes(finalData.repairCategory);
+      if (isNewModemSnVisible && finalData.newRouterModemSN?.trim()) {
+        const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
+          params: {
+            sn: finalData.newRouterModemSN
+          }
+        });
+
+        if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
+          setLoading(false);
+          const errorMessage = (duplicateResponse.data as any).message || 'Please check on Customer Details. SN Duplicate Detected.';
+          setErrors(prev => ({
+            ...prev,
+            newRouterModemSN: errorMessage
+          }));
+          Alert.alert('Validation Error', errorMessage);
+          return;
+        }
+
+        // 2. SmartOLT Validation (Fiber only)
+        if (finalData.connectionType === 'Fiber') {
           const vRes = await apiClient.get('/smart-olt/validate-sn', { params: { sn: finalData.newRouterModemSN } });
           if (!vRes.data?.success) {
-            setErrors(prev => ({ ...prev, newRouterModemSN: 'SN not in SmartOLT' }));
-            Alert.alert('Error', 'SN not in SmartOLT');
+            setErrors(prev => ({ ...prev, newRouterModemSN: 'sn not existing in smart olt' }));
+            Alert.alert('SmartOLT Verification Failed', 'sn not existing in smart olt');
             setLoading(false);
             return;
           }
@@ -417,7 +454,11 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
 
   // Filtered Lists for Pickers
   const filtered = {
-    inventory: useMemo(() => inventoryItems.filter(i => i.item_name.toLowerCase().includes((searchQueries.inventory || '').toLowerCase())), [inventoryItems, searchQueries.inventory]),
+    inventory: useMemo(() => {
+      const query = (searchQueries.inventory || '').toLowerCase();
+      const list = inventoryItems.filter(i => i.item_name.toLowerCase().includes(query));
+      return [{ id: 'none', item_name: 'None' } as any, ...list];
+    }, [inventoryItems, searchQueries.inventory]),
     lcpnaps: useMemo(() => lcpnaps.filter(l => l.lcpnap_name.toLowerCase().includes((searchQueries.lcpnaps || '').toLowerCase())).slice(0, 50), [lcpnaps, searchQueries.lcpnaps]),
     routerModels: useMemo(() => routerModels.filter(r => r.model.toLowerCase().includes((searchQueries.routerModels || '').toLowerCase())).slice(0, 50), [routerModels, searchQueries.routerModels]),
     technicians: useMemo(() => {
@@ -449,7 +490,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     handleInputChange, handleImageUpload, handleSave: handleSaveInternal,
     activePicker, setActivePicker, searchQueries, setSearchQueries, filtered,
     orderItems, setOrderItems, activeItemIndex, setActiveItemIndex, handleItemChange,
-    imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled,
+    imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
     activeTechField, setActiveTechField
   };
 };

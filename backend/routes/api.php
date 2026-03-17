@@ -1295,6 +1295,7 @@ Route::prefix('applications')->group(function () {
 
 // Job Orders Management Routes
 Route::prefix('job-orders')->middleware('ensure.database.tables')->group(function () {
+    Route::get('/validate-sn', [JobOrderController::class, 'validateModemRouterSN']);
     Route::get('/', [JobOrderController::class, 'index']);
     Route::post('/', [JobOrderController::class, 'store']);
     Route::get('/{id}', [JobOrderController::class, 'show']);

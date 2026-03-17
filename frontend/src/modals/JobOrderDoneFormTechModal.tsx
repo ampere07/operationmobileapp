@@ -1015,78 +1015,72 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    // SmartOLT and Technical Details Validation
-    if (formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber' && formData.modemSN.trim()) {
+    // Modem SN Duplicate Validation (Job Orders & Technical Details)
+    if (formData.onsiteStatus === 'Done' && formData.modemSN.trim()) {
       setLoading(true);
 
-      // 1. SmartOLT Validation Logic (Check if exists first)
+      // 1. Duplicate SN Check
       try {
-        const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-          params: { sn: formData.modemSN }
+        const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+        const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
+          params: {
+            sn: formData.modemSN,
+            exclude_id: currentId
+          }
         });
 
-        if (!(smartOltResponse.data as any).success) {
+        if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
           setLoading(false);
-          const errorMsg = 'sn not existing in smart olt';
+          const errorMessage = (duplicateResponse.data as any).message || 'Please check on Customer Details. SN Duplicate Detected.';
           setErrors(prev => ({
             ...prev,
-            modemSN: errorMsg
+            modemSN: errorMessage
           }));
-          showMessageModal('SmartOLT Verification Failed', [
-            { type: 'error', text: errorMsg }
+          showMessageModal('Validation Error', [
+            { type: 'error', text: errorMessage }
           ]);
           return;
         }
       } catch (error: any) {
-        console.error('[SMARTOLT VALIDATION] API Error:', error);
-        setLoading(false);
-        const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
-        setErrors(prev => ({
-          ...prev,
-          modemSN: errorMessage
-        }));
-        showMessageModal('Validation Error', [
-          { type: 'error', text: errorMessage }
-        ]);
-        return;
+        console.error('Error checking duplicate SN:', error);
+        if (error.response?.status === 422) {
+           setLoading(false);
+           return;
+        }
       }
 
-      // 2. Duplicate SN Check (Technical Details)
-      try {
-        // Check if SN exists in other Job Orders
-        const duplicateResponse = await apiClient.get('/job-orders', {
-          params: {
-            search: formData.modemSN,
-            limit: 50 // Check enough records
-          }
-        });
-
-        if (duplicateResponse.data && duplicateResponse.data.success && Array.isArray(duplicateResponse.data.data)) {
-          const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
-          const isDuplicate = duplicateResponse.data.data.some((jo: any) => {
-            const joId = jo.id || jo.JobOrder_ID;
-            // Check potential SN fields from API response
-            const joSN = jo.modem_sn || jo.Modem_SN || jo.modem_router_sn;
-            // Compare SNs (case-insensitive) and ensure it's not the current job order
-            return String(joId) !== String(currentId) &&
-              String(joSN || '').trim().toLowerCase() === formData.modemSN.trim().toLowerCase();
+      // 2. SmartOLT Validation (Fiber only)
+      if (formData.connectionType === 'Fiber') {
+        try {
+          const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+            params: { sn: formData.modemSN }
           });
 
-          if (isDuplicate) {
+          if (!(smartOltResponse.data as any).success) {
             setLoading(false);
-            const errorMessage = 'Please check on Customer Details. SN Duplicate Detected.';
+            const errorMsg = 'sn not existing in smart olt';
             setErrors(prev => ({
               ...prev,
-              modemSN: errorMessage
+              modemSN: errorMsg
             }));
-            showMessageModal('Validation Error', [
-              { type: 'error', text: errorMessage }
+            showMessageModal('SmartOLT Verification Failed', [
+              { type: 'error', text: errorMsg }
             ]);
             return;
           }
+        } catch (error: any) {
+          console.error('[SMARTOLT VALIDATION] API Error:', error);
+          setLoading(false);
+          const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
+          setErrors(prev => ({
+            ...prev,
+            modemSN: errorMessage
+          }));
+          showMessageModal('Validation Error', [
+            { type: 'error', text: errorMessage }
+          ]);
+          return;
         }
-      } catch (error) {
-        console.error('Error checking duplicate SN:', error);
       }
 
       setLoading(false);
@@ -1161,6 +1155,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         jobOrderUpdateData.onsite_remarks = updatedFormData.onsiteRemarks;
         jobOrderUpdateData.address_coordinates = updatedFormData.addressCoordinates || '';
         jobOrderUpdateData.onsite_status = 'Done';
+        
+        // Add tech input username if applicable
+        const hasTechInput = usernamePattern && usernamePattern.sequence.some(item => (item as any).type === 'tech_input');
+        if (hasTechInput && techInputValue.trim()) {
+          jobOrderUpdateData.pppoe_username = techInputValue.trim();
+        }
       }
 
       if (['Done', 'Failed', 'Reschedule'].includes(updatedFormData.onsiteStatus)) {
@@ -1309,90 +1309,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       }
 
-      // RADIUS/PPPoE Login - Execute AFTER LCPNAP/Port are saved
-      if (updatedFormData.onsiteStatus === 'Done') {
-        const hasTechInput = usernamePattern && usernamePattern.sequence.some(item => item.type === 'tech_input');
-        let credentialsUpdated = false;
-
-        const credentialsUpdateData: any = {};
-
-        if (hasTechInput && techInputValue.trim()) {
-          credentialsUpdateData.pppoe_username = techInputValue.trim();
-          credentialsUpdated = true;
-        } else {
-          const planNameForRadius = updatedFormData.choosePlan.includes(' - P')
-            ? updatedFormData.choosePlan.split(' - P')[0].trim()
-            : updatedFormData.choosePlan;
-
-          try {
-            const radiusResponse = await apiClient.post<{
-              success: boolean;
-              message: string;
-              data?: {
-                username: string;
-                password: string;
-                group: string;
-                credentials_exist?: boolean;
-                radius_response?: any;
-              };
-            }>(`/job-orders/${jobOrderId}/create-radius-account`);
-
-            if (radiusResponse.data.success && radiusResponse.data.data) {
-              const { username, password, credentials_exist } = radiusResponse.data.data;
-
-              // Update credentials data
-              credentialsUpdateData.pppoe_username = username;
-              credentialsUpdateData.pppoe_password = password;
-              credentialsUpdated = true;
-
-              if (credentials_exist) {
-                saveMessages.push({
-                  type: 'warning',
-                  text: `PPPoE credentials already exist: Username: ${username}, Password: ${password}, Plan: ${planNameForRadius}`
-                });
-              } else {
-                saveMessages.push({
-                  type: 'success',
-                  text: `RADIUS Account Created: Username: ${username}, Password: ${password}, Plan: ${planNameForRadius}`
-                });
-              }
-            } else {
-              saveMessages.push({
-                type: 'warning',
-                text: `RADIUS account creation failed: ${radiusResponse.data.message}`
-              });
-            }
-          } catch (radiusError: any) {
-            const errorMsg = radiusError.response?.data?.message || radiusError.message || 'Unknown error';
-            saveMessages.push({
-              type: 'warning',
-              text: `RADIUS account creation failed: ${errorMsg}`
-            });
-          }
-        }
-
-        if (credentialsUpdated) {
-          try {
-            // Update the job order again with the credentials
-            // Merge with original update data to ensure required fields are present if needed by backend validation
-            // But ideally we only send what's new. Safe to send partial update if backend allows,
-            // otherwise might need full payload. Assuming `updateJobOrder` merges or handles partials.
-            // Safe bet: send just the credentials if backend is flexible, but `updateJobOrder` function
-            // usually sends exactly what's passed.
-            const credentialSaveResponse = await updateJobOrder(jobOrderId, credentialsUpdateData);
-
-            if (!credentialSaveResponse.success) {
-              saveMessages.push({
-                type: 'error',
-                text: `Failed to save generated credentials: ${credentialSaveResponse.message}`
-              });
-            }
-          } catch (credError: any) {
-            saveMessages.push({
-              type: 'error',
-              text: `Error saving credentials: ${credError.message}`
-            });
-          }
+      // RADIUS account creation is now handled by the backend during job order update
+      // when onsiteStatus is set to 'Done'.
+      if (updatedFormData.onsiteStatus === 'Done' && jobOrderResponse.data) {
+        const { pppoe_username, pppoe_password } = jobOrderResponse.data;
+        if (pppoe_username && pppoe_password) {
+          saveMessages.push({
+            type: 'success',
+            text: `RADIUS/PPPoE Credentials: Username: ${pppoe_username}, Password: ${pppoe_password}`
+          });
         }
       }
 
@@ -1509,8 +1434,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       setLoading(false);
       setShowLoadingModal(false);
       setLoadingPercentage(0);
+
+      // Special handling for RADIUS error to match user requirements exactly
+      const displayMessage = errorMessage === 'radius api error occured contact support' 
+        ? errorMessage 
+        : `Failed to update records: ${errorMessage}`;
+
       showMessageModal('Error', [
-        { type: 'error', text: `Failed to update records: ${errorMessage}` }
+        { type: 'error', text: displayMessage }
       ]);
     }
   };

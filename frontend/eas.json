@@ -9,8 +9,12 @@
     "production": {
       "android": {
         "image": "latest",
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "autoIncrement": true
       }
     }
+  },
+  "cli": {
+    "appVersionSource": "remote"
   }
 }

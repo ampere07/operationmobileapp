@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { Camera, CheckCircle, AlertCircle, Loader2, Search, Check, X, ChevronDown } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
@@ -17,6 +16,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import apiClient from '../config/api';
 import { getAllLCPs, LCP } from '../services/lcpService';
 import { getAllNAPs, NAP } from '../services/napService';
+import { SearchablePicker, SearchablePickerTrigger } from '../components/SearchablePicker';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -139,55 +139,6 @@ const ImageUploadField = React.memo<ImageUploadFieldProps>(
   ),
 );
 
-interface DropdownFieldProps {
-  label: string;
-  value: string;
-  options: { label: string; value: string }[];
-  onChange: (value: string) => void;
-  placeholder: string;
-  disabled?: boolean;
-  error?: string;
-  required?: boolean;
-  isDarkMode: boolean;
-  primaryColor: string;
-}
-
-const DropdownField = React.memo<DropdownFieldProps>(
-  ({ label, value, options, onChange, placeholder, disabled, error, required, isDarkMode, primaryColor }) => (
-    <View style={styles.fieldContainer}>
-      <Text style={[styles.fieldLabel, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-        {label}{required && <Text style={{ color: '#ef4444' }}>*</Text>}
-      </Text>
-      <View style={[styles.pickerContainer, {
-        borderColor: error ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-        backgroundColor: disabled ? (isDarkMode ? '#374151' : '#f3f4f6') : (isDarkMode ? '#1f2937' : '#ffffff'),
-        opacity: disabled ? 0.6 : 1,
-      }]}>
-        <Picker
-          selectedValue={value}
-          onValueChange={(v) => !disabled && onChange(String(v))}
-          enabled={!disabled}
-          style={{ color: isDarkMode ? '#fff' : '#000' }}
-          dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-        >
-          <Picker.Item label={placeholder} value="" enabled={false} color={isDarkMode ? '#6b7280' : '#9ca3af'} />
-          {options.map((opt, i) => (
-            <Picker.Item key={i} label={opt.label} value={opt.value} />
-          ))}
-        </Picker>
-      </View>
-      {error && (
-        <View style={styles.errorRow}>
-          <View style={[styles.errorBullet, { backgroundColor: primaryColor }]}>
-            <Text style={styles.errorBulletText}>!</Text>
-          </View>
-          <Text style={[styles.errorDetailText, { color: primaryColor }]}>{error}</Text>
-        </View>
-      )}
-    </View>
-  ),
-);
-
 interface MiniModalItemProps {
   label: string;
   isSelected: boolean;
@@ -224,11 +175,17 @@ interface MapSectionProps {
   colorPalette: ColorPalette | null;
   webViewRef: React.RefObject<any>;
   loading: boolean;
+  onInteractionChange: (enabled: boolean) => void;
 }
 
 const MapSection = React.memo<MapSectionProps>(
-  ({ onMapPress, onGetMyLocation, isDarkMode, colorPalette, webViewRef, loading }) => (
-    <View style={[styles.mapSectionWrapper, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}>
+  ({ onMapPress, onGetMyLocation, isDarkMode, colorPalette, webViewRef, loading, onInteractionChange }) => (
+    <View 
+      style={[styles.mapSectionWrapper, { borderColor: isDarkMode ? '#374151' : '#d1d5db' }]}
+      onTouchStart={() => onInteractionChange(false)}
+      onTouchEnd={() => onInteractionChange(true)}
+      onTouchCancel={() => onInteractionChange(true)}
+    >
       <WebView
         ref={webViewRef}
         source={{ html: LEAFLET_HTML }}
@@ -296,6 +253,19 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
 
   const primaryColor = colorPalette?.primary || '#7c3aed';
   const [isContentReady, setIsContentReady] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+
+  // Region Picker State
+  const [isRegionPickerOpen, setIsRegionPickerOpen] = useState(false);
+  const [regionSearch, setRegionSearch] = useState('');
+
+  // City Picker State
+  const [isCityPickerOpen, setIsCityPickerOpen] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
+
+  // Barangay Picker State
+  const [isBarangayPickerOpen, setIsBarangayPickerOpen] = useState(false);
+  const [barangaySearch, setBarangaySearch] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -559,20 +529,50 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
             </View>
           </View>
 
-          <ScrollView style={styles.contentContainer} contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          <ScrollView 
+            style={styles.contentContainer} 
+            contentContainerStyle={styles.scrollViewContent} 
+            showsVerticalScrollIndicator={false} 
+            nestedScrollEnabled 
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={scrollEnabled}
+          >
             {!isContentReady ? (
               <View style={styles.loaderContainer}><ActivityIndicator size="large" color={primaryColor} /></View>
             ) : (
               <View style={{ gap: 16 }}>
-                <ImageUploadField label="Reading Image" field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} />
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Street<Text style={{ color: '#ef4444' }}>*</Text></Text>
                   <TextInput value={formData.street} onChangeText={t => setFormData(p => ({ ...p, street: t }))} style={[styles.input, { borderColor: errors.street ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]} placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'} placeholder="Enter street" />
                   {errors.street && <Text style={styles.errorText}>{errors.street}</Text>}
                 </View>
-                <DropdownField label="Region" value={formData.region} options={regionOptions} onChange={v => setFormData(p => ({ ...p, region: v, city: '', barangay: '' }))} placeholder="Select Region" required error={errors.region} isDarkMode={isDarkMode} primaryColor={primaryColor} />
-                <DropdownField label="City" value={formData.city} options={cityOptions} onChange={v => setFormData(p => ({ ...p, city: v, barangay: '' }))} placeholder={formData.region ? 'Select City' : 'All'} disabled={!formData.region} required error={errors.city} isDarkMode={isDarkMode} primaryColor={primaryColor} />
-                <DropdownField label="Barangay" value={formData.barangay} options={barangayOptions} onChange={v => setFormData(p => ({ ...p, barangay: v }))} placeholder={formData.city ? 'Select Barangay' : 'All'} disabled={!formData.city} required error={errors.barangay} isDarkMode={isDarkMode} primaryColor={primaryColor} />
+                <SearchablePickerTrigger
+                  label="Region"
+                  value={formData.region}
+                  onPress={() => setIsRegionPickerOpen(true)}
+                  required
+                  error={errors.region}
+                  isDarkMode={isDarkMode}
+                  placeholder="Select Region"
+                />
+                <SearchablePickerTrigger
+                  label="City"
+                  value={formData.city}
+                  onPress={() => formData.region && setIsCityPickerOpen(true)}
+                  required
+                  error={errors.city}
+                  isDarkMode={isDarkMode}
+                  placeholder={formData.region ? "Select City" : "Select Region first"}
+                />
+                <SearchablePickerTrigger
+                  label="Barangay"
+                  value={formData.barangay}
+                  onPress={() => formData.city && setIsBarangayPickerOpen(true)}
+                  required
+                  error={errors.barangay}
+                  isDarkMode={isDarkMode}
+                  placeholder={formData.city ? "Select Barangay" : "Select City first"}
+                />
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>LCP<Text style={{ color: '#ef4444' }}>*</Text></Text>
                   <Pressable onPress={() => { setIsLcpMiniModalVisible(true); setLcpSearch(''); }} style={[styles.pickerTrigger, { borderColor: errors.lcp_name ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
@@ -618,8 +618,9 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Coordinates<Text style={{ color: '#ef4444' }}>*</Text></Text>
                   <TextInput value={formData.coordinates} onChangeText={t => setFormData(p => ({ ...p, coordinates: t }))} style={[styles.input, { borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]} placeholder="14.466580, 121.201807" />
-                  <MapSection onMapPress={handleMapPress} onGetMyLocation={handleGetMyLocation} isDarkMode={isDarkMode} colorPalette={colorPalette} webViewRef={webViewRef} loading={loading} />
+                  <MapSection onMapPress={handleMapPress} onGetMyLocation={handleGetMyLocation} isDarkMode={isDarkMode} colorPalette={colorPalette} webViewRef={webViewRef} loading={loading} onInteractionChange={setScrollEnabled} />
                 </View>
+                <ImageUploadField label="Reading Image" field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} />
                 <ImageUploadField label="Image" field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} />
                 <ImageUploadField label="Image 2" field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} />
                 <View>
@@ -701,6 +702,60 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
               </View>
             </View>
           </Modal>
+
+          <SearchablePicker
+            isOpen={isRegionPickerOpen}
+            onClose={() => setIsRegionPickerOpen(false)}
+            title="Select Region"
+            data={regionOptions.filter(opt => opt.label.toLowerCase().includes(regionSearch.toLowerCase()))}
+            onSelect={(item) => {
+              setFormData(p => ({ ...p, region: item.value, city: '', barangay: '' }));
+              setIsRegionPickerOpen(false);
+              setRegionSearch('');
+            }}
+            keyExtractor={(item) => item.value}
+            searchValue={regionSearch}
+            onSearchChange={setRegionSearch}
+            isDarkMode={isDarkMode}
+            activeColor={primaryColor}
+            selectedItemValue={formData.region}
+          />
+
+          <SearchablePicker
+            isOpen={isCityPickerOpen}
+            onClose={() => setIsCityPickerOpen(false)}
+            title="Select City"
+            data={cityOptions.filter(opt => opt.label.toLowerCase().includes(citySearch.toLowerCase()))}
+            onSelect={(item) => {
+              setFormData(p => ({ ...p, city: item.value, barangay: '' }));
+              setIsCityPickerOpen(false);
+              setCitySearch('');
+            }}
+            keyExtractor={(item) => item.value}
+            searchValue={citySearch}
+            onSearchChange={setCitySearch}
+            isDarkMode={isDarkMode}
+            activeColor={primaryColor}
+            selectedItemValue={formData.city}
+          />
+
+          <SearchablePicker
+            isOpen={isBarangayPickerOpen}
+            onClose={() => setIsBarangayPickerOpen(false)}
+            title="Select Barangay"
+            data={barangayOptions.filter(opt => opt.label.toLowerCase().includes(barangaySearch.toLowerCase()))}
+            onSelect={(item) => {
+              setFormData(p => ({ ...p, barangay: item.value }));
+              setIsBarangayPickerOpen(false);
+              setBarangaySearch('');
+            }}
+            keyExtractor={(item) => item.value}
+            searchValue={barangaySearch}
+            onSearchChange={setBarangaySearch}
+            isDarkMode={isDarkMode}
+            activeColor={primaryColor}
+            selectedItemValue={formData.barangay}
+          />
         </View>
       </KeyboardAvoidingView>
     </Modal>

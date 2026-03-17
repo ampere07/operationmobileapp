@@ -150,6 +150,9 @@ class TransactionController extends Controller
                     if ($billingAccount) {
                         $this->sendApprovalSms($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment, $transaction->payment_date);
                         $this->sendApprovalEmail($billingAccount, $appliedData['invoices_updated']['invoices_paid'] ?? [], $transaction->received_payment, $transaction->payment_date);
+                        
+                        // Attempt reconnection for auto-applied payments
+                        $this->attemptReconnectionAfterApproval($billingAccount, $transaction->updated_by_user);
                     }
 
                 } else {
@@ -338,7 +341,7 @@ class TransactionController extends Controller
 
 
             // Attempt reconnection after successful approval
-            $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount);
+            $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount, $transaction->updated_by_user);
 
             event(new TransactionUpdated(['action' => 'approved', 'transaction_id' => $transactionId, 'account_no' => $accountNo]));
 
@@ -787,7 +790,7 @@ class TransactionController extends Controller
                     $accountPayments[$accountNo]['total'] += $paymentReceived;
 
                     // Attempt reconnection after successful approval
-                    $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount);
+                    $reconnectStatus = $this->attemptReconnectionAfterApproval($billingAccount, $transaction->updated_by_user);
 
                     $results['success'][] = [
                         'transaction_id' => $transactionId,
@@ -896,7 +899,7 @@ class TransactionController extends Controller
      * Attempt to reconnect user account after transaction approval
      * Only reconnects if billing_status_id is not 1 (Active) and balance is 0 or negative
      */
-    private function attemptReconnectionAfterApproval($billingAccount): string
+    private function attemptReconnectionAfterApproval($billingAccount, $updatedByUser = 'System'): string
     {
         try {
             // Reload billing account to get latest balance and status
@@ -956,7 +959,7 @@ class TransactionController extends Controller
                 'accountNumber' => $accountNo,
                 'username' => $username,
                 'plan' => $plan,
-                'updatedBy' => Auth::user()->email_address ?? 'Transaction Approval Auto-Reconnect',
+                'updatedBy' => $updatedByUser,
                 'remarks' => 'Transaction Approval Auto-Reconnect'
             ];
 

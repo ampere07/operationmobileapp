@@ -284,6 +284,8 @@ class ServiceOrderController extends Controller
                 'request_support_status' => $supportStatus
             ]);
             
+            $updatedByUser = $request->input('updated_by_user') ?: $request->input('created_by_user') ?: (Auth::user()->name ?? 'System');
+
             $reconnectStatus = null;
             if ($currentConcern && strtolower($currentConcern) === 'reconnect' && $supportStatus === 'resolved') {
                 $billingAccount = BillingAccount::where('account_no', $request->account_no)->first();
@@ -291,7 +293,7 @@ class ServiceOrderController extends Controller
                     Log::info('Triggering auto-reconnect for NEW Service Order with Reconnect concern', [
                         'account_no' => $request->account_no
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount, $serviceOrderId);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $serviceOrderId, $updatedByUser);
                 }
             }
 
@@ -456,6 +458,8 @@ class ServiceOrderController extends Controller
                 ], 404);
             }
             
+            $updatedByUser = $request->input('updated_by_user') ?: (Auth::user()->name ?? 'System');
+            
             $updateData = [];
             $billingUpdateData = [];
             $customerUpdateData = [];
@@ -554,7 +558,7 @@ class ServiceOrderController extends Controller
                         'router_modem_sn' => $newSN,
                         'lcpnap' => $newLcpNap,
                         'updated_at' => now(),
-                        'updated_by' => Auth::user()->name ?? 'Web'
+                        'updated_by' => $updatedByUser
                     ];
 
                     // Also sync job_orders table lcpnap/port/vlan
@@ -793,7 +797,7 @@ class ServiceOrderController extends Controller
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
                         'account_no' => $order->account_no
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $updatedByUser);
 
                     if ($reconnectStatus === 'success' && $normalizedConcern === 'upgrade/downgrade plan') {
                         try {
@@ -814,8 +818,8 @@ class ServiceOrderController extends Controller
                                 'date_changed' => now(),
                                 'date_used' => now(),
                                 'remarks' => $updateData['concern_remarks'] ?? $order->concern_remarks ?? 'Upgraded/Downgraded via Service Order',
-                                'created_by_user' => Auth::user()->name ?? Auth::user()->email ?? 'System',
-                                'updated_by_user' => Auth::user()->name ?? Auth::user()->email ?? 'System',
+                                'created_by_user' => $updatedByUser,
+                                'updated_by_user' => $updatedByUser,
                             ]);
                             \Log::info("PlanChangeLog created successfully for account {$billingAccount->account_no}");
                         } catch (\Exception $e) {
@@ -825,6 +829,8 @@ class ServiceOrderController extends Controller
                 }
             }
 
+
+
             // Trigger Disconnection if concern is 'Disconnect' and support status is 'Resolved'
             $disconnectStatus = null;
             if ($currentConcern && strtolower($currentConcern) === 'disconnect' && $supportStatus === 'resolved') {
@@ -833,7 +839,7 @@ class ServiceOrderController extends Controller
                     \Log::info('Triggering auto-disconnect for Service Order with Disconnect concern', [
                         'account_no' => $order->account_no
                     ]);
-                    $disconnectStatus = $this->attemptDisconnection($billingAccount);
+                    $disconnectStatus = $this->attemptDisconnection($billingAccount, $updatedByUser);
                 }
             }
 
@@ -856,7 +862,7 @@ class ServiceOrderController extends Controller
                     \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
                         'account_no' => $order->account_no
                     ]);
-                    $pulloutStatus = $this->attemptPullout($billingAccount);
+                    $pulloutStatus = $this->attemptPullout($billingAccount, $updatedByUser);
                 }
             }
 
@@ -979,7 +985,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptReconnection($billingAccount, $serviceOrderId = null): string
+    private function attemptReconnection($billingAccount, $serviceOrderId = null, $updatedBy = 'System'): string
     {
         try {
             // Reload billing account
@@ -987,6 +993,20 @@ class ServiceOrderController extends Controller
             $accountNo = $billingAccount->account_no;
             
             \Log::info('[SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
+
+            // Step 2: Trigger RADIUS Reconnection
+            try {
+                $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusParams = [
+                    'accountNumber' => $accountNo,
+                    'remarks' => 'Reconnected via Service Order',
+                    'updatedBy' => $updatedBy
+                ];
+                $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
+                \Log::info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
+            } catch (\Exception $radEx) {
+                \Log::error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
+            }
 
             // Step 3: Get account details (PPPoE Username and Plan)
             $accountInfo = DB::table('billing_accounts')
@@ -1091,7 +1111,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptDisconnection($billingAccount): string
+    private function attemptDisconnection($billingAccount, $updatedByUser = 'System'): string
     {
         try {
             // Reload billing account
@@ -1116,6 +1136,20 @@ class ServiceOrderController extends Controller
             }
 
             \Log::info('[SERVICE ORDER DISCONNECT PROCEED] Disconnecting user for account: ' . $accountNo);
+
+            // Step 2: Trigger RADIUS Disconnection
+            try {
+                $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->disconnectUser([
+                    'accountNumber' => $accountNo,
+                    'username' => $username,
+                    'remarks' => 'Disconnected via Service Order',
+                    'updatedBy' => $updatedByUser
+                ]);
+                \Log::info('[SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
+            } catch (\Exception $radEx) {
+                \Log::error('[SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
+            }
 
             \Log::info('[SERVICE ORDER DISCONNECT SUCCESS] Disconnection (Local Status) completed successfully');
 
@@ -1201,7 +1235,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptPullout($billingAccount): string
+    private function attemptPullout($billingAccount, $updatedByUser = 'System'): string
     {
         try {
             // Reload billing account
@@ -1226,6 +1260,20 @@ class ServiceOrderController extends Controller
             }
 
             \Log::info('[SERVICE ORDER PULLOUT PROCEED] Executing pullout for account: ' . $accountNo);
+
+            // Step 2: Trigger RADIUS Disconnection/Pullout
+            try {
+                $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->disconnectUser([
+                    'accountNumber' => $accountNo,
+                    'username' => $username,
+                    'remarks' => 'Pullout',
+                    'updatedBy' => $updatedByUser
+                ]);
+                \Log::info('[SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
+            } catch (\Exception $radEx) {
+                \Log::error('[SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
+            }
 
             \Log::info('[SERVICE ORDER PULLOUT SUCCESS] Disconnection (Local Status) completed successfully');
 
@@ -1340,7 +1388,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptMigration($billingAccount, $repairCategory = null): string
+    private function attemptMigration($billingAccount, $repairCategory = null, $updatedByUser = 'System'): string
     {
         try {
             $accountNo = $billingAccount->account_no;
@@ -1444,7 +1492,7 @@ class ServiceOrderController extends Controller
                                 ->update([
                                     'username' => $newUsername,
                                     'updated_at' => now(),
-                                    'updated_by' => Auth::user()->name ?? 'System'
+                                    'updated_by' => $updatedByUser
                                 ]);
                             
                             // Update job_orders: username, pppoe_username, and pppoe_password
@@ -1483,7 +1531,7 @@ class ServiceOrderController extends Controller
                     ->update([
                         'username' => $newUsername,
                         'updated_at' => now(),
-                        'updated_by' => Auth::user()->name ?? 'System'
+                        'updated_by' => $updatedByUser
                     ]);
                 
                 DB::table('job_orders')

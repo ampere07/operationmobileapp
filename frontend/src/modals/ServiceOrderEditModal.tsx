@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Modal, Pressable, Image, ActivityIndicator, Platform, KeyboardAvoidingView, StyleSheet, Alert } from 'react-native';
-import { X, ChevronDown, Search, Check, ChevronLeft } from 'lucide-react-native';
+import { X, ChevronDown, Search, Check, ChevronLeft, Camera } from 'lucide-react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 
 import ImagePreview from '../components/ImagePreview';
@@ -27,7 +27,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     handleInputChange, handleImageUpload, handleSave,
     activePicker, setActivePicker, searchQueries, setSearchQueries, filtered,
     orderItems, setOrderItems, activeItemIndex, setActiveItemIndex, handleItemChange,
-    imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled,
+    imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
     activeTechField, setActiveTechField, setFormData
   } = useServiceOrderEdit(isOpen, serviceOrderData, onClose, onSave);
 
@@ -202,38 +202,87 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
 
                           {/* SIGNATURE SECTION */}
                           <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Client Signature <Text style={styles.required}>*</Text></Text>
+                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                              Client Signature Image<Text style={styles.required}>*</Text>
+                            </Text>
                             {!isDrawingSignature ? (
                               <View>
-                                <Pressable 
-                                  onPress={() => setIsDrawingSignature(true)} 
-                                  style={[styles.signatureContainer, { borderColor: isDarkMode ? '#4b5563' : '#9ca3af', backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb' }]}
+                                <Pressable
+                                  onPress={() => setIsDrawingSignature(true)}
+                                  style={[styles.signatureContainer, {
+                                    borderColor: errors.clientSignatureFile ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb'
+                                  }]}
                                 >
                                   {(imageFiles.clientSignatureFile || formData.clientSignature) ? (
-                                    <Image source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }} style={styles.signatureImage} />
+                                    <Image
+                                      source={{ uri: imageFiles.clientSignatureFile?.uri || formData.clientSignature }}
+                                      style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                                    />
                                   ) : (
-                                    <View style={styles.signaturePlaceholder}><Text style={[styles.signatureText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Tap to Draw Signature</Text></View>
+                                    <View style={styles.signaturePlaceholder}>
+                                      <View style={[styles.signatureIconCircle, { backgroundColor: (activeColor || '#7c3aed') + '20' }]}>
+                                        <Camera size={24} color={activeColor || '#7c3aed'} />
+                                      </View>
+                                      <Text style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Tap to Draw Signature</Text>
+                                    </View>
                                   )}
                                 </Pressable>
+                                {(imageFiles.clientSignatureFile || formData.clientSignature) && (
+                                  <View style={styles.signatureActions}>
+                                    <Pressable
+                                      onPress={() => {
+                                        handleImageUpload('clientSignatureFile', null);
+                                        setFormData((prev: any) => ({ ...prev, clientSignature: '' }));
+                                      }}
+                                      style={styles.removeButton}
+                                    >
+                                      <X size={16} color="#ef4444" />
+                                      <Text style={styles.removeButtonText}>Remove</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => setIsDrawingSignature(true)}
+                                      style={[styles.redrawButton, { backgroundColor: activeColor || '#7c3aed' }]}
+                                    >
+                                      <Text style={styles.redrawButtonText}>Redraw</Text>
+                                    </Pressable>
+                                  </View>
+                                )}
                               </View>
                             ) : (
-                              <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#6b7280' : '#d1d5db' }]}>
+                              <View style={[styles.signatureCanvasContainer, { borderColor: isDarkMode ? '#374151' : '#d1d5db', flexDirection: 'column' }]}>
                                 <View style={{ flex: 1 }}>
                                   <SignatureScreen
                                     ref={signatureRef}
                                     onOK={handleSignatureOK}
-                                    onEmpty={() => Alert.alert('Empty', 'Please sign the canvas before saving.')}
-                                    style={{ flex: 1 }}
+                                    onEmpty={() => Alert.alert('Empty', 'Please provide a signature before saving')}
+                                    onBegin={() => setScrollEnabled(false)}
+                                    onEnd={() => setScrollEnabled(true)}
+                                    webStyle={`.m-signature-pad--footer {display: none;} .m-signature-pad {box-shadow: none; border: none;} .m-signature-pad--body {border: none;} body,html {width: 100%; height: 100%; margin: 0; padding: 0;}`}
                                   />
-                                  <Pressable onPress={() => setIsDrawingSignature(false)} style={styles.signatureCloseButton}><X size={20} color="#000" /></Pressable>
+                                  <Pressable
+                                    onPress={() => {
+                                      setIsDrawingSignature(false);
+                                      setScrollEnabled(true);
+                                    }}
+                                    style={styles.signatureCloseButton}
+                                  >
+                                    <X size={20} color="#000" />
+                                  </Pressable>
                                 </View>
-                                <View style={styles.signatureFooter}>
-                                  <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}><Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text></Pressable>
-                                  <Pressable onPress={() => signatureRef.current?.readSignature()} style={[styles.saveButton, { backgroundColor: activeColor }]}><Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text></Pressable>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: isDarkMode ? '#4b5563' : '#e5e7eb', backgroundColor: isDarkMode ? '#374151' : '#f9fafb' }}>
+                                  <Pressable onPress={() => signatureRef.current?.clearSignature()} style={{ padding: 8 }}>
+                                    <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Clear</Text>
+                                  </Pressable>
+                                  <Pressable onPress={() => signatureRef.current?.readSignature()} style={{ paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#10b981', borderRadius: 6 }}>
+                                    <Text style={{ color: 'white', fontWeight: 'bold' }}>Save</Text>
+                                  </Pressable>
                                 </View>
                               </View>
                             )}
-                            {errors.clientSignatureFile && <Text style={styles.errorText}>{errors.clientSignatureFile}</Text>}
+                            {errors.clientSignatureFile && (
+                              <Text style={[styles.errorText, { color: '#ef4444', marginTop: 4 }]}>{errors.clientSignatureFile}</Text>
+                            )}
                           </View>
 
                           {/* ITEMS SECTION */}
@@ -506,13 +555,19 @@ const styles = StyleSheet.create({
   connectionTypeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
   loadingOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   loadingText: { color: '#6b7280', marginTop: 12, fontSize: 14 },
-  signatureContainer: { height: 160, borderWidth: 1, borderStyle: 'dotted', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  signatureContainer: { height: 192, borderWidth: 1, borderStyle: 'dashed', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   signaturePlaceholder: { alignItems: 'center' },
   signatureText: { fontSize: 14 },
   signatureImage: { width: '100%', height: '100%', resizeMode: 'contain' },
   signatureCanvasContainer: { height: 288, borderWidth: 1, backgroundColor: '#ffffff', marginBottom: 8, overflow: 'hidden', borderRadius: 8 },
-  signatureCloseButton: { position: 'absolute', top: 8, right: 8, padding: 4, backgroundColor: '#e5e7eb', borderRadius: 9999, zIndex: 10 },
+  signatureCloseButton: { position: 'absolute', top: 8, right: 8, padding: 4, backgroundColor: '#e5e7eb', borderRadius: 9999, zIndex: 10, elevation: 2 },
   signatureFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderTopWidth: 1, borderColor: '#e5e7eb' },
+  signatureIconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  signatureActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  removeButton: { flexDirection: 'row', alignItems: 'center' },
+  removeButtonText: { color: '#ef4444', fontSize: 12, marginLeft: 4 },
+  redrawButton: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
+  redrawButtonText: { color: '#ffffff', fontSize: 12 },
   itemRow: { marginBottom: 16 },
   itemRowContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   itemPickerTrigger: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12, borderWidth: 1, borderRadius: 8, height: 50 },

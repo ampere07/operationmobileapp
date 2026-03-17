@@ -74,6 +74,7 @@ class JobOrderController extends Controller
                     $q->where('assigned_email', 'LIKE', "%{$search}%")
                       ->orWhere('onsite_status', 'LIKE', "%{$search}%")
                       ->orWhere('username', 'LIKE', "%{$search}%")
+                      ->orWhere('modem_router_sn', 'LIKE', "%{$search}%")
                       ->orWhereHas('application', function ($appQuery) use ($search) {
                           $appQuery->where('first_name', 'LIKE', "%{$search}%")
                                    ->orWhere('last_name', 'LIKE', "%{$search}%")
@@ -361,6 +362,7 @@ class JobOrderController extends Controller
 
     public function update(Request $request, $id): JsonResponse
     {
+        DB::beginTransaction();
         try {
             \Log::info('JobOrder Update Request', [
                 'id' => $id,
@@ -598,6 +600,12 @@ class JobOrderController extends Controller
             
             if (($data['onsite_status'] ?? null) === 'Done' && $oldStatus !== 'Done') {
                 $this->broadcastJobOrderDone($jobOrder);
+                
+                // Trigger RADIUS account creation
+                $radiusResult = $this->createRadiusAccountInternal($jobOrder);
+                if (!$radiusResult['success']) {
+                    throw new \Exception('radius api error occured contact support');
+                }
             }
             
             \Log::info('JobOrder After Update', [
@@ -652,6 +660,9 @@ class JobOrderController extends Controller
                     if (isset($data['vlan'])) {
                         $technicalUpdateData['vlan'] = $data['vlan'];
                     }
+                    if ($jobOrder->pppoe_username) {
+                        $technicalUpdateData['username'] = $jobOrder->pppoe_username;
+                    }
                     
                     if (!empty($technicalUpdateData)) {
                         $technicalDetail->update($technicalUpdateData);
@@ -671,17 +682,28 @@ class JobOrderController extends Controller
 
             $jobOrder->load('application');
 
+            DB::commit();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Job order updated successfully',
                 'data' => $jobOrder,
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             \Log::error('JobOrder Update Failed', [
                 'id' => $id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            $errorMessage = $e->getMessage();
+            if ($errorMessage === 'radius api error occured contact support') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage,
+                ], 400);
+            }
 
             return response()->json([
                 'success' => false,
@@ -1543,51 +1565,43 @@ class JobOrderController extends Controller
 
     public function createRadiusAccount($id): JsonResponse
     {
+        $jobOrder = JobOrder::with(['application', 'lcpnapLocation'])->findOrFail($id);
+        $result = $this->createRadiusAccountInternal($jobOrder);
+        
+        if ($result['success']) {
+            return response()->json($result);
+        } else {
+            return response()->json($result, 500);
+        }
+    }
+
+    private function createRadiusAccountInternal(JobOrder $jobOrder): array
+    {
+        $id = $jobOrder->id;
         try {
-            \Log::info('=== CREATE RADIUS ACCOUNT REQUEST ===', [
+            \Log::info('=== CREATE RADIUS ACCOUNT INTERNAL ===', [
                 'job_order_id' => $id
             ]);
-
-            DB::beginTransaction();
 
             $radiusConfig = RadiusConfig::first();
             
             if (!$radiusConfig) {
                 \Log::error('RADIUS configuration not found in database');
-                DB::rollBack();
-                return response()->json([
+                return [
                     'success' => false,
                     'message' => 'RADIUS configuration not found. Please configure RADIUS settings first.',
-                ], 500);
+                ];
             }
 
             $radiusUrl = $radiusConfig->ssl_type . '://' . $radiusConfig->ip . ':' . $radiusConfig->port . '/rest/user-manage/user';
             $radiusUsername = $radiusConfig->username;
             $radiusPassword = $radiusConfig->password;
 
-            \Log::info('RADIUS configuration loaded', [
-                'ssl_type' => $radiusConfig->ssl_type,
-                'ip' => $radiusConfig->ip,
-                'port' => $radiusConfig->port,
-                'url' => $radiusUrl,
-                'username' => $radiusConfig->username
-            ]);
-
-            $jobOrder = JobOrder::with(['application', 'lcpnapLocation'])->findOrFail($id);
-            
             if (!$jobOrder->application) {
                 throw new \Exception('Job order must have an associated application');
             }
 
             $application = $jobOrder->application;
-
-            \Log::info('Job order and application loaded', [
-                'job_order_id' => $id,
-                'application_id' => $application->id,
-                'customer_name' => $application->first_name . ' ' . $application->last_name,
-                'existing_username' => $jobOrder->pppoe_username,
-                'existing_password' => $jobOrder->pppoe_password ? 'EXISTS' : 'NULL'
-            ]);
 
             $credentialsExist = !empty($jobOrder->pppoe_username) && !empty($jobOrder->pppoe_password);
             $pppoeUsername = $jobOrder->pppoe_username;
@@ -1606,18 +1620,7 @@ class JobOrderController extends Controller
             $portValue = $jobOrder->port ?? '';
 
             if (!$credentialsExist) {
-                \Log::info('No existing credentials found, generating new ones', [
-                    'job_order_id' => $id
-                ]);
-                
                 $pppoeService = new PppoeUsernameService();
-                
-                \Log::info('LCPNAP/Port technical info', [
-                    'lcpnap_value' => $lcpnapValue,
-                    'lcp' => $lcpValue,
-                    'nap' => $napValue,
-                    'port' => $portValue
-                ]);
                 
                 $customerData = [
                     'first_name' => $application->first_name ?? '',
@@ -1636,32 +1639,13 @@ class JobOrderController extends Controller
                     throw new \Exception('Failed to generate PPPoE credentials');
                 }
                 
-                \Log::info('New PPPoE credentials generated', [
-                    'job_order_id' => $id,
-                    'pppoe_username' => $pppoeUsername,
-                    'username_length' => strlen($pppoeUsername),
-                    'password_length' => strlen($pppoePassword)
-                ]);
-
-                $updateResult = $jobOrder->update([
+                $jobOrder->update([
                     'pppoe_username' => $pppoeUsername,
                     'pppoe_password' => $pppoePassword,
                     'updated_by_user_email' => request()->input('updated_by_user_email', 'system@ampere.com')
                 ]);
                 
                 $jobOrder->refresh();
-                
-                \Log::info('PPPoE credentials saved to job_orders table', [
-                    'job_order_id' => $id,
-                    'update_result' => $updateResult,
-                    'pppoe_username_saved' => $jobOrder->pppoe_username,
-                    'pppoe_password_saved_length' => strlen($jobOrder->pppoe_password ?? '')
-                ]);
-            } else {
-                \Log::info('Credentials already exist, reusing existing credentials', [
-                    'job_order_id' => $id,
-                    'pppoe_username' => $pppoeUsername
-                ]);
             }
 
             $desiredPlan = $application->desired_plan;
@@ -1672,28 +1656,12 @@ class JobOrderController extends Controller
                 $plan = trim($parts[0]);
             }
             
-            \Log::info('Extracted plan name', [
-                'desired_plan' => $desiredPlan,
-                'extracted_plan' => $plan
-            ]);
-
             try {
                 $payload = [
                     'name' => $pppoeUsername,
                     'group' => $plan,
                     'password' => $pppoePassword
                 ];
-
-                \Log::info('Submitting to RADIUS API', [
-                    'url' => $radiusUrl,
-                    'method' => 'PUT',
-                    'payload' => [
-                        'name' => $pppoeUsername,
-                        'group' => $plan,
-                        'password' => '***'
-                    ],
-                    'auth_username' => $radiusUsername
-                ]);
 
                 $response = Http::withOptions([
                     'verify' => false
@@ -1705,58 +1673,28 @@ class JobOrderController extends Controller
 
                 if ($statusCode === 204 || $response->successful()) {
                     $radiusSubmitted = true;
-                    \Log::info('RADIUS API submission successful', [
-                        'status' => $statusCode,
-                        'response' => $statusCode === 204 ? 'No Content (Success)' : $response->json()
-                    ]);
                 } else {
                     $radiusError = 'HTTP ' . $statusCode . ': ' . $response->body();
-                    \Log::error('RADIUS API submission failed', [
-                        'status' => $statusCode,
-                        'error' => $response->body(),
-                        'headers' => $response->headers()
-                    ]);
-                    
                     if (!$credentialsExist) {
-                        DB::rollBack();
-                        return response()->json([
+                        return [
                             'success' => false,
                             'message' => 'Failed to create RADIUS account',
                             'error' => $radiusError,
-                            'radius_url' => $radiusUrl,
-                            'http_status' => $statusCode
-                        ], 500);
+                        ];
                     }
                 }
             } catch (\Exception $mikrotikException) {
                 $radiusError = $mikrotikException->getMessage();
-                \Log::error('RADIUS API submission exception', [
-                    'error' => $radiusError,
-                    'trace' => $mikrotikException->getTraceAsString()
-                ]);
-                
                 if (!$credentialsExist) {
-                    DB::rollBack();
-                    return response()->json([
+                    return [
                         'success' => false,
                         'message' => 'Failed to connect to RADIUS server',
                         'error' => $radiusError,
-                        'radius_url' => $radiusUrl
-                    ], 500);
+                    ];
                 }
             }
 
-            DB::commit();
-
-            \Log::info('=== RADIUS ACCOUNT OPERATION COMPLETED ===', [
-                'job_order_id' => $id,
-                'credentials_existed' => $credentialsExist,
-                'pppoe_username' => $pppoeUsername,
-                'radius_submitted' => $radiusSubmitted,
-                'radius_error' => $radiusError
-            ]);
-
-            return response()->json([
+            return [
                 'success' => true,
                 'message' => $credentialsExist ? 'RADIUS credentials already exist' : 'RADIUS account created successfully',
                 'data' => [
@@ -1769,32 +1707,21 @@ class JobOrderController extends Controller
                         'submitted' => $radiusSubmitted,
                         'status' => $radiusSubmitted ? 'success' : 'failed',
                         'error' => $radiusError
-                    ],
-                    'customer_name' => $application->first_name . ' ' . $application->last_name,
-                    'plan' => $plan,
-                    'radius_config' => [
-                        'url' => $radiusUrl,
-                        'ssl_type' => $radiusConfig->ssl_type,
-                        'ip' => $radiusConfig->ip,
-                        'port' => $radiusConfig->port
                     ]
                 ]
-            ]);
+            ];
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            
-            \Log::error('=== RADIUS ACCOUNT CREATION FAILED ===', [
+            \Log::error('=== RADIUS ACCOUNT CREATION INTERNAL FAILED ===', [
                 'job_order_id' => $id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
             
-            return response()->json([
+            return [
                 'success' => false,
                 'message' => 'Failed to create RADIUS account',
                 'error' => $e->getMessage(),
-            ], 500);
+            ];
         }
     }
 
@@ -1870,6 +1797,65 @@ class JobOrderController extends Controller
         $message = str_replace('{{company_name}}', $brandName, $message);
 
         return $message;
+    }
+
+    /**
+     * Validate Modem Router SN for duplicates
+     */
+    public function validateModemRouterSN(Request $request): JsonResponse
+    {
+        try {
+            $sn = $request->query('sn');
+            $excludeId = $request->query('exclude_id');
+
+            if (!$sn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'SN is required'
+                ], 422);
+            }
+
+            // Check job_orders table
+            $existsInJobOrders = JobOrder::where('modem_router_sn', $sn)
+                ->when($excludeId, function ($query) use ($excludeId) {
+                    return $query->where('id', '!=', $excludeId);
+                })
+                ->exists();
+
+            if ($existsInJobOrders) {
+                return response()->json([
+                    'success' => false,
+                    'is_duplicate' => true,
+                    'source' => 'job_orders',
+                    'message' => 'Please check on Customer Details. SN Duplicate Detected in Job Orders.'
+                ]);
+            }
+
+            // Check technical_details table (modem_router_sn field mapping might be router_modem_sn or ip_address etc)
+            // Let's check common field names for SN in technical_details
+            $existsInTechnicalDetails = TechnicalDetail::where('router_modem_sn', $sn)->exists();
+
+            if ($existsInTechnicalDetails) {
+                return response()->json([
+                    'success' => false,
+                    'is_duplicate' => true,
+                    'source' => 'technical_details',
+                    'message' => 'Please check on Customer Details. SN Duplicate Detected in Technical Details.'
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_duplicate' => false,
+                'message' => 'SN is available'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Modem SN Validation Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error validating SN'
+            ], 500);
+        }
     }
 
 }
