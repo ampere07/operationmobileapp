@@ -174,9 +174,9 @@ class LcpNapLocationController extends Controller
                 'nap_id' => 'required|string|max:255',
                 'port_total' => 'required|integer|min:1',
                 'coordinates' => 'nullable|string|max:255',
-                'reading_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
+                'reading_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:10240',
+                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:10240',
+                'image_2' => 'required|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'modified_by' => 'required|string|max:255'
             ]);
 

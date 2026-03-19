@@ -97,7 +97,7 @@ const LEAFLET_HTML = `<!DOCTYPE html>
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 interface ImageUploadFieldProps {
-  label: string;
+  label: React.ReactNode;
   field: 'reading_image' | 'image' | 'image_2';
   required?: boolean;
   error?: string;
@@ -110,7 +110,7 @@ const ImageUploadField = React.memo<ImageUploadFieldProps>(
   ({ label, field, required, error, previewUri, isDarkMode, onPress }) => (
     <View style={styles.fieldContainer}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
-        {label}{required && <Text style={{ color: '#ef4444' }}>*</Text>}
+        {label}
       </Text>
       <Pressable
         onPress={() => onPress(field)}
@@ -623,9 +623,9 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
                   <TextInput value={formData.coordinates} onChangeText={t => setFormData(p => ({ ...p, coordinates: t }))} style={[styles.input, { borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]} placeholder="14.466580, 121.201807" />
                   <MapSection onMapPress={handleMapPress} onGetMyLocation={handleGetMyLocation} isDarkMode={isDarkMode} colorPalette={colorPalette} webViewRef={webViewRef} loading={loading} onInteractionChange={setScrollEnabled} />
                 </View>
-                <ImageUploadField label="Reading Image" field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.reading_image} />
-                <ImageUploadField label="Image" field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image} />
-                <ImageUploadField label="Image 2" field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image_2} />
+                <ImageUploadField label={<Text>Reading Image<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.reading_image} />
+                <ImageUploadField label={<Text>Image<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image} />
+                <ImageUploadField label={<Text>Image 2<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image_2} />
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Modified By</Text>
                   <TextInput value={formData.modified_by} editable={false} style={[styles.input, { backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', color: '#9ca3af' }]} />

@@ -21,16 +21,16 @@ class ReconnectionLog extends Model
 
     public function billingAccount()
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(BillingAccount::class , 'account_id');
     }
 
     public function createdByUser()
     {
-        return $this->belongsTo(User::class, 'created_by_user_id');
+        return $this->belongsTo(User::class , 'created_by_user_id');
     }
 
     public function updatedByUser()
     {
-        return $this->belongsTo(User::class, 'updated_by_user_id');
+        return $this->belongsTo(User::class , 'updated_by_user_id');
     }
 }
