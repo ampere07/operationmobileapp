@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
-import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import ConfirmationModal from '../modals/MoveToJoModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { updateServiceOrder } from '../services/serviceOrderService';
+import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 
 interface ServiceOrderDetailsProps {
   serviceOrder: {
@@ -58,6 +59,11 @@ interface ServiceOrderDetailsProps {
     barangay?: string;
     start_time?: string | null;
     end_time?: string | null;
+    proof_of_billing_url?: string;
+    government_valid_id_url?: string;
+    second_government_valid_id_url?: string;
+    document_attachment_url?: string;
+    other_isp_bill_url?: string;
   };
   onClose: () => void;
   isMobile?: boolean;
@@ -79,6 +85,7 @@ const defaultFields = [
   'fullName',
   'contactNumber',
   'fullAddress',
+  'addressCoordinates',
   'houseFrontPicture',
   'emailAddress',
   'plan',
@@ -110,7 +117,12 @@ const defaultFields = [
   'image2Url',
   'image3Url',
   'clientSignatureUrl',
-  'serviceCharge'
+  'serviceCharge',
+  'proof_of_billing_url',
+  'government_valid_id_url',
+  'second_government_valid_id_url',
+  'document_attachment_url',
+  'other_isp_bill_url'
 ];
 
 const initialVisibility = defaultFields.reduce((acc: Record<string, boolean>, field) => ({ ...acc, [field]: true }), {});
@@ -168,6 +180,7 @@ const getFieldLabel = (fieldKey: string): string => {
     fullName: 'Full Name',
     contactNumber: 'Contact Number',
     fullAddress: 'Full Address',
+    addressCoordinates: 'Address Coordinates',
     houseFrontPicture: 'House Front Picture',
     emailAddress: 'Email Address',
     plan: 'Plan',
@@ -199,7 +212,12 @@ const getFieldLabel = (fieldKey: string): string => {
     image2Url: 'Modem Setup Image',
     image3Url: 'Time Out Image',
     clientSignatureUrl: 'Client Signature',
-    serviceCharge: 'Service Charge'
+    serviceCharge: 'Service Charge',
+    proof_of_billing_url: 'Proof of Billing',
+    government_valid_id_url: 'Government Valid ID',
+    second_government_valid_id_url: 'Second Government Valid ID',
+    document_attachment_url: 'Document Attachment',
+    other_isp_bill_url: 'Other ISP Bill'
   };
   return labels[fieldKey] || fieldKey;
 };
@@ -219,6 +237,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetailData | null>(null);
 
   // Sync props to state if props change
   useEffect(() => {
@@ -262,6 +281,20 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     setIsStarted(checkIsStarted((serviceOrder as any).start_time));
     setIsEnded(checkIsStarted((serviceOrder as any).end_time));
   }, [serviceOrder]);
+  
+  useEffect(() => {
+    const fetchCustomerDetail = async () => {
+      if (serviceOrder.accountNumber) {
+        try {
+          const detail = await getCustomerDetail(serviceOrder.accountNumber);
+          setCustomerDetail(detail);
+        } catch (error) {
+          console.error('Error fetching customer detail in ServiceOrderDetails:', error);
+        }
+      }
+    };
+    fetchCustomerDetail();
+  }, [serviceOrder.accountNumber]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -396,11 +429,18 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     if (fieldKey === 'endTime') return !(serviceOrder as any).end_time;
 
     const val = (serviceOrder as any)[fieldKey];
+    if (fieldKey === 'addressCoordinates') return !customerDetail?.addressCoordinates;
     if (val === null || val === undefined || val === '') return true;
     if (val === '-' || val === 'None' || val === 'Not assigned' || val === 'No remarks' || val === 'Not set') return true;
 
     // Special check for images
-    if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'clientSignatureUrl'].includes(fieldKey)) {
+    if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'clientSignatureUrl', 'proof_of_billing_url', 'government_valid_id_url', 'second_government_valid_id_url', 'document_attachment_url', 'other_isp_bill_url'].includes(fieldKey)) {
+      if (fieldKey === 'proof_of_billing_url') return !customerDetail?.proof_of_billing_url;
+      if (fieldKey === 'government_valid_id_url') return !customerDetail?.government_valid_id_url;
+      if (fieldKey === 'second_government_valid_id_url') return !customerDetail?.second_government_valid_id_url;
+      if (fieldKey === 'document_attachment_url') return !customerDetail?.document_attachment_url;
+      if (fieldKey === 'other_isp_bill_url') return !customerDetail?.other_isp_bill_url;
+      if (fieldKey === 'houseFrontPicture') return !(customerDetail?.houseFrontPictureUrl || serviceOrder.houseFrontPicture);
       return !val || val === 'No image available';
     }
 
@@ -446,7 +486,20 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     fullName: () => <Text style={valStyle}>{serviceOrder.fullName}</Text>,
     contactNumber: () => <Text style={valStyle}>{serviceOrder.contactNumber}</Text>,
     fullAddress: () => <Text style={valStyle}>{serviceOrder.fullAddress}</Text>,
-    houseFrontPicture: () => renderImageLinkContent(serviceOrder.houseFrontPicture),
+    addressCoordinates: () => {
+      const coords = customerDetail?.addressCoordinates;
+      return (
+        <View style={styles.imageLinkContainer}>
+          <Text style={valStyle}>{coords || 'Not provided'}</Text>
+          {coords && (
+            <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
+              <MapPin width={24} height={24} color="#4b5563" />
+            </Pressable>
+          )}
+        </View>
+      );
+    },
+    houseFrontPicture: () => renderImageLinkContent(customerDetail?.houseFrontPictureUrl || serviceOrder.houseFrontPicture),
     emailAddress: () => <Text style={valStyle}>{serviceOrder.emailAddress}</Text>,
     plan: () => <Text style={valStyle}>{serviceOrder.plan}</Text>,
     username: () => <Text style={valStyle}>{serviceOrder.username}</Text>,
@@ -485,7 +538,12 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
     clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
     serviceCharge: () => <Text style={valStyle}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
-  }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded]);
+    proof_of_billing_url: () => renderImageLinkContent(customerDetail?.proof_of_billing_url),
+    government_valid_id_url: () => renderImageLinkContent(customerDetail?.government_valid_id_url),
+    second_government_valid_id_url: () => renderImageLinkContent(customerDetail?.second_government_valid_id_url),
+    document_attachment_url: () => renderImageLinkContent(customerDetail?.document_attachment_url),
+    other_isp_bill_url: () => renderImageLinkContent(customerDetail?.other_isp_bill_url),
+  }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded, customerDetail]);
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>

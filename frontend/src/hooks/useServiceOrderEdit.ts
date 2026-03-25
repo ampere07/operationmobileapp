@@ -93,6 +93,10 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
   const [loading, setLoading] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [isDrawingSignature, setIsDrawingSignature] = useState(false);
+  const [loadingPercentage, setLoadingPercentage] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [showLoadingModal, setShowLoadingModal] = useState(false);
 
   // Data Lists
   const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
@@ -310,9 +314,13 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
 
   // Handlers
   const handleInputChange = useCallback((field: keyof ServiceOrderEditFormData, value: string) => {
-    setFormData(prev => ({ 
+    let finalValue = value;
+    if (field === 'routerModemSN' || field === 'newRouterModemSN') {
+      finalValue = value.toUpperCase();
+    }
+    setFormData((prev: ServiceOrderEditFormData) => ({ 
       ...prev, 
-      [field]: value,
+      [field]: finalValue,
       ...( (field === 'newLcp' || field === 'newNap' || field === 'newLcpnap') ? { newPort: '' } : {} )
     }));
     setErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
@@ -367,46 +375,93 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     
     const finalData = { ...formData, modifiedBy: currentUserEmail, modifiedDate: new Date().toLocaleString() };
     setFormData(finalData);
-    setLoading(true);
 
     if (!validateForm(finalData, orderItems, imageFiles, usedPorts, setErrors)) {
-      setLoading(false);
       Alert.alert('Error', 'Check required fields.');
       return;
     }
 
+    setLoading(true);
+    setShowLoadingModal(true);
+    setLoadingPercentage(0);
+    setCurrentStep(0);
+    setLoadingMessage('Initializing validation...');
+
+    let progressInterval: NodeJS.Timeout | null = null;
+
     try {
-      // 1. Duplicate SN Check
-      const isNewModemSnVisible = finalData.visitStatus === 'Done' && ['Migrate', 'Replace Router', 'Relocate'].includes(finalData.repairCategory);
-      if (isNewModemSnVisible && finalData.newRouterModemSN?.trim()) {
-        const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
-          params: {
-            sn: finalData.newRouterModemSN
+      // Logic to determine if newRouterModemSN is visible
+      const isNewModemSnVisible = finalData.visitStatus === 'Done' && (finalData.repairCategory === 'Migrate' || finalData.repairCategory === 'Replace Router');
+      const modemSN = finalData.newRouterModemSN?.trim();
+
+      if (isNewModemSnVisible && modemSN) {
+        // Step 1: SmartOLT Validation
+        if (finalData.connectionType === 'Fiber') {
+          setLoadingMessage('Checking SN in SmartOLT...');
+          setLoadingPercentage(10);
+          try {
+            const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', { params: { sn: modemSN } });
+            if (!smartOltResponse.data?.success) {
+               throw new Error('sn not existing in smart olt');
+            }
+          } catch (error: any) {
+            throw new Error(error.response?.data?.message || 'sn not existing in smart olt');
           }
+        }
+        
+        setCurrentStep(1);
+        setLoadingPercentage(20);
+        await new Promise(resolve => setTimeout(resolve, 600));
+
+        // Steps 2 & 3: Duplicate SN Check
+        setLoadingMessage('Checking SN duplicate in Job Orders...');
+        setLoadingPercentage(35);
+        
+        const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
+          params: { sn: modemSN }
         });
 
         if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
-          setLoading(false);
-          const errorMessage = (duplicateResponse.data as any).message || 'Please check on Customer Details. SN Duplicate Detected.';
-          setErrors(prev => ({
-            ...prev,
-            newRouterModemSN: errorMessage
-          }));
-          Alert.alert('Validation Error', errorMessage);
-          return;
-        }
-
-        // 2. SmartOLT Validation (Fiber only)
-        if (finalData.connectionType === 'Fiber') {
-          const vRes = await apiClient.get('/smart-olt/validate-sn', { params: { sn: finalData.newRouterModemSN } });
-          if (!vRes.data?.success) {
-            setErrors(prev => ({ ...prev, newRouterModemSN: 'sn not existing in smart olt' }));
-            Alert.alert('SmartOLT Verification Failed', 'sn not existing in smart olt');
-            setLoading(false);
-            return;
+          const source = (duplicateResponse.data as any).source;
+          if (source === 'job_orders') {
+            throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Job Orders.');
+          }
+          
+          setCurrentStep(2);
+          setLoadingPercentage(50);
+          setLoadingMessage('Checking SN duplicate in Technical Details...');
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          if (source === 'technical_details') {
+            throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Technical Details.');
           }
         }
+        
+        setCurrentStep(2);
+        setLoadingPercentage(55);
+        setLoadingMessage('Checking SN duplicate in Technical Details...');
+        await new Promise(resolve => setTimeout(resolve, 800));
+      } else {
+        // Skip validation steps
+        setCurrentStep(1);
+        setLoadingPercentage(35);
+        await new Promise(resolve => setTimeout(resolve, 400));
+        setCurrentStep(2);
+        setLoadingPercentage(55);
+        await new Promise(resolve => setTimeout(resolve, 400));
       }
+
+      // 4. Proceed to Saving
+      setCurrentStep(3);
+      setLoadingPercentage(65);
+      setLoadingMessage('Finalizing and saving changes...');
+      
+      progressInterval = setInterval(() => {
+        setLoadingPercentage(prev => {
+          if (prev >= 98) return 98;
+          return prev + 1;
+        });
+      }, 500);
 
       // Cleanup drafts
       await AsyncStorage.removeItem(`serviceOrderDraft_${serviceOrderId}`);
@@ -442,13 +497,20 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
         await createServiceOrderItems(validItems.map(i => ({ service_order_id: parseInt(String(serviceOrderId)), item_name: i.itemId, quantity: parseInt(i.quantity) || 1 })));
       }
 
+      if (progressInterval) clearInterval(progressInterval);
+      setLoadingPercentage(100);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      setLoading(false);
+      setShowLoadingModal(false);
       onSave(finalData);
       Alert.alert('Success', 'Updated!');
       onClose();
     } catch (e: any) {
-      Alert.alert('Error', e.message);
-    } finally {
+      if (progressInterval) clearInterval(progressInterval);
       setLoading(false);
+      setShowLoadingModal(false);
+      Alert.alert('Error', e.message);
     }
   };
 
@@ -491,7 +553,8 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     activePicker, setActivePicker, searchQueries, setSearchQueries, filtered,
     orderItems, setOrderItems, activeItemIndex, setActiveItemIndex, handleItemChange,
     imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
-    activeTechField, setActiveTechField
+    activeTechField, setActiveTechField,
+    loadingPercentage, loadingMessage, currentStep, showLoadingModal
   };
 };
 

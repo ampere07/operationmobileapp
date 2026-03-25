@@ -46,4 +46,5 @@ export interface Application {
   regionId?: number | null;
   boroughId?: number | null;
   villageId?: number | null;
+  address_coordinates?: string;
 }

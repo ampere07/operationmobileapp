@@ -258,6 +258,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   }>({ title: '', messages: [] });
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [currentStep, setCurrentStep] = useState<number>(0);
   const [usernamePattern, setUsernamePattern] = useState<UsernamePattern | null>(null);
   const [techInputValue, setTechInputValue] = useState<string>('');
   const [lcpnapSearch, setLcpnapSearch] = useState('');
@@ -378,7 +380,55 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   // Uses openCycleRef so rapid open/close cycles never cause stale state merges.
   useEffect(() => {
     if (!isOpen) {
-      // Cleanup when modal closes – reset transient state only
+      // Full cleanup when modal closes – reset EVERYTHING to prevent state leaks
+      setFormData({
+        dateInstalled: getTodayDate(),
+        usageType: '',
+        choosePlan: '',
+        connectionType: '',
+        routerModel: '',
+        modemSN: '',
+        region: '',
+        city: '',
+        barangay: '',
+        lcpnap: '',
+        port: '',
+        vlan: '',
+        onsiteStatus: 'In Progress',
+        onsiteRemarks: '',
+        signedContractImage: null,
+        setupImage: null,
+        boxReadingImage: null,
+        routerReadingImage: null,
+        portLabelImage: null,
+        clientSignatureImage: null,
+        speedTestImage: null,
+        modifiedBy: currentUserEmail,
+        modifiedDate: new Date().toLocaleString('en-US', {
+          month: '2-digit', day: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: true
+        }),
+        itemName1: '',
+        visit_by: '',
+        visit_with: '',
+        visit_with_other: '',
+        statusRemarks: '',
+        ip: '',
+        addressCoordinates: '',
+        proofImage: null
+      });
+      setImagePreviews({
+        signedContractImage: null,
+        setupImage: null,
+        boxReadingImage: null,
+        routerReadingImage: null,
+        portLabelImage: null,
+        clientSignatureImage: null,
+        speedTestImage: null,
+        proofImage: null
+      });
+      setErrors({});
       setOrderItems([{ itemId: '', quantity: '' }]);
       setTechInputValue('');
       return;
@@ -810,8 +860,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   }, [jobOrderData, isOpen]);
 
   const handleInputChange = useCallback((field: keyof JobOrderDoneFormData, value: string | File | null) => {
+    let finalValue = value;
+    if (typeof value === 'string' && field === 'modemSN') {
+      finalValue = value.toUpperCase();
+    }
     setFormData(prev => {
-      const newData = { ...prev, [field]: value };
+      const newData = { ...prev, [field]: finalValue };
       if (field === 'lcpnap') newData.port = '';
       if (field === 'region') { newData.city = ''; newData.barangay = ''; }
       if (field === 'city') newData.barangay = '';
@@ -1016,79 +1070,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
 
     // Modem SN Duplicate Validation (Job Orders & Technical Details)
-    if (formData.onsiteStatus === 'Done' && formData.modemSN.trim()) {
-      setLoading(true);
-
-      // 1. Duplicate SN Check
-      try {
-        const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
-        const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
-          params: {
-            sn: formData.modemSN,
-            exclude_id: currentId
-          }
-        });
-
-        if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
-          setLoading(false);
-          const errorMessage = (duplicateResponse.data as any).message || 'Please check on Customer Details. SN Duplicate Detected.';
-          setErrors(prev => ({
-            ...prev,
-            modemSN: errorMessage
-          }));
-          showMessageModal('Validation Error', [
-            { type: 'error', text: errorMessage }
-          ]);
-          return;
-        }
-      } catch (error: any) {
-        console.error('Error checking duplicate SN:', error);
-        if (error.response?.status === 422) {
-           setLoading(false);
-           return;
-        }
-      }
-
-      // 2. SmartOLT Validation (Fiber only)
-      if (formData.connectionType === 'Fiber') {
-        try {
-          const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-            params: { sn: formData.modemSN }
-          });
-
-          if (!(smartOltResponse.data as any).success) {
-            setLoading(false);
-            const errorMsg = 'sn not existing in smart olt';
-            setErrors(prev => ({
-              ...prev,
-              modemSN: errorMsg
-            }));
-            showMessageModal('SmartOLT Verification Failed', [
-              { type: 'error', text: errorMsg }
-            ]);
-            return;
-          }
-        } catch (error: any) {
-          console.error('[SMARTOLT VALIDATION] API Error:', error);
-          setLoading(false);
-          const errorMessage = error.response?.data?.message || 'Failed to validate Modem SN with SmartOLT system.';
-          setErrors(prev => ({
-            ...prev,
-            modemSN: errorMessage
-          }));
-          showMessageModal('Validation Error', [
-            { type: 'error', text: errorMessage }
-          ]);
-          return;
-        }
-      }
-
-      setLoading(false);
-    }
-
-
-
-    if (!jobOrderData?.id && !jobOrderData?.JobOrder_ID) {
+    // Refactored to show specific validation steps in the loading modal
+    const jobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+    
+    if (!jobOrderId) {
       showMessageModal('Error', [
         { type: 'error', text: 'Cannot update job order: Missing ID' }
       ]);
@@ -1098,32 +1083,94 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     setLoading(true);
     setShowLoadingModal(true);
     setLoadingPercentage(0);
-
-    const progressInterval = setInterval(() => {
-      setLoadingPercentage(prev => {
-        if (prev >= 99) return 99;
-        if (prev >= 90) return prev + 0.5;
-        if (prev >= 70) return prev + 1;
-        return prev + 3;
-      });
-    }, 200);
+    setCurrentStep(0);
+    setLoadingMessage('Starting validation...');
 
     const saveMessages: Array<{ type: 'success' | 'warning' | 'error'; text: string }> = [];
+    let progressInterval: NodeJS.Timeout | null = null;
 
     try {
-      const jobOrderId = jobOrderData.id || jobOrderData.JobOrder_ID;
-
-      if (!jobOrderId) {
-        saveMessages.push({
-          type: 'error',
-          text: 'Cannot update: Missing job order ID'
-        });
-
-        setLoading(false);
-        setShowLoadingModal(false);
-        showMessageModal('Error', saveMessages);
-        return;
+      // 1. SmartOLT Validation (Fiber only)
+      if (updatedFormData.onsiteStatus === 'Done' && updatedFormData.modemSN.trim() && updatedFormData.connectionType === 'Fiber') {
+        setLoadingMessage('Checking SN in SmartOLT...');
+        setLoadingPercentage(10);
+        try {
+          const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
+            params: { sn: updatedFormData.modemSN }
+          });
+          if (!(smartOltResponse.data as any).success) {
+            throw new Error('sn not existing in smart olt');
+          }
+        } catch (error: any) {
+          throw new Error(error.response?.data?.message || 'sn not existing in smart olt');
+        }
       }
+      
+      setCurrentStep(1);
+      setLoadingPercentage(20);
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // 2 & 3. Duplicate SN Check (Job Orders & Technical Details)
+      if (updatedFormData.onsiteStatus === 'Done' && updatedFormData.modemSN.trim()) {
+        setLoadingMessage('Checking SN duplicate in Job Orders...');
+        setLoadingPercentage(35);
+        
+        try {
+          const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
+            params: {
+              sn: updatedFormData.modemSN,
+              exclude_id: jobOrderId
+            }
+          });
+
+          if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
+            const source = (duplicateResponse.data as any).source;
+            if (source === 'job_orders') {
+              throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Job Orders.');
+            }
+            
+            // Job Order pass, check Technical Details
+            setCurrentStep(2);
+            setLoadingPercentage(50);
+            setLoadingMessage('Checking SN duplicate in Technical Details...');
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            if (source === 'technical_details') {
+              throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Technical Details.');
+            }
+          }
+          
+          // Passing both
+          setCurrentStep(2);
+          setLoadingPercentage(50);
+          setLoadingMessage('Checking SN duplicate in Technical Details...');
+          await new Promise(resolve => setTimeout(resolve, 800));
+        } catch (error: any) {
+          throw error;
+        }
+      } else {
+        // Skip duplicate checks if not 'Done'
+        setCurrentStep(1);
+        setLoadingPercentage(35);
+        await new Promise(resolve => setTimeout(resolve, 400));
+        setCurrentStep(2);
+        setLoadingPercentage(55);
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
+
+      // 4. Proceed to Saving
+      setCurrentStep(3);
+      setLoadingPercentage(65);
+      setLoadingMessage('Finalizing and saving changes...');
+      
+      progressInterval = setInterval(() => {
+        setLoadingPercentage(prev => {
+          if (prev >= 98) return 98;
+          return prev + 1;
+        });
+      }, 500);
+
+
 
       const now = new Date();
       const currentDateTime = now.getFullYear() + '-' + 
@@ -1416,7 +1463,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       }
 
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setLoadingPercentage(100);
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -1428,7 +1475,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       DeviceEventEmitter.emit('jobOrderUpdated');
       onClose();
     } catch (error: any) {
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error occurred';
 
       setLoading(false);
@@ -1661,7 +1708,73 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   return (
     <>
 
-      {/* Loading Modal removed as per user request */}
+      {/* ─── Loading Modal with Validation Steps ─────────────────────────── */}
+      <Modal
+        visible={showLoadingModal}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+      >
+        <View style={styles.loadingModalOverlay}>
+          <View style={[styles.loadingModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <ActivityIndicator size="large" color={colorPalette?.primary || '#7c3aed'} />
+            <Text style={[styles.loadingPercentage, { color: colorPalette?.primary || '#7c3aed', marginTop: 16 }]}>
+              {Math.round(loadingPercentage)}%
+            </Text>
+            <Text style={{ 
+              marginTop: 8, 
+              color: isDarkMode ? '#e5e7eb' : '#374151', 
+              fontSize: 16, 
+              fontWeight: '600',
+              textAlign: 'center' 
+            }}>
+              {loadingMessage || 'Processing...'}
+            </Text>
+            
+            {/* Steps indicator */}
+            <View style={{ marginTop: 24, width: '100%' }}>
+              {[
+                'SmartOLT Validation',
+                'Job Order duplicate check',
+                'Technical Details check',
+                'Saving changes'
+              ].map((step, index) => (
+                <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: currentStep > index 
+                      ? '#10b981' 
+                      : (currentStep === index ? (colorPalette?.primary || '#7c3aed') : (isDarkMode ? '#374151' : '#e5e7eb')),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12
+                  }}>
+                    {currentStep > index ? (
+                      <Check size={14} color="white" />
+                    ) : (
+                      <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>{index + 1}</Text>
+                    )}
+                  </View>
+                  <Text style={{ 
+                    color: currentStep >= index 
+                      ? (isDarkMode ? '#ffffff' : '#111827') 
+                      : (isDarkMode ? '#9ca3af' : '#6b7280'),
+                    fontSize: 14,
+                    fontWeight: currentStep === index ? 'bold' : 'normal'
+                  }}>
+                    {step}
+                  </Text>
+                  {currentStep === index && (
+                    <ActivityIndicator size="small" color={colorPalette?.primary || '#7c3aed'} style={{ marginLeft: 8 }} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ─── Message Modal ───────────────────────────────────────────── */}
       <Modal
@@ -2190,8 +2303,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         onRequestClose={onClose}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
             <View style={[styles.header, {
@@ -3377,7 +3491,7 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   inputGroup: {
     marginBottom: 16,

@@ -18,6 +18,11 @@ export interface CustomerDetailData {
   referredBy?: string;
   desiredPlan?: string;
   houseFrontPictureUrl?: string;
+  proof_of_billing_url?: string;
+  government_valid_id_url?: string;
+  second_government_valid_id_url?: string;
+  document_attachment_url?: string;
+  other_isp_bill_url?: string;
   groupId?: number;
   groupName?: string;
 

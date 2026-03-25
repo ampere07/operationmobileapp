@@ -109,6 +109,11 @@ export interface JobOrder {
   Router_Reading_Image?: string | null;
   House_Front_Picture?: string | null;
   Image?: string | null;
+  proof_of_billing_url?: string | null;
+  government_valid_id_url?: string | null;
+  second_government_valid_id_url?: string | null;
+  document_attachment_url?: string | null;
+  other_isp_bill_url?: string | null;
 
   // Items
   job_order_items?: JobOrderItem[];

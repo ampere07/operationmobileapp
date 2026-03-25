@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
-import { X, ExternalLink, Edit, ChevronLeft, Play, Square } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
@@ -65,6 +65,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     'secondContactNumber',
     'emailAddress',
     'fullAddress',
+    'addressCoordinates',
     'billingStatus',
     'billingDay',
     'choosePlan',
@@ -102,7 +103,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       'boxReadingImage',
       'routerReadingImage',
       'portLabelImage',
-      'houseFrontPicture'
+      'houseFrontPicture',
+      'proof_of_billing_url',
+      'government_valid_id_url',
+      'second_government_valid_id_url',
+      'document_attachment_url',
+      'other_isp_bill_url'
     ] : [])
   ];
 
@@ -596,6 +602,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       secondContactNumber: 'Second Contact Number',
       emailAddress: 'Email Address',
       fullAddress: 'Full Address',
+      addressCoordinates: 'Address Coordinates',
       billingStatus: 'Billing Status',
       billingDay: 'Billing Day',
       choosePlan: 'Choose Plan',
@@ -630,7 +637,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       boxReadingImage: 'Box Reading Image',
       routerReadingImage: 'Router Reading Image',
       portLabelImage: 'Port Label Image',
-      houseFrontPicture: 'House Front Picture'
+      houseFrontPicture: 'House Front Picture',
+      proof_of_billing_url: 'Proof of Billing',
+      government_valid_id_url: 'Government Valid ID',
+      second_government_valid_id_url: 'Second Government Valid ID',
+      document_attachment_url: 'Document Attachment',
+      other_isp_bill_url: 'Other ISP Bill'
     };
     return labels[fieldKey] || fieldKey;
   };
@@ -663,6 +675,19 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     secondContactNumber: () => <Text style={valStyle} selectable={true}>{jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || (applicationData?.secondary_mobile_number) || 'Not provided'}</Text>,
     emailAddress: () => <Text style={valStyle} selectable={true}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
     fullAddress: () => <Text style={valStyle} selectable={true}>{getClientFullAddress()}</Text>,
+    addressCoordinates: () => {
+      const coords = applicationData?.address_coordinates || jobOrder.Address_Coordinates || jobOrder.address_coordinates;
+      return (
+        <View style={st.imageLinkRow}>
+          <Text style={valStyle} selectable={true}>{coords || 'Not provided'}</Text>
+          {coords && (
+            <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
+              <MapPin width={24} height={24} color={'#4b5563'} />
+            </Pressable>
+          )}
+        </View>
+      );
+    },
     billingStatus: () => <Text style={valStyle} selectable={true}>{jobOrder.billing_status || jobOrder.Billing_Status || 'Not Set'}</Text>,
     billingDay: () => <Text style={valStyle} selectable={true}>{getBillingDayDisplay(jobOrder.Billing_Day || jobOrder.billing_day)}</Text>,
     choosePlan: () => <Text style={valStyle} selectable={true}>{jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || (applicationData?.desired_plan) || 'Not specified'}</Text>,
@@ -713,7 +738,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     boxReadingImage: () => renderImageLink(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL),
     routerReadingImage: () => renderImageLink(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL),
     portLabelImage: () => renderImageLink(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL),
-    houseFrontPicture: () => renderImageLink(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture),
+    houseFrontPicture: () => renderImageLink(applicationData?.house_front_picture_url || jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture),
+    proof_of_billing_url: () => renderImageLink(applicationData?.proof_of_billing_url || jobOrder.proof_of_billing_url),
+    government_valid_id_url: () => renderImageLink(applicationData?.government_valid_id_url || jobOrder.government_valid_id_url),
+    second_government_valid_id_url: () => renderImageLink(applicationData?.secondary_government_valid_id_url || jobOrder.second_government_valid_id_url),
+    document_attachment_url: () => renderImageLink(applicationData?.document_attachment_url || jobOrder.document_attachment_url),
+    other_isp_bill_url: () => renderImageLink(applicationData?.other_isp_bill_url || jobOrder.other_isp_bill_url),
   }), [jobOrder, applicationData, jobOrderItems, billingStatuses]);
 
   const isFieldEmpty = (fieldKey: string): boolean => {
@@ -726,6 +756,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       case 'secondContactNumber': return !(jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || applicationData?.secondary_mobile_number);
       case 'emailAddress': return !(jobOrder.Email_Address || jobOrder.email_address || applicationData?.email_address);
       case 'fullAddress': return !getClientFullAddress() || getClientFullAddress() === 'No address provided';
+      case 'addressCoordinates': return !(applicationData?.address_coordinates || jobOrder.Address_Coordinates || jobOrder.address_coordinates);
       case 'billingStatus': return !(jobOrder.billing_status || jobOrder.Billing_Status);
       case 'billingDay': return jobOrder.Billing_Day === null || jobOrder.Billing_Day === undefined;
       case 'choosePlan': return !(jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || applicationData?.desired_plan);
@@ -760,7 +791,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       case 'boxReadingImage': return !(jobOrder.box_reading_image_url || jobOrder.Box_Reading_Image_URL || jobOrder.box_reading_url || jobOrder.Box_Reading_URL);
       case 'routerReadingImage': return !(jobOrder.router_reading_image_url || jobOrder.Router_Reading_Image_URL || jobOrder.router_reading_url || jobOrder.Router_Reading_URL);
       case 'portLabelImage': return !(jobOrder.port_label_image_url || jobOrder.Port_Label_Image_URL || jobOrder.port_label_url || jobOrder.Port_Label_URL);
-      case 'houseFrontPicture': return !(jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture);
+      case 'houseFrontPicture': return !(applicationData?.house_front_picture_url || jobOrder.house_front_picture_url || jobOrder.House_Front_Picture_URL || jobOrder.house_front_picture || jobOrder.House_Front_Picture);
+      case 'proof_of_billing_url': return !(applicationData?.proof_of_billing_url || jobOrder.proof_of_billing_url);
+      case 'government_valid_id_url': return !(applicationData?.government_valid_id_url || jobOrder.government_valid_id_url);
+      case 'second_government_valid_id_url': return !(applicationData?.secondary_government_valid_id_url || jobOrder.second_government_valid_id_url);
+      case 'document_attachment_url': return !(applicationData?.document_attachment_url || jobOrder.document_attachment_url);
+      case 'other_isp_bill_url': return !(applicationData?.other_isp_bill_url || jobOrder.other_isp_bill_url);
       default: return false;
     }
   };

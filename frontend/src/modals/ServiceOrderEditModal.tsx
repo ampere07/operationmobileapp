@@ -28,7 +28,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     activePicker, setActivePicker, searchQueries, setSearchQueries, filtered,
     orderItems, setOrderItems, activeItemIndex, setActiveItemIndex, handleItemChange,
     imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
-    activeTechField, setActiveTechField, setFormData
+    activeTechField, setActiveTechField, setFormData,
+    loadingPercentage, loadingMessage, currentStep, showLoadingModal
   } = useServiceOrderEdit(isOpen, serviceOrderData, onClose, onSave);
 
   const activeColor = colorPalette?.primary || '#7c3aed';
@@ -364,6 +365,74 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* ─── Loading Modal with Validation Steps ─────────────────────────── */}
+      <Modal
+        visible={showLoadingModal}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+      >
+        <View style={styles.loadingModalOverlay}>
+          <View style={[styles.loadingModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+            <ActivityIndicator size="large" color={activeColor} />
+            <Text style={[styles.loadingPercentage, { color: activeColor, marginTop: 16 }]}>
+              {Math.round(loadingPercentage)}%
+            </Text>
+            <Text style={{ 
+              marginTop: 8, 
+              color: isDarkMode ? '#e5e7eb' : '#374151', 
+              fontSize: 16, 
+              fontWeight: '600',
+              textAlign: 'center' 
+            }}>
+              {loadingMessage || 'Processing...'}
+            </Text>
+            
+            {/* Steps indicator */}
+            <View style={{ marginTop: 24, width: '100%' }}>
+              {[
+                'SmartOLT Validation',
+                'Job Order duplicate check',
+                'Technical Details check',
+                'Saving changes'
+              ].map((step, index) => (
+                <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: currentStep > index 
+                      ? '#10b981' 
+                      : (currentStep === index ? (activeColor) : (isDarkMode ? '#374151' : '#e5e7eb')),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 12
+                  }}>
+                    {currentStep > index ? (
+                      <Check size={14} color="white" />
+                    ) : (
+                      <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>{index + 1}</Text>
+                    )}
+                  </View>
+                  <Text style={{ 
+                    color: currentStep >= index 
+                      ? (isDarkMode ? '#ffffff' : '#111827') 
+                      : (isDarkMode ? '#9ca3af' : '#6b7280'),
+                    fontSize: 14,
+                    fontWeight: currentStep === index ? 'bold' : 'normal'
+                  }}>
+                    {step}
+                  </Text>
+                  {currentStep === index && (
+                    <ActivityIndicator size="small" color={activeColor} style={{ marginLeft: 8 }} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* RENDER DYNAMIC PICKERS */}
       <SearchablePicker
         isOpen={activePicker === 'supportStatus'}
@@ -574,6 +643,28 @@ const styles = StyleSheet.create({
   itemSelectText: { fontSize: 16, paddingHorizontal: 8 },
   itemQtyInput: { width: 80, height: 50, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
   itemRemoveButton: { padding: 8 },
+  loadingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingModalContent: {
+    width: '85%',
+    padding: 24,
+    borderRadius: 20,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  loadingPercentage: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginVertical: 4,
+  },
 });
 
 export default ServiceOrderEditModal;

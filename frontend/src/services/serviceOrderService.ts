@@ -65,6 +65,11 @@ export interface ServiceOrderData {
   city?: string;
   barangay?: string;
   referred_by?: string;
+  proof_of_billing_url?: string;
+  government_valid_id_url?: string;
+  second_government_valid_id_url?: string;
+  document_attachment_url?: string;
+  other_isp_bill_url?: string;
 }
 
 export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderData>) => {
