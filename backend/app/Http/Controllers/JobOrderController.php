@@ -83,6 +83,9 @@ class JobOrderController extends Controller
                 });
             }
 
+            // Fetch total count for pagination awareness on frontend
+            $totalCount = $query->count();
+
             // Fetch one extra record to check if there are more pages
             $jobOrders = $query->skip(($page - 1) * $limit)
                 ->take($limit + 1)
@@ -127,6 +130,7 @@ class JobOrderController extends Controller
                     'pagination' => [
                         'current_page' => (int) $page,
                         'per_page' => (int) $limit,
+                        'total_count' => (int) $totalCount,
                         'has_more' => $hasMore
                     ]
                 ]);
@@ -218,6 +222,7 @@ class JobOrderController extends Controller
                 'pagination' => [
                     'current_page' => (int) $page,
                     'per_page' => (int) $limit,
+                    'total_count' => (int) $totalCount,
                     'has_more' => $hasMore
                 ]
             ]);
@@ -831,6 +836,11 @@ class JobOrderController extends Controller
                     'referred_by' => $application->referred_by,
                     'desired_plan' => $application->desired_plan,
                     'house_front_picture_url' => $jobOrder->house_front_picture_url,
+                    'proof_of_billing_url' => $application->proof_of_billing_url,
+                    'government_valid_id_url' => $application->government_valid_id_url,
+                    'second_government_valid_id_url' => $application->secondary_government_valid_id_url,
+                    'document_attachment_url' => $application->document_attachment_url,
+                    'other_isp_bill_url' => $application->other_isp_bill_url,
                     'created_by' => $defaultUserId,
                     'updated_by' => $defaultUserId,
                 ]);
@@ -853,6 +863,9 @@ class JobOrderController extends Controller
             \Log::info('Generated account number', [
                 'generated_account_no' => $accountNumber
             ]);
+            
+            // Sync generated account number to customer
+            $customer->update(['account_no' => $accountNumber]);
 
             $installationFee = $jobOrder->installation_fee ?? 0;
             

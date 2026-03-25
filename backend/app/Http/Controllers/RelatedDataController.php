@@ -191,8 +191,25 @@ class RelatedDataController extends Controller
     {
         try {
             $serviceOrders = DB::table('service_orders')
-                ->where('account_no', $accountNo)
-                ->orderBy('timestamp', 'desc')
+                ->leftJoin('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('service_orders.account_no', $accountNo)
+                ->select([
+                    'service_orders.*',
+                    'billing_accounts.date_installed',
+                    DB::raw("CONCAT(customers.first_name, ' ', COALESCE(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                    'customers.contact_number_primary as contact_number',
+                    'customers.email_address',
+                    'customers.address',
+                    'customers.desired_plan as plan',
+                    'customers.group_name as provider',
+                    'customers.barangay',
+                    'customers.city',
+                    'technical_details.username',
+                    'technical_details.connection_type'
+                ])
+                ->orderBy('service_orders.timestamp', 'desc')
                 ->get();
 
             return response()->json([
@@ -440,21 +457,8 @@ class RelatedDataController extends Controller
     public function getChangeDueLogsByAccount(string $accountNo): JsonResponse
     {
         try {
-            // First find the numeric account ID from the account number
-            $billingAccount = DB::table('billing_accounts')
-                ->where('account_no', $accountNo)
-                ->first();
-            
-            if (!$billingAccount) {
-                return response()->json([
-                    'success' => true,
-                    'data' => [],
-                    'count' => 0
-                ]);
-            }
-
             $logs = DB::table('change_due_logs')
-                ->where('account_id', $billingAccount->id)
+                ->where('account_no', $accountNo)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -1231,6 +1235,15 @@ class RelatedDataController extends Controller
                 ->sort()
                 ->values();
 
+            // Fetch session_status from online_status table
+            $sessionStatuses = DB::table('online_status')
+                ->whereNotNull('session_status')
+                ->where('session_status', '!=', '')
+                ->distinct()
+                ->pluck('session_status')
+                ->sort()
+                ->values();
+
             // Try to get billing statuses, if table exists
             $billingStatuses = [];
             try {
@@ -1252,6 +1265,7 @@ class RelatedDataController extends Controller
                     'connection_types' => $connectionTypes,
                     'username_statuses' => $usernameStatuses,
                     'group_names' => $groupNames,
+                    'session_statuses' => $sessionStatuses,
                     'billing_statuses' => $billingStatuses
                 ]
             ]);

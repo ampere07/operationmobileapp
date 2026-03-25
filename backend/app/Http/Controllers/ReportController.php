@@ -36,19 +36,18 @@ class ReportController extends Controller
         $report->save();
 
         try {
+            $pdfService = new \App\Services\ReportPdfService();
             if (strtolower($report->report_type) === 'summary') {
-                $pdfService = new \App\Services\ReportPdfService();
                 $tempPath = $pdfService->generateSummaryPdf($report);
             } else {
-                $csvService = new \App\Services\ReportCsvService();
-                $tempPath = $csvService->generateFile($report->report_type, $report->date_range);
+                $tempPath = $pdfService->generateTabularPdf($report);
             }
             $fileName = basename($tempPath);
 
             // Upload to GDrive
             $driveService = resolve(GoogleDriveService::class);
             $folderId = $driveService->findFolder('Reports') ?? $driveService->createFolder('Reports');
-            $fileUrl = $driveService->uploadFile($tempPath, $folderId, $fileName, 'text/csv');
+            $fileUrl = $driveService->uploadFile($tempPath, $folderId, $fileName, 'application/pdf');
 
             // Save URLs
             $report->file_url = $fileUrl;
@@ -65,7 +64,7 @@ class ReportController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Report generated but CSV failed: ' . $e->getMessage(),
+                'message' => 'Report generated but PDF failed: ' . $e->getMessage(),
             ], 500);
         }
     }

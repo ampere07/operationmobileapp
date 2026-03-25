@@ -16,8 +16,9 @@ class DCNoticeApiController extends Controller
     public function index(Request $request)
     {
         try {
+            $limitInput = $request->input('limit', 50);
+            $limit = (is_numeric($limitInput) && $limitInput > 0) ? (int)$limitInput : null;
             $page = $request->input('page', 1);
-            $limit = $request->input('limit', 50); // Reduced to 50 for faster response
             $search = $request->input('search', '');
             $date = $request->input('date', '');
             $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
@@ -53,17 +54,20 @@ class DCNoticeApiController extends Controller
                 $query->whereDate('dc_notice_date', $date);
             }
 
-            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
-            $dcNotices = $query->skip(($page - 1) * $limit)
-                ->take($limit + 1) // Fetch one extra
-                ->get();
-
-            // Check if there are more pages
-            $hasMore = $dcNotices->count() > $limit;
-
-            // Remove the extra record if it exists
-            if ($hasMore) {
-                $dcNotices = $dcNotices->slice(0, $limit);
+            // If limit is provided and > 0, do pagination. Otherwise, return ALL records.
+            if ($limit !== null) {
+                // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+                $dcNotices = $query->skip(($page - 1) * $limit)
+                    ->take($limit + 1) // Fetch one extra
+                    ->get();
+                $hasMore = $dcNotices->count() > $limit;
+                if ($hasMore) {
+                    $dcNotices = $dcNotices->slice(0, $limit);
+                }
+            } else {
+                // NO LIMIT - Return everything
+                $dcNotices = $query->get();
+                $hasMore = false;
             }
 
             // Fast mode: Return data immediately without customer details

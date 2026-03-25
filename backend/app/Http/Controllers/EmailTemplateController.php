@@ -48,7 +48,9 @@ class EmailTemplateController extends Controller
                 'Body_HTML' => 'nullable|string',
                 'Description' => 'nullable|string|max:255',
                 'Is_Active' => 'nullable|boolean',
-                'email_body' => 'nullable|string|max:255'
+                'email_body' => 'nullable|string|max:255',
+                'Page_Margin' => 'nullable|string|max:50',
+                'Image_Margin' => 'nullable|string|max:50'
             ]);
 
             if ($validator->fails()) {
@@ -79,7 +81,9 @@ class EmailTemplateController extends Controller
                 'Body_HTML' => $request->input('Body_HTML'),
                 'Description' => $request->input('Description'),
                 'Is_Active' => $request->input('Is_Active', 1),
-                'email_body' => $request->input('email_body')
+                'email_body' => $request->input('email_body'),
+                'Page_Margin' => $request->input('Page_Margin', '1in'),
+                'Image_Margin' => $request->input('Image_Margin', '0px')
             ]);
 
             return response()->json([
@@ -153,7 +157,9 @@ class EmailTemplateController extends Controller
                 'Body_HTML' => 'nullable|string',
                 'Description' => 'nullable|string|max:255',
                 'Is_Active' => 'nullable|boolean',
-                'email_body' => 'nullable|string|max:255'
+                'email_body' => 'nullable|string|max:255',
+                'Page_Margin' => 'nullable|string|max:50',
+                'Image_Margin' => 'nullable|string|max:50'
             ]);
 
             if ($validator->fails()) {
@@ -203,6 +209,12 @@ class EmailTemplateController extends Controller
             }
             if ($request->has('email_body')) {
                 $updateData['email_body'] = $request->input('email_body');
+            }
+            if ($request->has('Page_Margin')) {
+                $updateData['Page_Margin'] = $request->input('Page_Margin');
+            }
+            if ($request->has('Image_Margin')) {
+                $updateData['Image_Margin'] = $request->input('Image_Margin');
             }
 
             Log::info('Email template update data', [

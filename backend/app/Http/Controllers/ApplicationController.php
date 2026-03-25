@@ -47,6 +47,9 @@ class ApplicationController extends Controller
                 });
             }
 
+            // Fetch total count for pagination
+            $totalCount = $query->count();
+
             // Fetch one extra record to check if there are more pages (more efficient than COUNT)
             $applications = $query->skip(($page - 1) * $limit)
                 ->take($limit + 1) // Fetch one extra
@@ -84,6 +87,7 @@ class ApplicationController extends Controller
                     'pagination' => [
                         'current_page' => (int) $page,
                         'per_page' => (int) $limit,
+                        'total_count' => (int) $totalCount,
                         'has_more' => $hasMore
                     ]
                 ]);
@@ -140,6 +144,7 @@ class ApplicationController extends Controller
                 'pagination' => [
                     'current_page' => (int) $page,
                     'per_page' => (int) $limit,
+                    'total_count' => (int) $totalCount,
                     'has_more' => $hasMore
                 ]
             ]);

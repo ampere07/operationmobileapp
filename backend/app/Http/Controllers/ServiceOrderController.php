@@ -34,17 +34,17 @@ class ServiceOrderController extends Controller
                 'search' => $search,
                 'fast_mode' => $fastMode
             ]);
-            
+
             $query = "SELECT * FROM service_orders";
             $params = [];
             $whereClauses = [];
-            
+
             if ($request->has('assigned_email')) {
                 Log::info('Filtering by assigned_email: ' . $request->assigned_email);
                 $whereClauses[] = "assigned_email = ?";
                 $params[] = $request->assigned_email;
             }
-            
+
             if ($request->has('user_role') && strtolower($request->query('user_role')) === 'technician') {
                 $sevenDaysAgo = now()->subDays(7)->format('Y-m-d H:i:s');
                 $whereClauses[] = "updated_at >= ?";
@@ -62,24 +62,28 @@ class ServiceOrderController extends Controller
                 $params[] = $searchTerm;
                 $params[] = $searchTerm;
             }
-            
+
             if (!empty($whereClauses)) {
                 $query .= " WHERE " . implode(' AND ', $whereClauses);
             }
-            
+
+            // Fetch total count for pagination
+            $countQuery = str_replace("SELECT *", "SELECT COUNT(*) as total", $query);
+            $totalCount = DB::selectOne($countQuery, $params)->total;
+
             $query .= " ORDER BY created_at DESC";
-            
+
             // Add pagination with +1 for hasMore check
             $offset = ($page - 1) * $limit;
             $query .= " LIMIT ? OFFSET ?";
             $params[] = $limit + 1;
             $params[] = $offset;
-            
+
             $serviceOrders = DB::select($query, $params);
-            
+
             // Check if there are more pages
             $hasMore = count($serviceOrders) > $limit;
-            
+
             // Remove the extra record if it exists
             if ($hasMore) {
                 array_pop($serviceOrders);
@@ -92,7 +96,7 @@ class ServiceOrderController extends Controller
                 $enrichedOrders = [];
                 foreach ($serviceOrders as $order) {
                     $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
-                    
+
                     $enrichedOrders[] = [
                         'id' => $order->id,
                         'ticket_id' => $order->ticket_id ?? $order->id,
@@ -110,8 +114,9 @@ class ServiceOrderController extends Controller
                     'success' => true,
                     'data' => $enrichedOrders,
                     'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $limit,
+                        'current_page' => (int)$page,
+                        'per_page' => (int)$limit,
+                        'total_count' => (int)$totalCount,
                         'has_more' => $hasMore
                     ]
                 ]);
@@ -123,19 +128,19 @@ class ServiceOrderController extends Controller
                 $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
                 $billingAccount = DB::selectOne("SELECT * FROM billing_accounts WHERE account_no = ?", [$order->account_no]);
                 $technicalDetails = DB::selectOne("SELECT * FROM technical_details WHERE account_no = ?", [$order->account_no]);
-                $supportConcern = $order->concern_id ? DB::selectOne("SELECT * FROM support_concern WHERE id = ?", [$order->concern_id]) : null;
-                $repairCategory = $order->repair_category_id ? DB::selectOne("SELECT * FROM repair_category WHERE id = ?", [$order->repair_category_id]) : null;
-                $createdUser = $order->created_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->created_by_user_id]) : null;
-                $updatedUser = $order->updated_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->updated_by_user_id]) : null;
-                $visitUser = $order->visit_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->visit_by_user_id]) : null;
-                
+                $supportConcern = $order->concern_id ?DB::selectOne("SELECT * FROM support_concern WHERE id = ?", [$order->concern_id]) : null;
+                $repairCategory = $order->repair_category_id ?DB::selectOne("SELECT * FROM repair_category WHERE id = ?", [$order->repair_category_id]) : null;
+                $createdUser = $order->created_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->created_by_user_id]) : null;
+                $updatedUser = $order->updated_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->updated_by_user_id]) : null;
+                $visitUser = $order->visit_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->visit_by_user_id]) : null;
+
                 $firstItem = DB::selectOne("SELECT * FROM service_order_items WHERE service_order_id = ? ORDER BY id ASC LIMIT 1", [$order->id]);
                 $itemName1 = null;
                 if ($firstItem && $firstItem->item_id) {
                     $item = DB::selectOne("SELECT * FROM inventory_items WHERE id = ?", [$firstItem->item_id]);
                     $itemName1 = $item->item_name ?? null;
                 }
-                
+
                 $enrichedOrders[] = [
                     'id' => $order->id,
                     'ticket_id' => $order->ticket_id ?? $order->id,
@@ -199,15 +204,17 @@ class ServiceOrderController extends Controller
                 'success' => true,
                 'data' => $enrichedOrders,
                 'pagination' => [
-                    'current_page' => (int) $page,
-                    'per_page' => (int) $limit,
+                    'current_page' => (int)$page,
+                    'per_page' => (int)$limit,
+                    'total_count' => (int)$totalCount,
                     'has_more' => $hasMore
                 ]
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error fetching service orders: ' . $e->getMessage());
             Log::error('Trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch service orders',
@@ -220,10 +227,10 @@ class ServiceOrderController extends Controller
     {
         try {
             Log::info('Creating service order', $request->all());
-            
+
             $ticketId = $this->generateTicketId();
             Log::info('Generated ticket_id: ' . $ticketId);
-            
+
             $insertData = [
                 'ticket_id' => $ticketId,
                 'account_no' => $request->account_no,
@@ -241,50 +248,50 @@ class ServiceOrderController extends Controller
                 'created_at' => now(),
                 'updated_at' => now()
             ];
-            
+
             Log::info('Insert data before concern lookup:', $insertData);
-            
+
             if ($request->has('concern') && !empty($request->concern)) {
                 $supportConcern = DB::selectOne("SELECT id FROM support_concern WHERE name = ?", [$request->concern]);
                 if ($supportConcern) {
                     $insertData['concern_id'] = $supportConcern->id;
                 }
             }
-            
+
             if ($request->has('created_by_user') && !empty($request->created_by_user)) {
                 $user = DB::selectOne("SELECT id FROM users WHERE email = ?", [$request->created_by_user]);
                 if ($user) {
                     $insertData['created_by_user_id'] = $user->id;
                 }
             }
-            
+
             Log::info('Insert data before insertion:', $insertData);
             Log::info('Columns: ' . implode(', ', array_keys($insertData)));
             Log::info('Values: ' . json_encode(array_values($insertData)));
-            
+
             $columns = implode(', ', array_keys($insertData));
             $placeholders = implode(', ', array_fill(0, count($insertData), '?'));
             $query = "INSERT INTO service_orders ({$columns}) VALUES ({$placeholders})";
-            
+
             Log::info('SQL Query: ' . $query);
-            
+
             DB::insert($query, array_values($insertData));
             $serviceOrderId = DB::getPdo()->lastInsertId();
-            
+
             $insertedOrder = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$serviceOrderId]);
             Log::info('Inserted service order:', (array)$insertedOrder);
-            
+
             Log::info('Service order created successfully', ['id' => $serviceOrderId, 'ticket_id' => $ticketId]);
-            
+
             $currentConcern = trim($request->input('concern'));
             $supportStatus = strtolower(trim($request->input('support_status')));
-            
+
             \Log::info('Reconnection check (store) debug:', [
                 'current_concern' => $currentConcern,
                 'request_support_status' => $supportStatus
             ]);
-            
-            $updatedByUser = $request->input('updated_by_user') ?: $request->input('created_by_user') ?: (Auth::user()->name ?? 'System');
+
+            $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: ($request->input('created_by_user') ?: (Auth::user()->name ?? 'System')));
 
             $reconnectStatus = null;
             if ($currentConcern && strtolower($currentConcern) === 'reconnect' && $supportStatus === 'resolved') {
@@ -302,17 +309,17 @@ class ServiceOrderController extends Controller
                 'Service Order Created',
                 "New Service Order created for Account #{$request->account_no}. Ticket ID: {$ticketId}",
                 'info',
-                [
-                    'resource_type' => 'ServiceOrder',
-                    'resource_id' => $serviceOrderId,
-                    'additional_data' => [
-                        'ticket_id' => $ticketId,
-                        'account_no' => $request->account_no,
-                        'concern' => $request->concern,
-                        'support_status' => $request->support_status,
-                        'requested_by' => $request->requested_by
-                    ]
+            [
+                'resource_type' => 'ServiceOrder',
+                'resource_id' => $serviceOrderId,
+                'additional_data' => [
+                    'ticket_id' => $ticketId,
+                    'account_no' => $request->account_no,
+                    'concern' => $request->concern,
+                    'support_status' => $request->support_status,
+                    'requested_by' => $request->requested_by
                 ]
+            ]
             );
 
             event(new ServiceOrderUpdated(['action' => 'created', 'service_order_id' => $serviceOrderId, 'ticket_id' => $ticketId]));
@@ -326,10 +333,11 @@ class ServiceOrderController extends Controller
                     'reconnect_status' => $reconnectStatus
                 ],
             ], 201);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error creating service order: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create service order',
@@ -342,7 +350,7 @@ class ServiceOrderController extends Controller
     {
         try {
             Log::info("Fetching service order with ID: {$id}");
-            
+
             $order = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
 
             if (!$order) {
@@ -352,23 +360,23 @@ class ServiceOrderController extends Controller
                     'message' => 'Service order not found',
                 ], 404);
             }
-            
+
             $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
             $billingAccount = DB::selectOne("SELECT * FROM billing_accounts WHERE account_no = ?", [$order->account_no]);
             $technicalDetails = DB::selectOne("SELECT * FROM technical_details WHERE account_no = ?", [$order->account_no]);
-            $supportConcern = $order->concern_id ? DB::selectOne("SELECT * FROM support_concern WHERE id = ?", [$order->concern_id]) : null;
-            $repairCategory = $order->repair_category_id ? DB::selectOne("SELECT * FROM repair_category WHERE id = ?", [$order->repair_category_id]) : null;
-            $createdUser = $order->created_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->created_by_user_id]) : null;
-            $updatedUser = $order->updated_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->updated_by_user_id]) : null;
-            $visitUser = $order->visit_by_user_id ? DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->visit_by_user_id]) : null;
-            
+            $supportConcern = $order->concern_id ?DB::selectOne("SELECT * FROM support_concern WHERE id = ?", [$order->concern_id]) : null;
+            $repairCategory = $order->repair_category_id ?DB::selectOne("SELECT * FROM repair_category WHERE id = ?", [$order->repair_category_id]) : null;
+            $createdUser = $order->created_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->created_by_user_id]) : null;
+            $updatedUser = $order->updated_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->updated_by_user_id]) : null;
+            $visitUser = $order->visit_by_user_id ?DB::selectOne("SELECT * FROM users WHERE id = ?", [$order->visit_by_user_id]) : null;
+
             $firstItem = DB::selectOne("SELECT * FROM service_order_items WHERE service_order_id = ? ORDER BY id ASC LIMIT 1", [$order->id]);
             $itemName1 = null;
             if ($firstItem && $firstItem->item_id) {
                 $item = DB::selectOne("SELECT * FROM inventory_items WHERE id = ?", [$firstItem->item_id]);
                 $itemName1 = $item->item_name ?? null;
             }
-            
+
             $enrichedOrder = [
                 'id' => $order->id,
                 'ticket_id' => $order->ticket_id ?? $order->id,
@@ -431,10 +439,11 @@ class ServiceOrderController extends Controller
                 'success' => true,
                 'data' => $enrichedOrder,
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error fetching service order: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Service order not found',
@@ -448,27 +457,27 @@ class ServiceOrderController extends Controller
         try {
             Log::info("Updating service order with ID: {$id}");
             Log::info('Update data:', $request->all());
-            
+
             $order = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
-            
+
             if (!$order) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Service order not found',
                 ], 404);
             }
-            
-            $updatedByUser = $request->input('updated_by_user') ?: (Auth::user()->name ?? 'System');
-            
+
+            $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
+
             $updateData = [];
             $billingUpdateData = [];
             $customerUpdateData = [];
             $technicalUpdateData = [];
-            
+
             if ($request->has('date_installed')) {
                 $billingUpdateData['date_installed'] = $request->date_installed;
             }
-            
+
             if ($request->has('full_name')) {
                 $nameParts = explode(' ', $request->full_name);
                 if (count($nameParts) >= 2) {
@@ -479,15 +488,15 @@ class ServiceOrderController extends Controller
                     }
                 }
             }
-            
+
             if ($request->has('contact_number')) {
                 $customerUpdateData['contact_number_primary'] = $request->contact_number;
             }
-            
+
             if ($request->has('email_address')) {
                 $customerUpdateData['email_address'] = $request->email_address;
             }
-            
+
             if ($request->has('plan')) {
                 $customerUpdateData['desired_plan'] = $request->plan;
             }
@@ -496,7 +505,7 @@ class ServiceOrderController extends Controller
                 $billingAccount = DB::table('billing_accounts')
                     ->where('account_no', $order->account_no)
                     ->first();
-                
+
                 if ($billingAccount) {
                     $oldPlan = DB::table('customers')
                         ->where('id', $billingAccount->customer_id)
@@ -507,7 +516,7 @@ class ServiceOrderController extends Controller
                 $customerUpdateData['desired_plan'] = $request->new_plan;
                 $updateData['new_plan'] = $request->new_plan;
             }
-            
+
             // Handle technical details and old/new preservation
             $technicalDetails = DB::table('technical_details')
                 ->where('account_no', $order->account_no)
@@ -515,14 +524,14 @@ class ServiceOrderController extends Controller
 
             if ($technicalDetails) {
                 // Preservation and update logic
-                $hasTechUpdate = $request->filled('new_lcp') || $request->filled('new_nap') || 
-                                $request->filled('new_port') || $request->filled('new_vlan') || 
-                                $request->filled('new_router_modem_sn') || $request->filled('router_modem_sn') ||
-                                $request->filled('lcp') || $request->filled('nap') || $request->filled('port') || $request->filled('vlan');
+                $hasTechUpdate = $request->filled('new_lcp') || $request->filled('new_nap') ||
+                    $request->filled('new_port') || $request->filled('new_vlan') ||
+                    $request->filled('new_router_modem_sn') || $request->filled('router_modem_sn') ||
+                    $request->filled('lcp') || $request->filled('nap') || $request->filled('port') || $request->filled('vlan');
 
                 if ($hasTechUpdate) {
                     Log::info('Technical details update detected in ServiceOrderController');
-                    
+
                     // Old values
                     $updateData['old_lcp'] = $technicalDetails->lcp;
                     $updateData['old_nap'] = $technicalDetails->nap;
@@ -537,7 +546,7 @@ class ServiceOrderController extends Controller
                     $newPort = $request->input('new_port') ?? $request->input('port') ?? $technicalDetails->port;
                     $newVlan = $request->input('new_vlan') ?? $request->input('vlan') ?? $technicalDetails->vlan;
                     $newSN = $request->input('new_router_modem_sn') ?? $request->input('router_modem_sn') ?? $technicalDetails->router_modem_sn;
-                    
+
                     // Calculate LCPNAP
                     $newLcpNap = trim(($newLcp ?? '') . ' ' . ($newNap ?? ''), ' ');
 
@@ -568,9 +577,9 @@ class ServiceOrderController extends Controller
 
                     if ($billingAccountForJobOrder) {
                         $jobOrderSyncData = array_filter([
-                            'lcpnap'     => $newLcpNap ?: null,
-                            'port'       => $newPort   ?: null,
-                            'vlan'       => $newVlan   ?: null,
+                            'lcpnap' => $newLcpNap ?: null,
+                            'port' => $newPort ?: null,
+                            'vlan' => $newVlan ?: null,
                             'updated_at' => now(),
                         ], fn($v) => !is_null($v));
 
@@ -580,9 +589,9 @@ class ServiceOrderController extends Controller
 
                         Log::info('[SERVICE ORDER] Synced job_orders lcpnap/port/vlan for account_id ' . $billingAccountForJobOrder->id, [
                             'rows_affected' => $joAffected,
-                            'lcpnap'        => $newLcpNap,
-                            'port'          => $newPort,
-                            'vlan'          => $newVlan,
+                            'lcpnap' => $newLcpNap,
+                            'port' => $newPort,
+                            'vlan' => $newVlan,
                         ]);
                     }
                 }
@@ -591,19 +600,19 @@ class ServiceOrderController extends Controller
             if ($request->has('username')) {
                 $technicalUpdateData['username'] = $request->username;
             }
-            
+
             if ($request->has('connection_type')) {
                 $technicalUpdateData['connection_type'] = $request->connection_type;
             }
-            
+
             if ($request->has('concern_remarks')) {
                 $updateData['concern_remarks'] = $request->concern_remarks;
             }
-            
+
             if ($request->has('support_status')) {
                 $updateData['support_status'] = $request->support_status;
             }
-            
+
             if ($request->has('assigned_email')) {
                 $updateData['assigned_email'] = $request->assigned_email;
             }
@@ -615,66 +624,66 @@ class ServiceOrderController extends Controller
             if ($request->has('end_time')) {
                 $updateData['end_time'] = $request->end_time;
             }
-            
+
             if ($request->has('visit_by')) {
                 $updateData['visit_by'] = $request->visit_by;
             }
-            
+
             if ($request->has('visit_with')) {
                 $updateData['visit_with'] = $request->visit_with;
             }
-            
+
             if ($request->has('visit_with_other')) {
                 $updateData['visit_with_other'] = $request->visit_with_other;
             }
-            
+
             if ($request->has('visit_status')) {
                 $updateData['visit_status'] = $request->visit_status;
             }
-            
+
             if ($request->has('visit_remarks')) {
                 $updateData['visit_remarks'] = $request->visit_remarks;
             }
-            
+
             if ($request->has('support_remarks')) {
                 $updateData['support_remarks'] = $request->support_remarks;
             }
-            
+
             if ($request->has('service_charge')) {
                 $updateData['service_charge'] = $request->service_charge;
             }
-            
+
             if ($request->has('image1_url')) {
                 $updateData['image1_url'] = $request->image1_url;
             }
-            
+
             if ($request->has('image2_url')) {
                 $updateData['image2_url'] = $request->image2_url;
             }
-            
+
             if ($request->has('image3_url')) {
                 $updateData['image3_url'] = $request->image3_url;
             }
-            
+
             if ($request->has('client_signature_url')) {
                 $updateData['client_signature_url'] = $request->client_signature_url;
             }
-            
+
             $shouldAddServiceCharge = false;
             $statusChanged = false;
-            
+
             if ($request->has('support_status') && $request->support_status === 'Resolved' && $order->support_status !== 'Resolved') {
                 $shouldAddServiceCharge = true;
                 $statusChanged = true;
                 Log::info('Support status changed to Resolved, will add service charge to account balance');
             }
-            
+
             if ($request->has('visit_status') && $request->visit_status === 'Done' && $order->visit_status !== 'Done') {
                 $shouldAddServiceCharge = true;
                 $statusChanged = true;
                 Log::info('Visit status changed to Done, will add service charge to account balance');
             }
-            
+
             if ($shouldAddServiceCharge && $statusChanged && $request->has('service_charge')) {
                 $serviceCharge = floatval($request->service_charge);
                 if ($serviceCharge > 0) {
@@ -682,23 +691,23 @@ class ServiceOrderController extends Controller
                     if ($billingAccount) {
                         $currentBalance = floatval($billingAccount->account_balance);
                         $newBalance = $currentBalance + $serviceCharge;
-                        DB::update("UPDATE billing_accounts SET account_balance = ?, balance_update_date = ? WHERE account_no = ?", 
-                            [$newBalance, now(), $order->account_no]);
+                        DB::update("UPDATE billing_accounts SET account_balance = ?, balance_update_date = ? WHERE account_no = ?",
+                        [$newBalance, now(), $order->account_no]);
                         Log::info("Updated account balance from {$currentBalance} to {$newBalance} (added service charge: {$serviceCharge})");
                     }
                 }
             }
-            
+
             if ($request->has('updated_by')) {
                 $updateData['updated_by'] = $request->updated_by;
             }
-            
+
             if ($request->has('updated_by_user')) {
                 $updateData['updated_by_user'] = $request->updated_by_user;
             }
-            
+
             $updateData['updated_at'] = now();
-            
+
             if (!empty($updateData)) {
                 $sets = [];
                 $params = [];
@@ -711,7 +720,7 @@ class ServiceOrderController extends Controller
                 DB::update($query, $params);
                 Log::info('Updated service_orders table');
             }
-            
+
             if (!empty($billingUpdateData)) {
                 $billingUpdateData['updated_at'] = now();
                 $sets = [];
@@ -725,7 +734,7 @@ class ServiceOrderController extends Controller
                 DB::update($query, $params);
                 Log::info('Updated billing_accounts table');
             }
-            
+
             if (!empty($customerUpdateData)) {
                 $customerUpdateData['updated_at'] = now();
                 $sets = [];
@@ -739,7 +748,7 @@ class ServiceOrderController extends Controller
                 DB::update($query, $params);
                 Log::info('Updated customers table');
             }
-            
+
             if (!empty($technicalUpdateData)) {
                 $sets = [];
                 $params = [];
@@ -752,23 +761,25 @@ class ServiceOrderController extends Controller
                 DB::update($query, $params);
                 Log::info('Updated technical_details table');
             }
-            
+
             if ($request->has('item_name_1') && !empty($request->item_name_1)) {
                 Log::info('Processing item_name_1: ' . $request->item_name_1);
-                
+
                 $inventoryItem = DB::selectOne("SELECT * FROM inventory_items WHERE item_name = ?", [$request->item_name_1]);
-                
+
                 if ($inventoryItem) {
                     $existingItem = DB::selectOne("SELECT * FROM service_order_items WHERE service_order_id = ? ORDER BY id ASC LIMIT 1", [$id]);
-                    
+
                     if ($existingItem) {
                         DB::update("UPDATE service_order_items SET item_id = ?, quantity = 1 WHERE id = ?", [$inventoryItem->id, $existingItem->id]);
                         Log::info('Updated existing service_order_item');
-                    } else {
+                    }
+                    else {
                         DB::insert("INSERT INTO service_order_items (service_order_id, item_id, quantity) VALUES (?, ?, 1)", [$id, $inventoryItem->id]);
                         Log::info('Created new service_order_item');
                     }
-                } else {
+                }
+                else {
                     Log::warning('Inventory item not found for: ' . $request->item_name_1);
                 }
             }
@@ -803,7 +814,7 @@ class ServiceOrderController extends Controller
                         try {
                             $oldPlanString = $updateData['old_plan'] ?? $order->old_plan ?? null;
                             $newPlanString = $updateData['new_plan'] ?? $order->new_plan ?? null;
-                            
+
                             $oldPlanName = trim(explode(' - ', (string)$oldPlanString)[0] ?: (string)$oldPlanString);
                             $newPlanName = trim(explode(' - ', (string)$newPlanString)[0] ?: (string)$newPlanString);
 
@@ -822,7 +833,8 @@ class ServiceOrderController extends Controller
                                 'updated_by_user' => $updatedByUser,
                             ]);
                             \Log::info("PlanChangeLog created successfully for account {$billingAccount->account_no}");
-                        } catch (\Exception $e) {
+                        }
+                        catch (\Exception $e) {
                             \Log::error("Failed to create PlanChangeLog: " . $e->getMessage());
                         }
                     }
@@ -845,12 +857,12 @@ class ServiceOrderController extends Controller
 
             // Trigger Pullout if repair category is 'Pullout' and visit status is 'Done'
             $pulloutStatus = null;
-            
+
             $visitStatus = strtolower(trim($request->input('visit_status') ?? ''));
             if (empty($visitStatus) && isset($order->visit_status)) {
                 $visitStatus = strtolower(trim($order->visit_status));
             }
-            
+
             $repairCategory = strtolower(trim($request->input('repair_category') ?? ''));
             if (empty($repairCategory) && isset($order->repair_category)) {
                 $repairCategory = strtolower(trim($order->repair_category));
@@ -879,14 +891,14 @@ class ServiceOrderController extends Controller
 
                     // Update job_orders table with new LCPNAP, port, and vlan for relocation categories
                     $newLcpnap = $request->input('new_lcpnap');
-                    $newPort   = $request->input('new_port');
-                    $newVlan   = $request->input('new_vlan');
+                    $newPort = $request->input('new_port');
+                    $newVlan = $request->input('new_vlan');
 
                     if ($newLcpnap || $newPort || $newVlan) {
                         $jobOrderUpdateData = array_filter([
                             'lcpnap' => $newLcpnap ?: null,
-                            'port'   => $newPort   ?: null,
-                            'vlan'   => $newVlan   ?: null,
+                            'port' => $newPort ?: null,
+                            'vlan' => $newVlan ?: null,
                             'updated_at' => now(),
                         ], fn($v) => !is_null($v));
 
@@ -896,9 +908,9 @@ class ServiceOrderController extends Controller
 
                         \Log::info('[SERVICE ORDER RELOCATE] Updated job_orders for account_id ' . $billingAccount->id, [
                             'rows_affected' => $affected,
-                            'new_lcpnap'    => $newLcpnap,
-                            'new_port'      => $newPort,
-                            'new_vlan'      => $newVlan,
+                            'new_lcpnap' => $newLcpnap,
+                            'new_port' => $newPort,
+                            'new_vlan' => $newVlan,
                         ]);
                     }
                 }
@@ -909,20 +921,20 @@ class ServiceOrderController extends Controller
                 'Service Order Updated',
                 "Service Order #{$id} updated. Ticket: {$order->ticket_id}. Status: {$request->input('support_status', $order->support_status)}",
                 'info',
-                [
-                    'resource_type' => 'ServiceOrder',
-                    'resource_id' => $id,
-                    'additional_data' => [
-                        'ticket_id' => $order->ticket_id,
-                        'support_status' => $request->input('support_status'),
-                        'visit_status' => $request->input('visit_status'),
-                        'assigned_email' => $request->input('assigned_email'),
-                        'reconnect_status' => $reconnectStatus,
-                        'disconnect_status' => $disconnectStatus,
-                        'pullout_status' => $pulloutStatus,
-                        'migration_status' => $migrationStatus
-                    ]
+            [
+                'resource_type' => 'ServiceOrder',
+                'resource_id' => $id,
+                'additional_data' => [
+                    'ticket_id' => $order->ticket_id,
+                    'support_status' => $request->input('support_status'),
+                    'visit_status' => $request->input('visit_status'),
+                    'assigned_email' => $request->input('assigned_email'),
+                    'reconnect_status' => $reconnectStatus,
+                    'disconnect_status' => $disconnectStatus,
+                    'pullout_status' => $pulloutStatus,
+                    'migration_status' => $migrationStatus
                 ]
+            ]
             );
 
             event(new ServiceOrderUpdated(['action' => 'updated', 'service_order_id' => $id, 'ticket_id' => $order->ticket_id]));
@@ -935,10 +947,11 @@ class ServiceOrderController extends Controller
                 'pullout_status' => $pulloutStatus,
                 'migration_status' => $migrationStatus
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             Log::error('Error updating service order: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update service order',
@@ -960,14 +973,14 @@ class ServiceOrderController extends Controller
                 'Service Order Deleted',
                 "Service Order #{$id} deleted. Ticket: {$ticketId}, Account: {$accountNo}",
                 'warning',
-                [
-                    'resource_type' => 'ServiceOrder',
-                    'resource_id' => $id,
-                    'additional_data' => [
-                        'ticket_id' => $ticketId,
-                        'account_no' => $accountNo
-                    ]
+            [
+                'resource_type' => 'ServiceOrder',
+                'resource_id' => $id,
+                'additional_data' => [
+                    'ticket_id' => $ticketId,
+                    'account_no' => $accountNo
                 ]
+            ]
             );
 
             event(new ServiceOrderUpdated(['action' => 'deleted', 'service_order_id' => $id, 'ticket_id' => $ticketId]));
@@ -976,7 +989,8 @@ class ServiceOrderController extends Controller
                 'success' => true,
                 'message' => 'Service order deleted successfully',
             ]);
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete service order',
@@ -991,7 +1005,7 @@ class ServiceOrderController extends Controller
             // Reload billing account
             $billingAccount = BillingAccount::find($billingAccount->id);
             $accountNo = $billingAccount->account_no;
-            
+
             \Log::info('[SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
 
             // Step 2: Trigger RADIUS Reconnection
@@ -1004,7 +1018,8 @@ class ServiceOrderController extends Controller
                 ];
                 $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
                 \Log::info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
             }
 
@@ -1036,58 +1051,59 @@ class ServiceOrderController extends Controller
             $billingAccount->updated_at = now();
             $billingAccount->updated_by = Auth::id();
             $billingAccount->save();
-            
+
             \Log::info('[SERVICE ORDER RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
 
             \Log::info('[SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
-                // Send SMS Notification
-                try {
-                    $smsTemplate = DB::table('sms_templates')
-                        ->where('template_type', 'Reconnect')
-                        ->where('is_active', 1)
+            // Send SMS Notification
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Reconnect')
+                    ->where('is_active', 1)
+                    ->first();
+
+                if ($smsTemplate) {
+                    $customerInfo = DB::table('billing_accounts')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('billing_accounts.account_no', $accountNo)
+                        ->select(
+                        'customers.contact_number_primary',
+                        'customers.email_address',
+                        'customers.desired_plan as plan_name',
+                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                    )
                         ->first();
 
-                    if ($smsTemplate) {
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                                'customers.contact_number_primary',
-                                'customers.email_address',
-                                'customers.desired_plan as plan_name',
-                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                            )
-                            ->first();
+                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                        $message = $smsTemplate->message_content;
+                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $message = str_replace('{{customer_name}}', $customerName, $message);
+                        $message = str_replace('{{account_no}}', $accountNo, $message);
+                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            $message = $smsTemplate->message_content;
-                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsResult = $smsService->send([
+                            'contact_no' => $customerInfo->contact_number_primary,
+                            'message' => $message
+                        ]);
 
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
-
-                            if ($smsResult['success']) {
-                                \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
-                            }
+                        if ($smsResult['success']) {
+                            \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
                         }
                     }
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
+            }
+            catch (\Exception $e) {
+                \Log::error('[SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+            }
 
             // Email Notification
             try {
                 $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
-                
+
                 if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
                     $emailService = app(\App\Services\EmailQueueService::class);
                     $emailData = [
@@ -1099,13 +1115,15 @@ class ServiceOrderController extends Controller
                     $emailService->queueFromTemplate('RECONNECT', $emailData);
                     \Log::info('[SERVICE ORDER RECONNECT EMAIL] Email queued');
                 }
-            } catch (\Exception $e) {
+            }
+            catch (\Exception $e) {
                 \Log::error('[SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
             }
 
             return 'success';
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             \Log::error('[SERVICE ORDER RECONNECT EXCEPTION] ' . $e->getMessage());
             return 'exception';
         }
@@ -1117,7 +1135,7 @@ class ServiceOrderController extends Controller
             // Reload billing account
             $billingAccount = BillingAccount::find($billingAccount->id);
             $accountNo = $billingAccount->account_no;
-            
+
             \Log::info('[SERVICE ORDER DISCONNECT] Force starting for account: ' . $accountNo);
 
             // Get account details (PPPoE Username)
@@ -1147,7 +1165,8 @@ class ServiceOrderController extends Controller
                     'updatedBy' => $updatedByUser
                 ]);
                 \Log::info('[SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
@@ -1158,78 +1177,81 @@ class ServiceOrderController extends Controller
             $billingAccount->updated_at = now();
             $billingAccount->updated_by = Auth::id();
             $billingAccount->save();
-            
+
             \Log::info('[SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
 
-                // Send SMS Notification
-                try {
-                    $smsTemplate = DB::table('sms_templates')
-                        ->where('template_type', 'Disconnected')
-                        ->where('is_active', 1)
+            // Send SMS Notification
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Disconnected')
+                    ->where('is_active', 1)
+                    ->first();
+
+                if ($smsTemplate) {
+                    $customerInfo = DB::table('billing_accounts')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('billing_accounts.account_no', $accountNo)
+                        ->select(
+                        'customers.contact_number_primary',
+                        'customers.email_address',
+                        'customers.desired_plan as plan_name',
+                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                        'billing_accounts.account_balance'
+                    )
                         ->first();
 
-                    if ($smsTemplate) {
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                                'customers.contact_number_primary',
-                                'customers.email_address',
-                                'customers.desired_plan as plan_name',
-                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
-                                'billing_accounts.account_balance'
-                            )
-                            ->first();
+                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                        $message = $smsTemplate->message_content;
+                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $message = str_replace('{{customer_name}}', $customerName, $message);
+                        $message = str_replace('{{account_no}}', $accountNo, $message);
+                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                        $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                        $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            $message = $smsTemplate->message_content;
-                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
-                            $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
-                            $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsResult = $smsService->send([
+                            'contact_no' => $customerInfo->contact_number_primary,
+                            'message' => $message
+                        ]);
 
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
-
-                            if ($smsResult['success']) {
-                                \Log::info('[SERVICE ORDER DISCONNECT SMS] SMS sent');
-                            }
+                        if ($smsResult['success']) {
+                            \Log::info('[SERVICE ORDER DISCONNECT SMS] SMS sent');
                         }
                     }
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER DISCONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
+            }
+            catch (\Exception $e) {
+                \Log::error('[SERVICE ORDER DISCONNECT SMS EXCEPTION] ' . $e->getMessage());
+            }
 
-                // Send Email Notification
-                try {
-                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
-                    
-                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
-                              $emailService = app(\App\Services\EmailQueueService::class);
-                              $emailData = [
-                                  'customer_name' => $customerInfo->full_name,
-                                  'account_no' => $accountNo,
-                                  'amount_due' => number_format($customerInfo->account_balance, 2),
-                                  'balance' => number_format($customerInfo->account_balance, 2),
-                                  'recipient_email' => $customerInfo->email_address,
-                              ];
-                              $emailService->queueFromTemplate('DISCONNECTED', $emailData);
-                              \Log::info('[SERVICE ORDER DISCONNECT EMAIL] Email queued');
-                         }
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+            // Send Email Notification
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
+
+                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                    $emailService = app(\App\Services\EmailQueueService::class);
+                    $emailData = [
+                        'customer_name' => $customerInfo->full_name,
+                        'account_no' => $accountNo,
+                        'amount_due' => number_format($customerInfo->account_balance, 2),
+                        'balance' => number_format($customerInfo->account_balance, 2),
+                        'recipient_email' => $customerInfo->email_address,
+                    ];
+                    $emailService->queueFromTemplate('DISCONNECTED', $emailData);
+                    \Log::info('[SERVICE ORDER DISCONNECT EMAIL] Email queued');
                 }
+            }
+            catch (\Exception $e) {
+                \Log::error('[SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+            }
 
             return 'success';
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             \Log::error('[SERVICE ORDER DISCONNECT EXCEPTION] ' . $e->getMessage());
             return 'exception';
         }
@@ -1241,7 +1263,7 @@ class ServiceOrderController extends Controller
             // Reload billing account
             $billingAccount = BillingAccount::find($billingAccount->id);
             $accountNo = $billingAccount->account_no;
-            
+
             \Log::info('[SERVICE ORDER PULLOUT] Force starting for account: ' . $accountNo);
 
             // Get account details (PPPoE Username)
@@ -1271,7 +1293,8 @@ class ServiceOrderController extends Controller
                     'updatedBy' => $updatedByUser
                 ]);
                 \Log::info('[SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
@@ -1282,107 +1305,110 @@ class ServiceOrderController extends Controller
             $billingAccount->updated_at = now();
             $billingAccount->updated_by = Auth::id();
             $billingAccount->save();
-                
-                \Log::info('[SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
 
-                // Clear technical details
-                DB::table('technical_details')
-                    ->where('account_no', $accountNo)
-                    ->update([
-                        'connection_type' => null,
-                        'router_model' => null,
-                        'router_modem_sn' => null,
-                        'ip_address' => null,
-                        'lcp' => null,
-                        'nap' => null,
-                        'port' => null,
-                        'vlan' => null,
-                        'lcpnap' => null,
-                        'usage_type' => null,
-                        'updated_at' => now()
-                    ]);
+            \Log::info('[SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
 
-                \Log::info('[SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
+            // Clear technical details
+            DB::table('technical_details')
+                ->where('account_no', $accountNo)
+                ->update([
+                'connection_type' => null,
+                'router_model' => null,
+                'router_modem_sn' => null,
+                'ip_address' => null,
+                'lcp' => null,
+                'nap' => null,
+                'port' => null,
+                'vlan' => null,
+                'lcpnap' => null,
+                'usage_type' => null,
+                'updated_at' => now()
+            ]);
 
-                // Clear port in job_orders table using account_id (referencing billing_accounts id)
-                DB::table('job_orders')
-                    ->where('account_id', $billingAccount->id)
-                    ->update([
-                        'port' => null,
-                        'updated_at' => now()
-                    ]);
-                
-                \Log::info('[SERVICE ORDER PULLOUT DB] Cleared port in job_orders for Account ID: ' . $billingAccount->id);
+            \Log::info('[SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
 
-                // Send SMS Notification
-                try {
-                    $smsTemplate = DB::table('sms_templates')
-                        ->where('template_type', 'Disconnected')
-                        ->where('is_active', 1)
+            // Clear port in job_orders table using account_id (referencing billing_accounts id)
+            DB::table('job_orders')
+                ->where('account_id', $billingAccount->id)
+                ->update([
+                'port' => null,
+                'updated_at' => now()
+            ]);
+
+            \Log::info('[SERVICE ORDER PULLOUT DB] Cleared port in job_orders for Account ID: ' . $billingAccount->id);
+
+            // Send SMS Notification
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Disconnected')
+                    ->where('is_active', 1)
+                    ->first();
+
+                if ($smsTemplate) {
+                    $customerInfo = DB::table('billing_accounts')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('billing_accounts.account_no', $accountNo)
+                        ->select(
+                        'customers.contact_number_primary',
+                        'customers.email_address',
+                        'customers.desired_plan as plan_name',
+                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                        'billing_accounts.account_balance'
+                    )
                         ->first();
 
-                    if ($smsTemplate) {
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                                'customers.contact_number_primary',
-                                'customers.email_address',
-                                'customers.desired_plan as plan_name',
-                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
-                                'billing_accounts.account_balance'
-                            )
-                            ->first();
+                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                        $message = $smsTemplate->message_content;
+                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $message = str_replace('{{customer_name}}', $customerName, $message);
+                        $message = str_replace('{{account_no}}', $accountNo, $message);
+                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                        $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                        $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            $message = $smsTemplate->message_content;
-                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
-                            $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
-                            $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsResult = $smsService->send([
+                            'contact_no' => $customerInfo->contact_number_primary,
+                            'message' => $message
+                        ]);
 
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
-
-                            if ($smsResult['success']) {
-                                \Log::info('[SERVICE ORDER PULLOUT SMS] SMS sent');
-                            }
+                        if ($smsResult['success']) {
+                            \Log::info('[SERVICE ORDER PULLOUT SMS] SMS sent');
                         }
                     }
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER PULLOUT SMS EXCEPTION] ' . $e->getMessage());
                 }
+            }
+            catch (\Exception $e) {
+                \Log::error('[SERVICE ORDER PULLOUT SMS EXCEPTION] ' . $e->getMessage());
+            }
 
-                // Send Email Notification
-                try {
-                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
-                    
-                         if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
-                              $emailService = app(\App\Services\EmailQueueService::class);
-                              $emailData = [
-                                  'customer_name' => $customerInfo->full_name,
-                                  'account_no' => $accountNo,
-                                  'amount_due' => number_format($customerInfo->account_balance, 2),
-                                  'balance' => number_format($customerInfo->account_balance, 2),
-                                  'recipient_email' => $customerInfo->email_address,
-                              ];
-                              $emailService->queueFromTemplate('DISCONNECTED', $emailData);
-                              \Log::info('[SERVICE ORDER PULLOUT EMAIL] Email queued');
-                         }
-                } catch (\Exception $e) {
-                    \Log::error('[SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
+            // Send Email Notification
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
+
+                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                    $emailService = app(\App\Services\EmailQueueService::class);
+                    $emailData = [
+                        'customer_name' => $customerInfo->full_name,
+                        'account_no' => $accountNo,
+                        'amount_due' => number_format($customerInfo->account_balance, 2),
+                        'balance' => number_format($customerInfo->account_balance, 2),
+                        'recipient_email' => $customerInfo->email_address,
+                    ];
+                    $emailService->queueFromTemplate('DISCONNECTED', $emailData);
+                    \Log::info('[SERVICE ORDER PULLOUT EMAIL] Email queued');
                 }
+            }
+            catch (\Exception $e) {
+                \Log::error('[SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
+            }
 
             return 'success';
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             \Log::error('[SERVICE ORDER PULLOUT EXCEPTION] ' . $e->getMessage());
             return 'exception';
         }
@@ -1392,7 +1418,7 @@ class ServiceOrderController extends Controller
     {
         try {
             $accountNo = $billingAccount->account_no;
-            
+
             \Log::info('[SERVICE ORDER MIGRATION] Force starting for account: ' . $accountNo);
 
             // Get data for username generation
@@ -1401,16 +1427,16 @@ class ServiceOrderController extends Controller
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
                 ->where('billing_accounts.account_no', $accountNo)
                 ->select(
-                    'customers.first_name',
-                    'customers.middle_initial',
-                    'customers.last_name',
-                    'customers.contact_number_primary as mobile_number',
-                    'customers.desired_plan',
-                    'technical_details.lcp',
-                    'technical_details.nap',
-                    'technical_details.port',
-                    'technical_details.username as pppoe_username'
-                )
+                'customers.first_name',
+                'customers.middle_initial',
+                'customers.last_name',
+                'customers.contact_number_primary as mobile_number',
+                'customers.desired_plan',
+                'technical_details.lcp',
+                'technical_details.nap',
+                'technical_details.port',
+                'technical_details.username as pppoe_username'
+            )
                 ->first();
 
             $oldUsername = $fullInfo->pppoe_username ?? null;
@@ -1438,27 +1464,28 @@ class ServiceOrderController extends Controller
             // RADIUS ACCOUNT CREATION LOGIC
             $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
             $targetCategories = ['relocate', 'transfer lcp/nap/port', 'relocate router', 'transfer lcp nap vlan'];
-            
+
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info('[SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
-                
+
                 // STEP 1: DELETE THE OLD ACCOUNT
                 try {
                     $radiusOps = app(ManualRadiusOperationsService::class);
                     \Log::info('Triggering deleteAccount for old username: ' . $oldUsername);
                     $radiusOps->deleteAccount($oldUsername);
-                } catch (\Exception $delEx) {
+                }
+                catch (\Exception $delEx) {
                     \Log::error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
-                    // We continue anyway so the new account can be created
+                // We continue anyway so the new account can be created
                 }
 
                 $radiusConfig = RadiusConfig::first();
                 if ($radiusConfig) {
                     $radiusUrl = $radiusConfig->ssl_type . '://' . $radiusConfig->ip . ':' . $radiusConfig->port . '/rest/user-manage/user';
-                    
+
                     // Generate new password for relocation/transfer
                     $newPassword = $pppoeService->generatePassword($customerData);
-                    
+
                     // Get plan
                     $desiredPlan = $fullInfo->desired_plan ?? '';
                     $planName = $desiredPlan;
@@ -1485,69 +1512,74 @@ class ServiceOrderController extends Controller
 
                         if ($response->status() === 204 || $response->successful()) {
                             \Log::info('RADIUS account created successfully. Proceeding with DB updates.');
-                            
+
                             // Update technical_details
                             DB::table('technical_details')
                                 ->where('account_id', $billingAccount->id)
                                 ->update([
-                                    'username' => $newUsername,
-                                    'updated_at' => now(),
-                                    'updated_by' => $updatedByUser
-                                ]);
-                            
+                                'username' => $newUsername,
+                                'updated_at' => now(),
+                                'updated_by' => $updatedByUser
+                            ]);
+
                             // Update job_orders: username, pppoe_username, and pppoe_password
                             DB::table('job_orders')
                                 ->where('account_id', $billingAccount->id)
                                 ->update([
-                                    'pppoe_username' => $newUsername,
-                                    'username' => $newUsername,
-                                    'pppoe_password' => $newPassword,
-                                    'updated_at' => now()
-                                ]);
+                                'pppoe_username' => $newUsername,
+                                'username' => $newUsername,
+                                'pppoe_password' => $newPassword,
+                                'updated_at' => now()
+                            ]);
 
                             \Log::info('[SERVICE ORDER MIGRATION SUCCESS] Migration synced successfully after RADIUS success');
                             return 'success';
-                        } else {
+                        }
+                        else {
                             \Log::error('RADIUS account creation failed. DB will NOT be updated for relocation.', [
                                 'status' => $response->status(),
                                 'body' => $response->body()
                             ]);
                             return 'radius_failed';
                         }
-                    } catch (\Exception $radiusEx) {
+                    }
+                    catch (\Exception $radiusEx) {
                         \Log::error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
                         return 'exception';
                     }
-                } else {
+                }
+                else {
                     \Log::error('Radius config not found');
                     return 'radius_config_missing';
                 }
-            } else {
+            }
+            else {
                 // For other categories like plain 'migrate', we update DB without RADIUS as before
                 \Log::info('[SERVICE ORDER MIGRATION PROCEED] Updating database credentials (DB ONLY) for ' . $oldUsername);
 
                 DB::table('technical_details')
                     ->where('account_id', $billingAccount->id)
                     ->update([
-                        'username' => $newUsername,
-                        'updated_at' => now(),
-                        'updated_by' => $updatedByUser
-                    ]);
-                
+                    'username' => $newUsername,
+                    'updated_at' => now(),
+                    'updated_by' => $updatedByUser
+                ]);
+
                 DB::table('job_orders')
                     ->where('account_id', $billingAccount->id)
                     ->update([
-                        'pppoe_username' => $newUsername,
-                        'username' => $newUsername,
-                        'updated_at' => now()
-                    ]);
+                    'pppoe_username' => $newUsername,
+                    'username' => $newUsername,
+                    'updated_at' => now()
+                ]);
 
                 \Log::info('[SERVICE ORDER MIGRATION SUCCESS] DB Only migration completed');
                 return 'success';
             }
 
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             \Log::error('[SERVICE ORDER MIGRATION EXCEPTION] ' . $e->getMessage());
             return 'exception';
         }
@@ -1556,23 +1588,24 @@ class ServiceOrderController extends Controller
     private function generateTicketId(): string
     {
         $currentYear = date('Y');
-        
+
         $lastTicket = DB::selectOne(
             "SELECT ticket_id FROM service_orders WHERE ticket_id LIKE ? ORDER BY ticket_id DESC LIMIT 1",
-            [$currentYear . '%']
+        [$currentYear . '%']
         );
-        
+
         if ($lastTicket && $lastTicket->ticket_id) {
-            $lastNumber = (int) substr($lastTicket->ticket_id, 4);
+            $lastNumber = (int)substr($lastTicket->ticket_id, 4);
             $newNumber = $lastNumber + 1;
-        } else {
+        }
+        else {
             $newNumber = 1;
         }
-        
+
         $ticketId = $currentYear . str_pad($newNumber, 6, '0', STR_PAD_LEFT);
-        
+
         Log::info('Generated ticket ID: ' . $ticketId);
-        
+
         return $ticketId;
     }
 }

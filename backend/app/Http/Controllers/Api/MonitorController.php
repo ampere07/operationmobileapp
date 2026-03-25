@@ -593,6 +593,30 @@ class MonitorController extends Controller
                 return response()->json(['status' => 'success', 'data' => $qb->get(), 'barangays' => $response['barangays']]);
             }
 
+            // 12.1) DASHBOARD COUNTS (New)
+            if ($action === 'dashboard_counts') {
+                $counts = [
+                    'so_support_in_progress' => DB::table('service_orders')->where('support_status', 'In Progress')->count(),
+                    'so_visit_in_progress' => DB::table('service_orders')->where('visit_status', 'In Progress')->count(),
+                    'so_visit_pullout_in_progress' => DB::table('service_orders')
+                        ->leftJoin('support_concern', 'service_orders.concern_id', '=', 'support_concern.id')
+                        ->where('service_orders.visit_status', 'In Progress')
+                        ->where(function($q) {
+                            $q->where('support_concern.concern_name', 'LIKE', '%Pullout%')
+                              ->orWhere('service_orders.concern_remarks', 'LIKE', '%Pullout%');
+                        })
+                        ->count(),
+                    'app_pending' => DB::table('applications')->where('status', 'Pending')->count(),
+                    'jo_in_progress' => DB::table('job_orders')->where('onsite_status', 'In Progress')->count(),
+                    'radius_online' => DB::table('online_status')->where('session_status', 'Online')->count(),
+                    'radius_offline' => DB::table('online_status')->where('session_status', 'Offline')->count(),
+                    'radius_blocked' => DB::table('online_status')->where('session_status', 'Blocked')->count(),
+                ];
+
+                return response()->json(['status' => 'success', 'data' => $counts]);
+            }
+
+
             // 13) TECHNICIAN AVAILABILITY
             if ($action === 'technician_availability') {
                 $techs = DB::table('users')

@@ -44,8 +44,13 @@ class GoogleDrivePdfGenerationService
                 'document_type' => $documentType,
                 'account_no' => $account->account_no,
                 'soa_id' => $soa?->id,
+                'soa_is_null' => $soa === null,
+                'data_keys' => array_keys($pdfData),
+                'has_Due_Date' => isset($pdfData['Due_Date']),
+                'Due_Date_value' => $pdfData['Due_Date'] ?? 'NOT SET',
+                'has_Prev_Balance' => isset($pdfData['Prev_Balance']),
+                'Prev_Balance_value' => $pdfData['Prev_Balance'] ?? 'NOT SET',
                 'has_Amount_Discounts' => isset($pdfData['Amount_Discounts']),
-                'has_Amount_Rebates' => isset($pdfData['Amount_Rebates']),
                 'Amount_Discounts_value' => $pdfData['Amount_Discounts'] ?? 'NOT SET',
                 'Amount_Rebates_value' => $pdfData['Amount_Rebates'] ?? 'NOT SET',
             ]);
@@ -58,7 +63,23 @@ class GoogleDrivePdfGenerationService
                 throw new \Exception("PDF template {$templateCode} not found");
             }
 
+            // Check what placeholders exist in the template
+            preg_match_all('/\{\{([^}]+)\}\}/', $template->Body_HTML, $matches);
+            Log::info('Template placeholders found', [
+                'template_code' => $templateCode,
+                'placeholders' => $matches[1] ?? [],
+            ]);
+
             $html = $this->replacePlaceholders($template->Body_HTML, $pdfData);
+
+            // Check if any unreplaced placeholders remain
+            preg_match_all('/\{\{([^}]+)\}\}/', $html, $remainingMatches);
+            if (!empty($remainingMatches[1])) {
+                Log::warning('Unreplaced placeholders remain in template', [
+                    'unreplaced' => $remainingMatches[1],
+                ]);
+            }
+
             $html = $this->addStrictCss() . $html;
 
             $this->dompdf->loadHtml($html);
@@ -408,24 +429,24 @@ class GoogleDrivePdfGenerationService
         ];
 
         if ($soa) {
-            $dueDate = \Carbon\Carbon::parse($soa->due_date);
+            $dueDate = $soa->due_date ? \Carbon\Carbon::parse($soa->due_date) : null;
             $billingConfig = \App\Models\BillingConfig::first();
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
-            $dcDate = $dueDate->copy()->addDays($disconnectionDay);
+            $dcDate = $dueDate ? $dueDate->copy()->addDays($disconnectionDay) : null;
 
             $data = array_merge($data, [
                 'SOA_No' => $soa->id,
-                'Prev_Balance' => number_format($soa->balance_from_previous_bill, 2),
-                'Prev_Payment' => number_format($soa->payment_received_previous, 2),
-                'Rem_Balance' => number_format($soa->remaining_balance_previous, 2),
-                'Monthly_Fee' => number_format($soa->monthly_service_fee, 2),
-                'VAT' => number_format($soa->vat, 2),
-                'Amount_Due' => number_format($soa->amount_due, 2),
-                'Total_Due' => number_format($soa->total_amount_due, 2),
-                'Due_Date' => $dueDate->format('F d, Y'),
-                'Period_Start' => $soa->statement_date->format('F d, Y'),
-                'Period_End' => $dueDate->format('F d, Y'),
-                'DC_Date' => $dcDate->format('F d, Y'),
+                'Prev_Balance' => number_format((float)($soa->balance_from_previous_bill ?? 0), 2),
+                'Prev_Payment' => number_format((float)($soa->payment_received_previous ?? 0), 2),
+                'Rem_Balance' => number_format((float)($soa->remaining_balance_previous ?? 0), 2),
+                'Monthly_Fee' => number_format((float)($soa->monthly_service_fee ?? 0), 2),
+                'VAT' => number_format((float)($soa->vat ?? 0), 2),
+                'Amount_Due' => number_format((float)($soa->amount_due ?? 0), 2),
+                'Total_Due' => number_format((float)($soa->total_amount_due ?? 0), 2),
+                'Due_Date' => $dueDate ? $dueDate->format('F d, Y') : '-',
+                'Period_Start' => $soa->statement_date ? $soa->statement_date->format('m/d/Y') : '-',
+                'Period_End' => $dueDate ? $dueDate->format('m/d/Y') : '-',
+                'DC_Date' => $dcDate ? $dcDate->format('F d, Y') : '-',
                 // Others and Basic Charges - Individual amounts (show only if > 0)
                 'Amount_Discounts' => $soa->discounts > 0 ? number_format($soa->discounts, 2) : '',
                 'Amount_Rebates' => $soa->rebate > 0 ? number_format($soa->rebate, 2) : '',
@@ -436,8 +457,17 @@ class GoogleDrivePdfGenerationService
                 'Label_Rebates' => $soa->rebate > 0 ? 'Rebates' : '',
                 'Label_Service' => $soa->service_charge > 0 ? 'Service Charge' : '',
                 'Label_Staggered' => $soa->staggered > 0 ? 'Installment' : '',
-                'Label_Install' => $soa->staggered > 0 ? 'Installment' : '' // Alias for backward compatibility
+                'Label_Install' => $soa->staggered > 0 ? 'Installment' : '', // Alias for backward compatibility
             ]);
+
+            // Calculate Adjustment (total of service_charge + rebate + discounts + staggered)
+            $adjustmentTotal = (float)($soa->service_charge ?? 0)
+                + (float)($soa->rebate ?? 0)
+                + (float)($soa->discounts ?? 0)
+                + (float)($soa->staggered ?? 0);
+
+            $data['Adjustment_Label'] = $adjustmentTotal > 0 ? 'Other and Basic Charges' : '';
+            $data['Adjustment_Value'] = $adjustmentTotal > 0 ? number_format($adjustmentTotal, 2) : '';
 
             // Row templates for dynamic content (backward compatibility)
             $data['Row_Discounts'] = $soa->discounts > 0
@@ -523,7 +553,20 @@ class GoogleDrivePdfGenerationService
     protected function replacePlaceholders(string $template, array $data): string
     {
         foreach ($data as $key => $value) {
+            // Replace exact key: {{Key_Name}}
             $template = str_replace('{{' . $key . '}}', $value, $template);
+            
+            // Also replace space variant: {{Key Name}} (template may use spaces instead of underscores)
+            $spaceKey = str_replace('_', ' ', $key);
+            if ($spaceKey !== $key) {
+                $template = str_replace('{{' . $spaceKey . '}}', $value, $template);
+            }
+            
+            // Also replace underscore variant if key has spaces: {{Key_Name}}
+            $underscoreKey = str_replace(' ', '_', $key);
+            if ($underscoreKey !== $key) {
+                $template = str_replace('{{' . $underscoreKey . '}}', $value, $template);
+            }
         }
         return $template;
     }

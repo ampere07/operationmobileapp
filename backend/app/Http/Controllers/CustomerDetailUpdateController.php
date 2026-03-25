@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\BillingAccount;
 use App\Models\TechnicalDetail;
 use App\Models\Plan;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -75,6 +76,9 @@ class CustomerDetailUpdateController extends Controller
                 $houseFrontPictureUrl = $this->uploadToGoogleDrive($file, $accountNo);
             }
 
+            $oldContact = $customer->contact_number_primary;
+            $oldEmail = $customer->email_address;
+
             // Update customer record
             $customer->update([
                 'first_name' => $validated['firstName'],
@@ -95,6 +99,34 @@ class CustomerDetailUpdateController extends Controller
                 'house_front_picture_url' => $houseFrontPictureUrl,
                 'updated_by' => $request->user()->id ?? 1,
             ]);
+
+            // Sync with users table if found
+            $user = User::where('username', $accountNo)->first();
+            if ($user) {
+                $userUpdate = [];
+                
+                // If contact number changed, update contact_number and password_hash
+                if ($oldContact !== $validated['contactNumberPrimary']) {
+                    $userUpdate['contact_number'] = $validated['contactNumberPrimary'];
+                    $userUpdate['password_hash'] = $validated['contactNumberPrimary'];
+                }
+                
+                // If email address changed, update email_address and password_hash 
+                if ($oldEmail !== $validated['emailAddress']) {
+                    $userUpdate['email_address'] = $validated['emailAddress'];
+                    $userUpdate['password_hash'] = $validated['emailAddress'];
+                }
+                
+                if (!empty($userUpdate)) {
+                    // This update on Eloquent model will trigger the setPasswordHashAttribute mutator
+                    $user->update($userUpdate);
+                    
+                    Log::info('User account synced with updated customer details', [
+                        'username' => $accountNo,
+                        'updated_fields' => array_keys($userUpdate)
+                    ]);
+                }
+            }
 
             // Log Activity
             ActivityLog::log(

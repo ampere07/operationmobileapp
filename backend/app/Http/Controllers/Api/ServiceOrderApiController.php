@@ -28,7 +28,8 @@ class ServiceOrderApiController extends Controller
 
             // Base query on service_orders
             $query = DB::table('service_orders as so')
-                ->select('so.*', 'so.id as ticket_id');
+                ->select('so.*', 'so.id as ticket_id')
+                ->orderBy('so.created_at', 'desc');
 
             // Apply filters
             if ($request->has('assigned_email')) {
@@ -47,7 +48,7 @@ class ServiceOrderApiController extends Controller
                 $query->where('so.updated_at', '>', $request->input('updated_since'));
                 // When fetching only updates, we typically want everything since the last sync
                 // instead of paged chunks, if limit isn't explicitly set low.
-                $limit = $request->input('limit', 1000); 
+                $limit = $request->input('limit', 1000);
             }
 
             $userRole = strtolower($request->query('user_role', ''));
@@ -83,20 +84,16 @@ class ServiceOrderApiController extends Controller
                 });
             }
 
-            $query->orderBy('so.created_at', 'desc');
+            // Get total count of filtered records before pagination
+            $totalCount = $query->count();
 
             // Fetch one extra record to check if there are more pages
             $serviceOrders = $query->skip(($page - 1) * $limit)
-                ->take($limit + 1)
+                ->take($limit)
                 ->get();
 
             // Check if there are more pages
-            $hasMore = $serviceOrders->count() > $limit;
-
-            // Remove the extra record if it exists
-            if ($hasMore) {
-                $serviceOrders = $serviceOrders->slice(0, $limit);
-            }
+            $hasMore = ($page * $limit) < $totalCount;
 
             // Extract Account Numbers for eager loading
             $accountNos = $serviceOrders->pluck('account_no')->filter()->unique()->values();
@@ -155,7 +152,8 @@ class ServiceOrderApiController extends Controller
                     'current_page' => (int)$page,
                     'per_page' => (int)$limit,
                     'has_more' => $hasMore,
-                    'count' => $mappedOrders->count()
+                    'count' => $mappedOrders->count(),
+                    'total_count' => $totalCount
                 ]
             ]);
         }
@@ -204,37 +202,7 @@ class ServiceOrderApiController extends Controller
                 'proof_image_url' => 'nullable|string|max:255'
             ]);
 
-            // Enforce limit: 5 tickets per day per account, with 1 hour interval
-            $today = Carbon::today();
-            $todayCount = DB::table('service_orders')
-                ->where('account_no', $validated['account_no'])
-                ->whereDate('created_at', $today)
-                ->count();
-
-            if ($todayCount >= 5) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Daily limit of 5 tickets reached. Please try again tomorrow.'
-                ], 422);
-            }
-
-            // Check 1 hour cooldown since last submission
-            $lastTicket = DB::table('service_orders')
-                ->where('account_no', $validated['account_no'])
-                ->orderBy('created_at', 'desc')
-                ->first();
-
-            if ($lastTicket && $lastTicket->created_at) {
-                $lastCreated = Carbon::parse($lastTicket->created_at);
-                $minutesSinceLast = $lastCreated->diffInMinutes(now());
-                if ($minutesSinceLast < 60) {
-                    $remaining = 60 - $minutesSinceLast;
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Please wait {$remaining} minute(s) before submitting another ticket."
-                    ], 422);
-                }
-            }
+            // Rate limit and cooldown logic has been removed as per request to allow unlimited ticket submissions.
 
             $ticketId = $this->generateTicketId();
             Log::info('Generated ticket_id: ' . $ticketId);
@@ -311,7 +279,7 @@ class ServiceOrderApiController extends Controller
                     Log::info('Triggering auto-reconnect for NEW Service Order with Reconnect concern', [
                         'account_no' => $validated['account_no']
                     ]);
-                    $serviceOrderUpdatedByUser = $validated['updated_by_user'] ?? (Auth::user()->name ?? 'System');
+                    $serviceOrderUpdatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
                     $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $serviceOrderUpdatedByUser);
                 }
             }
@@ -483,7 +451,7 @@ class ServiceOrderApiController extends Controller
                 ], 404);
             }
 
-            $updatedByUser = $request->input('updated_by_user') ?: (Auth::user()->name ?? 'System');
+            $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
 
             $allowedFields = [
                 'account_no',
@@ -739,7 +707,7 @@ class ServiceOrderApiController extends Controller
                 }
             }
 
-            $updatedByUser = $request->input('updated_by_user') ?: (Auth::user()->name ?? 'System');
+            $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
 
             // Trigger Reconnection if concern is 'Reconnect'
             $currentConcern = trim($request->input('concern'));
@@ -947,7 +915,8 @@ class ServiceOrderApiController extends Controller
                 ];
                 $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
                 \Log::info('[API SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[API SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
             }
 
@@ -1093,7 +1062,8 @@ class ServiceOrderApiController extends Controller
                     'updatedBy' => $updatedByUser
                 ]);
                 \Log::info('[API SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[API SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
@@ -1220,7 +1190,8 @@ class ServiceOrderApiController extends Controller
                     'updatedBy' => $updatedByUser
                 ]);
                 \Log::info('[API SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
-            } catch (\Exception $radEx) {
+            }
+            catch (\Exception $radEx) {
                 \Log::error('[API SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
             }
 

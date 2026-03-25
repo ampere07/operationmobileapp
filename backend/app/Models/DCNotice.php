@@ -6,26 +6,26 @@ use Illuminate\Database\Eloquent\Model;
 
 class DCNotice extends Model
 {
-    protected $table = 'disconnection_notice';
+    protected $table = 'dc_notice';
 
     protected $fillable = [
-        'account_no',
+        'account_id',
         'invoice_id',
-        'overdue_date',
+        'dc_notice_date',
         'print_link',
         'created_by_user_id',
         'updated_by_user_id',
     ];
 
     protected $casts = [
-        'overdue_date' => 'datetime',
+        'dc_notice_date' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 
     public function account()
     {
-        return $this->belongsTo(BillingAccount::class, 'account_no', 'account_no');
+        return $this->belongsTo(BillingAccount::class, 'account_id');
     }
 
     public function invoice()
@@ -43,4 +43,3 @@ class DCNotice extends Model
         return $this->belongsTo(User::class, 'updated_by_user_id');
     }
 }
-

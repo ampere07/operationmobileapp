@@ -3,37 +3,38 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\UsageType;
+use App\Models\PaymentMethod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
 
-class UsageTypeApiController extends Controller
+class PaymentMethodApiController extends Controller
 {
     public function index(Request $request)
     {
         try {
             $page = (int) $request->get('page', 1);
-            $limit = min((int) $request->get('limit', 100), 100);
+            $limit = (int) $request->get('limit', 100);
             $search = $request->get('search', '');
             
-            $query = UsageType::query();
+            $query = PaymentMethod::query();
             
             if (!empty($search)) {
-                $query->where('usage_name', 'like', '%' . $search . '%');
+                $query->where('payment_method', 'like', '%' . $search . '%');
             }
             
             $totalItems = $query->count();
             $totalPages = ceil($totalItems / $limit);
             
-            $usageTypes = $query->orderBy('usage_name')
+            $paymentMethods = $query->orderBy('payment_method')
                              ->skip(($page - 1) * $limit)
                              ->take($limit)
                              ->get();
             
             return response()->json([
                 'success' => true,
-                'data' => $usageTypes,
+                'data' => $paymentMethods,
                 'pagination' => [
                     'current_page' => $page,
                     'total_pages' => $totalPages,
@@ -45,11 +46,11 @@ class UsageTypeApiController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('UsageType API Error: ' . $e->getMessage());
+            Log::error('PaymentMethod API Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching usage types: ' . $e->getMessage()
+                'message' => 'Error fetching payment methods: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -58,7 +59,7 @@ class UsageTypeApiController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'usage_name' => 'required|string|max:255|unique:usage_type,usage_name',
+                'payment_method' => 'required|string|max:255|unique:payment_methods,payment_method',
             ]);
 
             if ($validator->fails()) {
@@ -69,36 +70,36 @@ class UsageTypeApiController extends Controller
                 ], 422);
             }
             
-            $usageType = new UsageType();
-            $usageType->usage_name = $request->input('usage_name');
-            $usageType->created_by_user_id = auth()->id() ?? 1;
-            $usageType->updated_by_user_id = auth()->id() ?? 1;
-            $usageType->save();
+            $paymentMethod = new PaymentMethod();
+            $paymentMethod->payment_method = $request->input('payment_method');
+            $paymentMethod->created_by_user_id = auth()->id() ?? 1;
+            $paymentMethod->updated_by_user_id = auth()->id() ?? 1;
+            $paymentMethod->save();
             
             // Log Activity
             ActivityLog::log(
-                'Usage Type Created',
-                "New Usage Type created: {$usageType->usage_name} by " . (auth()->user()->email ?? 'System'),
+                'Payment Method Created',
+                "New Payment Method created: {$paymentMethod->payment_method} by " . (auth()->user()->email ?? 'System'),
                 'info',
                 [
-                    'resource_type' => 'UsageType',
-                    'resource_id' => $usageType->id,
-                    'additional_data' => $usageType->toArray()
+                    'resource_type' => 'PaymentMethod',
+                    'resource_id' => $paymentMethod->id,
+                    'additional_data' => $paymentMethod->toArray()
                 ]
             );
             
             return response()->json([
                 'success' => true,
-                'message' => 'Usage type added successfully',
-                'data' => $usageType
+                'message' => 'Payment method added successfully',
+                'data' => $paymentMethod
             ], 201);
             
         } catch (\Exception $e) {
-            \Log::error('UsageType Store Error: ' . $e->getMessage());
+            Log::error('PaymentMethod Store Error: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error adding usage type: ' . $e->getMessage()
+                'message' => 'Error adding payment method: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -106,23 +107,23 @@ class UsageTypeApiController extends Controller
     public function show($id)
     {
         try {
-            $usageType = UsageType::find($id);
+            $paymentMethod = PaymentMethod::find($id);
             
-            if (!$usageType) {
+            if (!$paymentMethod) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Usage type not found'
+                    'message' => 'Payment method not found'
                 ], 404);
             }
             
             return response()->json([
                 'success' => true,
-                'data' => $usageType
+                'data' => $paymentMethod
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching usage type: ' . $e->getMessage()
+                'message' => 'Error fetching payment method: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -131,7 +132,7 @@ class UsageTypeApiController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'usage_name' => 'required|string|max:255|unique:usage_type,usage_name,' . $id,
+                'payment_method' => 'required|string|max:255|unique:payment_methods,payment_method,' . $id,
             ]);
 
             if ($validator->fails()) {
@@ -142,40 +143,40 @@ class UsageTypeApiController extends Controller
                 ], 422);
             }
 
-            $usageType = UsageType::find($id);
-            if (!$usageType) {
+            $paymentMethod = PaymentMethod::find($id);
+            if (!$paymentMethod) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Usage type not found'
+                    'message' => 'Payment method not found'
                 ], 404);
             }
             
-            $usageType->usage_name = $request->input('usage_name');
-            $usageType->updated_by_user_id = auth()->id() ?? 1;
-            $usageType->save();
+            $paymentMethod->payment_method = $request->input('payment_method');
+            $paymentMethod->updated_by_user_id = auth()->id() ?? 1;
+            $paymentMethod->save();
             
             // Log Activity
             ActivityLog::log(
-                'Usage Type Updated',
-                "Usage Type updated: {$usageType->usage_name} (ID: {$id}) by " . (auth()->user()->email ?? 'System'),
+                'Payment Method Updated',
+                "Payment Method updated: {$paymentMethod->payment_method} (ID: {$id}) by " . (auth()->user()->email ?? 'System'),
                 'info',
                 [
-                    'resource_type' => 'UsageType',
+                    'resource_type' => 'PaymentMethod',
                     'resource_id' => $id,
-                    'additional_data' => $usageType->toArray()
+                    'additional_data' => $paymentMethod->toArray()
                 ]
             );
             
             return response()->json([
                 'success' => true,
-                'message' => 'Usage type updated successfully',
-                'data' => $usageType
+                'message' => 'Payment method updated successfully',
+                'data' => $paymentMethod
             ]);
             
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error updating usage type: ' . $e->getMessage()
+                'message' => 'Error updating payment method: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -183,38 +184,38 @@ class UsageTypeApiController extends Controller
     public function destroy($id)
     {
         try {
-            $usageType = UsageType::find($id);
-            if (!$usageType) {
+            $paymentMethod = PaymentMethod::find($id);
+            if (!$paymentMethod) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Usage type not found'
+                    'message' => 'Payment method not found'
                 ], 404);
             }
             
-            $usageTypeData = $usageType->toArray();
-            $usageType->delete();
+            $paymentMethodData = $paymentMethod->toArray();
+            $paymentMethod->delete();
             
             // Log Activity
             ActivityLog::log(
-                'Usage Type Deleted',
-                "Usage Type deleted: {$usageTypeData['usage_name']} (ID: {$id}) by " . (auth()->user()->email ?? 'System'),
+                'Payment Method Deleted',
+                "Payment Method deleted: {$paymentMethodData['payment_method']} (ID: {$id}) by " . (auth()->user()->email ?? 'System'),
                 'warning',
                 [
-                    'resource_type' => 'UsageType',
+                    'resource_type' => 'PaymentMethod',
                     'resource_id' => $id,
-                    'additional_data' => $usageTypeData
+                    'additional_data' => $paymentMethodData
                 ]
             );
             
             return response()->json([
                 'success' => true,
-                'message' => 'Usage type permanently deleted from database'
+                'message' => 'Payment method permanently deleted from database'
             ]);
             
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error deleting usage type: ' . $e->getMessage()
+                'message' => 'Error deleting payment method: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -222,12 +223,12 @@ class UsageTypeApiController extends Controller
     public function getStatistics()
     {
         try {
-            $totalUsageTypes = UsageType::count();
+            $totalPaymentMethods = PaymentMethod::count();
             
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'total_usage_types' => $totalUsageTypes
+                    'total_payment_methods' => $totalPaymentMethods
                 ]
             ]);
         } catch (\Exception $e) {

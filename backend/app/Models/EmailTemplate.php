@@ -30,7 +30,9 @@ class EmailTemplate extends Model
         'Body_HTML',
         'Description',
         'Is_Active',
-        'email_body'
+        'email_body',
+        'Page_Margin',
+        'Image_Margin'
     ];
 
     protected $casts = [

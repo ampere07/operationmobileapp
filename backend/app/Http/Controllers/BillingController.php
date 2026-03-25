@@ -104,6 +104,12 @@ class BillingController extends Controller
                     'Referred_By' => $customer ? $customer->referred_by : null,
                     'Desired_Plan' => $customer ? $customer->desired_plan : null,
                     'house_front_picture_url' => $customer ? $customer->house_front_picture_url : null,
+                    'proof_of_billing_url' => $customer ? $customer->proof_of_billing_url : null,
+                    'government_valid_id_url' => $customer ? $customer->government_valid_id_url : null,
+                    'second_government_valid_id_url' => $customer ? $customer->second_government_valid_id_url : null,
+                    'document_attachment_url' => $customer ? $customer->document_attachment_url : null,
+                    'other_isp_bill_url' => $customer ? $customer->other_isp_bill_url : null,
+                    'Account_No_Customer' => $customer ? $customer->account_no : null,
                     'Group_ID' => $customer ? $customer->group_id : null,
                     
                     'Username' => $technicalDetail ? $technicalDetail->username : null,
@@ -159,7 +165,10 @@ class BillingController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $billingAccount = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus'])->findOrFail($id);
+            $billingAccount = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus'])
+                ->where('id', $id)
+                ->orWhere('account_no', $id)
+                ->firstOrFail();
             $customer = $billingAccount->customer;
             $technicalDetail = $billingAccount->technicalDetails->first();
             
@@ -213,6 +222,12 @@ class BillingController extends Controller
                 'Referred_By' => $customer ? $customer->referred_by : null,
                 'Desired_Plan' => $customer ? $customer->desired_plan : null,
                 'house_front_picture_url' => $customer ? $customer->house_front_picture_url : null,
+                'proof_of_billing_url' => $customer ? $customer->proof_of_billing_url : null,
+                'government_valid_id_url' => $customer ? $customer->government_valid_id_url : null,
+                'second_government_valid_id_url' => $customer ? $customer->second_government_valid_id_url : null,
+                'document_attachment_url' => $customer ? $customer->document_attachment_url : null,
+                'other_isp_bill_url' => $customer ? $customer->other_isp_bill_url : null,
+                'Account_No_Customer' => $customer ? $customer->account_no : null,
                 'Group_ID' => $customer ? $customer->group_id : null,
                 
                 'Username' => $technicalDetail ? $technicalDetail->username : null,

@@ -17,8 +17,19 @@ class PaymentMethod extends Model
         'updated_by_user_id',
     ];
 
-    public function transactions()
+    /**
+     * Relationship with user who created the record
+     */
+    public function creator()
     {
-        return $this->hasMany(Transaction::class, 'payment_method_id');
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /**
+     * Relationship with user who updated the record
+     */
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by_user_id');
     }
 }

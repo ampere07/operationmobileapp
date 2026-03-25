@@ -92,11 +92,11 @@ class ManualRadiusOperationsService
 
                     DisconnectedLog::create([
                         'account_id' => $billingAccount->id,
-                        'session_id' => $sessionId,
+                        'session_id' => $sessionId ?? null,
                         'username' => $username,
                         'remarks' => $remarks ?: "Manual Disconnect",
-                        'created_by_user' => $userId ? (string)$userId : $updatedBy,
-                        'updated_by_user' => $userId ? (string)$userId : $updatedBy
+                        'created_by_user' => $updatedBy,
+                        'updated_by_user' => $updatedBy,
                     ]);
                     $this->writeLog("[DB] Disconnection log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
                 }
