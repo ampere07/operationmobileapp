@@ -727,7 +727,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
                 city: appData.city || jobOrderData.City || jobOrderData.city || '',
                 region: appData.region || jobOrderData.Region || jobOrderData.region || '',
                 location: appData.location || jobOrderData.Location || jobOrderData.location || '',
-                addressCoordinates: jobOrderData.Address_Coordinates || jobOrderData.address_coordinates || '',
+                addressCoordinates: appData.long_lat || jobOrderData.Address_Coordinates || jobOrderData.address_coordinates || '',
                 choosePlan: jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan || '',
                 status: loadedStatus,
                 connectionType: jobOrderData.Connection_Type || jobOrderData.connection_type || '',

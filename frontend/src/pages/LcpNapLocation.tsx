@@ -385,7 +385,9 @@ const LcpNapLocation: React.FC = () => {
 
     // 2. Filter by search query
     const query = debouncedSearch.trim().toLowerCase();
-    if (query) {
+    const isPlaceActive = !!(searchedPlacePin && query === searchedPlacePin.title.toLowerCase());
+
+    if (query && !isPlaceActive) {
       filtered = filtered.filter(m =>
         m.lcpnap_name.toLowerCase().includes(query) ||
         (m.lcp_name || '').toLowerCase().includes(query) ||
@@ -420,7 +422,7 @@ const LcpNapLocation: React.FC = () => {
       .sort((a, b) => a.d - b.d)
       .slice(0, limit)
       .map(x => x.m);
-  }, [markers, selectedLcpNapId, lcpNapGroups, debouncedSearch, mapCenter, pinLimit, currentRegion]);
+  }, [markers, selectedLcpNapId, lcpNapGroups, debouncedSearch, mapCenter, pinLimit, currentRegion, searchedPlacePin]);
 
   const handleLcpNapSelect = useCallback((id: number | string) => {
     setSelectedLcpNapId(id);
@@ -462,6 +464,7 @@ const LcpNapLocation: React.FC = () => {
   const handleSuggestionSelect = async (suggestion: any) => {
     skipShowSuggestionsRef.current = true; // Prevent re-opening immediately after selection
     setSearchQuery(suggestion.title);
+    setDebouncedSearch(suggestion.title); // Update debounced state immediately to avoid flicker and pin hiding
     setShowSuggestions(false);
 
     if (suggestion.type === 'lcpnap') {
@@ -469,6 +472,8 @@ const LcpNapLocation: React.FC = () => {
       setSearchedPlacePin(null);
       handleLocationSelect(suggestion.data);
     } else {
+      // Pre-set title to bypass text filtering immediately while we fetch real coordinates
+      setSearchedPlacePin({ latitude: 0, longitude: 0, title: suggestion.title });
       setIsLoading(true);
       try {
         const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&fields=geometry&key=${GOOGLE_MAPS_API_KEY}`;

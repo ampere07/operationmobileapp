@@ -797,7 +797,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       visit_with_other: getValue(jobOrderData.Visit_With_Other || jobOrderData.visit_with_other),
       statusRemarks: getValue(jobOrderData.Status_Remarks || jobOrderData.status_remarks),
       ip: getValue(jobOrderData.IP || jobOrderData.ip),
-      addressCoordinates: getValue(jobOrderData.Address_Coordinates || jobOrderData.address_coordinates)
+      addressCoordinates: getValue((appData?.long_lat) || jobOrderData.Address_Coordinates || jobOrderData.address_coordinates)
     });
 
     const buildImagePreviews = (safeConvert: (val: any) => string | null) => ({

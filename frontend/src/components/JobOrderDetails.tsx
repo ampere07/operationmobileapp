@@ -676,7 +676,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     emailAddress: () => <Text style={valStyle} selectable={true}>{jobOrder.Email_Address || jobOrder.email_address || (applicationData?.email_address) || 'Not provided'}</Text>,
     fullAddress: () => <Text style={valStyle} selectable={true}>{getClientFullAddress()}</Text>,
     addressCoordinates: () => {
-      const coords = applicationData?.address_coordinates || jobOrder.Address_Coordinates || jobOrder.address_coordinates;
+      const coords = applicationData?.long_lat || jobOrder.Address_Coordinates || jobOrder.address_coordinates;
       return (
         <View style={st.imageLinkRow}>
           <Text style={valStyle} selectable={true}>{coords || 'Not provided'}</Text>
@@ -756,7 +756,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       case 'secondContactNumber': return !(jobOrder.Second_Contact_Number || jobOrder.secondary_mobile_number || applicationData?.secondary_mobile_number);
       case 'emailAddress': return !(jobOrder.Email_Address || jobOrder.email_address || applicationData?.email_address);
       case 'fullAddress': return !getClientFullAddress() || getClientFullAddress() === 'No address provided';
-      case 'addressCoordinates': return !(applicationData?.address_coordinates || jobOrder.Address_Coordinates || jobOrder.address_coordinates);
+      case 'addressCoordinates': return !(applicationData?.long_lat || jobOrder.Address_Coordinates || jobOrder.address_coordinates);
       case 'billingStatus': return !(jobOrder.billing_status || jobOrder.Billing_Status);
       case 'billingDay': return jobOrder.Billing_Day === null || jobOrder.Billing_Day === undefined;
       case 'choosePlan': return !(jobOrder.Desired_Plan || jobOrder.desired_plan || jobOrder.Choose_Plan || jobOrder.choose_plan || applicationData?.desired_plan);

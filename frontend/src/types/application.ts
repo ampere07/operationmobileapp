@@ -47,4 +47,5 @@ export interface Application {
   boroughId?: number | null;
   villageId?: number | null;
   address_coordinates?: string;
+  long_lat?: string;
 }
