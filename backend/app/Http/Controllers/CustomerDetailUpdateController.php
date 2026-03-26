@@ -97,7 +97,7 @@ class CustomerDetailUpdateController extends Controller
                 'referred_by' => $validated['referredBy'] ?? $customer->referred_by,
                 'group_name' => $validated['groupName'] ?? $customer->group_name,
                 'house_front_picture_url' => $houseFrontPictureUrl,
-                'updated_by' => $request->user()->id ?? 1,
+                'updated_by' => $request->input('updatedBy'),
             ]);
 
             // Sync with users table if found
@@ -222,7 +222,7 @@ class CustomerDetailUpdateController extends Controller
 
             $updateData = [
                 'billing_status_id' => $billingStatusId,
-                'updated_by' => $request->user()->id ?? 1,
+                'updated_by' => $request->input('updatedBy'),
             ];
 
             if ($request->has('billingDay')) {
@@ -349,7 +349,7 @@ class CustomerDetailUpdateController extends Controller
             $technicalDetail->vlan = $validated['vlan'] ?? $technicalDetail->vlan;
             $technicalDetail->lcpnap = $lcpnap;
             $technicalDetail->usage_type = $validated['usageType'] ?? $technicalDetail->usage_type;
-            $technicalDetail->updated_by = $request->user()->id ?? 1;
+            $technicalDetail->updated_by = $request->input('updatedBy');
             
             $technicalDetail->save();
 

@@ -157,7 +157,7 @@ class UserController extends Controller
             'last_name' => 'sometimes|string|max:255',
             'username' => 'sometimes|string|max:255|unique:users,username,' . $id . ',id',
             'email_address' => 'sometimes|string|email|max:255|unique:users,email_address,' . $id . ',id',
-            'contact_number' => 'sometimes|string|max:20|regex:/^[+]?[0-9\s\-\(\)]+$/',
+            'contact_number' => 'sometimes|nullable|string|max:50',
             'password' => 'sometimes|string|min:8',
             'organization_id' => 'sometimes|nullable|integer',
             'role_id' => 'sometimes|nullable|integer|exists:roles,id',

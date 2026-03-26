@@ -62,7 +62,7 @@ class Customer extends Model
      */
     public function createdBy()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class , 'created_by');
     }
 
     /**
@@ -70,7 +70,7 @@ class Customer extends Model
      */
     public function updatedBy()
     {
-        return $this->belongsTo(User::class, 'updated_by');
+        return $this->belongsTo(User::class , 'updated_by');
     }
 
     /**
@@ -82,4 +82,3 @@ class Customer extends Model
         return implode(' ', $parts);
     }
 }
-

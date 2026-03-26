@@ -132,6 +132,7 @@ class ApplicationController extends Controller
                     'updated_at' => $app->updated_at ? $app->updated_at->format('Y-m-d H:i:s') : null,
                     'created_by_user_id' => $app->created_by_user_id,
                     'updated_by' => $app->updated_by,
+                    'long_lat' => $app->long_lat,
                     
                     'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
                     'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null
@@ -233,7 +234,8 @@ class ApplicationController extends Controller
                 'document_attachment_url' => 'nullable|string|max:255',
                 'other_isp_bill_url' => 'nullable|string|max:255',
                 'terms_agreed' => 'nullable|boolean',
-                'status' => 'nullable|string|max:100'
+                'status' => 'nullable|string|max:100',
+                'long_lat' => 'nullable|string|max:255'
             ]);
 
             $validatedData['timestamp'] = now();
@@ -290,6 +292,7 @@ class ApplicationController extends Controller
                 'document_attachment_url' => $application->document_attachment_url,
                 'other_isp_bill_url' => $application->other_isp_bill_url,
                 'terms_agreed' => $application->terms_agreed,
+                'long_lat' => $application->long_lat,
             ];
 
             return response()->json([
@@ -360,6 +363,8 @@ class ApplicationController extends Controller
                 'updated_at' => $application->updated_at ? $application->updated_at->format('Y-m-d H:i:s') : null,
                 'created_by_user_id' => $application->created_by_user_id,
                 'updated_by' => $application->updated_by,
+                'remarks' => $application->remarks,
+                'long_lat' => $application->long_lat,
                 
                 'create_date' => $application->timestamp ? $application->timestamp->format('Y-m-d') : null,
                 'create_time' => $application->timestamp ? $application->timestamp->format('H:i:s') : null
@@ -399,12 +404,15 @@ class ApplicationController extends Controller
                 'landmark' => 'nullable',
                 'referred_by' => 'nullable|string|max:255',
                 'desired_plan' => 'nullable|string|max:255',
-                'promo' => 'nullable|string|max:255'
+                'promo' => 'nullable|string|max:255',
+                'remarks' => 'nullable|string',
+                'updated_by' => 'nullable|string|max:255',
+                'long_lat' => 'nullable|string|max:255'
             ]);
 
             $application = Application::findOrFail($id);
             $oldStatus = $application->status;
-            $validatedData['updated_by'] = auth()->user()->email ?? 'system';
+            $validatedData['updated_by'] = $request->input('updated_by') ?? auth()->user()->email ?? 'system';
             $application->update($validatedData);
 
             // Create Activity Log
