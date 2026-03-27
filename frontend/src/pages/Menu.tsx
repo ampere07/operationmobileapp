@@ -16,6 +16,7 @@ import { formUIService } from '../services/formUIService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import NotificationModal from '../modals/NotificationModal';
 import AboutAppModal from '../modals/AboutAppModal';
+import { version } from '../../package.json';
 
 interface MenuProps {
     onLogout?: () => void;
@@ -181,7 +182,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                     </View>
                 </View>
 
-                <Text style={s.versionText}>Version 2.0.0</Text>
+                <Text style={s.versionText}>Version {version}</Text>
             </View>
 
             {/* Logout Confirmation Modal */}

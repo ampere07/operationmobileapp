@@ -36,6 +36,18 @@ class MonitorController extends Controller
                     return $qb->whereDate($col, now()->toDateString());
                 }
 
+                if ($scope === 'weekly') {
+                    return $qb->whereBetween($col, [now()->startOfWeek()->toDateTimeString(), now()->endOfWeek()->toDateTimeString()]);
+                }
+
+                if ($scope === 'monthly') {
+                    return $qb->whereMonth($col, now()->month)->whereYear($col, now()->year);
+                }
+
+                if ($scope === 'yearly') {
+                    return $qb->whereYear($col, now()->year);
+                }
+
                 if ($scope === 'custom' && $start && $end) {
                     // If you pass date only (YYYY-MM-DD), it still works.
                     return $qb->whereBetween($col, [$start, $end]);
@@ -839,6 +851,8 @@ class MonitorController extends Controller
                     ->whereNotNull('job_orders.assigned_email')
                     ->where('job_orders.assigned_email', '!=', '');
 
+                $jobs = $applyScope($jobs, 'job_orders.timestamp');
+
                 // 2) Service Orders
                 $services = DB::table('service_orders')
                     ->join('users', 'service_orders.assigned_email', '=', 'users.email_address')
@@ -863,6 +877,8 @@ class MonitorController extends Controller
                     ->where('service_orders.visit_status', '!=', 'Done') 
                     ->whereNotNull('service_orders.assigned_email')
                     ->where('service_orders.assigned_email', '!=', '');
+
+                $services = $applyScope($services, 'service_orders.timestamp');
 
                 $all = $jobs->union($services)->get();
 
@@ -932,6 +948,8 @@ class MonitorController extends Controller
                     ->whereNotNull('applications.referred_by')
                     ->where('applications.referred_by', '!=', '');
 
+                $jobs = $applyScope($jobs, 'job_orders.timestamp');
+
                 // 2) Service Orders
                 $services = DB::table('service_orders')
                     ->join('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
@@ -955,6 +973,8 @@ class MonitorController extends Controller
                     ->where('service_orders.visit_status', '!=', 'Done') 
                     ->whereNotNull('customers.referred_by')
                     ->where('customers.referred_by', '!=', '');
+
+                $services = $applyScope($services, 'service_orders.timestamp');
 
                 $all = $jobs->union($services)->get();
 
