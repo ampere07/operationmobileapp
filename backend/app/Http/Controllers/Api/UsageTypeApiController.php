@@ -10,6 +10,24 @@ use App\Models\ActivityLog;
 
 class UsageTypeApiController extends Controller
 {
+    private function resolveUserId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::id();
+        }
+
+        return null;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -71,8 +89,9 @@ class UsageTypeApiController extends Controller
             
             $usageType = new UsageType();
             $usageType->usage_name = $request->input('usage_name');
-            $usageType->created_by_user_id = auth()->id() ?? 1;
-            $usageType->updated_by_user_id = auth()->id() ?? 1;
+            $userId = $this->resolveUserId($request);
+            $usageType->created_by_user_id = $userId;
+            $usageType->updated_by_user_id = $userId;
             $usageType->save();
             
             // Log Activity
@@ -151,7 +170,7 @@ class UsageTypeApiController extends Controller
             }
             
             $usageType->usage_name = $request->input('usage_name');
-            $usageType->updated_by_user_id = auth()->id() ?? 1;
+            $usageType->updated_by_user_id = $this->resolveUserId($request);
             $usageType->save();
             
             // Log Activity

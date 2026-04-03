@@ -534,7 +534,7 @@ class BillingNotificationService
         ];
 
         if ($soa) {
-            $data['SOA_No'] = $soa->statement_no ?? '';
+            $data['SOA_No'] = $soa->id ?? '';
             $data['Statement_Date'] = $soa->statement_date ? $soa->statement_date->format('F j Y') : '';
             $data['Prev_Balance'] = number_format($soa->balance_from_previous_bill ?? 0, 2);
             $data['Prev_Payment'] = number_format($soa->payment_received_previous ?? 0, 2);
@@ -544,7 +544,7 @@ class BillingNotificationService
             $data['Period_End'] = ''; 
         } elseif ($invoice) {
              // Invoice specific data
-            $data['SOA_No'] = $invoice->invoice_no ?? ''; // Or N/A
+            $data['SOA_No'] = $invoice->id ?? ''; // Or N/A
             $data['Statement_Date'] = $invoice->invoice_date ? $invoice->invoice_date->format('F j Y') : '';
             $data['Prev_Balance'] = '0.00';
             $data['Prev_Payment'] = number_format($invoice->received_payment ?? 0, 2);

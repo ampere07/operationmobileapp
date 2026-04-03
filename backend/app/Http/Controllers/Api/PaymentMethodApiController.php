@@ -11,6 +11,24 @@ use App\Models\ActivityLog;
 
 class PaymentMethodApiController extends Controller
 {
+    private function resolveUserId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::id();
+        }
+
+        return null;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -72,8 +90,9 @@ class PaymentMethodApiController extends Controller
             
             $paymentMethod = new PaymentMethod();
             $paymentMethod->payment_method = $request->input('payment_method');
-            $paymentMethod->created_by_user_id = auth()->id() ?? 1;
-            $paymentMethod->updated_by_user_id = auth()->id() ?? 1;
+            $userId = $this->resolveUserId($request);
+            $paymentMethod->created_by_user_id = $userId;
+            $paymentMethod->updated_by_user_id = $userId;
             $paymentMethod->save();
             
             // Log Activity
@@ -152,7 +171,7 @@ class PaymentMethodApiController extends Controller
             }
             
             $paymentMethod->payment_method = $request->input('payment_method');
-            $paymentMethod->updated_by_user_id = auth()->id() ?? 1;
+            $paymentMethod->updated_by_user_id = $this->resolveUserId($request);
             $paymentMethod->save();
             
             // Log Activity

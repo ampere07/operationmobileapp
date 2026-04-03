@@ -10,6 +10,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { userService } from '../services/userService';
+import { technicianService, Technician } from '../services/technicianService';
 import { planService, Plan } from '../services/planService';
 import { getAllLCPNAPs, LCPNAP, getMostUsedLCPNAPs } from '../services/lcpnapService';
 import { getAllVLANs, VLAN } from '../services/vlanService';
@@ -465,7 +466,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         getAllVLANs(),
         getAllUsageTypes(),
         getAllInventoryItems('', 1, 1000),
-        userService.getUsersByRole('technician'),
+        technicianService.getAllTechnicians(),
         planService.getAllPlans(),
       ]);
 
@@ -570,14 +571,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         const response = technicianResult.value;
         if (response.success && response.data) {
           const technicianList = response.data
-            .filter((user: any) => user.first_name || user.last_name)
-            .map((user: any) => {
-              const firstName = (user.first_name || '').trim();
-              const lastName = (user.last_name || '').trim();
-              const fullName = `${firstName} ${lastName}`.trim();
+            .filter((tech: any) => tech.first_name || tech.last_name)
+            .map((tech: any) => {
+              const firstName = (tech.first_name || '').trim();
+              const middleInitial = tech.middle_initial ? `${tech.middle_initial.trim()}. ` : '';
+              const lastName = (tech.last_name || '').trim();
+              const fullName = `${firstName} ${middleInitial}${lastName}`.trim();
               return {
-                email: user.email_address || user.email || '',
-                name: fullName || user.username || user.email_address || user.email || ''
+                email: tech.id.toString(), // Using id as unique identifier
+                name: fullName || 'Unknown Technician'
               };
             })
             .filter((tech: any) => tech.name);

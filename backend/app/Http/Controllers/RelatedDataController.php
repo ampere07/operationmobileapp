@@ -345,8 +345,15 @@ class RelatedDataController extends Controller
             }
 
             $logs = DB::table('details_update_logs')
-                ->where('account_id', $billingAccount->id)
-                ->orderBy('updated_at', 'desc')
+                ->leftJoin('users as created_user', 'details_update_logs.created_by_user_id', '=', 'created_user.id')
+                ->leftJoin('users as updated_user', 'details_update_logs.updated_by_user_id', '=', 'updated_user.id')
+                ->where('details_update_logs.account_id', $billingAccount->id)
+                ->select([
+                    'details_update_logs.*',
+                    'created_user.email_address as created_by_user',
+                    'updated_user.email_address as updated_by_user',
+                ])
+                ->orderBy('details_update_logs.updated_at', 'desc')
                 ->get();
 
             return response()->json([

@@ -11,6 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Models\ActivityLog;
+use App\Models\Application;
+use App\Models\Customer;
+use App\Models\JobOrder;
 
 class LocationApiController extends Controller
 {
@@ -897,6 +900,80 @@ class LocationApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error getting statistics: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get related data (applications, job orders, customers) for a location
+     */
+    public function getRelatedData($type, $id)
+    {
+        try {
+            $column = '';
+            $locationName = '';
+            
+            switch($type) {
+                case 'region':
+                    $region = Region::find($id);
+                    if (!$region) return response()->json(['success' => false, 'message' => 'Region not found'], 404);
+                    $column = 'region';
+                    $locationName = $region->region;
+                    break;
+                case 'city':
+                    $city = City::find($id);
+                    if (!$city) return response()->json(['success' => false, 'message' => 'City not found'], 404);
+                    $column = 'city';
+                    $locationName = $city->city;
+                    break;
+                case 'barangay':
+                case 'borough':
+                    $barangay = Barangay::find($id);
+                    if (!$barangay) return response()->json(['success' => false, 'message' => 'Barangay not found'], 404);
+                    $column = 'barangay';
+                    $locationName = $barangay->barangay;
+                    break;
+                case 'location':
+                    $location = LocationDetail::find($id);
+                    if (!$location) return response()->json(['success' => false, 'message' => 'Location not found'], 404);
+                    $column = 'location';
+                    $locationName = $location->location_name;
+                    break;
+                default:
+                    return response()->json(['success' => false, 'message' => 'Invalid location type'], 400);
+            }
+
+            // Fetch related data
+            // Since data might be stored as either name or ID, we filter by both if possible
+            $applications = Application::where($column, $locationName)
+                ->orWhere($column, $id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+                
+            $customers = Customer::where($column, $locationName)
+                ->orWhere($column, $id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+                
+            $applicationIds = $applications->pluck('id');
+            $jobOrders = JobOrder::with('application')
+                ->whereIn('application_id', $applicationIds)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'applications' => $applications,
+                    'customers' => $customers,
+                    'jobOrders' => $jobOrders
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching related data: ' . $e->getMessage()
             ], 500);
         }
     }

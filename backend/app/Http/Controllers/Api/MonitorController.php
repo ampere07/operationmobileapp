@@ -11,16 +11,16 @@ class MonitorController extends Controller
     public function handle(Request $request)
     {
         $action = $request->query('action', $request->input('action', ''));
-        $param  = $request->query('param', '');
-        $year   = $request->query('year', date('Y'));
+        $param = $request->query('param', '');
+        $year = $request->query('year', date('Y'));
 
         // scope: overall | today | custom
-        $scope  = $request->query('scope', 'overall');
-        $start  = $request->query('start', '');
-        $end    = $request->query('end', '');
+        $scope = $request->query('scope', 'overall');
+        $start = $request->query('start', '');
+        $end = $request->query('end', '');
 
         // barangay filter (uses applications.barangay / customers.barangay where available)
-        $bgy    = $request->query('bgy', 'All');
+        $bgy = $request->query('bgy', 'All');
 
         $response = [
             'status' => 'empty',
@@ -57,7 +57,8 @@ class MonitorController extends Controller
             };
 
             $applyBarangayOnApplications = function ($qb, string $col = 'applications.barangay') use ($bgy) {
-                if (!$bgy || $bgy === 'All') return $qb;
+                if (!$bgy || $bgy === 'All')
+                    return $qb;
                 return $qb->where($col, $bgy);
             };
 
@@ -81,24 +82,26 @@ class MonitorController extends Controller
             // Uses App\Models\DashboardTemplate
             // -------------------------
             if ($action === 'save_template') {
-                $name   = $request->input('name', 'Untitled');
+                $name = $request->input('name', 'Untitled');
                 $layout = $request->input('layout', '[]');
                 $styles = $request->input('styles', '{}');
 
                 if (is_string($layout)) {
                     $decoded = json_decode($layout, true);
-                    if (json_last_error() === JSON_ERROR_NONE) $layout = $decoded;
+                    if (json_last_error() === JSON_ERROR_NONE)
+                        $layout = $decoded;
                 }
-                
+
                 if (is_string($styles)) {
                     $decoded = json_decode($styles, true);
-                    if (json_last_error() === JSON_ERROR_NONE) $styles = $decoded;
+                    if (json_last_error() === JSON_ERROR_NONE)
+                        $styles = $decoded;
                 }
 
                 $template = \App\Models\DashboardTemplate::create([
                     'template_name' => $name,
-                    'layout_data'   => $layout,
-                    'style_data'    => $styles,
+                    'layout_data' => $layout,
+                    'style_data' => $styles,
                 ]);
 
                 return response()->json([
@@ -109,25 +112,27 @@ class MonitorController extends Controller
             }
 
             if ($action === 'update_template') {
-                $id     = $request->input('id');
+                $id = $request->input('id');
                 $layout = $request->input('layout', '[]');
                 $styles = $request->input('styles', '{}');
 
                 if (is_string($layout)) {
                     $decoded = json_decode($layout, true);
-                    if (json_last_error() === JSON_ERROR_NONE) $layout = $decoded;
+                    if (json_last_error() === JSON_ERROR_NONE)
+                        $layout = $decoded;
                 }
-                
+
                 if (is_string($styles)) {
                     $decoded = json_decode($styles, true);
-                    if (json_last_error() === JSON_ERROR_NONE) $styles = $decoded;
+                    if (json_last_error() === JSON_ERROR_NONE)
+                        $styles = $decoded;
                 }
 
                 $template = \App\Models\DashboardTemplate::find($id);
                 if ($template) {
                     $template->update([
                         'layout_data' => $layout,
-                        'style_data'  => $styles,
+                        'style_data' => $styles,
                     ]);
                     return response()->json(['status' => 'success', 'message' => 'Template updated successfully']);
                 }
@@ -146,7 +151,8 @@ class MonitorController extends Controller
                 $id = $request->query('id', 0);
                 $template = \App\Models\DashboardTemplate::find($id);
 
-                if ($template) return response()->json(['status' => 'success', 'data' => $template]);
+                if ($template)
+                    return response()->json(['status' => 'success', 'data' => $template]);
                 return response()->json(['status' => 'error', 'message' => 'Template not found'], 404);
             }
 
@@ -254,7 +260,7 @@ class MonitorController extends Controller
 
                 // optional barangay filter via billing_accounts->customers
                 $qb->leftJoin('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
-                   ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+                    ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
 
                 if ($bgy && $bgy !== 'All') {
                     $qb->where('customers.barangay', $bgy);
@@ -297,7 +303,7 @@ class MonitorController extends Controller
 
                     // optional barangay filter via billing_accounts->customers
                     $qb->leftJoin('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
-                       ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+                        ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
 
                     if ($bgy && $bgy !== 'All') {
                         $qb->where('customers.barangay', $bgy);
@@ -311,7 +317,7 @@ class MonitorController extends Controller
                     $email = $row->raw_email ?? '';
                     $beforeAt = explode('@', $email)[0] ?? $email;
                     $name = ucwords(str_replace(['.', '_'], ' ', $beforeAt));
-                    $data[] = ['label' => $name, 'value' => (int)$row->value];
+                    $data[] = ['label' => $name, 'value' => (int) $row->value];
                 }
 
                 return response()->json(['status' => 'success', 'data' => $data, 'barangays' => $response['barangays']]);
@@ -339,7 +345,7 @@ class MonitorController extends Controller
                     ->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('onsite_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with')->where('visit_with', '!=', '');
-                    
+
                 $applyScope($qb2, 'job_orders.updated_at');
                 $rows2 = $qb2->groupBy(DB::raw("UPPER(TRIM(visit_with))"), 'onsite_status')->get();
 
@@ -348,7 +354,7 @@ class MonitorController extends Controller
                     ->select(DB::raw("UPPER(TRIM(visit_with_other)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('onsite_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with_other')->where('visit_with_other', '!=', '');
-                    
+
                 $applyScope($qb3, 'job_orders.updated_at');
                 $rows3 = $qb3->groupBy(DB::raw("UPPER(TRIM(visit_with_other))"), 'onsite_status')->get();
 
@@ -357,9 +363,11 @@ class MonitorController extends Controller
                 $structured = [];
                 foreach ($all as $r) {
                     $tech = ucwords(strtolower($r->tech ?? ''));
-                    if ($tech === '') continue;
-                    if (!isset($structured[$tech])) $structured[$tech] = ['label' => $tech, 'series' => []];
-                    $structured[$tech]['series'][$r->status] = ($structured[$tech]['series'][$r->status] ?? 0) + (int)$r->count;
+                    if ($tech === '')
+                        continue;
+                    if (!isset($structured[$tech]))
+                        $structured[$tech] = ['label' => $tech, 'series' => []];
+                    $structured[$tech]['series'][$r->status] = ($structured[$tech]['series'][$r->status] ?? 0) + (int) $r->count;
                 }
 
                 return response()->json(['status' => 'success', 'data' => array_values($structured), 'barangays' => $response['barangays']]);
@@ -371,7 +379,7 @@ class MonitorController extends Controller
                     ->select(DB::raw("UPPER(TRIM(visit_by_user)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('visit_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_by_user')->where('visit_by_user', '!=', '');
-                
+
                 $applyScope($qb1, 'service_orders.updated_at');
                 $rows1 = $qb1->groupBy(DB::raw("UPPER(TRIM(visit_by_user))"), 'visit_status')->get();
 
@@ -380,7 +388,7 @@ class MonitorController extends Controller
                     ->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('visit_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with')->where('visit_with', '!=', '');
-                
+
                 $applyScope($qb2, 'service_orders.updated_at');
                 $rows2 = $qb2->groupBy(DB::raw("UPPER(TRIM(visit_with))"), 'visit_status')->get();
 
@@ -389,9 +397,11 @@ class MonitorController extends Controller
                 $structured = [];
                 foreach ($all as $r) {
                     $tech = ucwords(strtolower($r->tech ?? ''));
-                    if ($tech === '') continue;
-                    if (!isset($structured[$tech])) $structured[$tech] = ['label' => $tech, 'series' => []];
-                    $structured[$tech]['series'][$r->status] = ($structured[$tech]['series'][$r->status] ?? 0) + (int)$r->count;
+                    if ($tech === '')
+                        continue;
+                    if (!isset($structured[$tech]))
+                        $structured[$tech] = ['label' => $tech, 'series' => []];
+                    $structured[$tech]['series'][$r->status] = ($structured[$tech]['series'][$r->status] ?? 0) + (int) $r->count;
                 }
 
                 return response()->json(['status' => 'success', 'data' => array_values($structured), 'barangays' => $response['barangays']]);
@@ -409,33 +419,33 @@ class MonitorController extends Controller
                             DB::raw("MONTHNAME(invoice_date) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
                             // Count records or sum amounts based on param
-                            $param === 'amount' 
-                                ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
-                                : DB::raw("COUNT(*) as value")
+                            $param === 'amount'
+                            ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
+                            : DB::raw("COUNT(*) as value")
                         )
                         ->whereYear('invoice_date', $year)
                         ->whereNotNull('invoice_date')
                         ->groupBy(DB::raw("MONTH(invoice_date)"), DB::raw("MONTHNAME(invoice_date)"), DB::raw("IFNULL(status, 'Unknown')"))
                         ->orderBy(DB::raw("MONTH(invoice_date)"))
                         ->get();
-                    
+
                     // Transform to: {label: "January", series: {"Paid": 1000, "Unpaid": 200}}
-                    $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                     $result = [];
-                    
+
                     foreach ($months as $month) {
                         $result[$month] = ['label' => $month, 'series' => []];
                     }
-                    
+
                     foreach ($qb as $row) {
                         if (isset($result[$row->month_name])) {
-                            $result[$row->month_name]['series'][$row->status_value] = (float)$row->value;
+                            $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-                    
+
                     return response()->json([
-                        'status' => 'success', 
-                        'data' => array_values($result), 
+                        'status' => 'success',
+                        'data' => array_values($result),
                         'barangays' => $response['barangays']
                     ]);
                 } elseif ($action === 'transactions_mon') {
@@ -447,29 +457,29 @@ class MonitorController extends Controller
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
                             // Count records or sum amounts based on param
                             $param === 'amount'
-                                ? DB::raw("SUM(IFNULL(received_payment, 0)) as value")
-                                : DB::raw("COUNT(*) as value")
+                            ? DB::raw("SUM(IFNULL(received_payment, 0)) as value")
+                            : DB::raw("COUNT(*) as value")
                         )
                         ->whereYear('date_processed', $year)
                         ->whereNotNull('date_processed')
                         ->groupBy(DB::raw("MONTH(date_processed)"), DB::raw("MONTHNAME(date_processed)"), DB::raw("IFNULL(status, 'Unknown')"))
                         ->orderBy(DB::raw("MONTH(date_processed)"))
                         ->get();
-                    
+
                     // Transform to: {label: "January", series: {"Completed": 100, "Pending": 20}}
-                    $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                     $result = [];
-                    
+
                     foreach ($months as $month) {
                         $result[$month] = ['label' => $month, 'series' => []];
                     }
-                    
+
                     foreach ($qb as $row) {
                         if (isset($result[$row->month_name])) {
-                            $result[$row->month_name]['series'][$row->status_value] = (float)$row->value;
+                            $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-                    
+
                     return response()->json([
                         'status' => 'success',
                         'data' => array_values($result),
@@ -484,29 +494,29 @@ class MonitorController extends Controller
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
                             // Count records or sum amounts based on param
                             $param === 'amount'
-                                ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
-                                : DB::raw("COUNT(*) as value")
+                            ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
+                            : DB::raw("COUNT(*) as value")
                         )
                         ->whereYear('date_time', $year)
                         ->whereNotNull('date_time')
                         ->groupBy(DB::raw("MONTH(date_time)"), DB::raw("MONTHNAME(date_time)"), DB::raw("IFNULL(status, 'Unknown')"))
                         ->orderBy(DB::raw("MONTH(date_time)"))
                         ->get();
-                    
+
                     // Transform to: {label: "January", series: {"Success": 80, "Failed": 5}}
-                    $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
                     $result = [];
-                    
+
                     foreach ($months as $month) {
                         $result[$month] = ['label' => $month, 'series' => []];
                     }
-                    
+
                     foreach ($qb as $row) {
                         if (isset($result[$row->month_name])) {
-                            $result[$row->month_name]['series'][$row->status_value] = (float)$row->value;
+                            $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-                    
+
                     return response()->json([
                         'status' => 'success',
                         'data' => array_values($result),
@@ -526,7 +536,7 @@ class MonitorController extends Controller
 
                 $applyScope($qb, 'expenses_log.expense_date');
                 $qb->groupBy('expenses_category.category_name')
-                   ->orderByDesc('value');
+                    ->orderByDesc('value');
 
                 return response()->json(['status' => 'success', 'data' => $qb->get(), 'barangays' => $response['barangays']]);
             }
@@ -543,7 +553,7 @@ class MonitorController extends Controller
 
                 $applyScope($qb, 'transactions.date_processed');
                 $qb->groupBy('payment_method')
-                   ->orderByDesc('value');
+                    ->orderByDesc('value');
 
                 return response()->json(['status' => 'success', 'data' => $qb->get(), 'barangays' => $response['barangays']]);
             }
@@ -562,10 +572,10 @@ class MonitorController extends Controller
                 $data = [];
                 foreach ($raw as $row) {
                     $data[] = [
-                        'name'  => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
-                        'coords'=> $row->long_lat,
-                        'plan'  => $row->desired_plan,
-                        'bgy'   => $row->barangay,
+                        'name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                        'coords' => $row->long_lat,
+                        'plan' => $row->desired_plan,
+                        'bgy' => $row->barangay,
                     ];
                 }
 
@@ -587,8 +597,8 @@ class MonitorController extends Controller
                 $applyScope($qb, 'job_orders.timestamp');
 
                 $qb->groupBy('applications.referred_by')
-                   ->orderByDesc('value')
-                   ->limit(20);
+                    ->orderByDesc('value')
+                    ->limit(20);
 
                 return response()->json(['status' => 'success', 'data' => $qb->get(), 'barangays' => $response['barangays']]);
             }
@@ -613,9 +623,9 @@ class MonitorController extends Controller
                     'so_visit_pullout_in_progress' => DB::table('service_orders')
                         ->leftJoin('support_concern', 'service_orders.concern_id', '=', 'support_concern.id')
                         ->where('service_orders.visit_status', 'In Progress')
-                        ->where(function($q) {
+                        ->where(function ($q) {
                             $q->where('support_concern.concern_name', 'LIKE', '%Pullout%')
-                              ->orWhere('service_orders.concern_remarks', 'LIKE', '%Pullout%');
+                                ->orWhere('service_orders.concern_remarks', 'LIKE', '%Pullout%');
                         })
                         ->count(),
                     'app_pending' => DB::table('applications')->where('status', 'Pending')->count(),
@@ -641,9 +651,11 @@ class MonitorController extends Controller
                 foreach ($techs as $tech) {
                     $email = $tech->email_address;
                     $name = trim(($tech->first_name ?? '') . ' ' . ($tech->last_name ?? ''));
-                    if (!$name) $name = $tech->username;
+                    if (!$name)
+                        $name = $tech->username;
 
-                    if (!$name) $name = $tech->username;
+                    if (!$name)
+                        $name = $tech->username;
 
                     // --- RESET TIME LOGIC (Every 7:59 AM GMT+8) ---
                     $now = \Carbon\Carbon::now('Asia/Manila');
@@ -655,20 +667,22 @@ class MonitorController extends Controller
                     // 1. Fetch ALL tasks (JO/SO) that happened since resetTime
                     $dailyJOs = DB::table('job_orders')
                         ->where('assigned_email', $email)
-                        ->where(function($q) use ($resetTime) {
+                        ->where(function ($q) use ($resetTime) {
                             $q->where('start_time', '>=', $resetTime)
-                              ->orWhere('end_time', '>=', $resetTime)
-                              ->orWhere(function($sq) { $sq->whereNotNull('start_time')->whereNull('end_time'); });
+                                ->orWhere('end_time', '>=', $resetTime)
+                                ->orWhere(function ($sq) {
+                                    $sq->whereNotNull('start_time')->whereNull('end_time'); });
                         })
                         ->select('id', 'start_time', 'end_time', DB::raw("'jo' as task_type"))
                         ->get();
 
                     $dailySOs = DB::table('service_orders')
                         ->where('assigned_email', $email)
-                        ->where(function($q) use ($resetTime) {
+                        ->where(function ($q) use ($resetTime) {
                             $q->where('start_time', '>=', $resetTime)
-                              ->orWhere('end_time', '>=', $resetTime)
-                              ->orWhere(function($sq) { $sq->whereNotNull('start_time')->whereNull('end_time'); });
+                                ->orWhere('end_time', '>=', $resetTime)
+                                ->orWhere(function ($sq) {
+                                    $sq->whereNotNull('start_time')->whereNull('end_time'); });
                         })
                         ->select('id', 'start_time', 'end_time', DB::raw("'so' as task_type"))
                         ->get();
@@ -685,7 +699,8 @@ class MonitorController extends Controller
                         $tEnd = $task->end_time ? \Carbon\Carbon::parse($task->end_time, 'Asia/Manila') : null;
 
                         // Ensure task start is not before reset
-                        if ($tStart->lt($resetTime)) $tStart = $resetTime->copy();
+                        if ($tStart->lt($resetTime))
+                            $tStart = $resetTime->copy();
 
                         // Idle gap found?
                         if ($tStart->gt($refTime)) {
@@ -762,7 +777,7 @@ class MonitorController extends Controller
                             $since = $soStartTime;
                             $type = 'so';
                         }
-                    } 
+                    }
                     // Otherwise they are available, find when they finished last task
                     else {
                         // Find last finished JO/SO with end_time
@@ -777,10 +792,10 @@ class MonitorController extends Controller
                             ->whereNotNull('end_time')
                             ->orderByDesc('end_time')
                             ->first();
-                        
+
                         $joTime = $lastJO ? $lastJO->end_time : null;
                         $soTime = $lastSO ? $lastSO->end_time : null;
-                        
+
                         if ($joTime && $soTime) {
                             $since = ($joTime > $soTime) ? $joTime : $soTime;
                         } else {
@@ -874,7 +889,7 @@ class MonitorController extends Controller
                         'service_orders.visit_status as status'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
-                    ->where('service_orders.visit_status', '!=', 'Done') 
+                    ->where('service_orders.visit_status', '!=', 'Done')
                     ->whereNotNull('service_orders.assigned_email')
                     ->where('service_orders.assigned_email', '!=', '');
 
@@ -888,7 +903,7 @@ class MonitorController extends Controller
                     $endStr = $item->end_time_str ?? null;
                     $start = $startStr ? \Carbon\Carbon::parse($startStr) : null;
                     $end = $endStr ? \Carbon\Carbon::parse($endStr) : null;
-                    
+
                     if (!$start) {
                         return [
                             'team_name' => $item->team_name,
@@ -901,12 +916,14 @@ class MonitorController extends Controller
                     }
 
                     $endTime = $end ?: \Carbon\Carbon::now();
-                    
+
                     // Duration string
                     $diff = $start->diff($endTime);
                     $duration = "";
-                    if ($diff->d > 0) $duration .= $diff->d . "d ";
-                    if ($diff->h > 0) $duration .= $diff->h . "h ";
+                    if ($diff->d > 0)
+                        $duration .= $diff->d . "d ";
+                    if ($diff->h > 0)
+                        $duration .= $diff->h . "h ";
                     $duration .= $diff->i . "m ";
                     $duration .= $diff->s . "s";
 
@@ -970,7 +987,7 @@ class MonitorController extends Controller
                         'service_orders.visit_status as status'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
-                    ->where('service_orders.visit_status', '!=', 'Done') 
+                    ->where('service_orders.visit_status', '!=', 'Done')
                     ->whereNotNull('customers.referred_by')
                     ->where('customers.referred_by', '!=', '');
 
@@ -983,7 +1000,7 @@ class MonitorController extends Controller
                     $endStr = $item->end_time_str ?? null;
                     $start = $startStr ? \Carbon\Carbon::parse($startStr) : null;
                     $end = $endStr ? \Carbon\Carbon::parse($endStr) : null;
-                    
+
                     if (!$start) {
                         return [
                             'team_name' => $item->team_name,
@@ -998,8 +1015,10 @@ class MonitorController extends Controller
                     $endTime = $end ?: \Carbon\Carbon::now();
                     $diff = $start->diff($endTime);
                     $duration = "";
-                    if ($diff->d > 0) $duration .= $diff->d . "d ";
-                    if ($diff->h > 0) $duration .= $diff->h . "h ";
+                    if ($diff->d > 0)
+                        $duration .= $diff->d . "d ";
+                    if ($diff->h > 0)
+                        $duration .= $diff->h . "h ";
                     $duration .= $diff->i . "m ";
                     $duration .= $diff->s . "s";
 
@@ -1015,7 +1034,7 @@ class MonitorController extends Controller
 
                 return response()->json(['status' => 'success', 'data' => $data]);
             }
-            
+
             return response()->json([
                 'status' => 'error',
                 'message' => "Unknown action: $action",

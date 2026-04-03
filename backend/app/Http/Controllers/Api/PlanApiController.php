@@ -7,28 +7,39 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Models\ActivityLog;
+use App\Models\User;
 
 class PlanApiController extends Controller
 {
-    private function getCurrentUserId()
+    private function resolveUserId(Request $request)
     {
-        $user = DB::table('users')->first();
-        return $user ? $user->id : null;
+        $userEmail = $request->input('email_address');
+        $userId = auth()->id();
+
+        if (!$userId && $userEmail) {
+            $user = User::where('email_address', $userEmail)->first();
+            if ($user) {
+                $userId = $user->id;
+            }
+        }
+
+        return $userId;
     }
 
     public function index()
     {
         try {
             $plans = DB::table('plan_list')
+                ->leftJoin('users', 'plan_list.modified_by_user', '=', 'users.id')
                 ->select(
-                    'id',
-                    'plan_name as name',
-                    'description',
-                    'price',
-                    'modified_date',
-                    'modified_by_user as modified_by'
+                    'plan_list.id',
+                    'plan_list.plan_name as name',
+                    'plan_list.description',
+                    'plan_list.price',
+                    'plan_list.modified_date',
+                    'users.email_address as modified_by'
                 )
-                ->orderBy('plan_name')
+                ->orderBy('plan_list.plan_name')
                 ->get();
             
             return response()->json([
@@ -63,7 +74,7 @@ class PlanApiController extends Controller
                 ], 422);
             }
 
-            $currentUserId = $this->getCurrentUserId();
+            $currentUserId = $this->resolveUserId($request);
             $now = now();
             
             $planId = DB::table('plan_list')->insertGetId([
@@ -75,15 +86,16 @@ class PlanApiController extends Controller
             ]);
             
             $plan = DB::table('plan_list')
+                ->leftJoin('users', 'plan_list.modified_by_user', '=', 'users.id')
                 ->select(
-                    'id',
-                    'plan_name as name',
-                    'description',
-                    'price',
-                    'modified_date',
-                    'modified_by_user_id as modified_by'
+                    'plan_list.id',
+                    'plan_list.plan_name as name',
+                    'plan_list.description',
+                    'plan_list.price',
+                    'plan_list.modified_date',
+                    'users.email_address as modified_by'
                 )
-                ->where('id', $planId)
+                ->where('plan_list.id', $planId)
                 ->first();
 
             // Create Activity Log
@@ -118,15 +130,16 @@ class PlanApiController extends Controller
     {
         try {
             $plan = DB::table('plan_list')
+                ->leftJoin('users', 'plan_list.modified_by_user', '=', 'users.id')
                 ->select(
-                    'id',
-                    'plan_name as name',
-                    'description',
-                    'price',
-                    'modified_date',
-                    'modified_by_user as modified_by'
+                    'plan_list.id',
+                    'plan_list.plan_name as name',
+                    'plan_list.description',
+                    'plan_list.price',
+                    'plan_list.modified_date',
+                    'users.email_address as modified_by'
                 )
-                ->where('id', $id)
+                ->where('plan_list.id', $id)
                 ->first();
             
             if (!$plan) {
@@ -185,7 +198,7 @@ class PlanApiController extends Controller
                 ], 422);
             }
             
-            $currentUserId = $this->getCurrentUserId();
+            $currentUserId = $this->resolveUserId($request);
             $now = now();
             
             DB::table('plan_list')
@@ -199,15 +212,16 @@ class PlanApiController extends Controller
                 ]);
             
             $plan = DB::table('plan_list')
+                ->leftJoin('users', 'plan_list.modified_by_user', '=', 'users.id')
                 ->select(
-                    'id',
-                    'plan_name as name',
-                    'description',
-                    'price',
-                    'modified_date',
-                    'modified_by_user as modified_by'
+                    'plan_list.id',
+                    'plan_list.plan_name as name',
+                    'plan_list.description',
+                    'plan_list.price',
+                    'plan_list.modified_date',
+                    'users.email_address as modified_by'
                 )
-                ->where('id', $id)
+                ->where('plan_list.id', $id)
                 ->first();
 
             // Create Activity Log

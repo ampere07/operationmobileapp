@@ -42,8 +42,7 @@ class ConcernController extends Controller
 
         try {
             $concern = Concern::create([
-                'concern_name' => $request->concern_name,
-                'created_by_user_id' => $request->created_by_user_id
+                'concern_name' => $request->concern_name
             ]);
 
             // Log Activity
@@ -106,8 +105,7 @@ class ConcernController extends Controller
         try {
             $concern = Concern::findOrFail($id);
             $concern->update([
-                'concern_name' => $request->concern_name ?? $concern->concern_name,
-                'updated_by_user_id' => $request->updated_by_user_id
+                'concern_name' => $request->concern_name ?? $concern->concern_name
             ]);
 
             // Log Activity
@@ -128,6 +126,7 @@ class ConcernController extends Controller
                 'data' => $concern
             ]);
         } catch (\Exception $e) {
+            \Log::error('Update Concern Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update concern',

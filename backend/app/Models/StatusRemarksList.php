@@ -14,9 +14,9 @@ class StatusRemarksList extends Model
     protected $fillable = [
         'status_remarks',
         'created_at',
-        'created_by_user_id',
+        'created_by_user',
         'updated_at',
-        'updated_by_user_id'
+        'updated_by_user'
     ];
 
     protected $casts = [

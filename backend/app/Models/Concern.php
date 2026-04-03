@@ -10,11 +10,10 @@ class Concern extends Model
     use HasFactory;
 
     protected $table = 'concern';
+    public $timestamps = false; // Disable if table lacks created_at/updated_at
 
     protected $fillable = [
-        'concern_name',
-        'created_by_user_id',
-        'updated_by_user_id'
+        'concern_name'
     ];
 
     protected $casts = [

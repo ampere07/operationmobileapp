@@ -465,12 +465,12 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         onClose={() => setActivePicker(null)}
         title="Select Technician"
         data={filtered.assignedEmails}
-        onSelect={(t) => { handleInputChange('assignedEmail', t.email); setActivePicker(null); }}
+        onSelect={(t) => { handleInputChange('assignedEmail', t.name); setActivePicker(null); }}
         searchValue={searchQueries.assignedEmail || ''}
         onSearchChange={(t) => setSearchQueries({ ...searchQueries, assignedEmail: t })}
         keyExtractor={(t) => t.email}
         itemTextKey="name"
-        itemValueKey="email"
+        itemValueKey="name"
         selectedItemValue={formData.assignedEmail}
         activeColor={activeColor}
       />
@@ -555,6 +555,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
         onSearchChange={(t) => setSearchQueries({ ...searchQueries, technician: t })}
         keyExtractor={(t, idx) => t.email || idx.toString()}
         itemTextKey="name"
+        itemValueKey="name"
         selectedItemValue={activeTechField ? formData[activeTechField] : ''}
         activeColor={activeColor}
       />

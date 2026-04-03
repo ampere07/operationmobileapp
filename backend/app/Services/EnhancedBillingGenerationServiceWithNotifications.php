@@ -254,18 +254,38 @@ class EnhancedBillingGenerationServiceWithNotifications
             $adjustedDate = $this->calculateAdjustedBillingDate($account, $statementDate);
             $dueDate = $adjustedDate->copy()->addDays($dueDateOffset);
 
+            // Create initial statement to get the ID
+            $statement = StatementOfAccount::create([
+                'account_no' => $account->account_no,
+                'statement_date' => $statementDate->format('Y-m-d'),
+                'balance_from_previous_bill' => 0,
+                'payment_received_previous' => 0,
+                'remaining_balance_previous' => 0,
+                'monthly_service_fee' => 0,
+                'others_and_basic_charges' => 0,
+                'service_charge' => 0,
+                'rebate' => 0,
+                'discounts' => 0,
+                'staggered' => 0,
+                'vat' => 0,
+                'due_date' => $dueDate,
+                'amount_due' => 0,
+                'total_amount_due' => 0,
+                'created_by' => (string) $userId,
+                'updated_by' => (string) $userId
+            ]);
+
             $prorateAmount = $this->calculateProrateAmount($account, $plan->price, $adjustedDate);
             $monthlyFeeGross = $prorateAmount / (1 + self::VAT_RATE);
             $vat = $monthlyFeeGross * self::VAT_RATE;
             $monthlyServiceFee = $prorateAmount - $vat;
 
-            $invoiceId = $this->generateInvoiceId($statementDate);
-            
+            // Use statement ID as the reference for charges
             $charges = $this->calculateChargesAndDeductions(
                 $account, 
                 $statementDate, 
                 $userId, 
-                $invoiceId,
+                (string)$statement->id,
                 $plan->price,
                 false,
                 false
@@ -280,9 +300,8 @@ class EnhancedBillingGenerationServiceWithNotifications
             $remainingBalance = $previousBalance - $paymentReceived;
             $totalAmountDue = $remainingBalance + $amountDue;
 
-            $statement = StatementOfAccount::create([
-                'account_no' => $account->account_no,
-                'statement_date' => $statementDate->format('Y-m-d'),
+            // Update statement with actual values
+            $statement->update([
                 'balance_from_previous_bill' => round($previousBalance, 2),
                 'payment_received_previous' => round($paymentReceived, 2),
                 'remaining_balance_previous' => round($remainingBalance, 2),
@@ -293,12 +312,8 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'discounts' => round($charges['discounts'], 2),
                 'staggered' => round($charges['staggered_install_fees'], 2),
                 'vat' => round($vat, 2),
-                'due_date' => $dueDate,
                 'amount_due' => round($amountDue, 2),
-                'total_amount_due' => round($totalAmountDue, 2),
-                'print_link' => null,
-                'created_by' => (string) $userId,
-                'updated_by' => (string) $userId
+                'total_amount_due' => round($totalAmountDue, 2)
             ]);
 
             DB::commit();
@@ -375,14 +390,30 @@ class EnhancedBillingGenerationServiceWithNotifications
             $adjustedDate = $this->calculateAdjustedBillingDate($account, $invoiceDate);
             $dueDate = $adjustedDate->copy()->addDays($dueDateOffset);
 
-            $invoiceId = $this->generateInvoiceId($invoiceDate);
+            // Create initial invoice to get the ID
+            $invoice = Invoice::create([
+                'account_no' => $account->account_no,
+                'invoice_date' => $invoiceDate->format('Y-m-d'),
+                'invoice_balance' => 0,
+                'others_and_basic_charges' => 0,
+                'service_charge' => 0,
+                'rebate' => 0,
+                'discounts' => 0,
+                'staggered' => 0,
+                'total_amount' => 0,
+                'received_payment' => 0.00,
+                'due_date' => $dueDate,
+                'status' => 'Unpaid',
+                'created_by' => (string) $userId,
+                'updated_by' => (string) $userId
+            ]);
             
             $prorateAmount = $this->calculateProrateAmount($account, $plan->price, $adjustedDate);
             $charges = $this->calculateChargesAndDeductions(
                 $account, 
                 $invoiceDate, 
                 $userId, 
-                $invoiceId,
+                (string)$invoice->id,
                 $plan->price,
                 true,
                 true
@@ -396,9 +427,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 $totalAmount += $account->account_balance;
             }
 
-            $invoice = Invoice::create([
-                'account_no' => $account->account_no,
-                'invoice_date' => $invoiceDate->format('Y-m-d'),
+            $invoice->update([
                 'invoice_balance' => round($prorateAmount, 2),
                 'others_and_basic_charges' => round($othersBasicCharges, 2),
                 'service_charge' => round($charges['service_fees'], 2),
@@ -406,13 +435,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'discounts' => round($charges['discounts'], 2),
                 'staggered' => round($charges['staggered_install_fees'], 2),
                 'total_amount' => round($totalAmount, 2),
-                'received_payment' => 0.00,
-                'due_date' => $dueDate,
-                'status' => $totalAmount <= 0 ? 'Paid' : 'Unpaid',
-                'payment_portal_log_ref' => null,
-                'transaction_id' => null,
-                'created_by' => (string) $userId,
-                'updated_by' => (string) $userId
+                'status' => $totalAmount <= 0 ? 'Paid' : 'Unpaid'
             ]);
 
             $appliedDiscounts = $charges['discounts'];
@@ -426,7 +449,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'balance_update_date' => $invoiceDate->format('Y-m-d')
             ]);
             
-            $this->log('info', 'Invoice created with discount applied to balance', [
+            $this->log('info', 'Invoice updated with discount applied to balance', [
                 'account_no' => $account->account_no,
                 'invoice_balance' => $prorateAmount,
                 'total_amount' => $totalAmount,
@@ -435,9 +458,9 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'new_balance' => $newBalance
             ]);
             
-            $this->markDiscountsAsUsed($account, $userId, $invoiceId);
-            $this->markRebatesAsUsed($account, $userId, $invoiceId);
-            $this->markPlanChangesAsUsed($account, $userId, $invoiceId);
+            $this->markDiscountsAsUsed($account, $userId, (string)$invoice->id);
+            $this->markRebatesAsUsed($account, $userId, (string)$invoice->id);
+            $this->markPlanChangesAsUsed($account, $userId, (string)$invoice->id);
             $this->trackStaggeredInvoiceAssociation($account->account_no, $invoice->id);
 
             DB::commit();
@@ -456,16 +479,6 @@ class EnhancedBillingGenerationServiceWithNotifications
         }
     }
     
-    protected function generateInvoiceId(Carbon $date): string
-    {
-        $year = $date->format('y');
-        $month = $date->format('m');
-        $day = $date->format('d');
-        $hour = $date->format('H');
-        $randomId = '0000';
-        
-        return $year . $month . $day . $hour . $randomId;
-    }
 
     protected function calculateAdjustedBillingDate(BillingAccount $account, Carbon $baseDate): Carbon
     {

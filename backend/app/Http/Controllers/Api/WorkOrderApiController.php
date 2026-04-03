@@ -36,7 +36,7 @@ class WorkOrderApiController extends Controller
             }
 
             if ($request->has('updated_since')) {
-                $query->where('updated_at', '>', $request->input('updated_since'));
+                $query->where('updated_date', '>', $request->input('updated_since'));
                 // increase limit for updates
                 $limit = $request->input('limit', 1000);
             }

@@ -10,9 +10,22 @@ use App\Models\ActivityLog;
 
 class LcpApiController extends Controller
 {
-    private function getCurrentUser()
+    private function resolveUserId(Request $request)
     {
-        return 'ravenampere0123@gmail.com';
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::id();
+        }
+
+        return null;
     }
 
     public function index(Request $request)
@@ -86,6 +99,9 @@ class LcpApiController extends Controller
             
             $lcp = new LCP();
             $lcp->lcp_name = $name;
+            $userId = $this->resolveUserId($request);
+            $lcp->created_by_user_id = $userId;
+            $lcp->updated_by_user_id = $userId;
             $lcp->save();
 
             // Log Activity
@@ -174,6 +190,7 @@ class LcpApiController extends Controller
             }
             
             $lcp->lcp_name = $name;
+            $lcp->updated_by_user_id = $this->resolveUserId($request);
             $lcp->save();
 
             // Log Activity

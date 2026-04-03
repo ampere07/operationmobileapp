@@ -10,6 +10,8 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { concernService, Concern } from '../services/concernService';
 import { getUsedPorts } from '../services/portService';
 import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
+import { technicianService } from '../services/technicianService';
+
 
 export interface UserData {
   email?: string;
@@ -196,7 +198,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     const fetchAllData = async () => {
       const [invRes, techRes, detailsRes, concernRes] = await Promise.allSettled([
         getAllInventoryItems('', 1, 1000),
-        apiClient.get('/users', { signal: controller.signal }),
+        technicianService.getAllTechnicians(),
         Promise.all([
           apiClient.get('/vlan', { signal: controller.signal }),
           getAllLCPNAPs('', 1, 1000),
@@ -214,13 +216,19 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
           .map((i: any, idx: number) => ({ model: i.item_name, id: idx })));
       }
 
-      if (techRes.status === 'fulfilled' && techRes.value.data?.success) {
-        setTechnicians(techRes.value.data.data
-          .filter((u: any) => (typeof u.role === 'string' ? u.role : u.role?.role_name || '').toLowerCase() === 'technician')
-          .map((u: any) => ({
-            email: u.email_address || u.email || '',
-            name: `${(u.first_name || '').trim()} ${(u.last_name || '').trim()}`.trim() || u.username || u.email_address || u.email || ''
-          })));
+      if (techRes.status === 'fulfilled' && techRes.value.success && techRes.value.data) {
+        setTechnicians((techRes.value.data as any[])
+          .filter((u: any) => u.first_name || u.last_name)
+          .map((u: any) => {
+            const firstName = (u.first_name || '').trim();
+            const middleInitial = u.middle_initial ? `${u.middle_initial.trim()}. ` : '';
+            const lastName = (u.last_name || '').trim();
+            const fullName = `${firstName} ${middleInitial}${lastName}`.trim();
+            return {
+              email: u.id.toString(), // Using id as the unique identifier
+              name: fullName || 'Unknown Technician'
+            };
+          }));
       }
 
       if (detailsRes.status === 'fulfilled') {

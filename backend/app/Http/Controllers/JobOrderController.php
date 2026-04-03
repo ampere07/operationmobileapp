@@ -999,7 +999,7 @@ class JobOrderController extends Controller
                 'account_id' => $billingAccount->id,
                 'pppoe_username' => $generatedUsername,
                 'pppoe_password' => $generatedPassword,
-                'updated_by_user_email' => 'system@ampere.com'
+                'updated_by_user_email' => request()->input('updated_by_user_email', $jobOrder->created_by_user_email)
             ]);
             
             \Log::info('Credentials saved to job_orders table', [
@@ -1655,7 +1655,7 @@ class JobOrderController extends Controller
                 $jobOrder->update([
                     'pppoe_username' => $pppoeUsername,
                     'pppoe_password' => $pppoePassword,
-                    'updated_by_user_email' => request()->input('updated_by_user_email', 'system@ampere.com')
+                    'updated_by_user_email' => request()->input('updated_by_user_email', $jobOrder->created_by_user_email)
                 ]);
                 
                 $jobOrder->refresh();

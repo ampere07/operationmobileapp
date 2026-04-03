@@ -68,6 +68,26 @@ class CustomerDetailUpdateController extends Controller
             $billingAccount = BillingAccount::where('account_no', $accountNo)->firstOrFail();
             $customer = Customer::findOrFail($billingAccount->customer_id);
 
+            // Capture old details before update
+            $oldDetails = [
+                'first_name' => $customer->first_name,
+                'middle_initial' => $customer->middle_initial,
+                'last_name' => $customer->last_name,
+                'email_address' => $customer->email_address,
+                'contact_number_primary' => $customer->contact_number_primary,
+                'contact_number_secondary' => $customer->contact_number_secondary,
+                'address' => $customer->address,
+                'region' => $customer->region,
+                'city' => $customer->city,
+                'barangay' => $customer->barangay,
+                'location' => $customer->location,
+                'address_coordinates' => $customer->address_coordinates,
+                'housing_status' => $customer->housing_status,
+                'referred_by' => $customer->referred_by,
+                'group_name' => $customer->group_name,
+                'house_front_picture_url' => $customer->house_front_picture_url,
+            ];
+
             $houseFrontPictureUrl = $customer->house_front_picture_url;
 
             // Handle house front picture upload if provided
@@ -129,6 +149,52 @@ class CustomerDetailUpdateController extends Controller
                         'updated_fields' => array_keys($userUpdate)
                     ]);
                 }
+            }
+
+            // Capture new details after update
+            $customer->refresh();
+            $newDetails = [
+                'first_name' => $customer->first_name,
+                'middle_initial' => $customer->middle_initial,
+                'last_name' => $customer->last_name,
+                'email_address' => $customer->email_address,
+                'contact_number_primary' => $customer->contact_number_primary,
+                'contact_number_secondary' => $customer->contact_number_secondary,
+                'address' => $customer->address,
+                'region' => $customer->region,
+                'city' => $customer->city,
+                'barangay' => $customer->barangay,
+                'location' => $customer->location,
+                'address_coordinates' => $customer->address_coordinates,
+                'housing_status' => $customer->housing_status,
+                'referred_by' => $customer->referred_by,
+                'group_name' => $customer->group_name,
+                'house_front_picture_url' => $customer->house_front_picture_url,
+            ];
+
+            $changedOldDetails = [];
+            $changedNewDetails = [];
+
+            foreach ($oldDetails as $key => $oldValue) {
+                $newValue = $newDetails[$key] ?? null;
+                if ($oldValue !== $newValue) {
+                    $changedOldDetails[$key] = $oldValue;
+                    $changedNewDetails[$key] = $newValue;
+                }
+            }
+
+            if (!empty($changedOldDetails) || !empty($changedNewDetails)) {
+                // Log to details_update_logs
+                $logUserId = $request->input('updatedBy') ?: ($request->user() ? $request->user()->id : null);
+                DB::table('details_update_logs')->insert([
+                    'account_id' => $billingAccount->id,
+                    'old_details' => json_encode(['type' => 'customer_details', 'data' => $changedOldDetails]),
+                    'new_details' => json_encode(['type' => 'customer_details', 'data' => $changedNewDetails]),
+                    'created_at' => now(),
+                    'created_by_user_id' => $logUserId,
+                    'updated_at' => now(),
+                    'updated_by_user_id' => $logUserId,
+                ]);
             }
 
             // Log Activity
@@ -199,6 +265,12 @@ class CustomerDetailUpdateController extends Controller
 
             $billingAccount = BillingAccount::where('account_no', $accountNo)->firstOrFail();
 
+            // Capture old billing details before update
+            $oldBillingDetails = [
+                'billing_status_id' => $billingAccount->billing_status_id,
+                'billing_day' => $billingAccount->billing_day,
+            ];
+
             // Resolve billing_status_id
             $billingStatusId = $billingAccount->billing_status_id;
             if (!empty($validated['billingStatus'])) {
@@ -236,6 +308,38 @@ class CustomerDetailUpdateController extends Controller
             }
 
             $billingAccount->update($updateData);
+
+            // Capture new billing details after update
+            $billingAccount->refresh();
+            $newBillingDetails = [
+                'billing_status_id' => $billingAccount->billing_status_id,
+                'billing_day' => $billingAccount->billing_day,
+            ];
+
+            $changedOldBillingDetails = [];
+            $changedNewBillingDetails = [];
+
+            foreach ($oldBillingDetails as $key => $oldValue) {
+                $newValue = $newBillingDetails[$key] ?? null;
+                if ($oldValue !== $newValue) {
+                    $changedOldBillingDetails[$key] = $oldValue;
+                    $changedNewBillingDetails[$key] = $newValue;
+                }
+            }
+
+            if (!empty($changedOldBillingDetails) || !empty($changedNewBillingDetails)) {
+                // Log to details_update_logs
+                $logUserId = $request->input('updatedBy') ?: ($request->user() ? $request->user()->id : null);
+                DB::table('details_update_logs')->insert([
+                    'account_id' => $billingAccount->id,
+                    'old_details' => json_encode(['type' => 'billing_details', 'data' => $changedOldBillingDetails]),
+                    'new_details' => json_encode(['type' => 'billing_details', 'data' => $changedNewBillingDetails]),
+                    'created_at' => now(),
+                    'created_by_user_id' => $logUserId,
+                    'updated_at' => now(),
+                    'updated_by_user_id' => $logUserId,
+                ]);
+            }
 
             // Log Activity
             ActivityLog::log(
@@ -317,12 +421,29 @@ class CustomerDetailUpdateController extends Controller
             // Get or create technical details
             $technicalDetail = TechnicalDetail::where('account_id', $billingAccount->id)->first();
             
+            $isNewTechnicalDetail = false;
             if (!$technicalDetail) {
+                $isNewTechnicalDetail = true;
                 $technicalDetail = new TechnicalDetail();
                 $technicalDetail->account_id = $billingAccount->id;
                 $technicalDetail->account_no = $billingAccount->account_no;
                 $technicalDetail->created_by = $request->user()->id ?? 1;
             }
+
+            // Capture old technical details before update
+            $oldTechnicalDetails = $isNewTechnicalDetail ? [] : [
+                'username' => $technicalDetail->username,
+                'connection_type' => $technicalDetail->connection_type,
+                'router_model' => $technicalDetail->router_model,
+                'router_modem_sn' => $technicalDetail->router_modem_sn,
+                'ip_address' => $technicalDetail->ip_address,
+                'lcp' => $technicalDetail->lcp,
+                'nap' => $technicalDetail->nap,
+                'lcpnap' => $technicalDetail->lcpnap,
+                'port' => $technicalDetail->port,
+                'vlan' => $technicalDetail->vlan,
+                'usage_type' => $technicalDetail->usage_type,
+            ];
 
             // Generate LCPNAP if LCP and NAP are provided, or use direct lcpnap
             $lcpnap = $technicalDetail->lcpnap;
@@ -361,6 +482,55 @@ class CustomerDetailUpdateController extends Controller
             }
             
             $technicalDetail->save();
+
+            // Capture new technical details after save
+            $newTechnicalDetails = [
+                'username' => $technicalDetail->username,
+                'connection_type' => $technicalDetail->connection_type,
+                'router_model' => $technicalDetail->router_model,
+                'router_modem_sn' => $technicalDetail->router_modem_sn,
+                'ip_address' => $technicalDetail->ip_address,
+                'lcp' => $technicalDetail->lcp,
+                'nap' => $technicalDetail->nap,
+                'lcpnap' => $technicalDetail->lcpnap,
+                'port' => $technicalDetail->port,
+                'vlan' => $technicalDetail->vlan,
+                'usage_type' => $technicalDetail->usage_type,
+            ];
+
+            $changedOldTechnicalDetails = [];
+            $changedNewTechnicalDetails = [];
+
+            if (!empty($oldTechnicalDetails)) {
+                foreach ($oldTechnicalDetails as $key => $oldValue) {
+                    $newValue = $newTechnicalDetails[$key] ?? null;
+                    if ($oldValue !== $newValue) {
+                        $changedOldTechnicalDetails[$key] = $oldValue;
+                        $changedNewTechnicalDetails[$key] = $newValue;
+                    }
+                }
+            } else {
+                foreach ($newTechnicalDetails as $key => $newValue) {
+                    if ($newValue !== null && $newValue !== '') {
+                        $changedOldTechnicalDetails[$key] = null;
+                        $changedNewTechnicalDetails[$key] = $newValue;
+                    }
+                }
+            }
+
+            if (!empty($changedNewTechnicalDetails) || !empty($changedOldTechnicalDetails)) {
+                // Log to details_update_logs
+                $logUserId = $request->input('updatedBy') ?: ($request->user() ? $request->user()->id : null);
+                DB::table('details_update_logs')->insert([
+                    'account_id' => $billingAccount->id,
+                    'old_details' => json_encode(['type' => 'technical_details', 'data' => $changedOldTechnicalDetails]),
+                    'new_details' => json_encode(['type' => 'technical_details', 'data' => $changedNewTechnicalDetails]),
+                    'created_at' => now(),
+                    'created_by_user_id' => $logUserId,
+                    'updated_at' => now(),
+                    'updated_by_user_id' => $logUserId,
+                ]);
+            }
 
             // Log Activity
             ActivityLog::log(

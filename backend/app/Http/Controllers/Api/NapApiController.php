@@ -13,10 +13,22 @@ class NapApiController extends Controller
     /**
      * Get current user email from session/auth (fallback for now)
      */
-    private function getCurrentUser()
+    private function resolveUserId(Request $request)
     {
-        // For now, return a default user - you can modify this to get from session/auth
-        return 'ravenampere0123@gmail.com';
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::id();
+        }
+
+        return null;
     }
 
     /**
@@ -115,7 +127,7 @@ class NapApiController extends Controller
             $name = $request->input('name');
             
             // Automatically set modified date and user
-            $currentUser = $this->getCurrentUser();
+            $userId = $this->resolveUserId($request);
             $now = now();
             
             // Check for duplicate NAP name in nap table
@@ -130,6 +142,8 @@ class NapApiController extends Controller
             // Insert new NAP
             $insertData = [
                 'nap_name' => $name,
+                'created_by_user_id' => $userId,
+                'updated_by_user_id' => $userId,
                 'created_at' => $now,
                 'updated_at' => $now
             ];
@@ -224,7 +238,7 @@ class NapApiController extends Controller
             $name = $request->input('name');
             
             // Automatically set modified date and user
-            $currentUser = $this->getCurrentUser();
+            $userId = $this->resolveUserId($request);
             $now = now();
             
             // Check for duplicate name (excluding current NAP)
@@ -239,7 +253,8 @@ class NapApiController extends Controller
             // Update NAP
             $updateData = [
                 'nap_name' => $name,
-                'updated_at' => $now
+                'updated_at' => $now,
+                'updated_by_user_id' => $userId
             ];
             
             DB::table('nap')->where('id', $id)->update($updateData);

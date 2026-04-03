@@ -40,7 +40,9 @@ use App\Http\Controllers\Api\ReconnectionLogsController;
 use App\Http\Controllers\ConsolidatedNotificationController;
 use App\Http\Controllers\Api\ServiceOrderItemApiController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TechnicianController;
 
+Route::apiResource('technicians', TechnicianController::class);
 Route::get('/reports', [ReportController::class , 'index']);
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
@@ -688,6 +690,7 @@ Route::put('/locations/barangay/{id}', [\App\Http\Controllers\Api\LocationApiCon
 Route::delete('/locations/region/{id}', [\App\Http\Controllers\Api\LocationApiController::class , 'deleteLocation']);
 Route::delete('/locations/city/{id}', [\App\Http\Controllers\Api\LocationApiController::class , 'deleteLocation']);
 Route::delete('/locations/barangay/{id}', [\App\Http\Controllers\Api\LocationApiController::class , 'deleteLocation']);
+Route::get('/locations/{type}/{id}/related', [\App\Http\Controllers\Api\LocationApiController::class , 'getRelatedData']);
 
 // Direct test endpoint for troubleshooting
 Route::get('/locations-ping', function () {
@@ -1762,7 +1765,7 @@ Route::prefix('router-models')->group(function () {
 });
 
 // Status Remarks Management Routes
-Route::prefix('status-remarks')->group(function () {
+Route::middleware('auth:sanctum')->prefix('status-remarks')->group(function () {
     Route::get('/', [\App\Http\Controllers\StatusRemarksController::class , 'index']);
     Route::post('/', [\App\Http\Controllers\StatusRemarksController::class , 'store']);
     Route::get('/{id}', [\App\Http\Controllers\StatusRemarksController::class , 'show']);

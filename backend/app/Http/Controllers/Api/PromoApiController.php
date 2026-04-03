@@ -8,13 +8,23 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 class PromoApiController extends Controller
 {
     public function index(): JsonResponse
     {
         try {
-            $promos = Promo::orderBy('name', 'asc')->get();
+            $promos = Promo::leftJoin('users as creators', 'promo_list.created_by_user_id', '=', 'creators.id')
+                ->leftJoin('users as updaters', 'promo_list.updated_by_user_id', '=', 'updaters.id')
+                ->select(
+                    'promo_list.*',
+                    'creators.email_address as creator_email',
+                    'updaters.email_address as updater_email'
+                )
+                ->orderBy('promo_list.name', 'asc')
+                ->get();
 
             $formattedPromos = $promos->map(function ($promo) {
                 return [
@@ -25,6 +35,8 @@ class PromoApiController extends Controller
                     'status' => $promo->status,
                     'created_at' => $promo->created_at ? $promo->created_at->format('Y-m-d H:i:s') : null,
                     'updated_at' => $promo->updated_at ? $promo->updated_at->format('Y-m-d H:i:s') : null,
+                    'creator_email' => $promo->creator_email,
+                    'updater_email' => $promo->updater_email,
                 ];
             });
 
@@ -52,8 +64,18 @@ class PromoApiController extends Controller
                 'status' => 'nullable|string|max:100',
             ]);
 
-            $validated['created_by_user_id'] = auth()->id() ?? 1;
-            $validated['updated_by_user_id'] = auth()->id() ?? 1;
+            $userEmail = $request->input('email_address');
+            $userId = auth()->id();
+
+            if (!$userId && $userEmail) {
+                $user = User::where('email_address', $userEmail)->first();
+                if ($user) {
+                    $userId = $user->id;
+                }
+            }
+
+            $validated['created_by_user_id'] = $userId;
+            $validated['updated_by_user_id'] = $userId;
 
             $promo = Promo::create($validated);
 
@@ -130,7 +152,17 @@ class PromoApiController extends Controller
                 'status' => 'nullable|string|max:100',
             ]);
 
-            $validated['updated_by_user_id'] = auth()->id() ?? 1;
+            $userEmail = $request->input('email_address');
+            $userId = auth()->id();
+
+            if (!$userId && $userEmail) {
+                $user = User::where('email_address', $userEmail)->first();
+                if ($user) {
+                    $userId = $user->id;
+                }
+            }
+
+            $validated['updated_by_user_id'] = $userId;
 
             $promo->update($validated);
 

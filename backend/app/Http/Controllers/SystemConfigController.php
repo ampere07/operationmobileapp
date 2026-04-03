@@ -10,69 +10,7 @@ use Illuminate\Support\Facades\Storage;
 
 class SystemConfigController extends Controller
 {
-    private function uploadToGoogleDrive($file, $filename)
-    {
-        try {
-            $client = new \Google\Client();
-            $client->setClientId(env('GOOGLE_DRIVE_CLIENT_ID'));
-            $client->setClientSecret(env('GOOGLE_DRIVE_CLIENT_SECRET'));
-            $client->setRedirectUri(env('GOOGLE_DRIVE_REDIRECT_URI'));
-            $client->setAccessType('offline');
-            $client->setScopes([\Google_Service_Drive::DRIVE_FILE]);
-            
-            $accessToken = [
-                'access_token' => env('GOOGLE_DRIVE_ACCESS_TOKEN'),
-                'refresh_token' => env('GOOGLE_DRIVE_REFRESH_TOKEN'),
-                'expires_in' => 3600,
-                'created' => time()
-            ];
-            $client->setAccessToken($accessToken);
 
-            if ($client->isAccessTokenExpired()) {
-                $newToken = $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-                if (isset($newToken['access_token'])) {
-                    $client->setAccessToken($newToken);
-                }
-            }
-
-            $service = new \Google_Service_Drive($client);
-            
-            $fileMetadata = new \Google_Service_Drive_DriveFile([
-                'name' => $filename,
-                'parents' => [env('GOOGLE_DRIVE_FOLDER_ID')]
-            ]);
-
-            $content = file_get_contents($file->getRealPath());
-            
-            $driveFile = $service->files->create($fileMetadata, [
-                'data' => $content,
-                'mimeType' => $file->getMimeType(),
-                'uploadType' => 'multipart',
-                'fields' => 'id,webViewLink'
-            ]);
-
-            $service->permissions->create(
-                $driveFile->id,
-                new \Google_Service_Drive_Permission([
-                    'type' => 'anyone',
-                    'role' => 'reader'
-                ])
-            );
-
-            return [
-                'success' => true,
-                'file_id' => $driveFile->id,
-                'web_view_link' => $driveFile->webViewLink,
-                'direct_link' => "https://drive.google.com/uc?export=view&id={$driveFile->id}"
-            ];
-        } catch (\Exception $e) {
-            Log::error('Google Drive upload failed: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage()
-            ];
-        }
-    }
 
     public function getLogo()
     {
@@ -103,33 +41,39 @@ class SystemConfigController extends Controller
             $file = $request->file('logo');
             $filename = 'logo_' . time() . '.' . $file->getClientOriginalExtension();
 
-            $uploadResult = $this->uploadToGoogleDrive($file, $filename);
-
-            if (!$uploadResult['success']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to upload to Google Drive: ' . $uploadResult['error']
-                ], 500);
+            $driveService = resolve(\App\Services\GoogleDriveService::class);
+            $folderId = $driveService->getParentFolderId();
+            
+            $fileUrl = $driveService->uploadFile($file, $folderId, $filename, $file->getMimeType());
+            
+            // Extract file ID from URL: https://drive.google.com/file/d/ID/view
+            preg_match('/\/d\/(.+?)\/view/', $fileUrl, $matches);
+            $fileId = $matches[1] ?? '';
+            
+            if (!$fileId) {
+                throw new \Exception('Failed to extract file ID from Drive URL: ' . $fileUrl);
             }
+
+            $directLink = "https://drive.google.com/uc?export=view&id={$fileId}";
 
             $config = SystemConfig::updateOrCreate(
                 ['config_key' => 'image_logo'],
                 [
-                    'config_value' => $uploadResult['direct_link'],
+                    'config_value' => $directLink,
                     'updated_by' => $request->updated_by
                 ]
             );
 
             // Update form_ui table - only one entry should exist
             if (FormUI::exists()) {
-                FormUI::query()->update(['logo_url' => $uploadResult['direct_link']]);
+                FormUI::query()->update(['logo_url' => $directLink]);
             } else {
-                FormUI::create(['logo_url' => $uploadResult['direct_link']]);
+                FormUI::create(['logo_url' => $directLink]);
             }
 
             Log::info('Logo uploaded successfully', [
-                'file_id' => $uploadResult['file_id'],
-                'direct_link' => $uploadResult['direct_link'],
+                'file_id' => $fileId,
+                'direct_link' => $directLink,
                 'updated_by' => $request->updated_by
             ]);
 
@@ -137,8 +81,8 @@ class SystemConfigController extends Controller
                 'success' => true,
                 'message' => 'Logo uploaded successfully',
                 'data' => [
-                    'logo_url' => $uploadResult['direct_link'],
-                    'file_id' => $uploadResult['file_id']
+                    'logo_url' => $directLink,
+                    'file_id' => $fileId
                 ]
             ]);
         } catch (\Exception $e) {
