@@ -32,7 +32,9 @@ class EmailTemplate extends Model
         'Is_Active',
         'email_body',
         'Page_Margin',
-        'Image_Margin'
+        'Image_Margin',
+        'modified_by',
+        'modifiet_at'
     ];
 
     protected $casts = [

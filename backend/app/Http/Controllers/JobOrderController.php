@@ -28,6 +28,7 @@ use App\Services\GoogleDriveService;
 use App\Services\PppoeUsernameService;
 use App\Models\RadiusConfig;
 use App\Models\ActivityLog;
+use App\Events\JobOrderViewingUpdate;
 
 class JobOrderController extends Controller
 {
@@ -1871,4 +1872,31 @@ class JobOrderController extends Controller
         }
     }
 
+    public function broadcastViewing(Request $request)
+    {
+        try {
+            $jobOrderId = $request->input('job_order_id');
+            $action = $request->input('action', 'started_viewing');
+            $username = auth()->user()->username ?? 'Guest';
+
+            event(new JobOrderViewingUpdate($jobOrderId, $username, $action));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing update broadcasted'
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('[Presence] broadcastViewing error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing update',
+                'error' => $e->getMessage(),
+                'type' => get_class($e)
+            ], 500);
+        }
+    }
 }

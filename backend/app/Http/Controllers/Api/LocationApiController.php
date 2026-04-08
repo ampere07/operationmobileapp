@@ -18,6 +18,30 @@ use App\Models\JobOrder;
 class LocationApiController extends Controller
 {
     /**
+     * Get current user email
+     */
+    private function getCurrentUser(Request $request)
+    {
+        if ($request->has('user_email')) {
+            return $request->user_email;
+        }
+        if ($request->has('modified_by')) {
+            return $request->modified_by;
+        }
+        if ($request->has('modifiedBy')) {
+            return $request->modifiedBy;
+        }
+        if (auth()->check()) {
+            return auth()->user()->email;
+        }
+        throw new \Exception('Unauthenticated: User email is required for this operation.');
+    }
+
+    private function resolveUserEmail(Request $request)
+    {
+        return $this->getCurrentUser($request);
+    }
+    /**
      * Get all locations with hierarchical structure
      */
     public function getAllLocations()
@@ -45,13 +69,21 @@ class LocationApiController extends Controller
                                         return [
                                             'id' => $location->id,
                                             'name' => $location->location_name,
-                                            'barangay_id' => $location->barangay_id
+                                            'barangay_id' => $location->barangay_id,
+                                            'modified_by' => $location->modified_by ?? 'N/A',
+                                            'modified_at' => $location->modified_at
                                         ];
-                                    })
+                                    }),
+                                    'modified_by' => $barangay->modified_by ?? 'N/A',
+                                    'modified_at' => $barangay->modified_at
                                 ];
-                            })
+                            }),
+                            'modified_by' => $city->modified_by ?? 'N/A',
+                            'modified_at' => $city->modified_at
                         ];
-                    })
+                    }),
+                    'modified_by' => $region->modified_by ?? 'N/A',
+                    'modified_at' => $region->modified_at
                 ];
             });
             
@@ -81,7 +113,9 @@ class LocationApiController extends Controller
                 return [
                     'id' => $region->id,
                     'name' => $region->region,
-                    'region' => $region->region
+                    'region' => $region->region,
+                    'modified_by' => $region->modified_by,
+                    'modified_at' => $region->modified_at
                 ];
             });
             
@@ -113,7 +147,9 @@ class LocationApiController extends Controller
                     'id' => $city->id,
                     'name' => $city->city,
                     'city' => $city->city,
-                    'region_id' => $city->region_id
+                    'region_id' => $city->region_id,
+                    'modified_by' => $city->modified_by,
+                    'modified_at' => $city->modified_at
                 ];
             });
             
@@ -143,7 +179,9 @@ class LocationApiController extends Controller
                     'id' => $city->id,
                     'name' => $city->city,
                     'city' => $city->city,
-                    'region_id' => $city->region_id
+                    'region_id' => $city->region_id,
+                    'modified_by' => $city->modified_by,
+                    'modified_at' => $city->modified_at
                 ];
             });
             
@@ -175,7 +213,9 @@ class LocationApiController extends Controller
                     'id' => $barangay->id,
                     'name' => $barangay->barangay,
                     'barangay' => $barangay->barangay,
-                    'city_id' => $barangay->city_id
+                    'city_id' => $barangay->city_id,
+                    'modified_by' => $barangay->modified_by,
+                    'modified_at' => $barangay->modified_at
                 ];
             });
             
@@ -205,7 +245,9 @@ class LocationApiController extends Controller
                     'id' => $barangay->id,
                     'name' => $barangay->barangay,
                     'barangay' => $barangay->barangay,
-                    'city_id' => $barangay->city_id
+                    'city_id' => $barangay->city_id,
+                    'modified_by' => $barangay->modified_by,
+                    'modified_at' => $barangay->modified_at
                 ];
             });
             
@@ -238,7 +280,9 @@ class LocationApiController extends Controller
                     'name' => $location->location_name,
                     'location_name' => $location->location_name,
                     'barangay_id' => $location->barangay_id,
-                    'borough_id' => $location->barangay_id  // Frontend uses borough_id
+                    'borough_id' => $location->barangay_id,  // Frontend uses borough_id
+                    'modified_by' => $location->modified_by,
+                    'modified_at' => $location->modified_at
                 ];
             });
             
@@ -269,7 +313,9 @@ class LocationApiController extends Controller
                     'name' => $location->location_name,
                     'location_name' => $location->location_name,
                     'barangay_id' => $location->barangay_id,
-                    'borough_id' => $location->barangay_id  // Frontend uses borough_id
+                    'borough_id' => $location->barangay_id,  // Frontend uses borough_id
+                    'modified_by' => $location->modified_by,
+                    'modified_at' => $location->modified_at
                 ];
             });
             
@@ -314,7 +360,9 @@ class LocationApiController extends Controller
             }
             
             $region = Region::create([
-                'region' => $name
+                'region' => $name,
+                'modified_by' => $this->resolveUserEmail($request),
+                'modified_at' => now()
             ]);
             
             // Log Activity
@@ -378,7 +426,9 @@ class LocationApiController extends Controller
             
             $city = City::create([
                 'region_id' => $regionId,
-                'city' => $name
+                'city' => $name,
+                'modified_by' => $this->resolveUserEmail($request),
+                'modified_at' => now()
             ]);
             
             // Log Activity
@@ -442,7 +492,9 @@ class LocationApiController extends Controller
             
             $barangay = Barangay::create([
                 'city_id' => $cityId,
-                'barangay' => $name
+                'barangay' => $name,
+                'modified_by' => $this->resolveUserEmail($request),
+                'modified_at' => now()
             ]);
             
             // Log Activity
@@ -509,7 +561,9 @@ class LocationApiController extends Controller
             
             $location = LocationDetail::create([
                 'barangay_id' => $barangayId,
-                'location_name' => $name
+                'location_name' => $name,
+                'modified_by' => $this->resolveUserEmail($request),
+                'modified_at' => now()
             ]);
             
             // Log Activity
@@ -587,6 +641,8 @@ class LocationApiController extends Controller
                     }
                     
                     $location->region = $name;
+                    $location->modified_by = $this->resolveUserEmail($request);
+                    $location->modified_at = now();
                     $location->save();
                     break;
                     
@@ -611,6 +667,8 @@ class LocationApiController extends Controller
                     }
                     
                     $location->city = $name;
+                    $location->modified_by = $this->resolveUserEmail($request);
+                    $location->modified_at = now();
                     $location->save();
                     break;
                     
@@ -635,6 +693,8 @@ class LocationApiController extends Controller
                     }
                     
                     $location->barangay = $name;
+                    $location->modified_by = $this->resolveUserEmail($request);
+                    $location->modified_at = now();
                     $location->save();
                     break;
                     
@@ -659,6 +719,8 @@ class LocationApiController extends Controller
                     }
                     
                     $location->location_name = $name;
+                    $location->modified_by = $this->resolveUserEmail($request);
+                    $location->modified_at = now();
                     $location->save();
                     break;
             }

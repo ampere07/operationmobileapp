@@ -13,7 +13,9 @@ class SMSTemplate extends Model
         'template_type',
         'message_content',
         'variables',
-        'is_active'
+        'is_active',
+        'updated_by',
+        'created_by'
     ];
 
     protected $casts = [

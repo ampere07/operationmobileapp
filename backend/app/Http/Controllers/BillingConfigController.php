@@ -84,7 +84,8 @@ class BillingConfigController extends Controller
                 'overdue_day' => $request->input('overdue_day', 0),
                 'disconnection_notice' => $request->input('disconnection_notice', 0),
                 'pullout_day' => $request->input('pullout_day', 0),
-                'updated_by' => $userEmail
+                'updated_by' => $userEmail,
+                'created_by' => $userEmail
             ]);
 
             return response()->json([

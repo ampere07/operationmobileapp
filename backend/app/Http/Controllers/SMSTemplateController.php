@@ -57,7 +57,9 @@ class SMSTemplateController extends Controller
                 'template_type' => 'required|string|max:255',
                 'message_content' => 'required|string',
                 'variables' => 'nullable',
-                'is_active' => 'boolean'
+                'is_active' => 'boolean',
+                'created_by' => 'nullable|string|max:255',
+                'updated_by' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
@@ -101,7 +103,8 @@ class SMSTemplateController extends Controller
                 'template_type' => 'required|string|max:255',
                 'message_content' => 'required|string',
                 'variables' => 'nullable',
-                'is_active' => 'boolean'
+                'is_active' => 'boolean',
+                'updated_by' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {

@@ -14,15 +14,21 @@ use Illuminate\Support\Str;
 
 class InventoryLogApiController extends Controller
 {
-    /**
-     * Get current user email
-     */
-    private function getCurrentUser()
+    private function getCurrentUser(Request $request)
     {
+        if ($request->has('user_email')) {
+            return $request->user_email;
+        }
+        if ($request->has('modified_by')) {
+            return $request->modified_by;
+        }
+        if ($request->has('modifiedBy')) {
+            return $request->modifiedBy;
+        }
         if (auth()->check()) {
             return auth()->user()->email;
         }
-        return 'ravenampere0123@gmail.com';
+        throw new \Exception('Unauthenticated: User email is required for this operation.');
     }
 
     /**
@@ -91,9 +97,9 @@ class InventoryLogApiController extends Controller
             $log->remarks = $request->remarks;
             $log->sn = $request->sn;
             $log->account_no = $request->account_no;
-            $log->modified_by = $this->getCurrentUser();
+            $log->modified_by = $this->getCurrentUser($request);
             $log->modified_date = now();
-            $log->user_email = $this->getCurrentUser();
+            $log->user_email = $this->getCurrentUser($request);
             $log->save();
 
             // Update item total quantity

@@ -16,3 +16,87 @@ use Illuminate\Support\Facades\Broadcast;
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
+
+Broadcast::channel('job-orders-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('applications-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('service-orders-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('staggered-installations-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('transaction-reverts-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('transactions-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});
+
+Broadcast::channel('customers-presence', function ($user) {
+    if (auth()->check()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->full_name,
+            'email' => $user->email_address,
+            'username' => $user->username,
+        ];
+    }
+    return false;
+});

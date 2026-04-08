@@ -62,7 +62,7 @@ class SmsConfigController extends Controller
                 ], 422);
             }
 
-            $updatedBy = $request->input('updated_by', 'unknown@user.com');
+            $updatedBy = $request->input('updated_by');
 
             Log::info('Creating SMS configuration', [
                 'data' => $request->except(['password', 'updated_by']),
@@ -74,7 +74,8 @@ class SmsConfigController extends Controller
                 'email' => $request->input('email'),
                 'password' => $request->input('password'),
                 'sender' => $request->input('sender'),
-                'updated_by' => $updatedBy
+                'updated_by' => $updatedBy,
+                'created_by' => $updatedBy
             ]);
 
             return response()->json([
@@ -125,7 +126,7 @@ class SmsConfigController extends Controller
                 ], 422);
             }
 
-            $updatedBy = $request->input('updated_by', 'unknown@user.com');
+            $updatedBy = $request->input('updated_by');
 
             Log::info('Updating SMS configuration', [
                 'data' => $request->except(['password', 'updated_by']),

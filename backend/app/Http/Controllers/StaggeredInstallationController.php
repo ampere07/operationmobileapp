@@ -6,6 +6,7 @@ use App\Models\StaggeredInstallation;
 use App\Models\BillingAccount;
 use App\Models\Invoice;
 use App\Models\ActivityLog;
+use App\Events\StaggeredInstallationViewingUpdate;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,42 @@ use Illuminate\Support\Facades\Auth;
 
 class StaggeredInstallationController extends Controller
 {
+    public function broadcastViewing(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'staggered_id' => 'required|string',
+                'action' => 'required|string|in:started_viewing,stopped_viewing'
+            ]);
+
+            $username = Auth::user()->username ?? Auth::user()->name ?? 'Unknown User';
+            
+            \Log::info('[Presence] Staggered broadcast:', [
+                'staggered_id' => $validated['staggered_id'],
+                'username' => $username,
+                'action' => $validated['action']
+            ]);
+
+            event(new StaggeredInstallationViewingUpdate(
+                $validated['staggered_id'],
+                $username,
+                $validated['action']
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing status broadcasted successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error broadcasting viewing status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function index(): JsonResponse
     {
         try {
@@ -47,6 +84,7 @@ class StaggeredInstallationController extends Controller
                 'monthly_payment' => 'required|numeric|min:0',
                 'modified_by' => 'required|string|email',
                 'modified_date' => 'required|string',
+                'created_at' => 'required|string',
                 'user_email' => 'required|string|email',
                 'remarks' => 'nullable|string',
             ]);

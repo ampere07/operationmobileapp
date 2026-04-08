@@ -11,9 +11,46 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Events\TransactionUpdated;
+use App\Events\TransactionRevertViewingUpdate;
 
 class TransactionRevertController extends Controller
 {
+    public function broadcastViewing(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'revert_id' => 'required|string',
+                'action' => 'required|string|in:started_viewing,stopped_viewing'
+            ]);
+
+            $username = Auth::user()->username ?? Auth::user()->name ?? 'Unknown User';
+            
+            \Log::info('[Presence] Transaction Revert broadcast:', [
+                'revert_id' => $validated['revert_id'],
+                'username' => $username,
+                'action' => $validated['action']
+            ]);
+
+            event(new TransactionRevertViewingUpdate(
+                $validated['revert_id'],
+                $username,
+                $validated['action']
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing status broadcasted successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error broadcasting viewing status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function index(Request $request): JsonResponse
     {
         try {

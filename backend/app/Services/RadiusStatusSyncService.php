@@ -44,6 +44,9 @@ class RadiusStatusSyncService
 
             $this->processAccounts($radiusUsers, $radiusSessions, $stats);
 
+            // Update the radius config timestamp to reflect last sync
+            $radiusConfig->touch();
+
             DB::commit();
 
             return $stats;

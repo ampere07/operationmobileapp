@@ -24,39 +24,39 @@ class PortApiController extends Controller
             $excludeUsed = $request->get('exclude_used', false);
             $currentJobOrderId = $request->get('current_job_order_id', null);
             $lcpnap = $request->get('lcpnap', '');
-            
+
             $query = Port::query();
-            
+
             if (!empty($search)) {
                 $query->where('PORT_ID', 'like', '%' . $search . '%');
             }
-            
+
             if ($excludeUsed && !empty($lcpnap)) {
                 $usedPortsQuery = \DB::table('job_orders')
                     ->whereNotNull('port')
                     ->whereNotNull('lcpnap')
                     ->where('port', '!=', '')
                     ->where('lcpnap', '=', $lcpnap);
-                
+
                 if ($currentJobOrderId) {
                     $usedPortsQuery->where('id', '!=', $currentJobOrderId);
                 }
-                
+
                 $usedPorts = $usedPortsQuery->pluck('port')->toArray();
-                
+
                 if (!empty($usedPorts)) {
                     $query->whereNotIn('Label', $usedPorts);
                 }
             }
-            
+
             $totalItems = $query->count();
             $totalPages = ceil($totalItems / $limit);
-            
+
             $portItems = $query->orderBy('Label')
-                             ->skip(($page - 1) * $limit)
-                             ->take($limit)
-                             ->get();
-            
+                ->skip(($page - 1) * $limit)
+                ->take($limit)
+                ->get();
+
             return response()->json([
                 'success' => true,
                 'data' => $portItems,
@@ -74,10 +74,10 @@ class PortApiController extends Controller
                     'current_job_order_id' => $currentJobOrderId
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Port API Error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching Port items: ' . $e->getMessage()
@@ -103,7 +103,7 @@ class PortApiController extends Controller
 
             $label = $request->input('label');
             $portId = $request->input('port_id');
-            
+
             $existing = Port::where('PORT_ID', $portId)->first();
             if ($existing) {
                 return response()->json([
@@ -111,12 +111,12 @@ class PortApiController extends Controller
                     'message' => 'A Port with this PORT_ID already exists'
                 ], 422);
             }
-            
+
             $port = new Port();
             $port->PORT_ID = $portId;
             $port->Label = $label;
             $port->save();
-            
+
             // Create Activity Log
             ActivityLog::log(
                 'Port Created',
@@ -128,16 +128,16 @@ class PortApiController extends Controller
                     'additional_data' => $port->toArray()
                 ]
             );
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Port added successfully',
                 'data' => $port
             ], 201);
-            
+
         } catch (\Exception $e) {
             \Log::error('Port Store Error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error adding Port: ' . $e->getMessage()
@@ -149,14 +149,14 @@ class PortApiController extends Controller
     {
         try {
             $port = Port::find($id);
-            
+
             if (!$port) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Port not found'
                 ], 404);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $port
@@ -192,10 +192,10 @@ class PortApiController extends Controller
                     'message' => 'Port not found'
                 ], 404);
             }
-            
+
             $label = $request->input('label');
             $portId = $request->input('port_id');
-            
+
             $duplicate = Port::where('PORT_ID', $portId)->where('id', '!=', $id)->first();
             if ($duplicate) {
                 return response()->json([
@@ -203,7 +203,7 @@ class PortApiController extends Controller
                     'message' => 'A Port with this PORT_ID already exists'
                 ], 422);
             }
-            
+
             $port->PORT_ID = $portId;
             $port->Label = $label;
             $port->save();
@@ -219,13 +219,13 @@ class PortApiController extends Controller
                     'additional_data' => $port->toArray()
                 ]
             );
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Port updated successfully',
                 'data' => $port
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -244,7 +244,7 @@ class PortApiController extends Controller
                     'message' => 'Port not found'
                 ], 404);
             }
-            
+
             $portData = $port->toArray();
             $port->delete();
 
@@ -259,12 +259,12 @@ class PortApiController extends Controller
                     'additional_data' => $portData
                 ]
             );
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Port permanently deleted from database'
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -277,7 +277,7 @@ class PortApiController extends Controller
     {
         try {
             $totalPort = Port::count();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -296,44 +296,93 @@ class PortApiController extends Controller
         try {
             $lcpnap = $request->get('lcpnap');
             $currentJobOrderId = $request->get('current_job_order_id');
+            $currentAccountNo = $request->get('current_account_no');
 
             if (empty($lcpnap)) {
                 return response()->json([
                     'success' => true,
-                    'data' => []
+                    'data' => [],
+                    'port_accounts' => [],
+                    'total_ports' => 32
                 ]);
             }
 
-            $query = \DB::table('job_orders')
+            // Function to normalize port labels (e.g., "P 01" or "1" -> "P01")
+            $normalizePort = function($port) {
+                if (empty($port)) return null;
+                $num = preg_replace('/[^\d]/', '', $port);
+                if ($num === '') return null;
+                return 'P' . str_pad($num, 2, '0', STR_PAD_LEFT);
+            };
+
+            // Query job_orders - join directly with billing_accounts to get account_no
+            $joQuery = \DB::table('job_orders')
+                ->leftJoin('billing_accounts', 'job_orders.account_id', '=', 'billing_accounts.id')
+                ->where('job_orders.lcpnap', $lcpnap)
+                ->whereNotNull('job_orders.port')
+                ->where('job_orders.port', '!=', '');
+
+            if ($currentJobOrderId) {
+                $joQuery->where('job_orders.id', '!=', $currentJobOrderId);
+            }
+            if ($currentAccountNo) {
+                $joQuery->where('billing_accounts.account_no', '!=', $currentAccountNo);
+            }
+
+            $joResults = $joQuery->select('job_orders.port', 'billing_accounts.account_no')->get();
+
+            // Query technical_details - has account_no directly
+            $tdQuery = \DB::table('technical_details')
                 ->where('lcpnap', $lcpnap)
                 ->whereNotNull('port')
                 ->where('port', '!=', '');
 
-            if ($currentJobOrderId) {
-                $query->where('id', '!=', $currentJobOrderId);
+            if ($currentAccountNo) {
+                $tdQuery->where('account_no', '!=', $currentAccountNo);
+            } elseif ($currentJobOrderId) {
+                $tdQuery->where('account_id', '!=', $currentJobOrderId);
             }
 
-            $usedPortsJobOrders = $query->pluck('port')->toArray();
+            $tdResults = $tdQuery->select('port', 'account_no')->get();
 
-            $usedPortsTechnicalDetails = \DB::table('technical_details')
-                ->where('lcpnap', $lcpnap)
-                ->whereNotNull('port')
-                ->where('port', '!=', '')
-                ->pluck('port')
-                ->toArray();
+            // Build port => account_no mapping (technical_details takes precedence)
+            $portAccountMap = [];
+            foreach ($joResults as $row) {
+                $p = $normalizePort($row->port);
+                if ($p) {
+                    $portAccountMap[$p] = $row->account_no ?? '';
+                }
+            }
+            foreach ($tdResults as $row) {
+                $p = $normalizePort($row->port);
+                if ($p) {
+                    $portAccountMap[$p] = $row->account_no ?? '';
+                }
+            }
 
-            $usedPorts = array_unique(array_merge($usedPortsJobOrders, $usedPortsTechnicalDetails));
-            $usedPorts = array_values($usedPorts);
+            $usedPorts = array_values(array_unique(array_keys($portAccountMap)));
 
+            // Robust LCPNAP lookup - try exact match then flexible match
             $lcpnapInfo = \DB::table('lcpnap')->where('lcpnap_name', $lcpnap)->first();
-            $totalPorts = $lcpnapInfo ? (int)$lcpnapInfo->port_total : 32; // Default to 32 if not found
+            if (!$lcpnapInfo) {
+                // Try normalizing the lookup name if exact match fails
+                $searchName = str_replace(['-', '_', '.'], ' ', $lcpnap);
+                $lcpnapInfo = \DB::table('lcpnap')
+                    ->where('lcpnap_name', 'like', '%' . $searchName . '%')
+                    ->first();
+            }
+
+            $totalPorts = $lcpnapInfo ? (int) $lcpnapInfo->port_total : 32;
 
             return response()->json([
                 'success' => true,
                 'data' => $usedPorts,
+                'port_accounts' => $portAccountMap,
                 'total_ports' => $totalPorts
             ]);
         } catch (\Exception $e) {
+            \Log::error('Error fetching used ports: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching used ports: ' . $e->getMessage()

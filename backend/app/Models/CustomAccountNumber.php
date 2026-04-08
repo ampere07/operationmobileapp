@@ -20,6 +20,7 @@ class CustomAccountNumber extends Model
     protected $fillable = [
         'starting_number',
         'updated_by',
+        'created_by',
         'created_at',
         'updated_at'
     ];

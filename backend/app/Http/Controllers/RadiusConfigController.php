@@ -15,9 +15,27 @@ class RadiusConfigController extends Controller
         try {
             $configs = RadiusConfig::all();
             
+            // Add status check for each config
+            $configsWithStatus = $configs->map(function($config) {
+                $isOnline = false;
+                try {
+                    $connection = @fsockopen($config->ip, $config->port, $errno, $errstr, 2);
+                    if ($connection) {
+                        $isOnline = true;
+                        fclose($connection);
+                    }
+                } catch (\Exception $e) {
+                    $isOnline = false;
+                }
+                
+                $configArray = $config->toArray();
+                $configArray['is_online'] = $isOnline;
+                return $configArray;
+            });
+            
             return response()->json([
                 'success' => true,
-                'data' => $configs,
+                'data' => $configsWithStatus,
                 'count' => $configs->count(),
                 'message' => $configs->isEmpty() ? 'No RADIUS configurations found' : null
             ]);

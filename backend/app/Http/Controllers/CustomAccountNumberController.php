@@ -103,6 +103,7 @@ class CustomAccountNumberController extends Controller
             DB::table('custom_account_number')->insert([
                 'starting_number' => $startingNumberValue,
                 'updated_by' => $userEmail,
+                'created_by' => $userEmail,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);

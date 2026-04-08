@@ -15,7 +15,9 @@ class Barangay extends Model
     
     protected $fillable = [
         'barangay',
-        'city_id'
+        'city_id',
+        'modified_by',
+        'modified_at'
     ];
 
     public function city()

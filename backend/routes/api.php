@@ -106,7 +106,7 @@ Route::options('{any}', function () {
     return response('', 200)
     ->header('Access-Control-Allow-Origin', '*')
     ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    ->header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN')
+    ->header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With, X-XSRF-TOKEN, X-App-ID')
     ->header('Access-Control-Allow-Credentials', 'true')
     ->header('Access-Control-Max-Age', '86400');
 })->where('any', '.*');
@@ -1353,18 +1353,20 @@ Route::prefix('logs')->middleware('ensure.database.tables')->group(function () {
     Route::delete('/clear', [LogsController::class , 'clear']);
 });
 
-// Applications Management Routes - Temporarily removed middleware
-Route::prefix('applications')->group(function () {
+// Applications Management Routes
+Route::prefix('applications')->middleware('auth:sanctum')->group(function () {
     Route::get('/', [ApplicationController::class , 'index']);
     Route::post('/', [ApplicationController::class , 'store']);
+    Route::post('/broadcast-viewing', [ApplicationController::class, 'broadcastViewing']);
     Route::get('/{id}', [ApplicationController::class , 'show']);
     Route::put('/{id}', [ApplicationController::class , 'update']);
     Route::delete('/{id}', [ApplicationController::class , 'destroy']);
 });
 
 // Job Orders Management Routes
-Route::prefix('job-orders')->middleware('ensure.database.tables')->group(function () {
+Route::prefix('job-orders')->middleware(['auth:sanctum', 'ensure.database.tables'])->group(function () {
     Route::get('/validate-sn', [JobOrderController::class , 'validateModemRouterSN']);
+    Route::post('/broadcast-viewing', [JobOrderController::class, 'broadcastViewing'])->withoutMiddleware([\App\Http\Middleware\EnsureDatabaseTables::class]);
     Route::get('/', [JobOrderController::class , 'index']);
     Route::post('/', [JobOrderController::class , 'store']);
     Route::get('/{id}', [JobOrderController::class , 'show']);
@@ -2056,6 +2058,7 @@ Route::get('/debug/tables', function () {
 Route::prefix('service-orders')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'index']);
     Route::post('/', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'store']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'broadcastViewing']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'update']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'destroy']);
@@ -2083,6 +2086,7 @@ Route::prefix('service_order_items')->group(function () {
 Route::prefix('service_orders')->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'index']);
     Route::post('/', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'store']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'broadcastViewing']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'update']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'destroy']);
@@ -2100,6 +2104,7 @@ Route::put('/customer-detail/{accountNo}/technical', [\App\Http\Controllers\Cust
 // Customer Management Routes
 Route::prefix('customers')->group(function () {
     Route::get('/', [\App\Http\Controllers\CustomerController::class , 'index']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\CustomerController::class , 'broadcastViewing']);
     Route::post('/', [\App\Http\Controllers\CustomerController::class , 'store']);
     Route::get('/{id}', [\App\Http\Controllers\CustomerController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\CustomerController::class , 'update']);
@@ -2484,6 +2489,7 @@ Route::prefix('settings-color-palette')->group(function () {
 Route::prefix('transactions')->group(function () {
     Route::get('/', [\App\Http\Controllers\TransactionController::class , 'index']);
     Route::post('/', [\App\Http\Controllers\TransactionController::class , 'store']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\TransactionController::class , 'broadcastViewing']);
     Route::post('/upload-images', [\App\Http\Controllers\TransactionController::class , 'uploadImages']);
     Route::post('/batch-approve', [\App\Http\Controllers\TransactionController::class , 'batchApprove']);
     Route::get('/{id}', [\App\Http\Controllers\TransactionController::class , 'show']);
@@ -2499,6 +2505,7 @@ Route::prefix('transaction-reverts')->group(function () {
     Route::post('/', [\App\Http\Controllers\TransactionRevertController::class , 'store']);
     Route::get('/{id}', [\App\Http\Controllers\TransactionRevertController::class , 'show']);
     Route::put('/{id}/status', [\App\Http\Controllers\TransactionRevertController::class , 'updateStatus']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\TransactionRevertController::class , 'broadcastViewing']);
 });
 
 // Rebates endpoint for frontend
@@ -2987,6 +2994,7 @@ Route::prefix('staggered-installations')->group(function () {
     Route::put('/{id}', [\App\Http\Controllers\StaggeredInstallationController::class , 'update']);
     Route::post('/{id}/approve', [\App\Http\Controllers\StaggeredInstallationController::class , 'approve']);
     Route::delete('/{id}', [\App\Http\Controllers\StaggeredInstallationController::class , 'destroy']);
+    Route::post('/broadcast-viewing', [\App\Http\Controllers\StaggeredInstallationController::class , 'broadcastViewing']);
 });
 
 // Concern Management Routes

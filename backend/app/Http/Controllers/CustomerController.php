@@ -9,9 +9,47 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use App\Events\CustomerViewingUpdate;
 
 class CustomerController extends Controller
 {
+    public function broadcastViewing(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'customer_id' => 'required|string',
+                'action' => 'required|string|in:started_viewing,stopped_viewing'
+            ]);
+
+            $username = Auth::user()->username ?? Auth::user()->name ?? 'Unknown User';
+            
+            \Log::info('[Presence] Customer broadcast:', [
+                'customer_id' => $validated['customer_id'],
+                'username' => $username,
+                'action' => $validated['action']
+            ]);
+
+            event(new CustomerViewingUpdate(
+                $validated['customer_id'],
+                $username,
+                $validated['action']
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing status broadcasted successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error broadcasting viewing status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function index(): JsonResponse
     {
         try {

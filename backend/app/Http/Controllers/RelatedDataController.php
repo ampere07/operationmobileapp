@@ -1148,6 +1148,14 @@ class RelatedDataController extends Controller
                 ->sort()
                 ->values();
 
+            $concerns = DB::table('service_orders')
+                ->whereNotNull('concern')
+                ->where('concern', '!=', '')
+                ->distinct()
+                ->pluck('concern')
+                ->sort()
+                ->values();
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -1160,7 +1168,8 @@ class RelatedDataController extends Controller
                     'new_vlans' => $newVlans,
                     'new_lcpnaps' => $newLcpnaps,
                     'router_models' => $routerModels,
-                    'usage_types' => $usageTypes
+                    'usage_types' => $usageTypes,
+                    'concerns' => $concerns
                 ]
             ]);
         } catch (\Exception $e) {

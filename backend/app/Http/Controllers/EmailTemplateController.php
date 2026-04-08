@@ -83,7 +83,9 @@ class EmailTemplateController extends Controller
                 'Is_Active' => $request->input('Is_Active', 1),
                 'email_body' => $request->input('email_body'),
                 'Page_Margin' => $request->input('Page_Margin', '1in'),
-                'Image_Margin' => $request->input('Image_Margin', '0px')
+                'Image_Margin' => $request->input('Image_Margin', '0px'),
+                'modified_by' => $request->input('modified_by'),
+                'modifiet_at' => now()
             ]);
 
             return response()->json([
@@ -216,7 +218,11 @@ class EmailTemplateController extends Controller
             if ($request->has('Image_Margin')) {
                 $updateData['Image_Margin'] = $request->input('Image_Margin');
             }
-
+            if ($request->has('modified_by')) {
+                $updateData['modified_by'] = $request->input('modified_by');
+            }
+            $updateData['modifiet_at'] = now();
+            
             Log::info('Email template update data', [
                 'template_code' => $templateCode,
                 'fields_being_updated' => array_keys($updateData),
@@ -303,6 +309,8 @@ class EmailTemplateController extends Controller
             }
 
             $template->Is_Active = !$template->Is_Active;
+            $template->modified_by = $request->input('modified_by');
+            $template->modifiet_at = now();
             $template->save();
 
             Log::info('Toggled email template active status', [

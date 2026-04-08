@@ -14,7 +14,9 @@ class Region extends Model
     public $timestamps = false;
     
     protected $fillable = [
-        'region'
+        'region',
+        'modified_by',
+        'modified_at'
     ];
 
     public function cities()

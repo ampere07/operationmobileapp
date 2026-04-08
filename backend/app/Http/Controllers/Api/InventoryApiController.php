@@ -17,23 +17,50 @@ class InventoryApiController extends Controller
     /**
      * Get current user email
      */
-    private function getCurrentUser()
+    private function getCurrentUser(Request $request)
     {
+        if ($request->has('user_email')) {
+            return $request->user_email;
+        }
+        if ($request->has('modified_by')) {
+            return $request->modified_by;
+        }
+        if ($request->has('modifiedBy')) {
+            return $request->modifiedBy;
+        }
         if (auth()->check()) {
             return auth()->user()->email;
         }
-        return 'ravenampere0123@gmail.com';
+        throw new \Exception('Unauthenticated: User email is required for this operation.');
+    }
+
+    private function resolveUserId(Request $request)
+    {
+        $email = $request->modified_by ?? $request->modifiedBy ?? $request->user_email;
+        if (!$email && auth()->check()) {
+            $email = auth()->user()->email;
+        }
+
+        if ($email) {
+            $user = \App\Models\User::where('email', $email)->first();
+            if ($user) return $user->id;
+            throw new \Exception("User not found with email: {$email}");
+        }
+        
+        if (auth()->check()) return auth()->id();
+        
+        throw new \Exception('Unauthenticated: User identification is required for this operation.');
     }
 
     /**
      * Get all items from inventory_items table
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
             $items = Inventory::with('category')->orderBy('item_name')->get();
             
-            $formattedItems = $items->map(function ($item) {
+            $formattedItems = $items->map(function ($item) use ($request) {
                 return [
                     'item_name' => $item->item_name,
                     'item_description' => $item->item_description,
@@ -43,10 +70,9 @@ class InventoryApiController extends Controller
                     'category' => $item->category ? $item->category->category_name : null,
                     'category_id' => $item->category_id,
                     'item_id' => $item->id,
-                    'modified_by' => $this->getCurrentUser(),
+                    'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
-                    'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser(),
+                    'user_email' => $this->getCurrentUser($request),
                     'total_quantity' => $item->total_quantity
                 ];
             });
@@ -110,8 +136,9 @@ class InventoryApiController extends Controller
             $item->supplier_id = null;
             $item->quantity_alert = $request->quantity_alert ?? 0;
             $item->image_url = $request->image ?? '';
-            $item->created_by_user_id = auth()->id();
-            $item->updated_by_user_id = auth()->id();
+            $userId = $this->resolveUserId($request);
+            $item->created_by_user_id = $userId;
+            $item->updated_by_user_id = $userId;
             $item->save();
 
             // Create Activity Log
@@ -134,18 +161,13 @@ class InventoryApiController extends Controller
                 'success' => true,
                 'message' => 'Inventory item added successfully',
                 'data' => [
-                    'item_name' => $item->item_name,
-                    'item_description' => $item->item_description,
-                    'supplier' => $item->supplier_id,
-                    'quantity_alert' => $item->quantity_alert,
                     'image' => $item->image_url,
                     'category' => $item->category ? $item->category->category_name : null,
                     'category_id' => $item->category_id,
                     'item_id' => $item->id,
-                    'modified_by' => $this->getCurrentUser(),
+                    'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
-                    'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser(),
+                    'user_email' => $this->getCurrentUser($request),
                     'total_quantity' => $item->total_quantity
                 ]
             ], 201);
@@ -163,7 +185,7 @@ class InventoryApiController extends Controller
     /**
      * Get a specific item from inventory_items table
      */
-    public function show($itemName)
+    public function show(Request $request, $itemName)
     {
         try {
             $decodedItemName = urldecode($itemName);
@@ -188,10 +210,9 @@ class InventoryApiController extends Controller
                     'category' => $item->category ? $item->category->category_name : null,
                     'category_id' => $item->category_id,
                     'item_id' => $item->id,
-                    'modified_by' => $this->getCurrentUser(),
+                    'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
-                    'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser(),
+                    'user_email' => $this->getCurrentUser($request),
                     'total_quantity' => $item->total_quantity
                 ]
             ]);
@@ -259,7 +280,7 @@ class InventoryApiController extends Controller
             $item->category_id = $categoryId;
             $item->quantity_alert = $request->quantity_alert ?? 0;
             $item->image_url = $request->image ?? '';
-            $item->updated_by_user_id = auth()->id();
+            $item->updated_by_user_id = $this->resolveUserId($request);
             $item->save();
 
             // Create Activity Log
@@ -290,10 +311,9 @@ class InventoryApiController extends Controller
                     'category' => $item->category ? $item->category->category_name : null,
                     'category_id' => $item->category_id,
                     'item_id' => $item->id,
-                    'modified_by' => $this->getCurrentUser(),
+                    'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
-                    'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser(),
+                    'user_email' => $this->getCurrentUser($request),
                     'total_quantity' => $item->total_quantity
                 ]
             ]);

@@ -42,7 +42,9 @@ class ConcernController extends Controller
 
         try {
             $concern = Concern::create([
-                'concern_name' => $request->concern_name
+                'concern_name' => $request->concern_name,
+                'modified_by' => $request->modified_by,
+                'modified_at' => now(),
             ]);
 
             // Log Activity
@@ -105,7 +107,9 @@ class ConcernController extends Controller
         try {
             $concern = Concern::findOrFail($id);
             $concern->update([
-                'concern_name' => $request->concern_name ?? $concern->concern_name
+                'concern_name' => $request->concern_name ?? $concern->concern_name,
+                'modified_by' => $request->modified_by,
+                'modified_at' => now(),
             ]);
 
             // Log Activity

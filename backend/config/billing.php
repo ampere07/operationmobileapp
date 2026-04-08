@@ -53,13 +53,13 @@ return [
 
     'templates' => [
         'soa_pdf' => 'SOA_DESIGN',
-        'soa_email' => 'SOA_DESIGN_EMAIL',
+        'soa_email' => 'SOA_TEMPLATE',
         'invoice_pdf' => 'INVOICE_DESIGN',
-        'invoice_email' => 'INVOICE_DESIGN_EMAIL',
+        'invoice_email' => 'SOA_TEMPLATE',
         'overdue_pdf' => 'OVERDUE_DESIGN',
-        'overdue_email' => 'OVERDUE_DESIGN_EMAIL',
+        'overdue_email' => 'OVERDUE_DESIGN',
         'dc_notice_pdf' => 'DCNOTICE_DESIGN',
-        'dc_notice_email' => 'DCNOTICE_DESIGN_EMAIL',
+        'dc_notice_email' => 'DCNOTICE_DESIGN',
     ],
 
     /*

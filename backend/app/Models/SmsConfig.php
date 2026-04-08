@@ -18,7 +18,8 @@ class SmsConfig extends Model
         'email',
         'password',
         'sender',
-        'updated_by'
+        'updated_by',
+        'created_by'
     ];
 
     protected $casts = [

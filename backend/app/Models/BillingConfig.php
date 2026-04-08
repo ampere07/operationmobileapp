@@ -22,7 +22,8 @@ class BillingConfig extends Model
         'disconnection_fee',
         'pullout_offset',
         'pullout_day',
-        'updated_by'
+        'updated_by',
+        'created_by'
     ];
 
     protected $casts = [

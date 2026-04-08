@@ -1481,4 +1481,32 @@ class ServiceOrderApiController extends Controller
             return 'exception';
         }
     }
+
+    public function broadcastViewing(Request $request)
+    {
+        try {
+            $serviceOrderId = $request->input('service_order_id');
+            $action = $request->input('action', 'started_viewing');
+            $username = auth()->user()->username ?? 'Guest';
+
+            event(new \App\Events\ServiceOrderViewingUpdate($serviceOrderId, $username, $action));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing update broadcasted'
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('[Presence] service order broadcastViewing error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing update',
+                'error' => $e->getMessage(),
+                'type' => get_class($e)
+            ], 500);
+        }
+    }
 }

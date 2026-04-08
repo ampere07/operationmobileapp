@@ -10,9 +10,46 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Services\ManualRadiusOperationsService;
 use App\Events\TransactionUpdated;
+use App\Events\TransactionViewingUpdate;
 
 class TransactionController extends Controller
 {
+    public function broadcastViewing(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'transaction_id' => 'required|string',
+                'action' => 'required|string|in:started_viewing,stopped_viewing'
+            ]);
+
+            $username = Auth::user()->username ?? Auth::user()->name ?? 'Unknown User';
+            
+            \Log::info('[Presence] Transaction broadcast:', [
+                'transaction_id' => $validated['transaction_id'],
+                'username' => $username,
+                'action' => $validated['action']
+            ]);
+
+            event(new TransactionViewingUpdate(
+                $validated['transaction_id'],
+                $username,
+                $validated['action']
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing status broadcasted successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error broadcasting viewing status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function index(Request $request): JsonResponse
     {
         try {

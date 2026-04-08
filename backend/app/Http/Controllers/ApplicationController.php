@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Events\ApplicationViewingUpdate;
 
 class ApplicationController extends Controller
 {
@@ -479,6 +480,27 @@ class ApplicationController extends Controller
                 'message' => 'Failed to delete application',
                 'error' => $e->getMessage(),
                 'success' => false
+            ], 500);
+        }
+    }
+    public function broadcastViewing(Request $request)
+    {
+        try {
+            $applicationId = $request->input('application_id');
+            $action = $request->input('action', 'started_viewing');
+            $username = auth()->user()->username ?? 'Guest';
+
+            event(new ApplicationViewingUpdate($applicationId, $username, $action));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Viewing update broadcasted'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('broadcastViewing error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to broadcast viewing update'
             ], 500);
         }
     }
