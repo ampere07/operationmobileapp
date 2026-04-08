@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -94,6 +95,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           role_id: response.data.user.role_id,
           organization: response.data.user.organization
         };
+        if (response.data.token) {
+          await AsyncStorage.setItem('authToken', response.data.token);
+        }
         onLogin(userData);
       } else {
         setError('Login failed. Please try again.');

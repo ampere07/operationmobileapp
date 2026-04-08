@@ -289,7 +289,7 @@ const ServiceOrderPage: React.FC = () => {
           const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
           const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
 
-          if (visitStatus === 'done' || visitStatus === 'completed' || supportStatus === 'resolved' || supportStatus === 'completed' || supportStatus === 'done') {
+          if (visitStatus === 'done' || visitStatus === 'completed' || visitStatus === 'failed' || supportStatus === 'resolved' || supportStatus === 'completed' || supportStatus === 'done') {
             const completionTime = serviceOrder.rawUpdatedAt || serviceOrder.end_time;
             if (completionTime) {
               const completionDate = new Date(completionTime);

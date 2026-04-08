@@ -407,7 +407,7 @@ const JobOrderPage: React.FC = () => {
       // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
       if (userRoleId === 2) {
         const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase();
-        if (onsiteStatus === 'done' || onsiteStatus === 'completed') {
+        if (onsiteStatus === 'done' || onsiteStatus === 'completed' || onsiteStatus === 'failed') {
           // Use updated_at or EndTimeStamp to determine when it was completed
           const completionTime = jobOrder.Updated_At || jobOrder.updated_at || jobOrder.EndTimeStamp || jobOrder.end_timestamp;
           if (completionTime) {

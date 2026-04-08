@@ -1484,6 +1484,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       setShowLoadingModal(false);
       setLoadingPercentage(0);
 
+      // Detect SN-related validation errors and highlight the modemSN field
+      const lowerError = errorMessage.toLowerCase();
+      if (
+        lowerError.includes('smart olt') ||
+        lowerError.includes('sn duplicate') ||
+        lowerError.includes('sn not existing') ||
+        lowerError.includes('duplicate detected')
+      ) {
+        setErrors(prev => ({ ...prev, modemSN: errorMessage }));
+      }
+
       // Special handling for RADIUS error to match user requirements exactly
       const displayMessage = errorMessage === 'radius api error occured contact support' 
         ? errorMessage 

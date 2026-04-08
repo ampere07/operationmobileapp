@@ -104,6 +104,21 @@ apiClient.interceptors.request.use(
       config.headers.Cookie = cookieStore;
     }
 
+    // Set Origin to ensure Sanctum triggers stateful middleware if needed
+    if (!config.headers.Origin && !config.headers.origin) {
+      config.headers.Origin = 'https://backend.atssfiber.ph';
+    }
+
+    // Manually attach Bearer token
+    try {
+      const authToken = await AsyncStorage.getItem('authToken');
+      if (authToken) {
+        config.headers.Authorization = `Bearer ${authToken}`;
+      }
+    } catch (e) {
+      console.error('Failed to get auth token', e);
+    }
+
     return config;
   },
   (error) => {

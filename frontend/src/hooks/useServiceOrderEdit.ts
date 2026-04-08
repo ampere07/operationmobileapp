@@ -518,7 +518,20 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       if (progressInterval) clearInterval(progressInterval);
       setLoading(false);
       setShowLoadingModal(false);
-      Alert.alert('Error', e.message);
+
+      // Detect SN-related validation errors and highlight the newRouterModemSN field
+      const errorMessage = e.response?.data?.message || e.message || 'Unknown error';
+      const lowerError = errorMessage.toLowerCase();
+      if (
+        lowerError.includes('smart olt') ||
+        lowerError.includes('sn duplicate') ||
+        lowerError.includes('sn not existing') ||
+        lowerError.includes('duplicate detected')
+      ) {
+        setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
+      }
+
+      Alert.alert('Error', errorMessage);
     }
   };
 

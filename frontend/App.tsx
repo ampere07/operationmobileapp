@@ -42,6 +42,7 @@ function App() {
   const handleLogout = async () => {
     // Remove user data and cookies from AsyncStorage
     await AsyncStorage.removeItem('authData');
+    await AsyncStorage.removeItem('authToken');
     await clearCookies();
     setUserData(null);
     setIsLoggedIn(false);
