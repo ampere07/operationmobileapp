@@ -1409,7 +1409,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             barangay: updatedFormData.barangay,
             desired_plan: updatedFormData.choosePlan,
             referred_by: referredBy,
-            promo: promo
+            promo: promo,
+            long_lat: updatedFormData.addressCoordinates || '',
+            updated_by: updatedFormData.modifiedBy
           };
 
           const applicationResponse = await updateApplication(applicationId.toString(), applicationUpdateData);
