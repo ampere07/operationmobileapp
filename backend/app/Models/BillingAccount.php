@@ -22,6 +22,7 @@ class BillingAccount extends Model
         'billing_status_id',
         'created_by',
         'updated_by',
+        'vip_expiration',
     ];
 
     protected $casts = [

@@ -258,7 +258,8 @@ class CustomerDetailUpdateController extends Controller
         try {
             $validated = $request->validate([
                 'billingStatus' => 'nullable',
-                'billingDay' => 'nullable|integer|min:1|max:31'
+                'billingDay' => 'nullable|integer|min:0|max:31',
+                'vip_expiration' => 'nullable|date'
             ]);
 
             DB::beginTransaction();
@@ -269,6 +270,7 @@ class CustomerDetailUpdateController extends Controller
             $oldBillingDetails = [
                 'billing_status_id' => $billingAccount->billing_status_id,
                 'billing_day' => $billingAccount->billing_day,
+                'vip_expiration' => $billingAccount->vip_expiration,
             ];
 
             // Resolve billing_status_id
@@ -307,6 +309,10 @@ class CustomerDetailUpdateController extends Controller
                 $updateData['billing_day'] = $validated['billingDay'];
             }
 
+            if ($request->has('vip_expiration')) {
+                $updateData['vip_expiration'] = $validated['vip_expiration'];
+            }
+
             $billingAccount->update($updateData);
 
             // Capture new billing details after update
@@ -314,6 +320,7 @@ class CustomerDetailUpdateController extends Controller
             $newBillingDetails = [
                 'billing_status_id' => $billingAccount->billing_status_id,
                 'billing_day' => $billingAccount->billing_day,
+                'vip_expiration' => $billingAccount->vip_expiration,
             ];
 
             $changedOldBillingDetails = [];

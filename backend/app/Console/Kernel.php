@@ -85,6 +85,24 @@ class Kernel extends ConsoleKernel
                  });
 
         // ===================================================================
+        // VIP ACCOUNTS EXPIRATION CHECK
+        // ===================================================================
+
+        // Check VIP accounts for expiration daily at midnight
+        // Uses: ManualRadiusOperationsService
+        // Logs: storage/logs/vipChecker.log
+        $schedule->command('vip:check-expiration')
+                 ->dailyAt('00:00')
+                 ->withoutOverlapping()
+                 ->runInBackground()
+                 ->onSuccess(function () {
+                     \Illuminate\Support\Facades\Log::info('VIP expiration check completed successfully');
+                 })
+                 ->onFailure(function () {
+                     \Illuminate\Support\Facades\Log::error('VIP expiration check failed');
+                 });
+
+        // ===================================================================
         // EMAIL QUEUE PROCESSING (DEDICATED CRON JOBS)
         // ===================================================================
 

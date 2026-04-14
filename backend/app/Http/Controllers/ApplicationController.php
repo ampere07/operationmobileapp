@@ -6,6 +6,8 @@ use App\Models\Application;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
+use App\Models\AuditTrailLog;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Events\ApplicationViewingUpdate;
@@ -244,6 +246,23 @@ class ApplicationController extends Controller
 
             $application = Application::create($validatedData);
 
+            $userEmail = $request->input('updated_by') ?? auth()->user()?->email;
+            if (!$userEmail) {
+                throw new \Exception("Logged in user email is required for auditing.");
+            }
+
+            // Audit Trail Log
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type' => 'applications',
+                    'id' => $application->id,
+                    'data' => $application->fresh()->toArray()
+                ],
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
+
             $this->broadcastNewApplication($application);
 
             // Create Activity Log
@@ -413,8 +432,54 @@ class ApplicationController extends Controller
 
             $application = Application::findOrFail($id);
             $oldStatus = $application->status;
-            $validatedData['updated_by'] = $request->input('updated_by') ?? auth()->user()->email ?? 'system';
-            $application->update($validatedData);
+
+            Log::info("=== UPDATE PAYLOAD FOR APP #$id ===", $request->all());
+
+            $userEmail = $request->input('updated_by') ?? auth()->user()?->email;
+            if (!$userEmail) {
+                throw new \Exception("Logged in user email is required for auditing.");
+            }
+            $validatedData['updated_by'] = $userEmail;
+            
+            Log::info("=== VALIDATED DATA ===", $validatedData);
+            
+            $application->fill($validatedData);
+            $dirtyAttributes = $application->getDirty();
+            
+            Log::info("=== DIRTY ATTRIBUTES ===", $dirtyAttributes);
+            
+            if (!empty($dirtyAttributes)) {
+                $oldData = [];
+                $newData = [];
+                
+                foreach ($dirtyAttributes as $key => $newValue) {
+                    // We typically ignore 'updated_at' logging as a meaningful change unless something else changed
+                    if ($key === 'updated_at') continue;
+                    $oldData[$key] = $application->getOriginal($key);
+                    $newData[$key] = $newValue;
+                }
+                
+                $application->save();
+
+                if (!empty($newData)) {
+                    AuditTrailLog::create([
+                        'old_details' => [
+                            'type' => 'applications',
+                            'id' => $application->id,
+                            'data' => $oldData
+                        ],
+                        'new_details' => [
+                            'type' => 'applications',
+                            'id' => $application->id,
+                            'data' => $newData
+                        ],
+                        'created_by_user' => $validatedData['updated_by'],
+                        'updated_by_user' => $validatedData['updated_by']
+                    ]);
+                }
+            } else {
+                $application->save();
+            }
 
             // Create Activity Log
             ActivityLog::log(
@@ -454,6 +519,23 @@ class ApplicationController extends Controller
             $application = Application::findOrFail($id);
             $applicationData = $application->toArray();
             $application->delete();
+
+            $userEmail = request()->input('updated_by') ?? auth()->user()?->email;
+            if (!$userEmail) {
+                throw new \Exception("Logged in user email is required for auditing.");
+            }
+
+            // Audit Trail Log
+            AuditTrailLog::create([
+                'old_details' => [
+                    'type' => 'applications',
+                    'id' => $id,
+                    'data' => $applicationData
+                ],
+                'new_details' => null,
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
 
             // Create Activity Log
             ActivityLog::log(

@@ -1165,9 +1165,8 @@ Route::post('/login', function (Request $request) {
             ]);
         }
 
-        // Generate token using Sanctum
-        $user->tokens()->delete(); // Clear old tokens to avoid bloat for single-device usage
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Generate token
+        $token = 'user_token_' . $user->id . '_' . time();
         $responseData['token'] = $token;
 
         return response()->json([

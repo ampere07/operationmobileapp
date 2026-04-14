@@ -329,7 +329,7 @@ class PortApiController extends Controller
                 $joQuery->where('billing_accounts.account_no', '!=', $currentAccountNo);
             }
 
-            $joResults = $joQuery->select('job_orders.port', 'billing_accounts.account_no')->get();
+            $joResults = $joQuery->select('job_orders.port', 'billing_accounts.account_no', 'job_orders.username')->get();
 
             // Query technical_details - has account_no directly
             $tdQuery = \DB::table('technical_details')
@@ -343,20 +343,24 @@ class PortApiController extends Controller
                 $tdQuery->where('account_id', '!=', $currentJobOrderId);
             }
 
-            $tdResults = $tdQuery->select('port', 'account_no')->get();
+            $tdResults = $tdQuery->select('port', 'account_no', 'username')->get();
 
             // Build port => account_no mapping (technical_details takes precedence)
             $portAccountMap = [];
             foreach ($joResults as $row) {
                 $p = $normalizePort($row->port);
                 if ($p) {
-                    $portAccountMap[$p] = $row->account_no ?? '';
+                    $u = trim($row->username ?? '');
+                    $a = trim($row->account_no ?? '');
+                    $portAccountMap[$p] = $u ? "$u | $a" : $a;
                 }
             }
             foreach ($tdResults as $row) {
                 $p = $normalizePort($row->port);
                 if ($p) {
-                    $portAccountMap[$p] = $row->account_no ?? '';
+                    $u = trim($row->username ?? '');
+                    $a = trim($row->account_no ?? '');
+                    $portAccountMap[$p] = $u ? "$u | $a" : $a;
                 }
             }
 
