@@ -41,6 +41,7 @@ use App\Http\Controllers\ConsolidatedNotificationController;
 use App\Http\Controllers\Api\ServiceOrderItemApiController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TechnicianController;
+use App\Http\Controllers\Api\PaymentPortalLogsController;
 
 Route::apiResource('technicians', TechnicianController::class);
 Route::get('/reports', [ReportController::class , 'index']);
@@ -303,6 +304,7 @@ Route::prefix('invoices')->group(function () {
 // Payment Portal Logs Routes
 Route::prefix('payment-portal-logs')->group(function () {
     Route::get('/by-account/{accountNo}', [RelatedDataController::class , 'getPaymentPortalLogsByAccount']);
+    Route::get('/unique-channels', [RelatedDataController::class, 'getUniquePaymentChannels']);
     Route::get('/{id}', [RelatedDataController::class , 'getPaymentPortalLogById']);
 });
 
@@ -3448,6 +3450,8 @@ Route::get('/lookup/service-orders', [RelatedDataController::class , 'getService
 Route::get('/lookup/customers', [RelatedDataController::class , 'getCustomerLookupData']);
 Route::get('/lookup/application-visits', [RelatedDataController::class , 'getApplicationVisitLookupData']);
 Route::get('/lookup/work-orders', [RelatedDataController::class , 'getWorkOrderLookupData']);
+Route::get('/lookup/invoices', [RelatedDataController::class , 'getInvoiceLookupData']);
+Route::get('/lookup/statements', [RelatedDataController::class , 'getSOALookupData']);
 Route::get('/transactions/{id}/details', [RelatedDataController::class , 'getTransactionById']);
 
 Route::get('/invoices/by-account/{accountNo}', [RelatedDataController::class , 'getInvoicesByAccount']);
@@ -3459,6 +3463,9 @@ Route::get('/service-orders/by-account/{accountNo}', [RelatedDataController::cla
 Route::get('/reconnection-logs/by-account/{accountNo}', [RelatedDataController::class , 'getReconnectionLogsByAccount']);
 Route::get('/disconnected-logs/by-account/{accountNo}', [RelatedDataController::class , 'getDisconnectedLogsByAccount']);
 Route::get('/details-update-logs/by-account/{accountNo}', [RelatedDataController::class , 'getDetailsUpdateLogsByAccount']);
+Route::get('/audit-trail-logs/by-application/{applicationId}', [RelatedDataController::class , 'getAuditTrailLogsByApplication']);
+Route::get('/audit-trail-logs/by-job-order/{jobOrderId}', [RelatedDataController::class , 'getAuditTrailLogsByJobOrder']);
+
 Route::get('/plan-change-logs/by-account/{accountNo}', [RelatedDataController::class , 'getPlanChangeLogsByAccount']);
 Route::get('/service-charge-logs/by-account/{accountNo}', [RelatedDataController::class , 'getServiceChargeLogsByAccount']);
 Route::get('/change-due-logs/by-account/{accountNo}', [RelatedDataController::class , 'getChangeDueLogsByAccount']);

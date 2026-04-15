@@ -377,6 +377,55 @@ class RelatedDataController extends Controller
     }
 
     /**
+     * Get related audit trail logs by application ID
+     */
+    public function getAuditTrailLogsByApplication(string $applicationId): JsonResponse
+    {
+        try {
+            $logs = DB::table('audit_trail_logs')
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.type')) = 'applications'")
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.id')) = ?", [$applicationId])
+                ->orWhere(function ($query) use ($applicationId) {
+                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.type')) = 'applications'")
+                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.id')) = ?", [$applicationId]);
+                })
+                ->orderBy('created_at', 'desc')
+                ->get();
+                
+            $logs->transform(function ($log) {
+                // Since this model's properties are directly queried with DB query builder, it returns a plain stdClass object
+                return [
+                    'id' => $log->id ?? '-',
+                    'old_details' => $log->old_details ?? null,
+                    'new_details' => $log->new_details ?? null,
+                    'created_by_user' => $log->created_by_user ?? '-',
+                    'updated_by_user' => $log->updated_by_user ?? '-',
+                    'created_at' => $log->created_at ?? null,
+                    'updated_at' => $log->updated_at ?? null,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $logs,
+                'count' => $logs->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching audit trail logs for application: ' . $applicationId, [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch audit trail logs',
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0
+            ], 500);
+        }
+    }
+
+    /**
      * Get related plan change logs by account number
      */
     public function getPlanChangeLogsByAccount(string $accountNo): JsonResponse
@@ -961,11 +1010,20 @@ class RelatedDataController extends Controller
                 ->sort()
                 ->values();
 
+            $channels = DB::table('payment_portal_logs')
+                ->whereNotNull('payment_channel')
+                ->where('payment_channel', '!=', '')
+                ->distinct()
+                ->pluck('payment_channel')
+                ->sort()
+                ->values();
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'statuses' => $statuses,
-                    'transaction_statuses' => $transactionStatuses
+                    'transaction_statuses' => $transactionStatuses,
+                    'payment_channels' => $channels
                 ]
             ]);
         } catch (\Exception $e) {
@@ -1290,6 +1348,169 @@ class RelatedDataController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch customer lookup data',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    /**
+     * Get unique payment channels from logs
+     */
+    public function getUniquePaymentChannels(): JsonResponse
+    {
+        try {
+            $channels = DB::table('payment_portal_logs')
+                ->whereNotNull('payment_channel')
+                ->where('payment_channel', '!=', '')
+                ->distinct()
+                ->pluck('payment_channel');
+
+            return response()->json([
+                'success' => true,
+                'data' => $channels
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch unique payment channels', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch unique payment channels',
+                'data' => []
+            ], 500);
+        }
+    }
+
+    public function getInvoiceLookupData(): JsonResponse
+    {
+        try {
+            $remarks = DB::table('invoices')
+                ->whereNotNull('remarks')
+                ->where('remarks', '!=', '')
+                ->distinct()
+                ->pluck('remarks')
+                ->sort()
+                ->values();
+
+            $modifiedBy = DB::table('invoices')
+                ->whereNotNull('updated_by')
+                ->where('updated_by', '!=', '')
+                ->distinct()
+                ->pluck('updated_by')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'remarks' => $remarks,
+                    'modified_by' => $modifiedBy
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch invoice lookup data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getSOALookupData(): JsonResponse
+    {
+        try {
+            $updatedBy = DB::table('statement_of_accounts')
+                ->whereNotNull('updated_by')
+                ->where('updated_by', '!=', '')
+                ->distinct()
+                ->pluck('updated_by');
+
+            $createdBy = DB::table('statement_of_accounts')
+                ->whereNotNull('created_by')
+                ->where('created_by', '!=', '')
+                ->distinct()
+                ->pluck('created_by');
+
+            $modifiedBy = $updatedBy->merge($createdBy)->unique()->sort()->values();
+
+            $remarks = DB::table('statement_of_accounts')
+                ->whereNotNull('remarks')
+                ->where('remarks', '!=', '')
+                ->distinct()
+                ->pluck('remarks')
+                ->sort()
+                ->values();
+
+            $statuses = DB::table('statement_of_accounts')
+                ->whereNotNull('status')
+                ->where('status', '!=', '')
+                ->distinct()
+                ->pluck('status')
+                ->sort()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'modified_by' => $modifiedBy,
+                    'remarks' => $remarks,
+                    'statuses' => $statuses
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch SOA lookup data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get related audit trail logs by job order ID
+     */
+    public function getAuditTrailLogsByJobOrder(string $jobOrderId): JsonResponse
+    {
+        try {
+            $logs = DB::table('audit_trail_logs')
+                ->where(function ($query) use ($jobOrderId) {
+                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.type')) = 'joborders'")
+                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.id')) = ?", [$jobOrderId]);
+                })
+                ->orWhere(function ($query) use ($jobOrderId) {
+                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.type')) = 'joborders'")
+                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.id')) = ?", [$jobOrderId]);
+                })
+                ->orderBy('created_at', 'desc')
+                ->get();
+                
+            $logs->transform(function ($log) {
+                return [
+                    'id' => $log->id ?? '-',
+                    'old_details' => $log->old_details ?? null,
+                    'new_details' => $log->new_details ?? null,
+                    'created_by_user' => $log->created_by_user ?? '-',
+                    'updated_by_user' => $log->updated_by_user ?? '-',
+                    'created_at' => $log->created_at ?? null,
+                    'updated_at' => $log->updated_at ?? null,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $logs,
+                'count' => $logs->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching audit trail logs for job order: ' . $jobOrderId, [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch audit trail logs',
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0
             ], 500);
         }
     }

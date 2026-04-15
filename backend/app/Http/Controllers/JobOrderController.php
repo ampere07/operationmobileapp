@@ -13,6 +13,7 @@ use App\Models\Port;
 use App\Models\VLAN;
 use App\Models\LCPNAPLocation;
 use App\Models\Plan;
+use App\Models\AuditTrailLog;
 use App\Models\User;
 use App\Models\Role;
 use App\Models\OnlineStatus;
@@ -300,6 +301,18 @@ class JobOrderController extends Controller
             $jobOrder = JobOrder::create($data);
             $jobOrder->load('application');
 
+            // Audit Trail Log
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type' => 'joborders',
+                    'id' => $jobOrder->id,
+                    'data' => $jobOrder->fresh()->toArray()
+                ],
+                'created_by_user' => $data['created_by_user_email'] ?? 'System',
+                'updated_by_user' => $data['created_by_user_email'] ?? 'System'
+            ]);
+
             // Create Activity Log using helper
             $customerName = trim(($jobOrder->application->first_name ?? '') . ' ' . ($jobOrder->application->last_name ?? ''));
             ActivityLog::log(
@@ -585,7 +598,41 @@ class JobOrderController extends Controller
             ]);
 
             $oldStatus = $jobOrder->onsite_status;
-            $jobOrder->update($data);
+            
+            $jobOrder->fill($data);
+            $dirtyAttributes = $jobOrder->getDirty();
+            
+            if (!empty($dirtyAttributes)) {
+                $oldData = [];
+                $newData = [];
+                
+                foreach ($dirtyAttributes as $key => $newValue) {
+                    if ($key === 'updated_at') continue;
+                    $oldData[$key] = $jobOrder->getOriginal($key);
+                    $newData[$key] = $newValue;
+                }
+                
+                $jobOrder->save();
+
+                if (!empty($newData)) {
+                    AuditTrailLog::create([
+                        'old_details' => [
+                            'type' => 'joborders',
+                            'id' => $jobOrder->id,
+                            'data' => $oldData
+                        ],
+                        'new_details' => [
+                            'type' => 'joborders',
+                            'id' => $jobOrder->id,
+                            'data' => $newData
+                        ],
+                        'created_by_user' => $data['updated_by_user_email'] ?? 'System',
+                        'updated_by_user' => $data['updated_by_user_email'] ?? 'System'
+                    ]);
+                }
+            } else {
+                $jobOrder->save();
+            }
 
             // Create Activity Log using helper
             ActivityLog::log(
@@ -749,6 +796,20 @@ class JobOrderController extends Controller
             $jobOrder = JobOrder::findOrFail($id);
             $jobOrderData = $jobOrder->toArray();
             $jobOrder->delete();
+
+            $userEmail = request()->input('updated_by_user_email') ?? auth()->user()?->email ?? 'System';
+
+            // Audit Trail Log
+            AuditTrailLog::create([
+                'old_details' => [
+                    'type' => 'joborders',
+                    'id' => $id,
+                    'data' => $jobOrderData
+                ],
+                'new_details' => null,
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
 
             // Create Activity Log
             ActivityLog::log(

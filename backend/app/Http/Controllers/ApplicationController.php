@@ -437,7 +437,8 @@ class ApplicationController extends Controller
 
             $userEmail = $request->input('updated_by') ?? auth()->user()?->email;
             if (!$userEmail) {
-                throw new \Exception("Logged in user email is required for auditing.");
+                // Fallback to system or something else if not provided, though it should be provided
+                $userEmail = 'System';
             }
             $validatedData['updated_by'] = $userEmail;
             
