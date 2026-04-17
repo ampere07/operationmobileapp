@@ -127,6 +127,109 @@ class ManualRadiusOperationsService
     }
 
     /**
+     * Restrict user from RADIUS and update database
+     */
+    public function restrictedUser(array $params): array
+    {
+        try {
+            $accountNo = $params['accountNumber'] ?? '';
+            $username = $params['username'] ?? '';
+            $remarks = $params['remarks'] ?? '';
+            $updatedBy = $params['updatedBy'] ?? 'System';
+
+            $this->writeLog("=== RESTRICTED USER START ===");
+            $this->writeLog("Account: $accountNo | Username: $username | Remarks: $remarks");
+
+            if (empty($username)) {
+                throw new Exception("Username is required for restrict operation");
+            }
+
+            // Determine status 
+            $status = "Restricted";
+            $this->writeLog("Status Set: $status");
+
+            // Get RADIUS configurations
+            $radiusEndpoints = $this->getRadiusEndpoints();
+
+            // Try to get active session ID before it's gone
+            $sessionId = null;
+            if (!empty($username)) {
+                $sessPath = "/rest/user-manage/session?user=" . urlencode($username);
+                foreach ($radiusEndpoints as $endpoint) {
+                    $fullUrl = $endpoint['url'] . $sessPath;
+                    $sessResult = $this->callApiWithRetry($fullUrl, 'GET', null, $endpoint['username'], $endpoint['password']);
+                    if ($sessResult && is_array($sessResult) && isset($sessResult[0]['.id'])) {
+                        $sessionId = $sessResult[0]['.id'];
+                        $this->writeLog("[SESSION] Found session ID for logging: $sessionId");
+                        break;
+                    }
+                }
+            }
+
+            // Perform RADIUS operations
+            $this->radiusOps(
+                $radiusEndpoints,
+                $username,
+                'Restricted', // RADIUS profile group
+                $status,      // Database status name
+                true,         // isDisconnectAction (kicking session to apply profile)
+                $accountNo,
+                $updatedBy
+            );
+
+            // LOG RESTRICTION TO DATABASE
+            try {
+                $billingAccount = null;
+                if (!empty($accountNo)) {
+                    $billingAccount = DB::table('billing_accounts')->where('account_no', $accountNo)->first();
+                }
+
+                if (!$billingAccount && !empty($username)) {
+                    $techDetail = DB::table('technical_details')->where('username', $username)->first();
+                    if ($techDetail) {
+                        $billingAccount = DB::table('billing_accounts')->where('id', $techDetail->account_id)->first();
+                    }
+                }
+
+                if ($billingAccount) {
+                    DisconnectedLog::create([
+                        'account_id' => $billingAccount->id,
+                        'session_id' => $sessionId ?? null,
+                        'username' => $username,
+                        'remarks' => $remarks ?: "Manual Restricted",
+                        'created_by_user' => $updatedBy,
+                        'updated_by_user' => $updatedBy,
+                    ]);
+                    $this->writeLog("[DB] Restriction log entry created for Account: " . ($billingAccount->account_no ?? 'Unknown'));
+                }
+            } catch (Throwable $dbEx) {
+                $this->writeLog("[DB ERROR] Failed to create restriction log: " . $dbEx->getMessage());
+            }
+
+            $this->writeLog("[SUCCESS] User restricted successfully");
+            $this->writeLog("=== RESTRICTED USER END ===");
+
+            return [
+                'status' => 'success',
+                'message' => 'User restricted successfully',
+                'output' => 'Success: User Restricted'
+            ];
+
+        } catch (Throwable $e) {
+            $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("[TRACE] " . $e->getTraceAsString());
+            $this->writeLog("=== RESTRICTED USER END ===");
+            
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'output' => 'Error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+
+    /**
      * Reconnect user to RADIUS and update database
      */
     public function reconnectUser(array $params): array
@@ -614,8 +717,8 @@ class ManualRadiusOperationsService
         // Get status ID from billing_status table
         $statusId = DB::table('billing_status')->where('status_name', $dbStatus)->value('id');
 
-        // If status name not found (e.g. "Inactive"), try "Disconnected" as fallback
-        if (!$statusId && $dbStatus === 'Inactive') {
+        // If status name not found (e.g. "Inactive" or "Restricted"), try "Disconnected" as fallback
+        if (!$statusId && in_array($dbStatus, ['Inactive', 'Restricted'])) {
              $statusId = DB::table('billing_status')->where('status_name', 'Disconnected')->value('id');
         }
 

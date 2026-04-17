@@ -1055,7 +1055,7 @@ class ServiceOrderApiController extends Controller
             // Step 2: Trigger RADIUS Disconnection
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->disconnectUser([
+                $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
                     'remarks' => 'Disconnected via Service Order API',

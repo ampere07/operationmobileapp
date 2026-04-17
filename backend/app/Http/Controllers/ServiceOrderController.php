@@ -845,6 +845,7 @@ class ServiceOrderController extends Controller
 
             // Trigger Disconnection if concern is 'Disconnect' and support status is 'Resolved'
             $disconnectStatus = null;
+            $pulloutStatus = null;
             if ($currentConcern && strtolower($currentConcern) === 'disconnect' && $supportStatus === 'resolved') {
                 $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
                 if ($billingAccount) {
@@ -855,8 +856,9 @@ class ServiceOrderController extends Controller
                 }
             }
 
-            // Trigger Pullout if repair category is 'Pullout' and visit status is 'Done'
-            $pulloutStatus = null;
+
+
+
 
             $visitStatus = strtolower(trim($request->input('visit_status') ?? ''));
             if (empty($visitStatus) && isset($order->visit_status)) {
@@ -1158,7 +1160,7 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Disconnection
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->disconnectUser([
+                $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
                     'remarks' => 'Disconnected via Service Order',

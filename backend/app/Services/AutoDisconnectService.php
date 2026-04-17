@@ -245,7 +245,7 @@ class AutoDisconnectService
         $billingStatus = $billingAccount->billingStatus->status ?? '';
         $this->writeLog("  [INFO] Current Status: {$billingStatus}");
         
-        if (in_array($billingStatus, ['Inactive', 'Pullout', 'Disconnected', 'Offline'])) {
+        if (in_array($billingStatus, ['Inactive', 'Pullout', 'Disconnected', 'Offline', 'Restricted'])) {
             $this->writeLog("  [SKIP] Status is already {$billingStatus}");
             return ['success' => false, 'reason' => "Already {$billingStatus}"];
         }
@@ -323,30 +323,31 @@ class AutoDisconnectService
                 $this->writeLog("  [FEE] No disconnection fee (set to 0)");
             }
 
-            // Disconnect via RADIUS using existing service
-            $this->writeLog("  [RADIUS] Initiating disconnection...");
-            $disconnectResult = $this->radiusService->disconnectUser([
+            // Restrict via RADIUS using existing service
+            $this->writeLog("  [RADIUS] Initiating restriction...");
+            $restrictResult = $this->radiusService->restrictedUser([
                 'username' => $username,
                 'accountNumber' => $accountNo,
                 'remarks' => 'Auto DC',
                 'updatedBy' => 'System'
             ]);
 
-            if ($disconnectResult['status'] !== 'success') {
-                throw new Exception("RADIUS disconnect failed: " . ($disconnectResult['message'] ?? 'Unknown error'));
+            if ($restrictResult['status'] !== 'success') {
+                throw new Exception("RADIUS restrict failed: " . ($restrictResult['message'] ?? 'Unknown error'));
             }
-            $this->writeLog("  [RADIUS] ✓ Successfully disconnected");
+            $this->writeLog("  [RADIUS] ✓ Successfully restricted");
 
-            // Update billing account status to Disconnected (4)
+            // Override billing account status to Inactive (RADIUS service sets Restricted; we want Inactive here)
+            $inactiveStatusId = DB::table('billing_status')->where('status_name', 'Inactive')->value('id') ?? 4;
             DB::table('billing_accounts')
                 ->where('id', $billingAccount->id)
                 ->update([
-                    'billing_status_id' => 4,
+                    'billing_status_id' => $inactiveStatusId,
                     'updated_by' => 'System',
                     'updated_at' => Carbon::now()
                 ]);
 
-            $this->writeLog("  [LOG] Status updated to 4 (RADIUS Service handled disconnected_logs)");
+            $this->writeLog("  [LOG] Status overridden to Inactive (ID: {$inactiveStatusId}) after RADIUS restriction");
 
             $this->writeLog("  [DB] STARTING DB COMMIT for Account {$accountNo}...");
             DB::commit();
@@ -370,7 +371,7 @@ class AutoDisconnectService
                 $this->writeLog("  [EMAIL] Skipping Email (Service null or no email address)");
             }
 
-            $this->writeLog("  [COMPLETE] Account {$accountNo} successfully disconnected");
+            $this->writeLog("  [COMPLETE] Account {$accountNo} successfully restricted and set to Inactive");
 
             return ['success' => true];
 
