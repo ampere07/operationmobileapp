@@ -653,13 +653,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
   const renderImageLink = (url: string | undefined | null) => (
     <View style={st.imageLinkRow}>
-      <Text style={[st.imageLinkText, { color: dynamicValueColor }]} numberOfLines={1} selectable={true}>
-        {url || 'No image available'}
-      </Text>
-      {url && (
-        <Pressable onPress={() => Linking.openURL(url || '')}>
-          <ExternalLink width={16} height={16} color={'#4b5563'} />
+      {url ? (
+        <Pressable 
+          onPress={() => Linking.openURL(url)}
+          style={({ pressed }) => [
+            { opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' }
+          ]}
+        >
+          <Text style={[st.imageLinkText, { color: '#2563eb', textDecorationLine: 'underline', flex: 0, marginRight: 4 }]} selectable={true}>
+            View
+          </Text>
+          <ExternalLink width={14} height={14} color={'#2563eb'} />
         </Pressable>
+      ) : (
+        <Text style={[st.imageLinkText, { color: '#9ca3af' }]} selectable={true}>
+          No image available
+        </Text>
       )}
     </View>
   );
