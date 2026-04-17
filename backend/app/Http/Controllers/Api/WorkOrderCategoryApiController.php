@@ -10,23 +10,6 @@ use App\Models\ActivityLog;
 
 class WorkOrderCategoryApiController extends Controller
 {
-    private function resolveUserId(Request $request)
-    {
-        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
-        
-        if ($email) {
-            $user = \App\Models\User::where('email_address', $email)->first();
-            if ($user) {
-                return $user->id;
-            }
-        }
-
-        if (\Auth::check()) {
-            return \Auth::id();
-        }
-
-        return null;
-    }
 
     public function index(Request $request)
     {
@@ -90,9 +73,7 @@ class WorkOrderCategoryApiController extends Controller
             
             $category = new WorkOrderCategory();
             $category->category = $request->input('category');
-            $userId = $this->resolveUserId($request);
             $category->created_by = $request->input('email_address', 'system');
-            $category->updated_by_user_id = $userId;
             $category->save();
             
             // Log Activity
@@ -171,7 +152,6 @@ class WorkOrderCategoryApiController extends Controller
             }
             
             $category->category = $request->input('category');
-            $category->updated_by_user_id = $this->resolveUserId($request);
             $category->save();
             
             // Log Activity

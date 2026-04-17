@@ -210,15 +210,16 @@ class ServiceOrderApiController extends Controller
             $timestamp = null;
             if (isset($validated['timestamp'])) {
                 try {
-                    $timestamp = Carbon::parse($validated['timestamp'])->format('Y-m-d H:i:s');
+                    $timestamp = \Carbon\Carbon::parse($validated['timestamp'], 'Asia/Manila')->format('Y-m-d H:i:s');
                 }
                 catch (\Exception $e) {
                     Log::warning('Invalid timestamp format, using current time', ['timestamp' => $validated['timestamp']]);
-                    $timestamp = now()->format('Y-m-d H:i:s');
+                    $timestamp = now('Asia/Manila')->format('Y-m-d H:i:s');
                 }
+
             }
             else {
-                $timestamp = now()->format('Y-m-d H:i:s');
+                $timestamp = now('Asia/Manila')->format('Y-m-d H:i:s');
             }
 
             $data = [
@@ -768,17 +769,22 @@ class ServiceOrderApiController extends Controller
 
 
 
-            // Trigger Disconnection if concern is 'Disconnect' and support status is 'Resolved'
-            $disconnectStatus = null;
-            if ($currentConcern && strtolower($currentConcern) === 'disconnect' && $supportStatus === 'resolved') {
-                $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
-                if ($billingAccount) {
-                    \Log::info('Triggering auto-disconnect for Service Order with Disconnect concern', [
-                        'account_no' => $serviceOrder->account_no
-                    ]);
-                    $disconnectStatus = $this->attemptDisconnection($billingAccount, $updatedByUser);
+            // Trigger Restriction/Disconnection based on concern and support status
+            $restrictedStatus = null;
+            if ($currentConcern && $supportStatus === 'resolved') {
+                $lowerConcern = strtolower($currentConcern);
+                if ($lowerConcern === 'restrict' || $lowerConcern === 'disconnect') {
+                    $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
+                    if ($billingAccount) {
+                        \Log::info("Triggering auto-restriction for Service Order with {$currentConcern} concern", [
+                            'account_no' => $serviceOrder->account_no
+                        ]);
+                        $restrictedStatus = $this->attemptRestriction($billingAccount, $updatedByUser);
+                    }
                 }
             }
+
+
 
             // Trigger Pullout if repair category is 'Pullout' and visit status is 'Done'
             $pulloutStatus = null;
@@ -848,7 +854,7 @@ class ServiceOrderApiController extends Controller
                 'message' => 'Service order updated successfully',
                 'data' => $updatedServiceOrder,
                 'reconnect_status' => $reconnectStatus,
-                'disconnect_status' => $disconnectStatus,
+                'restricted_status' => $restrictedStatus,
                 'pullout_status' => $pulloutStatus,
                 'migration_status' => $migrationStatus
             ]);
@@ -1026,6 +1032,64 @@ class ServiceOrderApiController extends Controller
         }
     }
 
+    private function attemptRestriction($billingAccount, $updatedByUser = 'System'): string
+    {
+        try {
+            // Reload billing account
+            $billingAccount = BillingAccount::find($billingAccount->id);
+            $accountNo = $billingAccount->account_no;
+
+            \Log::info('[API SERVICE ORDER RESTRICT] Force starting for account: ' . $accountNo);
+
+            // Get account details (PPPoE Username)
+            $accountInfo = DB::table('billing_accounts')
+                ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
+                ->where('billing_accounts.id', $billingAccount->id)
+                ->select('technical_details.username as pppoe_username')
+                ->first();
+
+            $username = $accountInfo->pppoe_username ?? null;
+
+            if (empty($username)) {
+                \Log::info('[API SERVICE ORDER RESTRICT SKIP] No PPPoE username found');
+                return 'no_username';
+            }
+
+            // Step 2: Trigger RADIUS Restriction
+            try {
+                $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->restrictedUser([
+                    'accountNumber' => $accountNo,
+                    'username' => $username,
+                    'remarks' => 'Restricted via Service Order API',
+                    'updatedBy' => $updatedByUser
+                ]);
+                \Log::info('[API SERVICE ORDER RESTRICT RADIUS] restrictedUser called for: ' . $username);
+            } catch (\Exception $radEx) {
+                \Log::error('[API SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
+            }
+
+            // Update billing_status_id to 6 (Restricted)
+            $statusId = DB::table('billing_status')->where('status_name', 'Restricted')->value('id');
+            if (!$statusId) {
+                $statusId = 6; // Fallback
+            }
+
+            $billingAccount->billing_status_id = $statusId;
+            $billingAccount->updated_at = now();
+            // Use current user if authenticated
+            $billingAccount->updated_by = Auth::id() ?: 1;
+            $billingAccount->save();
+
+            \Log::info("[API SERVICE ORDER RESTRICT DB] Updated billing_status_id to {$statusId} (Restricted) for Account: {$accountNo}");
+
+            return 'success';
+        } catch (\Exception $e) {
+            \Log::error('[API SERVICE ORDER RESTRICT EXCEPTION] ' . $e->getMessage());
+            return 'exception';
+        }
+    }
+
     private function attemptDisconnection($billingAccount, $updatedByUser = 'System'): string
     {
         try {
@@ -1051,11 +1115,10 @@ class ServiceOrderApiController extends Controller
             }
 
             \Log::info('[API SERVICE ORDER DISCONNECT PROCEED] Disconnecting user for account: ' . $accountNo);
-
             // Step 2: Trigger RADIUS Disconnection
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->restrictedUser([
+                $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
                     'remarks' => 'Disconnected via Service Order API',
@@ -1067,12 +1130,10 @@ class ServiceOrderApiController extends Controller
                 \Log::error('[API SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
-            \Log::info('[API SERVICE ORDER DISCONNECT SUCCESS] Disconnection (Local Status) completed successfully');
-
-            // Update billing_status_id to 4 (Disconnected)
+            // Step 3: Update local database status (ID 4 = Disconnected)
             $billingAccount->billing_status_id = 4;
             $billingAccount->updated_at = now();
-            $billingAccount->updated_by = Auth::id();
+            $billingAccount->updated_by = Auth::id() ?: 1;
             $billingAccount->save();
 
             \Log::info('[API SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);

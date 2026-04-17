@@ -683,7 +683,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
     const fetchUsedPorts = async () => {
       try {
-        const response = await apiClient.get('/job-orders', {
+        const used = new Set<string>();
+        const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+        const currentAccountId = jobOrderData?.account_id || jobOrderData?.Account_ID;
+
+        // 1. Fetch from job-orders (pending/active)
+        const joResponse = await apiClient.get('/job-orders', {
           params: {
             lcpnap: formData.lcpnap,
             limit: 2000
@@ -693,23 +698,55 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
         if (!isCurrentSession()) return;
 
-        if (response.data && response.data.success && Array.isArray(response.data.data)) {
-          const used = new Set<string>();
-          const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
-
-          response.data.data.forEach((jo: any) => {
+        if (joResponse.data && joResponse.data.success && Array.isArray(joResponse.data.data)) {
+          joResponse.data.data.forEach((jo: any) => {
             const joLcpnap = jo.lcpnap || jo.LCPNAP;
 
             if (joLcpnap === formData.lcpnap) {
-              const joPort = jo.port || jo.PORT;
+              const joPort = (jo.port || jo.PORT || '').toString().trim();
               const joId = jo.id || jo.JobOrder_ID;
 
               if (joPort && String(joId) !== String(currentId)) {
-                used.add(joPort.toString());
+                // Normalize port name to match generator (e.g., P01)
+                let p = joPort;
+                if (/^\d+$/.test(p)) {
+                  p = `P${p.padStart(2, '0')}`;
+                }
+                used.add(p.toUpperCase());
               }
             }
           });
+        }
 
+        // 2. Fetch from technical_details (already installed customers)
+        // We find the ID of the selected LCPNAP to call the related-customers endpoint
+        const selectedLcpnapObj = lcpnaps.find(ln => (ln.lcpnap_name || (ln as any).name) === formData.lcpnap);
+        if (selectedLcpnapObj?.id) {
+          try {
+            const rcResponse = await apiClient.get(`/lcpnap/${selectedLcpnapObj.id}/related-customers`, {
+              signal: controller.signal
+            });
+            
+            if (isCurrentSession() && rcResponse.data && rcResponse.data.success && Array.isArray(rcResponse.data.data)) {
+              rcResponse.data.data.forEach((rc: any) => {
+                const rcPort = (rc.port || '').toString().trim();
+                const rcAccountId = rc.id || rc.account_id || rc.Account_ID;
+
+                if (rcPort && String(rcAccountId) !== String(currentAccountId)) {
+                  let p = rcPort;
+                  if (/^\d+$/.test(p)) {
+                    p = `P${p.padStart(2, '0')}`;
+                  }
+                  used.add(p.toUpperCase());
+                }
+              });
+            }
+          } catch (err) {
+            console.error('Failed to fetch related customers for used ports:', err);
+          }
+        }
+
+        if (isCurrentSession()) {
           setUsedPorts(used);
         }
       } catch (error: any) {
@@ -722,7 +759,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchUsedPorts();
 
     return () => { controller.abort(); };
-  }, [isOpen, formData.lcpnap, jobOrderData]);
+  }, [isOpen, formData.lcpnap, jobOrderData, lcpnaps]);
 
   useEffect(() => {
     if (!jobOrderData || !isOpen) return;

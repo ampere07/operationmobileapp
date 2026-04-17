@@ -23,7 +23,8 @@ class DashboardController extends Controller
                 // Radius Stats (Overall)
                 'radius_online' => DB::table('online_status')->where('session_status', 'Online')->count(),
                 'radius_offline' => DB::table('online_status')->where('session_status', 'Offline')->count(),
-                'radius_blocked' => DB::table('online_status')->where('session_status', 'Blocked')->count(),
+                'radius_disconnected' => DB::table('online_status')->where('session_status', 'Disconnected')->count(),
+                'radius_restricted' => DB::table('online_status')->where('session_status', 'Restricted')->count(),
 
                 // Support Status Today (Based on timestamp)
                 'support_status_in_progress' => DB::table('service_orders')->where('support_status', 'In Progress')->whereDate('timestamp', $todayStr)->count(),

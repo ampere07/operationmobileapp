@@ -24,14 +24,13 @@ class RadiusStatusSyncService
             'not_found' => 0,
             'offline' => 0,
             'online' => 0,
-            'inactive' => 0,
-            'blocked' => 0,
+            'restricted' => 0,
+            'disconnected' => 0,
             'errors' => 0
         ];
 
         try {
-            DB::beginTransaction();
-
+            // Step 1: Sync billing accounts to online_status quickly (outside of a long transaction)
             $this->syncAccountsToOnlineStatus($stats);
             
             $radiusConfig = RadiusConfig::first();
@@ -39,8 +38,24 @@ class RadiusStatusSyncService
                 throw new \Exception('RADIUS configuration not found');
             }
 
+            // Step 2: Fetch RADIUS data (potentially slow I/O)
             $radiusUsers = $this->fetchRadiusUsers($radiusConfig);
             $radiusSessions = $this->fetchRadiusSessions($radiusConfig);
+
+            // Anti-timeout: ensure DB connection is alive after API calls
+            try {
+                DB::connection()->getPdo()->query('SELECT 1');
+            } catch (\Throwable $e) {
+                Log::warning('DB connection lost before processing accounts, attempting reconnect', [
+                    'error' => $e->getMessage(),
+                ]);
+                $default = config('database.default');
+                DB::purge($default);
+                DB::reconnect($default);
+            }
+
+            // Step 3: Process and update DB within a short transaction
+            DB::beginTransaction();
 
             $this->processAccounts($radiusUsers, $radiusSessions, $stats);
 
@@ -52,7 +67,9 @@ class RadiusStatusSyncService
             return $stats;
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             Log::error('RADIUS Status Sync Failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -68,7 +85,7 @@ class RadiusStatusSyncService
             SELECT ba.id, ba.account_no, td.username, NOW(), NOW()
             FROM billing_accounts ba
             LEFT JOIN technical_details td ON ba.id = td.account_id
-            WHERE td.username IS NOT NULL
+            WHERE td.username IS NOT NULL AND TRIM(td.username) != ''
         ");
 
         if ($inserted) {
@@ -144,13 +161,18 @@ class RadiusStatusSyncService
             ->leftJoin('technical_details as td', 'ba.id', '=', 'td.account_id')
             ->select('ba.id as account_id', 'ba.account_no', 'td.username')
             ->whereNotNull('td.username')
+            ->whereRaw("TRIM(td.username) <> ''")
             ->get();
 
         Log::info('Processing accounts for RADIUS sync', ['count' => count($accounts)]);
 
         foreach ($accounts as $account) {
             try {
-                $username = trim($account->username);
+                $username = trim($account->username ?? '');
+                if ($username === '') {
+                    // Skip records with empty usernames
+                    continue;
+                }
                 $accountNo = $account->account_no;
 
                 $status = 'Offline';
@@ -166,14 +188,16 @@ class RadiusStatusSyncService
                     $group = $user['group'];
                     $hasSession = isset($radiusSessions[$username]);
 
-                    if ($group === 'Disconnected' || $group === 'Mikrotik-Group:Disconnected') {
-                        if ($hasSession) {
-                            $status = 'Blocked';
-                            $stats['blocked']++;
-                        } else {
-                            $status = 'Inactive';
-                            $stats['inactive']++;
-                        }
+                    // NEW ALGO
+                    $isRestricted = ($group === 'Restricted' || $group === 'Mikrotik-Group:Restricted');
+                    $isDisconnected = ($group === 'Disconnected' || $group === 'Mikrotik-Group:Disconnected');
+
+                    if ($isRestricted) {
+                        $status = 'Restricted';
+                        $stats['restricted']++;
+                    } elseif ($isDisconnected) {
+                        $status = 'Disconnected';
+                        $stats['disconnected']++;
                     } else {
                         if ($hasSession) {
                             $status = 'Online';

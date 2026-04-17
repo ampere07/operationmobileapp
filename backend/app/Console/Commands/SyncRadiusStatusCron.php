@@ -45,8 +45,8 @@ class SyncRadiusStatusCron extends Command
                 'updated' => $stats['updated'],
                 'online' => $stats['online'],
                 'offline' => $stats['offline'],
-                'inactive' => $stats['inactive'],
-                'blocked' => $stats['blocked'],
+                'restricted' => $stats['restricted'],
+                'disconnected' => $stats['disconnected'],
                 'not_found' => $stats['not_found'],
                 'errors' => $stats['errors']
             ]);
@@ -62,7 +62,7 @@ class SyncRadiusStatusCron extends Command
             }
 
             $this->info('RADIUS Status Sync Completed');
-            $this->info("Synced: {$stats['synced']} | Online: {$stats['online']} | Offline: {$stats['offline']} | Inactive: {$stats['inactive']} | Blocked: {$stats['blocked']} | Not Found: {$stats['not_found']} | Errors: {$stats['errors']}");
+            $this->info("Synced: {$stats['synced']} | Online: {$stats['online']} | Offline: {$stats['offline']} | Restricted: {$stats['restricted']} | Disconnected: {$stats['disconnected']} | Not Found: {$stats['not_found']} | Errors: {$stats['errors']}");
 
             return Command::SUCCESS;
 

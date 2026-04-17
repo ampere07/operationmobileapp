@@ -284,6 +284,18 @@ class JobOrderController extends Controller
             if (isset($data['pppoe_username']) && !empty($data['pppoe_username'])) {
                 $data['username'] = $data['pppoe_username'];
             }
+
+            // Ensure timestamp is in Asia/Manila
+            if (isset($data['timestamp'])) {
+                try {
+                    $data['timestamp'] = \Carbon\Carbon::parse($data['timestamp'], 'Asia/Manila')->format('Y-m-d H:i:s');
+                } catch (\Exception $e) {
+                    $data['timestamp'] = now('Asia/Manila')->format('Y-m-d H:i:s');
+                }
+            } else {
+                $data['timestamp'] = now('Asia/Manila')->format('Y-m-d H:i:s');
+            }
+
             
             // Set default values if not provided
             if (!isset($data['billing_status'])) {
@@ -879,6 +891,10 @@ class JobOrderController extends Controller
 
             if ($existingCustomer) {
                 $customer = $existingCustomer;
+                $houseUrlSource = $jobOrder->house_front_picture_url ?: $application->house_front_picture_url;
+                if (!empty($houseUrlSource) && empty($customer->house_front_picture_url)) {
+                    $customer->update(['house_front_picture_url' => $houseUrlSource]);
+                }
                 \Log::info('Using existing customer for approval', ['customer_id' => $customer->id]);
             } else {
                 $customer = Customer::create([
@@ -897,7 +913,7 @@ class JobOrderController extends Controller
                     'housing_status' => $application->housing_status,
                     'referred_by' => $application->referred_by,
                     'desired_plan' => $application->desired_plan,
-                    'house_front_picture_url' => $jobOrder->house_front_picture_url,
+                    'house_front_picture_url' => $jobOrder->house_front_picture_url ?? $application->house_front_picture_url,
                     'proof_of_billing_url' => $application->proof_of_billing_url,
                     'government_valid_id_url' => $application->government_valid_id_url,
                     'second_government_valid_id_url' => $application->secondary_government_valid_id_url,

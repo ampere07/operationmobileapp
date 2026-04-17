@@ -277,19 +277,67 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       return;
     }
     const session = openCycleRef.current;
+    
     const fetchPorts = async () => {
       try {
-        const lRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
-        if (!isMountedRef.current || openCycleRef.current !== session) return;
-        if (lRes.success && lRes.data?.[0]) setTotalPorts(lRes.data[0].port_total || 32);
+        const used = new Set<string>();
         
-        const uRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
+        // 1. Determine total ports
+        const selectedLcpnapObj = lcpnaps.find(ln => ln.lcpnap_name === formData.newLcpnap);
+        if (selectedLcpnapObj) {
+          setTotalPorts(selectedLcpnapObj.port_total || 32);
+        } else {
+          const lRes = await getAllLCPNAPs(formData.newLcpnap, 1, 1);
+          if (isMountedRef.current && lRes.success && lRes.data?.[0]) {
+            setTotalPorts(lRes.data[0].port_total || 32);
+          }
+        }
+        
         if (!isMountedRef.current || openCycleRef.current !== session) return;
-        if (uRes.success && uRes.data) setUsedPorts(uRes.data.used);
-      } catch (e) {}
+
+        // 2. Fetch used ports from Job Orders and Technical Details via service
+        const uRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
+        if (isMountedRef.current && openCycleRef.current === session) {
+          if (uRes.success && uRes.data?.used) {
+            uRes.data.used.forEach(p => {
+              let norm = p.toString().trim();
+              if (/^\d+$/.test(norm)) norm = `P${norm.padStart(2, '0')}`;
+              used.add(norm.toUpperCase());
+            });
+          }
+        }
+
+        // 3. Robust check specifically for technical_details (already installed customers)
+        const lcpnapId = selectedLcpnapObj?.id;
+        if (lcpnapId) {
+          try {
+            const rcRes = await apiClient.get(`/lcpnap/${lcpnapId}/related-customers`);
+            if (isMountedRef.current && openCycleRef.current === session && rcRes.data?.success && Array.isArray(rcRes.data.data)) {
+              rcRes.data.data.forEach((rc: any) => {
+                // Skip the current account itself
+                const rcAccountNo = rc.account_no;
+                if (rcAccountNo !== formData.accountNo && rc.port) {
+                   let norm = rc.port.toString().trim();
+                   if (/^\d+$/.test(norm)) norm = `P${norm.padStart(2, '0')}`;
+                   used.add(norm.toUpperCase());
+                }
+              });
+            }
+          } catch (e) {
+            console.error('Failed to fetch related customers in service order edit:', e);
+          }
+        }
+
+        if (isMountedRef.current && openCycleRef.current === session) {
+          setUsedPorts(Array.from(used));
+        }
+      } catch (e) {
+        console.error('Error in fetchPorts:', e);
+      }
     };
+    
     fetchPorts();
-  }, [isOpen, formData.newLcpnap, formData.accountNo]);
+  }, [isOpen, formData.newLcpnap, formData.accountNo, lcpnaps]);
 
   // Drafts
   useEffect(() => {

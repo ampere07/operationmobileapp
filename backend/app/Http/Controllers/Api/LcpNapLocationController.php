@@ -85,9 +85,9 @@ class LcpNapLocationController extends Controller
                     'td.lcpnap',
                     \DB::raw('COUNT(DISTINCT td.id) as total_technical_details'),
                     \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Online" THEN os.id END) as active_sessions'),
-                    \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Inactive" THEN os.id END) as inactive_sessions'),
+                    \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Restricted" THEN os.id END) as restricted_sessions'),
                     \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Offline" THEN os.id END) as offline_sessions'),
-                    \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Blocked" THEN os.id END) as blocked_sessions'),
+                    \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Disconnected" THEN os.id END) as disconnected_sessions'),
                     \DB::raw('COUNT(DISTINCT CASE WHEN os.session_status = "Not Found" THEN os.id END) as not_found_sessions'),
                     \DB::raw('COUNT(DISTINCT os.id) as total_sessions')
                 );
@@ -129,9 +129,9 @@ class LcpNapLocationController extends Controller
                         'modified_by' => $item->modified_by,
                         'modified_date' => $item->modified_date,
                         'active_sessions' => $stats ? (int) $stats->active_sessions : 0,
-                        'inactive_sessions' => $stats ? (int) $stats->inactive_sessions : 0,
+                        'restricted_sessions' => $stats ? (int) $stats->restricted_sessions : 0,
                         'offline_sessions' => $stats ? (int) $stats->offline_sessions : 0,
-                        'blocked_sessions' => $stats ? (int) $stats->blocked_sessions : 0,
+                        'disconnected_sessions' => $stats ? (int) $stats->disconnected_sessions : 0,
                         'not_found_sessions' => $stats ? (int) $stats->not_found_sessions : 0,
                         'total_technical_details' => $stats ? (int) $stats->total_technical_details : 0,
                         'total_sessions' => $stats ? (int) $stats->total_sessions : 0
