@@ -9,6 +9,7 @@ import {
     CreditCard,
     LogOut,
     Info,
+    Clock,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -16,6 +17,7 @@ import { formUIService } from '../services/formUIService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import NotificationModal from '../modals/NotificationModal';
 import AboutAppModal from '../modals/AboutAppModal';
+import TimeInOutModal from '../modals/TimeInOutModal';
 import { version } from '../../package.json';
 
 interface MenuProps {
@@ -33,6 +35,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showNotificationModal, setShowNotificationModal] = useState(false);
     const [showAboutModal, setShowAboutModal] = useState(false);
+    const [showTimeInOutModal, setShowTimeInOutModal] = useState(false);
 
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
@@ -67,16 +70,14 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
         initialize();
     }, []);
 
+    const isTechnician = userData?.role?.toLowerCase() === 'technician' || userData?.role_id === 2;
+
     const menuGroups = [
         {
-            title: 'Preferences',
+            title: 'Menu',
             items: [
+                ...(isTechnician ? [{ id: 'time-in-out', label: 'Time In/Out', icon: Clock }] : []),
                 { id: 'notifications', label: 'Notifications', icon: Bell },
-            ]
-        },
-        {
-            title: 'About',
-            items: [
                 { id: 'about', label: 'About App', icon: Info },
             ]
         }
@@ -140,31 +141,34 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
             <View style={s.menuContainer}>
                 {menuGroups.map((group, groupIndex) => (
                     <View key={groupIndex} style={s.groupWrap}>
-                        <Text style={s.groupTitle}>{group.title}</Text>
+                        {!!group.title && <Text style={s.groupTitle}>{group.title}</Text>}
                         <View style={s.groupCard}>
                             {group.items.map((item, itemIndex) => (
-                                <Pressable
-                                    key={item.id}
-                                    onPress={() => {
-                                        if (item.id === 'notifications') {
-                                            setShowNotificationModal(true);
-                                        } else if (item.id === 'about') {
-                                            setShowAboutModal(true);
-                                        }
-                                    }}
-                                    style={({ pressed }) => [
-                                        s.menuItem,
-                                        { backgroundColor: pressed ? '#f9fafb' : '#ffffff' },
-                                        itemIndex < group.items.length - 1 ? s.menuItemBorder : null,
-                                    ]}
-                                >
-                                    <View style={s.menuItemLeft}>
-                                        <View style={s.menuIconWrap}>
-                                            <item.icon size={20} color="#4b5563" />
+                                <React.Fragment key={item.id}>
+                                    <Pressable
+                                        onPress={() => {
+                                            if (item.id === 'notifications') {
+                                                setShowNotificationModal(true);
+                                            } else if (item.id === 'about') {
+                                                setShowAboutModal(true);
+                                            } else if (item.id === 'time-in-out') {
+                                                setShowTimeInOutModal(true);
+                                            }
+                                        }}
+                                        style={({ pressed }) => [
+                                            s.menuItem,
+                                            { backgroundColor: pressed ? '#f9fafb' : '#ffffff' }
+                                        ]}
+                                    >
+                                        <View style={s.menuItemLeft}>
+                                            <View style={s.menuIconWrap}>
+                                                <item.icon size={20} color="#4b5563" />
+                                            </View>
+                                            <Text style={s.menuItemLabel}>{item.label}</Text>
                                         </View>
-                                        <Text style={s.menuItemLabel}>{item.label}</Text>
-                                    </View>
-                                </Pressable>
+                                    </Pressable>
+                                    {itemIndex < group.items.length - 1 && <View style={s.separator} />}
+                                </React.Fragment>
                             ))}
                         </View>
                     </View>
@@ -225,6 +229,13 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                 visible={showAboutModal}
                 onClose={() => setShowAboutModal(false)}
             />
+
+            <TimeInOutModal 
+                visible={showTimeInOutModal}
+                onClose={() => setShowTimeInOutModal(false)}
+                userData={userData}
+                colorPalette={colorPalette}
+            />
         </ScrollView>
     );
 };
@@ -252,8 +263,8 @@ const s = StyleSheet.create({
     groupWrap: { marginBottom: 24 },
     groupTitle: { fontSize: 13, fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginLeft: 4 },
     groupCard: { backgroundColor: '#ffffff', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#f1f5f9' },
-    menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16 },
-    menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 20, paddingHorizontal: 20 },
+    separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#e5e7eb', marginHorizontal: 20 },
     menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
     menuIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     menuItemLabel: { fontSize: 15, fontWeight: '500', color: '#374151', marginLeft: 14 },

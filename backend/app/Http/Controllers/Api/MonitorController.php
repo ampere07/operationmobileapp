@@ -658,6 +658,7 @@ class MonitorController extends Controller
 
             // 13) TECHNICIAN AVAILABILITY
             if ($action === 'technician_availability') {
+                $customStartTime = $request->query('custom_start_time');
                 $techs = DB::table('users')
                     ->where('role_id', 2)
                     ->select('username', 'email_address', 'first_name', 'last_name', 'created_at')
@@ -667,9 +668,21 @@ class MonitorController extends Controller
                 $now = \Carbon\Carbon::now('Asia/Manila');
                 $viewStart = $now->copy()->startOfDay();
 
+                // Apply custom start time if provided (format HH:mm)
+                $applyCustomStart = function($baseDate) use ($customStartTime) {
+                    if ($customStartTime && preg_match('/^([01][0-9]|2[0-3]):([0-5][0-9])$/', $customStartTime)) {
+                        try {
+                            return \Carbon\Carbon::createFromFormat('Y-m-d H:i', $baseDate->toDateString() . ' ' . $customStartTime, 'Asia/Manila');
+                        } catch (\Exception $e) {
+                            return $baseDate->startOfDay();
+                        }
+                    }
+                    return $baseDate->startOfDay();
+                };
+
                 switch ($scope) {
                     case 'today':
-                        $viewStart = $now->copy()->startOfDay();
+                        $viewStart = $applyCustomStart($now->copy());
                         break;
                     case 'weekly':
                         $viewStart = $now->copy()->startOfWeek();
