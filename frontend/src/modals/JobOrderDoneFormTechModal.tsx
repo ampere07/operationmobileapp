@@ -703,16 +703,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             const joLcpnap = jo.lcpnap || jo.LCPNAP;
 
             if (joLcpnap === formData.lcpnap) {
-              const joPort = (jo.port || jo.PORT || '').toString().trim();
+              const joPort = (jo.port || jo.PORT || '').toString().replace(/\s+/g, '');
               const joId = jo.id || jo.JobOrder_ID;
 
               if (joPort && String(joId) !== String(currentId)) {
                 // Normalize port name to match generator (e.g., P01)
-                let p = joPort;
+                let p = joPort.toUpperCase();
                 if (/^\d+$/.test(p)) {
                   p = `P${p.padStart(2, '0')}`;
+                } else if (/^P\d+$/.test(p)) {
+                  const numStr = p.substring(1);
+                  p = `P${numStr.padStart(2, '0')}`;
                 }
-                used.add(p.toUpperCase());
+                used.add(p);
               }
             }
           });
@@ -729,15 +732,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             
             if (isCurrentSession() && rcResponse.data && rcResponse.data.success && Array.isArray(rcResponse.data.data)) {
               rcResponse.data.data.forEach((rc: any) => {
-                const rcPort = (rc.port || '').toString().trim();
+                const rcPort = (rc.port || '').toString().replace(/\s+/g, '');
                 const rcAccountId = rc.id || rc.account_id || rc.Account_ID;
 
                 if (rcPort && String(rcAccountId) !== String(currentAccountId)) {
-                  let p = rcPort;
+                  let p = rcPort.toUpperCase();
                   if (/^\d+$/.test(p)) {
                     p = `P${p.padStart(2, '0')}`;
+                  } else if (/^P\d+$/.test(p)) {
+                    const numStr = p.substring(1);
+                    p = `P${numStr.padStart(2, '0')}`;
                   }
-                  used.add(p.toUpperCase());
+                  used.add(p);
                 }
               });
             }

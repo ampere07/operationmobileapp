@@ -8,7 +8,6 @@ import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemSe
 import { createServiceOrderItems, ServiceOrderItem } from '../services/serviceOrderItemService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { concernService, Concern } from '../services/concernService';
-import { getUsedPorts } from '../services/portService';
 import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
 import { technicianService } from '../services/technicianService';
 
@@ -295,19 +294,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
         
         if (!isMountedRef.current || openCycleRef.current !== session) return;
 
-        // 2. Fetch used ports from Job Orders and Technical Details via service
-        const uRes = await getUsedPorts(formData.newLcpnap, undefined, formData.accountNo);
-        if (isMountedRef.current && openCycleRef.current === session) {
-          if (uRes.success && uRes.data?.used) {
-            uRes.data.used.forEach(p => {
-              let norm = p.toString().trim();
-              if (/^\d+$/.test(norm)) norm = `P${norm.padStart(2, '0')}`;
-              used.add(norm.toUpperCase());
-            });
-          }
-        }
-
-        // 3. Robust check specifically for technical_details (already installed customers)
+        // Fetch used ports ONLY from technical_details (already installed customers)
         const lcpnapId = selectedLcpnapObj?.id;
         if (lcpnapId) {
           try {
@@ -317,9 +304,14 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
                 // Skip the current account itself
                 const rcAccountNo = rc.account_no;
                 if (rcAccountNo !== formData.accountNo && rc.port) {
-                   let norm = rc.port.toString().trim();
-                   if (/^\d+$/.test(norm)) norm = `P${norm.padStart(2, '0')}`;
-                   used.add(norm.toUpperCase());
+                   let norm = rc.port.toString().replace(/\s+/g, '').toUpperCase();
+                   if (/^\d+$/.test(norm)) {
+                     norm = `P${norm.padStart(2, '0')}`;
+                   } else if (/^P\d+$/.test(norm)) {
+                     const numStr = norm.substring(1);
+                     norm = `P${numStr.padStart(2, '0')}`;
+                   }
+                   used.add(norm);
                 }
               });
             }
