@@ -660,8 +660,9 @@ class MonitorController extends Controller
             if ($action === 'technician_availability') {
                 $customStartTime = $request->query('custom_start_time');
                 $techs = DB::table('users')
-                    ->where('role_id', 2)
-                    ->select('username', 'email_address', 'first_name', 'last_name', 'created_at')
+                    ->where('users.role_id', 2)
+                    ->leftJoin('tech_in_out', 'users.id', '=', 'tech_in_out.tech_id')
+                    ->select('users.id as tech_id', 'users.username', 'users.email_address', 'users.first_name', 'users.last_name', 'users.created_at', 'tech_in_out.status as tech_status', 'tech_in_out.time_in', 'tech_in_out.time_out', 'tech_in_out.last_updated')
                     ->get();
 
                 $data = [];
@@ -725,7 +726,7 @@ class MonitorController extends Controller
                     $dailySOs = DB::table('service_orders')
                         ->where('assigned_email', $email)
                         ->where('start_time', '>=', $viewStartStr)
-                        ->select('id', 'start_time', 'end_time', 'visit_status as status', DB::raw("'so' as task_type"))
+                        ->select('id', 'start_time', 'end_time', 'visit_status as status', DB::raw("'so' as task_type"), 'concern')
                         ->get();
 
                     $allTasks = $dailyJOs->concat($dailySOs)->sortBy('start_time');
@@ -737,9 +738,23 @@ class MonitorController extends Controller
 
                     $sortedTasks = $allTasks->sortBy('start_time');
 
+                    $isOffline = (strtolower($tech->tech_status ?? '') === 'offline');
+                    $timeBound = $now->copy();
+
+                    if ($isOffline) {
+                        if (!empty($tech->time_out)) {
+                            $timeBound = \Carbon\Carbon::parse($tech->time_out, 'Asia/Manila');
+                        } elseif (!empty($tech->last_updated)) {
+                            $timeBound = \Carbon\Carbon::parse($tech->last_updated, 'Asia/Manila');
+                        }
+                    }
+
                     foreach ($sortedTasks as $task) {
                         $tStart = \Carbon\Carbon::parse($task->start_time, 'Asia/Manila');
-                        $tEnd = $task->end_time ? \Carbon\Carbon::parse($task->end_time, 'Asia/Manila') : $now;
+                        $tEnd = $task->end_time ? \Carbon\Carbon::parse($task->end_time, 'Asia/Manila') : $timeBound->copy();
+
+                        if ($tStart->gt($timeBound)) $tStart = $timeBound->copy();
+                        if ($tEnd->gt($timeBound)) $tEnd = $timeBound->copy();
 
                         // Add idle time before this task
                         if ($tStart->gt($currentTime)) {
@@ -754,9 +769,9 @@ class MonitorController extends Controller
                         }
                     }
 
-                    // Add final idle time until now
-                    if ($currentTime->lt($now)) {
-                        $totalAvailableSeconds += $currentTime->diffInSeconds($now);
+                    // Add final idle time until timeBound
+                    if ($currentTime->lt($timeBound)) {
+                        $totalAvailableSeconds += $currentTime->diffInSeconds($timeBound);
                     }
 
                     // Format Times
@@ -770,24 +785,41 @@ class MonitorController extends Controller
 
                     // 3. Status Logic
                     $workingTask = $allTasks->filter(function($t) { return !$t->end_time; })->last();
-
+                    $isPullout = false;
                     if ($workingTask) {
                         $status = 'Working';
-                        $details = ($workingTask->task_type === 'jo' ? 'Job Order #' : 'Service Order #') . $workingTask->id . ' (' . ($workingTask->status ?? 'In Progress') . ')';
+                        $details = ($workingTask->task_type === 'jo' ? 'Job Order' : 'Service Order');
+                        
+                        // Add concern for SO
+                        if ($workingTask->task_type === 'so' && !empty($workingTask->concern)) {
+                            if (stripos($workingTask->concern, 'Pullout') !== false) {
+                                $isPullout = true;
+                            } else {
+                                $details .= ' - ' . $workingTask->concern;
+                            }
+                        }
+                        
                         $since = $workingTask->start_time;
                         $primaryTimeDisp = $workingTimeStr;
                     } else {
                         $status = 'Available';
                         $lastFinished = $allTasks->filter(function($t) { return $t->end_time; })->last();
                         if ($lastFinished) {
-                            $details = ($lastFinished->task_type === 'jo' ? 'Job Order #' : 'Service Order #') . $lastFinished->id . ' (' . ($lastFinished->status ?? 'Done') . ')';
+                            $details = ($lastFinished->task_type === 'jo' ? 'Job Order' : 'Service Order') . ' (' . ($lastFinished->status ?? 'Done') . ')';
                             $since = $lastFinished->end_time;
                         } else {
-                            $details = 'Ready to accept tasks (Today)';
+                            $details = 'Ready to Accept';
                             $since = $viewStartStr;
                         }
                         $primaryTimeDisp = $availableTimeStr;
                     }
+
+                    if ($isOffline) {
+                        $status = 'Offline';
+                        $details = 'Technician is offline';
+                        $since = clone $timeBound;
+                    }
+
 
                     if ($since) {
                         try {
@@ -799,13 +831,17 @@ class MonitorController extends Controller
                         'label' => $name,
                         'value' => $totalWorkingSeconds,
                         'meta' => [
+                            'tech_id' => $tech->tech_id,
                             'email' => $email,
                             'status' => $status,
                             'details' => $details,
                             'since' => $since,
                             'primary_time_str' => $primaryTimeDisp,
                             'total_working_str' => $workingTimeStr,
-                            'total_available_str' => $availableTimeStr
+                            'total_available_str' => $availableTimeStr,
+                            'is_pullout' => $isPullout,
+                            'time_in' => $tech->time_in,
+                            'time_out' => $tech->time_out
                         ]
                     ];
                 }

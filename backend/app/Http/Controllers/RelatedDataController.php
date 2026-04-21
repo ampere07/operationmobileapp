@@ -1471,17 +1471,33 @@ class RelatedDataController extends Controller
     public function getAuditTrailLogsByJobOrder(string $jobOrderId): JsonResponse
     {
         try {
-            $logs = DB::table('audit_trail_logs')
+            // Fetch the job order to get the associated application_id
+            $jobOrder = DB::table('job_orders')->where('id', $jobOrderId)->first();
+            $applicationId = $jobOrder ? $jobOrder->application_id : null;
+
+            $query = DB::table('audit_trail_logs')
                 ->where(function ($query) use ($jobOrderId) {
                     $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.type')) = 'joborders'")
-                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.id')) = ?", [$jobOrderId]);
-                })
-                ->orWhere(function ($query) use ($jobOrderId) {
-                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.type')) = 'joborders'")
-                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.id')) = ?", [$jobOrderId]);
-                })
-                ->orderBy('created_at', 'desc')
-                ->get();
+                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.id')) = ?", [$jobOrderId])
+                          ->orWhere(function ($q) use ($jobOrderId) {
+                              $q->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.type')) = 'joborders'")
+                                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.id')) = ?", [$jobOrderId]);
+                          });
+                });
+
+            // If there's an associated application, also fetch its audit logs
+            if ($applicationId) {
+                $query->orWhere(function ($query) use ($applicationId) {
+                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.type')) = 'applications'")
+                          ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(new_details, '$.id')) = ?", [$applicationId])
+                          ->orWhere(function ($q) use ($applicationId) {
+                              $q->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.type')) = 'applications'")
+                                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_details, '$.id')) = ?", [$applicationId]);
+                          });
+                });
+            }
+
+            $logs = $query->orderBy('created_at', 'desc')->get();
                 
             $logs->transform(function ($log) {
                 return [

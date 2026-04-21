@@ -24,7 +24,7 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['*'],
+    'allowed_headers' => ['*', 'X-Skip-Auth-Error'],
 
     'exposed_headers' => [],
 
