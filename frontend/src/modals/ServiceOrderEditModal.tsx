@@ -356,7 +356,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   {renderInput('concernRemarks', 'Concern Remarks', !isTechnician)}
                   {renderInput('modifiedBy', 'Modified By', false)}
                   {renderInput('supportRemarks', 'Support Remarks')}
-                  {renderInput('serviceCharge', 'Service Charge', true, 'numeric')}
+
 
                 </ScrollView>
               )}
