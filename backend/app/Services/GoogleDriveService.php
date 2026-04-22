@@ -119,26 +119,68 @@ class GoogleDriveService
 
     private function initializeGoogleDriveService()
     {
-        $client = new GoogleClient();
+        $tempDir = sys_get_temp_dir();
         
+        // Use config() instead of env() to ensure values are found even if config is cached
+        $rawKey = config('services.google.drive.private_key') ?? env('GOOGLE_DRIVE_PRIVATE_KEY');
+        $clientEmail = config('services.google.drive.client_email') ?? env('GOOGLE_DRIVE_CLIENT_EMAIL');
+        $projectId = config('services.google.drive.project_id') ?? env('GOOGLE_DRIVE_PROJECT_ID');
+        $clientId = config('services.google.drive.client_id') ?? env('GOOGLE_DRIVE_CLIENT_ID');
+        $privateKeyId = config('services.google.drive.private_key_id') ?? env('GOOGLE_DRIVE_PRIVATE_KEY_ID');
+
+        // Handle literal backslash+n and ensure actual newlines
+        $privateKey = str_replace(['\\n', '\n'], "\n", $rawKey);
+        
+        // Remove any surrounding quotes that might have been preserved by environment loaders
+        $privateKey = trim($privateKey, '"\'');
+        
+        // Ensure it starts and ends correctly by trimming any whitespace
+        $privateKey = trim($privateKey);
+
+        // Create a unique filename for this application to avoid collisions
+        $tempKeyFile = $tempDir . '/google_drive_keys_' . substr(md5($clientEmail), 0, 10) . '.json';
+
+        // Create the credentials array
         $credentials = [
             'type' => 'service_account',
-            'project_id' => env('GOOGLE_DRIVE_PROJECT_ID'),
-            'private_key_id' => env('GOOGLE_DRIVE_PRIVATE_KEY_ID'),
-            'private_key' => str_replace('\\n', "\n", env('GOOGLE_DRIVE_PRIVATE_KEY')),
-            'client_email' => env('GOOGLE_DRIVE_CLIENT_EMAIL'),
-            'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+            'project_id' => $projectId,
+            'private_key_id' => $privateKeyId,
+            'private_key' => $privateKey,
+            'client_email' => $clientEmail,
+            'client_id' => $clientId,
             'auth_uri' => 'https://accounts.google.com/o/oauth2/auth',
             'token_uri' => 'https://oauth2.googleapis.com/token',
             'auth_provider_x509_cert_url' => 'https://www.googleapis.com/oauth2/v1/certs',
-            'client_x509_cert_url' => 'https://www.googleapis.com/robot/v1/metadata/x509/' . env('GOOGLE_DRIVE_CLIENT_EMAIL')
+            'client_x509_cert_url' => 'https://www.googleapis.com/robot/v1/metadata/x509/' . urlencode($clientEmail)
         ];
+
+        // Ensure the temporary file exists and has the current credentials
+        try {
+            file_put_contents($tempKeyFile, json_encode($credentials));
+            chmod($tempKeyFile, 0600);
+        } catch (\Exception $e) {
+            Log::error('Failed to create temporary Google credentials file', [
+                'path' => $tempKeyFile,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        // Set environment variables to guide the Google SDK
+        putenv('GOOGLE_APPLICATION_CREDENTIALS=' . $tempKeyFile);
+        putenv('HOME=' . $tempDir);
+
+        $client = new GoogleClient();
         
+        // Use the array directly to be certain no file-loading issues occur
         $client->setAuthConfig($credentials);
         $client->addScope(GoogleDrive::DRIVE_FILE);
         
         return new GoogleDrive($client);
     }
+
+
+
+
 
     public function getService()
     {

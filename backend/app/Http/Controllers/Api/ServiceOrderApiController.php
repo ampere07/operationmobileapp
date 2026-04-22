@@ -454,6 +454,12 @@ class ServiceOrderApiController extends Controller
 
             $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
 
+            $accountRef = $serviceOrder->account_no;
+            // Fetch old records for change logging
+            $oldCustomer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$accountRef]);
+            $oldBilling = DB::selectOne("SELECT * FROM billing_accounts WHERE account_no = ?", [$accountRef]);
+            $oldTechnical = DB::selectOne("SELECT * FROM technical_details WHERE account_no = ?", [$accountRef]);
+
             $allowedFields = [
                 'account_no',
                 'timestamp',
@@ -848,6 +854,49 @@ class ServiceOrderApiController extends Controller
             }
 
             $updatedServiceOrder = DB::table('service_orders')->where('id', $id)->first();
+
+            // Compare and log changes to customers, billing_accounts, and technical_details
+            $newCustomer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$accountRef]);
+            $newBilling = DB::selectOne("SELECT * FROM billing_accounts WHERE account_no = ?", [$accountRef]);
+            $newTechnical = DB::selectOne("SELECT * FROM technical_details WHERE account_no = ?", [$accountRef]);
+
+            $oldDataToLog = [];
+            $newDataToLog = [];
+
+            $tablesToCompare = [
+                ['name' => 'customers', 'old' => $oldCustomer, 'new' => $newCustomer],
+                ['name' => 'billing_accounts', 'old' => $oldBilling, 'new' => $newBilling],
+                ['name' => 'technical_details', 'old' => $oldTechnical, 'new' => $newTechnical],
+            ];
+
+            foreach ($tablesToCompare as $table) {
+                if ($table['old'] && $table['new']) {
+                    foreach ((array)$table['old'] as $key => $oldVal) {
+                        // Skip internal and timestamp fields
+                        if (in_array($key, ['id', 'created_at', 'updated_at', 'balance_update_date'])) continue;
+                        
+                        $newVal = $table['new']->$key ?? null;
+                        if ($oldVal != $newVal) {
+                            $oldDataToLog[$table['name']][$key] = $oldVal;
+                            $newDataToLog[$table['name']][$key] = $newVal;
+                        }
+                    }
+                }
+            }
+
+            if (!empty($oldDataToLog)) {
+                $currentUserId = Auth::id() ?? null;
+                DB::table('details_update_logs')->insert([
+                    'account_id' => $oldBilling->id ?? null,
+                    'old_details' => json_encode($oldDataToLog),
+                    'new_details' => json_encode($newDataToLog),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                    'created_by_user_id' => $currentUserId,
+                    'updated_by_user_id' => $currentUserId,
+                ]);
+                Log::info("Logged details update (API) for account_no: {$accountRef}");
+            }
 
             return response()->json([
                 'success' => true,

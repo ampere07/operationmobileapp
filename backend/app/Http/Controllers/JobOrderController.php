@@ -862,7 +862,8 @@ class JobOrderController extends Controller
             }
 
             $application = $jobOrder->application;
-            $defaultUserId = 1;
+            $actionUserEmail = request()->input('updated_by_user_email') ?? auth()->user()?->email_address ?? auth()->user()?->email ?? 'admin@amperecloud.com';
+            $actionUserId = auth()->id() ?? 1;
 
             \Log::info('Job Order Approval - Application Data', [
                 'application_id' => $application->id,
@@ -919,8 +920,8 @@ class JobOrderController extends Controller
                     'second_government_valid_id_url' => $application->secondary_government_valid_id_url,
                     'document_attachment_url' => $application->document_attachment_url,
                     'other_isp_bill_url' => $application->other_isp_bill_url,
-                    'created_by' => $defaultUserId,
-                    'updated_by' => $defaultUserId,
+                    'created_by' => $actionUserEmail,
+                    'updated_by' => $actionUserEmail,
                 ]);
             }
 
@@ -1000,8 +1001,8 @@ class JobOrderController extends Controller
                 'balance_update_date' => now(),
                 'billing_day' => $jobOrder->billing_day,
                 'billing_status_id' => 1,
-                'created_by' => $defaultUserId,
-                'updated_by' => $defaultUserId,
+                'created_by' => $actionUserEmail,
+                'updated_by' => $actionUserEmail,
             ]);
             
             \Log::info('BillingAccount created', [
@@ -1050,8 +1051,8 @@ class JobOrderController extends Controller
                 'vlan' => $jobOrder->vlan,
                 'lcpnap' => $jobOrder->lcpnap,
                 'usage_type' => $jobOrder->usage_type,
-                'created_by' => $defaultUserId,
-                'updated_by' => $defaultUserId,
+                'created_by' => $actionUserEmail,
+                'updated_by' => $actionUserEmail,
             ]);
 
 
@@ -1106,8 +1107,8 @@ class JobOrderController extends Controller
                     'contact_number' => $customer->contact_number_primary,
                     'role_id' => $customerRoleId,
                     'status' => 'active',
-                    'created_by_user_id' => $defaultUserId,
-                    'updated_by_user_id' => $defaultUserId,
+                    'created_by_user_id' => $actionUserId,
+                    'updated_by_user_id' => $actionUserId,
                 ];
                 
                 // Directly insert into database to bypass mutator
