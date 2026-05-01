@@ -33,6 +33,17 @@ class ApplicationController extends Controller
 
             $query = Application::orderBy('id', 'desc');
 
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    // If user has no organization_id, only show applications that also have no organization_id
+                    $query->whereNull('organization_id');
+                }
+            }
+
             // Apply 'since' filter if provided
             if ($since) {
                 $query->where('updated_at', '>', $since);
@@ -80,7 +91,8 @@ class ApplicationController extends Controller
                         'last_name' => $app->last_name,
                         'city' => $app->city,
                         'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
-                        'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null
+                        'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null,
+                        'organization_id' => $app->organization_id
                     ];
                 });
 
@@ -138,7 +150,8 @@ class ApplicationController extends Controller
                     'long_lat' => $app->long_lat,
                     
                     'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
-                    'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null
+                    'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null,
+                    'organization_id' => $app->organization_id
                 ];
             });
             
@@ -185,7 +198,7 @@ class ApplicationController extends Controller
             return 'Unknown Location';
         }
     }
-
+    
     private function broadcastNewApplication($application)
     {
         try {
@@ -198,7 +211,7 @@ class ApplicationController extends Controller
                 'title' => 'New Application',
                 'message' => 'A new customer application has been received',
                 'timestamp' => now()->timestamp,
-                'formatted_date' => now()->format('Y-m-d h:i:s A')
+                'organization_id' => $application->organization_id
             ];
 
             event(new \App\Events\NewApplicationCreated($data));
@@ -238,11 +251,17 @@ class ApplicationController extends Controller
                 'other_isp_bill_url' => 'nullable|string|max:255',
                 'terms_agreed' => 'nullable|boolean',
                 'status' => 'nullable|string|max:100',
-                'long_lat' => 'nullable|string|max:255'
+                'long_lat' => 'nullable|string|max:255',
+                'organization_id' => 'nullable|integer'
             ]);
 
             $validatedData['timestamp'] = now();
             $validatedData['created_by_user_id'] = auth()->id();
+            
+            // If not provided, default to current user's organization
+            if (!isset($validatedData['organization_id']) && auth()->user()?->organization_id) {
+                $validatedData['organization_id'] = auth()->user()->organization_id;
+            }
 
             $application = Application::create($validatedData);
 
@@ -313,6 +332,7 @@ class ApplicationController extends Controller
                 'other_isp_bill_url' => $application->other_isp_bill_url,
                 'terms_agreed' => $application->terms_agreed,
                 'long_lat' => $application->long_lat,
+                'organization_id' => $application->organization_id,
             ];
 
             return response()->json([
@@ -344,7 +364,17 @@ class ApplicationController extends Controller
         try {
             Log::info('ApplicationController show: Fetching application ID: ' . $id);
             
-            $application = Application::findOrFail($id);
+            $query = Application::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            
+            $application = $query->findOrFail($id);
             
             $formattedApplication = [
                 'id' => (string)$application->id,
@@ -385,6 +415,7 @@ class ApplicationController extends Controller
                 'updated_by' => $application->updated_by,
                 'remarks' => $application->remarks,
                 'long_lat' => $application->long_lat,
+                'organization_id' => $application->organization_id,
                 
                 'create_date' => $application->timestamp ? $application->timestamp->format('Y-m-d') : null,
                 'create_time' => $application->timestamp ? $application->timestamp->format('H:i:s') : null
@@ -427,10 +458,21 @@ class ApplicationController extends Controller
                 'promo' => 'nullable|string|max:255',
                 'remarks' => 'nullable|string',
                 'updated_by' => 'nullable|string|max:255',
-                'long_lat' => 'nullable|string|max:255'
+                'long_lat' => 'nullable|string|max:255',
+                'organization_id' => 'nullable|integer'
             ]);
 
-            $application = Application::findOrFail($id);
+            $query = Application::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $application = $query->findOrFail($id);
             $oldStatus = $application->status;
 
             Log::info("=== UPDATE PAYLOAD FOR APP #$id ===", $request->all());
@@ -517,7 +559,17 @@ class ApplicationController extends Controller
     public function destroy($id)
     {
         try {
-            $application = Application::findOrFail($id);
+            $query = Application::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $application = $query->findOrFail($id);
             $applicationData = $application->toArray();
             $application->delete();
 
@@ -566,6 +618,7 @@ class ApplicationController extends Controller
             ], 500);
         }
     }
+
     public function broadcastViewing(Request $request)
     {
         try {
@@ -588,4 +641,3 @@ class ApplicationController extends Controller
         }
     }
 }
-

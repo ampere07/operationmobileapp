@@ -20,7 +20,8 @@ class Discount extends Model
         'processed_by_user_id',
         'approved_by_user_id',
         'created_by_user_id',
-        'updated_by_user_id'
+        'updated_by_user_id',
+        'organization_id'
     ];
 
     protected $casts = [

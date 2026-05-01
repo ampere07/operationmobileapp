@@ -119,7 +119,10 @@ class GoogleDriveService
 
     private function initializeGoogleDriveService()
     {
-        $tempDir = sys_get_temp_dir();
+        $tempDir = storage_path('app/temp');
+        if (!file_exists($tempDir)) {
+            @mkdir($tempDir, 0775, true);
+        }
         
         // Use config() instead of env() to ensure values are found even if config is cached
         $rawKey = config('services.google.drive.private_key') ?? env('GOOGLE_DRIVE_PRIVATE_KEY');
@@ -138,7 +141,11 @@ class GoogleDriveService
         $privateKey = trim($privateKey);
 
         // Create a unique filename for this application to avoid collisions
-        $tempKeyFile = $tempDir . '/google_drive_keys_' . substr(md5($clientEmail), 0, 10) . '.json';
+        $currentUser = function_exists('posix_getpwuid') && function_exists('posix_geteuid') 
+            ? posix_getpwuid(posix_geteuid())['name'] 
+            : get_current_user();
+            
+        $tempKeyFile = $tempDir . '/google_drive_keys_' . $currentUser . '_' . substr(md5($clientEmail), 0, 10) . '.json';
 
         // Create the credentials array
         $credentials = [

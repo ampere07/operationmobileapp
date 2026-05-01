@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class InventoryRelatedDataController extends Controller
 {
@@ -15,10 +16,15 @@ class InventoryRelatedDataController extends Controller
     public function getInventoryLogsByItem(string $itemId): JsonResponse
     {
         try {
-            // inventory_logs has 'item_id' column
-            $logs = DB::table('inventory_logs')
-                ->where('item_id', $itemId)
-                ->orderBy('date', 'desc')
+            $query = DB::table('inventory_logs')
+                ->where('item_id', $itemId);
+
+            $user = Auth::user();
+            if ($user && $user->organization_id) {
+                $query->where('organization_id', $user->organization_id);
+            }
+
+            $logs = $query->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -47,10 +53,15 @@ class InventoryRelatedDataController extends Controller
     public function getBorrowedLogsByItem(string $itemId): JsonResponse
     {
         try {
-            // borrowed_logs has 'item_id' column based on CREATE TABLE
-            $logs = DB::table('borrowed_logs')
-                ->where('item_id', $itemId)
-                ->orderBy('date', 'desc')
+            $query = DB::table('borrowed_logs')
+                ->where('item_id', $itemId);
+
+            $user = Auth::user();
+            if ($user && $user->organization_id) {
+                $query->where('organization_id', $user->organization_id);
+            }
+
+            $logs = $query->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -93,9 +104,15 @@ class InventoryRelatedDataController extends Controller
                 ]);
             }
 
-            $logs = DB::table('defective_logs')
-                ->where('item_name', $item->item_name)
-                ->orderBy('date', 'desc')
+            $query = DB::table('defective_logs')
+                ->where('item_name', $item->item_name);
+
+            $user = Auth::user();
+            if ($user && $user->organization_id) {
+                $query->where('organization_id', $user->organization_id);
+            }
+
+            $logs = $query->orderBy('date', 'desc')
                 ->get();
 
             return response()->json([
@@ -139,14 +156,25 @@ class InventoryRelatedDataController extends Controller
             }
 
             // Get job_order_id from job_order_items by matching item_name
-            $jobOrderIds = DB::table('job_order_items')
-                ->where('item_name', $item->item_name)
-                ->pluck('job_order_id');
+            $itemsQuery = DB::table('job_order_items')
+                ->where('item_name', $item->item_name);
+            
+            $user = Auth::user();
+            if ($user && $user->organization_id) {
+                $itemsQuery->where('organization_id', $user->organization_id);
+            }
+            
+            $jobOrderIds = $itemsQuery->pluck('job_order_id');
 
             // Then get job orders
-            $jobOrders = DB::table('job_orders')
-                ->whereIn('id', $jobOrderIds)
-                ->orderBy('created_at', 'desc')
+            $ordersQuery = DB::table('job_orders')
+                ->whereIn('id', $jobOrderIds);
+            
+            if ($user && $user->organization_id) {
+                $ordersQuery->where('organization_id', $user->organization_id);
+            }
+            
+            $jobOrders = $ordersQuery->orderBy('created_at', 'desc')
                 ->get();
 
             return response()->json([
@@ -190,14 +218,25 @@ class InventoryRelatedDataController extends Controller
             }
 
             // Get service_order_id from service_order_items by matching item_name
-            $serviceOrderIds = DB::table('service_order_items')
-                ->where('item_name', $item->item_name)
-                ->pluck('service_order_id');
+            $itemsQuery = DB::table('service_order_items')
+                ->where('item_name', $item->item_name);
+            
+            $user = Auth::user();
+            if ($user && $user->organization_id) {
+                $itemsQuery->where('organization_id', $user->organization_id);
+            }
+            
+            $serviceOrderIds = $itemsQuery->pluck('service_order_id');
 
             // Then get service orders
-            $serviceOrders = DB::table('service_orders')
-                ->whereIn('id', $serviceOrderIds)
-                ->orderBy('created_at', 'desc')
+            $ordersQuery = DB::table('service_orders')
+                ->whereIn('id', $serviceOrderIds);
+            
+            if ($user && $user->organization_id) {
+                $ordersQuery->where('organization_id', $user->organization_id);
+            }
+            
+            $serviceOrders = $ordersQuery->orderBy('created_at', 'desc')
                 ->get();
 
             return response()->json([

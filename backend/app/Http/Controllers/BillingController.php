@@ -14,6 +14,11 @@ class BillingController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             // Pagination parameters
             $perPage = $request->get('per_page', 50);
             $page = $request->get('page', 1);
@@ -37,6 +42,12 @@ class BillingController extends Controller
             $query = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus'])
                 ->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc');
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->whereHas('customer', function($q) use ($organizationId) {
+                    $q->where('organization_id', $organizationId);
+                });
+            }
 
             // Support incremental refresh: only return records updated since a given timestamp
             $updatedSince = $request->get('updated_since');
@@ -142,7 +153,9 @@ class BillingController extends Controller
                 'success' => true,
                 'data' => $billingData->values(),
                 'count' => $billingData->count(),
-                'total' => BillingAccount::count(),
+                'total' => $isSuperAdmin ? BillingAccount::count() : BillingAccount::whereHas('customer', function($q) use ($organizationId) {
+                    $q->where('organization_id', $organizationId);
+                })->count(),
                 'server_time' => now()->toISOString(),
                 'pagination' => [
                     'current_page' => (int)$page,
@@ -165,10 +178,24 @@ class BillingController extends Controller
     public function show($id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $billingAccount = BillingAccount::with(['customer.group', 'technicalDetails', 'onlineStatus', 'billingStatus'])
-                ->where('id', $id)
-                ->orWhere('account_no', $id)
+                ->where(function($q) use ($id) {
+                    $q->where('id', $id)
+                      ->orWhere('account_no', $id);
+                })
                 ->firstOrFail();
+
+            if (!$isSuperAdmin && $organizationId && $billingAccount->customer && $billingAccount->customer->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to billing record'
+                ], 403);
+            }
             $customer = $billingAccount->customer;
             $technicalDetail = $billingAccount->technicalDetails->first();
             
@@ -277,17 +304,31 @@ class BillingController extends Controller
     public function checkUpdates(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $since = $request->get('since');
 
             if (!$since) {
                 return response()->json(['has_updates' => false, 'count' => 0]);
             }
 
-            $count = BillingAccount::where('updated_at', '>=', $since)
-                ->orWhereHas('customer', function ($q) use ($since) {
-                    $q->where('updated_at', '>=', $since);
-                })
-                ->count();
+            $query = BillingAccount::where(function($q) use ($since) {
+                $q->where('updated_at', '>=', $since)
+                  ->orWhereHas('customer', function ($cq) use ($since) {
+                      $cq->where('updated_at', '>=', $since);
+                  });
+            });
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->whereHas('customer', function($q) use ($organizationId) {
+                    $q->where('organization_id', $organizationId);
+                });
+            }
+
+            $count = $query->count();
 
             return response()->json([
                 'has_updates' => $count > 0,

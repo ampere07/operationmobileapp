@@ -21,6 +21,7 @@ class Organization extends Model
         'email_address',
         'created_by_user_id',
         'updated_by_user_id',
+        'organization_id',
     ];
 
     protected $casts = [

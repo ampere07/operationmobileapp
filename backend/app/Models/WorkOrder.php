@@ -25,6 +25,11 @@ class WorkOrder extends Model
         'requested_by',
         'updated_by',
         'start_time',
-        'end_time'
+        'end_time',
+        'organization_id'
+    ];
+
+    protected $casts = [
+        'organization_id' => 'integer'
     ];
 }

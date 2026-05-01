@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet } from 'react-native';
-import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw } from 'lucide-react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet, Modal } from 'react-native';
+import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw, LogOut } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
@@ -125,6 +125,14 @@ const jo = StyleSheet.create({
   // Detail panels
   mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
   tabletDetail: { flexShrink: 0, overflow: 'hidden' },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalContent: { backgroundColor: '#ffffff', borderRadius: 24, padding: 32, width: '100%', maxWidth: 400, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 15, elevation: 10 },
+  modalIconContainer: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 12, textAlign: 'center' },
+  modalMessage: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 24 },
+  reloginButton: { paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, width: '100%', alignItems: 'center', shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  reloginButtonText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
 });
 
 // Move utility functions outside components to avoid recreation
@@ -266,7 +274,7 @@ const JobOrderCard = React.memo(({
   </Pressable>
 ));
 
-const JobOrderPage: React.FC = () => {
+const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -280,6 +288,21 @@ const JobOrderPage: React.FC = () => {
   const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState<boolean>(false);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
+  const [showReloginModal, setShowReloginModal] = useState<boolean>(false);
+
+  // Watch for 401 error to show relogin modal
+  useEffect(() => {
+    if (error && (error.includes('401') || error.toLowerCase().includes('unauthorized'))) {
+      setShowReloginModal(true);
+    }
+  }, [error]);
+
+  const handleRelogin = useCallback(() => {
+    setShowReloginModal(false);
+    if (onLogout) {
+      onLogout();
+    }
+  }, [onLogout]);
 
   const { width } = Dimensions.get('window');
   const isTablet = width >= 768;
@@ -739,6 +762,31 @@ const JobOrderPage: React.FC = () => {
         onApplyFilters={handleApplyFilters}
         currentFilters={filterValues}
       />
+
+      <Modal
+        transparent
+        visible={showReloginModal}
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={jo.modalOverlay}>
+          <View style={jo.modalContent}>
+            <View style={jo.modalIconContainer}>
+              <LogOut size={48} color="#ef4444" />
+            </View>
+            <Text style={jo.modalTitle}>Session Expired</Text>
+            <Text style={jo.modalMessage}>
+              Your session has expired or is invalid. Please log in again to securely access your account.
+            </Text>
+            <Pressable
+              onPress={handleRelogin}
+              style={[jo.reloginButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
+            >
+              <Text style={jo.reloginButtonText}>Relogin</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View >
   );
 };

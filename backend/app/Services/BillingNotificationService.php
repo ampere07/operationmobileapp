@@ -122,37 +122,34 @@ class BillingNotificationService
                 throw new \Exception("Customer not found for invoice {$invoice->id}");
             }
 
-            $pdfResult = $this->pdfService->generateOverduePdf($invoice);
-
-            if (!$pdfResult['success']) {
-                $results['errors'][] = "PDF generation failed: " . $pdfResult['error'];
-                return $results;
-            }
-
-            $results['pdf_generated'] = true;
-            $results['pdf_url'] = $pdfResult['url'];
+            $pdfUrl = null;
+            $filename = null;
+            
 
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
                 
-                // Use template code from config
-                $templateCode = config('billing.templates.overdue_email', 'OVERDUE_DESIGN_EMAIL');
+                $templateCode = config('billing.templates.overdue_email', 'OVERDUE_DESIGN');
                 
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
                     $templateCode,
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
-                        'google_drive_url' => $pdfResult['url'],
-                        'filename' => $pdfResult['filename']
+                        'google_drive_url' => $pdfUrl,
+                        'filename' => $filename
                     ])
                 );
                 
-                // If failed to find template, log it but don't crash
                 if ($emailQueued === null) {
                     $results['errors'][] = "Email template '{$templateCode}' not found.";
+                    Log::error("Overdue Email template '{$templateCode}' not found", ['account_no' => $account->account_no]);
+                } else {
+                    Log::info("Overdue Email queued successfully", ['account_no' => $account->account_no, 'recipient' => $customer->email_address]);
                 }
                 
                 $results['email_queued'] = $emailQueued !== null;
+            } else {
+                Log::warning("Skipping Overdue Email: Customer has no email address", ['account_no' => $account->account_no]);
             }
 
             if ($customer->contact_number_primary) {
@@ -161,7 +158,11 @@ class BillingNotificationService
                 
                 if (!$smsResult['success']) {
                     $results['errors'][] = "SMS failed: " . ($smsResult['error'] ?? 'Unknown');
+                } else {
+                    Log::info("Overdue SMS sent successfully", ['account_no' => $account->account_no]);
                 }
+            } else {
+                Log::warning("Skipping Overdue SMS: Customer has no contact number", ['account_no' => $account->account_no]);
             }
 
         } catch (\Exception $e) {
@@ -192,36 +193,34 @@ class BillingNotificationService
                 throw new \Exception("Customer not found for invoice {$invoice->id}");
             }
 
-            $pdfResult = $this->pdfService->generateDcNoticePdf($invoice);
-
-            if (!$pdfResult['success']) {
-                $results['errors'][] = "PDF generation failed: " . $pdfResult['error'];
-                return $results;
-            }
-
-            $results['pdf_generated'] = true;
-            $results['pdf_url'] = $pdfResult['url'];
+            $pdfUrl = null;
+            $filename = null;
+            
 
             if ($customer->email_address) {
                 $emailData = $this->prepareEmailData($account, $invoice, null);
                 
-                // Use template code from config
-                $templateCode = config('billing.templates.dc_notice_email', 'DCNOTICE_DESIGN_EMAIL');
+                $templateCode = config('billing.templates.dc_notice_email', 'DCNOTICE_DESIGN');
                 
                 $emailQueued = $this->emailQueueService->queueFromTemplate(
                     $templateCode,
                     array_merge($emailData, [
                         'recipient_email' => $customer->email_address,
-                        'google_drive_url' => $pdfResult['url'],
-                        'filename' => $pdfResult['filename']
+                        'google_drive_url' => $pdfUrl,
+                        'filename' => $filename
                     ])
                 );
                 
                 if ($emailQueued === null) {
                     $results['errors'][] = "Email template '{$templateCode}' not found.";
+                    Log::error("DC Notice Email template '{$templateCode}' not found", ['account_no' => $account->account_no]);
+                } else {
+                    Log::info("DC Notice Email queued successfully", ['account_no' => $account->account_no, 'recipient' => $customer->email_address]);
                 }
                 
                 $results['email_queued'] = $emailQueued !== null;
+            } else {
+                Log::warning("Skipping DC Notice Email: Customer has no email address", ['account_no' => $account->account_no]);
             }
 
             if ($customer->contact_number_primary) {
@@ -230,7 +229,11 @@ class BillingNotificationService
                 
                 if (!$smsResult['success']) {
                     $results['errors'][] = "SMS failed: " . ($smsResult['error'] ?? 'Unknown');
+                } else {
+                    Log::info("DC Notice SMS sent successfully", ['account_no' => $account->account_no]);
                 }
+            } else {
+                Log::warning("Skipping DC Notice SMS: Customer has no contact number", ['account_no' => $account->account_no]);
             }
 
         } catch (\Exception $e) {

@@ -35,9 +35,19 @@ class ServiceOrderController extends Controller
                 'fast_mode' => $fastMode
             ]);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $query = "SELECT * FROM service_orders";
             $params = [];
             $whereClauses = [];
+
+            if (!$isSuperAdmin && $organizationId) {
+                $whereClauses[] = "organization_id = ?";
+                $params[] = $organizationId;
+            }
 
             if ($request->has('assigned_email')) {
                 Log::info('Filtering by assigned_email: ' . $request->assigned_email);
@@ -231,6 +241,9 @@ class ServiceOrderController extends Controller
             $ticketId = $this->generateTicketId();
             Log::info('Generated ticket_id: ' . $ticketId);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+
             $insertData = [
                 'ticket_id' => $ticketId,
                 'account_no' => $request->account_no,
@@ -244,6 +257,7 @@ class ServiceOrderController extends Controller
                 'status' => $request->status ?? 'unused',
                 'start_time' => $request->start_time,
                 'end_time' => $request->end_time,
+                'organization_id' => $organizationId,
                 'created_by_user_id' => null,
                 'created_at' => now(),
                 'updated_at' => now()
@@ -346,10 +360,13 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function show($id): JsonResponse
-    {
         try {
             Log::info("Fetching service order with ID: {$id}");
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
 
             $order = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
 
@@ -359,6 +376,13 @@ class ServiceOrderController extends Controller
                     'success' => false,
                     'message' => 'Service order not found',
                 ], 404);
+            }
+
+            if (!$isSuperAdmin && $organizationId && $order->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to service order.',
+                ], 403);
             }
 
             $customer = DB::selectOne("SELECT * FROM customers WHERE account_no = ?", [$order->account_no]);
@@ -452,11 +476,14 @@ class ServiceOrderController extends Controller
         }
     }
 
-    public function update(Request $request, $id): JsonResponse
-    {
         try {
             Log::info("Updating service order with ID: {$id}");
             Log::info('Update data:', $request->all());
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
 
             $order = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
 
@@ -465,6 +492,13 @@ class ServiceOrderController extends Controller
                     'success' => false,
                     'message' => 'Service order not found',
                 ], 404);
+            }
+
+            if (!$isSuperAdmin && $organizationId && $order->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only update service orders within your organization.',
+                ], 403);
             }
 
             $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
@@ -1559,6 +1593,55 @@ class ServiceOrderController extends Controller
                 return 'no_username';
             }
 
+            \Log::info('[SERVICE ORDER MIGRATION] Found old username: ' . $oldUsername);
+
+            // SPECIAL CASE: Transfer LCP/NAP/PORT
+            $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
+            if ($normalizedCategory === 'transfer lcp/nap/port') {
+                \Log::info('[SERVICE ORDER] Handling Transfer LCP/NAP/PORT via Disable/Update/Enable sequence');
+                $radiusOps = app(ManualRadiusOperationsService::class);
+
+                // 1. Disable Old User
+                $radiusOps->disabledUser([
+                    'username' => $oldUsername,
+                    'accountNumber' => $accountNo,
+                    'updatedBy' => $updatedByUser
+                ]);
+
+                // 2. Generate ONLY New Username (keep existing password)
+                $pppoeService = new PppoeUsernameService();
+                $customerData = (array)$fullInfo;
+                $newUsername = $pppoeService->generateUniqueUsername($customerData);
+
+                \Log::info("[SERVICE ORDER] Transfer: Updating username from {$oldUsername} to {$newUsername}");
+
+                // 3. Update Credentials (RADIUS + DB username)
+                $credResult = $radiusOps->updateCredentials([
+                    'accountNumber' => $accountNo,
+                    'username' => $oldUsername,
+                    'newUsername' => $newUsername,
+                    'newPassword' => null, // Don't update password
+                    'updatedBy' => $updatedByUser
+                ]);
+
+                if ($credResult['status'] === 'success') {
+                    \Log::info('[SERVICE ORDER] Credentials updated successfully, now enabling...');
+
+                    // 4. Enable New User
+                    $radiusOps->enabledUser([
+                        'username' => $newUsername,
+                        'accountNumber' => $accountNo,
+                        'updatedBy' => $updatedByUser
+                    ]);
+
+                    \Log::info('[SERVICE ORDER] User enabled successfully. Transfer complete.');
+                    return 'success';
+                } else {
+                    \Log::error('[SERVICE ORDER] Failed to update credentials during transfer.');
+                    return 'radius_failed';
+                }
+            }
+
             // Generate new username using the same logic as JobOrderController
             $pppoeService = new PppoeUsernameService();
             $customerData = (array)$fullInfo;
@@ -1575,8 +1658,7 @@ class ServiceOrderController extends Controller
             }
 
             // RADIUS ACCOUNT CREATION LOGIC
-            $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
-            $targetCategories = ['relocate', 'transfer lcp/nap/port', 'relocate router', 'transfer lcp nap vlan'];
+            $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info('[SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);

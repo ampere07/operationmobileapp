@@ -19,7 +19,8 @@ class Technician extends Model
         'middle_initial',
         'last_name',
         'updated_at',
-        'updated_by'
+        'updated_by',
+        'organization_id'
     ];
 
     protected $casts = [

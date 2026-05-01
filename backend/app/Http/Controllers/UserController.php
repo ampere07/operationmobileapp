@@ -14,8 +14,31 @@ class UserController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = User::with(['organization', 'role']);
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+            $roleId = $user ? $user->role_id : null;
+
+            $query = User::with(['organization', 'role', 'agent']);
             
+            // A Global SuperAdmin must have role_id 7 AND no organization_id
+            $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
+
+            if ($isGlobalAdmin) {
+                // Global admin can see:
+                // 1. Users with no organization
+                // 2. Users with an organization ONLY if they are also SuperAdmins (role_id 7)
+                $query->where(function($q) {
+                    $q->whereNull('organization_id')
+                      ->orWhere('role_id', 7);
+                });
+            } else {
+                if ($organizationId) {
+                    $query->where('organization_id', $organizationId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
             if ($request->has('role')) {
                 $roleName = $request->input('role');
                 $query->whereHas('role', function($q) use ($roleName) {
@@ -24,13 +47,13 @@ class UserController extends Controller
             }
 
             if ($request->has('role_id')) {
-                $roleId = $request->input('role_id');
-                if (is_array($roleId)) {
-                    $query->whereIn('role_id', $roleId);
-                } elseif (is_string($roleId) && strpos($roleId, ',') !== false) {
-                    $query->whereIn('role_id', explode(',', $roleId));
+                $requestedRoleId = $request->input('role_id');
+                if (is_array($requestedRoleId)) {
+                    $query->whereIn('role_id', $requestedRoleId);
+                } elseif (is_string($requestedRoleId) && strpos($requestedRoleId, ',') !== false) {
+                    $query->whereIn('role_id', explode(',', $requestedRoleId));
                 } else {
-                    $query->where('role_id', $roleId);
+                    $query->where('role_id', $requestedRoleId);
                 }
             }
             
@@ -61,6 +84,7 @@ class UserController extends Controller
             'password' => 'required|string|min:8',
             'organization_id' => 'nullable|integer',
             'role_id' => 'nullable|integer|exists:roles,id',
+            'agent_id' => 'nullable|integer|exists:agents,id',
         ]);
 
         if ($validator->fails()) {
@@ -72,6 +96,12 @@ class UserController extends Controller
         }
 
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            
+            $isGlobalAdmin = !$authUser || ($roleId == 7 && $organizationId === null);
+
             // Generate user ID with proper error handling
             
                 $userData = [
@@ -83,8 +113,9 @@ class UserController extends Controller
                     'email_address' => $request->email_address,   // correct field
                     'contact_number' => $request->contact_number, // correct field
                     'password_hash' => $request->password,
-                    'organization_id' => $request->organization_id && $request->organization_id > 0 ? $request->organization_id : null,
+                    'organization_id' => $isGlobalAdmin ? ($request->organization_id && $request->organization_id > 0 ? $request->organization_id : null) : $organizationId,
                     'role_id' => $request->role_id && $request->role_id > 0 ? $request->role_id : null,
+                    'agent_id' => $request->agent_id && $request->agent_id > 0 ? $request->agent_id : null,
                 ];
             
             $user = User::create($userData);
@@ -104,7 +135,7 @@ class UserController extends Controller
                 \Log::warning('Failed to log user creation activity: ' . $logError->getMessage());
             }
             
-            $responseUser = $user->load(['organization', 'role']);
+            $responseUser = $user->load(['organization', 'role', 'agent']);
 
             return response()->json([
                 'success' => true,
@@ -125,7 +156,30 @@ class UserController extends Controller
     public function show($id)
     {
         try {
-            $user = User::with(['organization', 'role'])->findOrFail($id);
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
+            
+            $user = User::with(['organization', 'role', 'agent'])->findOrFail($id);
+            
+            if (!$isGlobalAdmin) {
+                if ($organizationId) {
+                    if ($user->organization_id !== $organizationId) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized access to user record.'], 403);
+                    }
+                } else {
+                    if ($user->organization_id !== null) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized access to user record.'], 403);
+                    }
+                }
+            } else {
+                // Global admin can only see other org users if they are SuperAdmin
+                if ($user->organization_id !== null && $user->role_id != 7) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized. Global admins can only view users in other organizations if they are SuperAdmins.'], 403);
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $user
@@ -161,6 +215,7 @@ class UserController extends Controller
             'password' => 'sometimes|string|min:8',
             'organization_id' => 'sometimes|nullable|integer',
             'role_id' => 'sometimes|nullable|integer|exists:roles,id',
+            'agent_id' => 'sometimes|nullable|integer|exists:agents,id',
         ]);
 
         if ($validator->fails()) {
@@ -172,10 +227,33 @@ class UserController extends Controller
         }
 
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            
+            $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
+
             $user = User::findOrFail($id);
             
+            if (!$isGlobalAdmin) {
+                if ($organizationId) {
+                    if ($user->organization_id !== $organizationId) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update users within your organization.'], 403);
+                    }
+                } else {
+                    if ($user->organization_id !== null) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update users without an organization.'], 403);
+                    }
+                }
+            } else {
+                // Global admin can only update other org users if they are SuperAdmin
+                if ($user->organization_id !== null && $user->role_id != 7) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized. Global admins can only update users in other organizations if they are SuperAdmins.'], 403);
+                }
+            }
+
             $oldData = $user->toArray();
-            $updateData = $request->only(['salutation', 'first_name', 'middle_initial','last_name','username', 'email_address', 'contact_number', 'organization_id', 'role_id']);
+            $updateData = $request->only(['salutation', 'first_name', 'middle_initial','last_name','username', 'email_address', 'contact_number', 'organization_id', 'role_id', 'agent_id']);
             
             if ($request->has('password')) {
                 $updateData['password_hash'] = $request->password;
@@ -183,7 +261,12 @@ class UserController extends Controller
             
             // Handle organization_id properly - ensure it is null if not provided or 0
             if (array_key_exists('organization_id', $updateData)) {
-                $updateData['organization_id'] = $updateData['organization_id'] && $updateData['organization_id'] > 0 ? $updateData['organization_id'] : null;
+                // Only superadmin can change organization_id
+                if (!$isSuperAdmin) {
+                    unset($updateData['organization_id']);
+                } else {
+                    $updateData['organization_id'] = $updateData['organization_id'] && $updateData['organization_id'] > 0 ? $updateData['organization_id'] : null;
+                }
             }
             
             // Handle role_id properly - ensure it is null if not provided or 0
@@ -193,17 +276,21 @@ class UserController extends Controller
             
             // Remove empty values to avoid unnecessary updates
             $updateData = array_filter($updateData, function($value, $key) {
-                return $value !== null && $value !== '' && $key !== 'organization_id' && $key !== 'role_id';
+                return $value !== null && $value !== '' && $key !== 'organization_id' && $key !== 'role_id' && $key !== 'agent_id';
             }, ARRAY_FILTER_USE_BOTH);
             
-            // Add organization_id back if it was in the request (even if null)
-            if ($request->has('organization_id')) {
+            // Add organization_id back if it was in the request (even if null) AND is superadmin
+            if ($request->has('organization_id') && $isSuperAdmin) {
                 $updateData['organization_id'] = $request->organization_id && $request->organization_id > 0 ? $request->organization_id : null;
             }
             
             // Add role_id back if it was in the request (even if null)
             if ($request->has('role_id')) {
                 $updateData['role_id'] = $request->role_id && $request->role_id > 0 ? $request->role_id : null;
+            }
+
+            if ($request->has('agent_id')) {
+                $updateData['agent_id'] = $request->agent_id && $request->agent_id > 0 ? $request->agent_id : null;
             }
 
             $user->update($updateData);
@@ -223,7 +310,7 @@ class UserController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'User updated successfully',
-                'data' => $user->load(['organization', 'role'])
+                'data' => $user->load(['organization', 'role', 'agent'])
             ]);
         } catch (\Exception $e) {
             \Log::error('User update failed for ID ' . $id . ': ' . $e->getMessage());
@@ -239,7 +326,31 @@ class UserController extends Controller
     public function destroy($id)
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            
+            $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
+
             $user = User::findOrFail($id);
+
+            if (!$isGlobalAdmin) {
+                if ($organizationId) {
+                    if ($user->organization_id !== $organizationId) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete users within your organization.'], 403);
+                    }
+                } else {
+                    if ($user->organization_id !== null) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete users without an organization.'], 403);
+                    }
+                }
+            } else {
+                // Global admin can only delete other org users if they are SuperAdmin
+                if ($user->organization_id !== null && $user->role_id != 7) {
+                    return response()->json(['success' => false, 'message' => 'Unauthorized. Global admins can only delete users in other organizations if they are SuperAdmins.'], 403);
+                }
+            }
+
             $username = $user->username;
             $user->delete();
 
@@ -269,4 +380,3 @@ class UserController extends Controller
 
 
 }
-

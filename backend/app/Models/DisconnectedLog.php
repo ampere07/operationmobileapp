@@ -14,7 +14,8 @@ class DisconnectedLog extends Model
         'username',
         'remarks',
         'created_by_user',
-        'updated_by_user'
+        'updated_by_user',
+        'organization_id'
     ];
 
     public function billingAccount()

@@ -24,6 +24,11 @@ class BillingRecordsController extends Controller
     public function getSOARecords(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             // Pagination parameters - smaller default for faster loading
             $perPage = $request->get('per_page', 50); // Reduced to 50 for faster response
             $page = $request->get('page', 1);
@@ -39,6 +44,10 @@ class BillingRecordsController extends Controller
                     ->select('statement_of_accounts.*')
                     ->leftJoin('billing_accounts', 'statement_of_accounts.account_no', '=', 'billing_accounts.account_no')
                     ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+            }
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where($fastMode ? 'organization_id' : 'statement_of_accounts.organization_id', $organizationId);
             }
             
             // Filter by account number
@@ -181,13 +190,25 @@ class BillingRecordsController extends Controller
     public function getInvoiceRecords(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             // Pagination parameters - smaller default for faster loading
             $perPage = $request->get('per_page', 50); // Reduced to 50 for faster response
             $page = $request->get('page', 1);
             $fastMode = $request->get('fast', false); // Fast mode: skip customer data loading
             
             // Base query - direct fetch for both modes since we load relations manually
-            $query = Invoice::query();
+            $query = Invoice::query()
+                ->select('invoices.*')
+                ->leftJoin('billing_accounts', 'invoices.account_no', '=', 'billing_accounts.account_no')
+                ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id');
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('invoices.organization_id', $organizationId);
+            }
             
             // Filter by account number
             if ($request->has('account_no')) {

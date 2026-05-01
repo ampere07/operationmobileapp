@@ -2,33 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Technician;
+use App\Models\Agent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class TechnicianController extends Controller
+class AgentController extends Controller
 {
     public function index()
     {
         try {
             $user = auth()->user();
-            $organizationId = $user ? $user->organization_id : null;
+            $organizationId = $user->organization_id;
 
-            $query = Technician::query();
+            $query = Agent::query();
 
             if ($organizationId) {
                 $query->where('organization_id', $organizationId);
             }
 
-            $technicians = $query->get();
+            $agents = $query->get();
             return response()->json([
                 'success' => true,
-                'data' => $technicians
+                'data' => $agents
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch technicians',
+                'message' => 'Failed to fetch agents',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -37,9 +37,7 @@ class TechnicianController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'first_name' => 'required|string|max:255',
-            'middle_initial' => 'nullable|string|max:1',
-            'last_name' => 'required|string|max:255',
+            'team_name' => 'required|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -52,26 +50,24 @@ class TechnicianController extends Controller
 
         try {
             $user = auth()->user();
-            $organizationId = $user ? $user->organization_id : null;
+            $organizationId = $user->organization_id;
 
-            $technician = Technician::create([
-                'first_name' => $request->first_name,
-                'middle_initial' => $request->middle_initial,
-                'last_name' => $request->last_name,
-                'updated_at' => now(),
-                'updated_by' => $request->updated_by ?? ($user->email_address ?? 'system'),
+            $agent = Agent::create([
+                'team_name' => $request->team_name,
+                'created_at' => now(),
+                'created_by' => $request->created_by ?? ($user->email_address ?? 'system'),
                 'organization_id' => $organizationId
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Technician added successfully',
-                'data' => $technician
+                'message' => 'Agent added successfully',
+                'data' => $agent
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to add technician',
+                'message' => 'Failed to add agent',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -80,9 +76,7 @@ class TechnicianController extends Controller
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'first_name' => 'sometimes|string|max:255',
-            'middle_initial' => 'sometimes|nullable|string|max:1',
-            'last_name' => 'sometimes|string|max:255',
+            'team_name' => 'sometimes|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -95,35 +89,31 @@ class TechnicianController extends Controller
 
         try {
             $user = auth()->user();
-            $organizationId = $user ? $user->organization_id : null;
+            $organizationId = $user->organization_id;
 
-            $technician = Technician::findOrFail($id);
+            $agent = Agent::findOrFail($id);
 
-            // Check if user belongs to an organization and if it matches the technician's organization
-            if ($organizationId && $technician->organization_id !== $organizationId) {
+            // Check if user belongs to an organization and if it matches the agent's organization
+            if ($organizationId && $agent->organization_id !== $organizationId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthorized. You can only update technicians within your organization.'
+                    'message' => 'Unauthorized. You can only update agents within your organization.'
                 ], 403);
             }
 
             // Don't allow organization_id to be changed via update
             $updateData = $request->except('organization_id');
-
-            $technician->update($updateData + [
-                'updated_at' => now(),
-                'updated_by' => $request->updated_by ?? ($user->email_address ?? 'system')
-            ]);
+            $agent->update($updateData);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Technician updated successfully',
-                'data' => $technician
+                'message' => 'Agent updated successfully',
+                'data' => $agent
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update technician',
+                'message' => 'Failed to update agent',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -133,28 +123,28 @@ class TechnicianController extends Controller
     {
         try {
             $user = auth()->user();
-            $organizationId = $user ? $user->organization_id : null;
+            $organizationId = $user->organization_id;
 
-            $technician = Technician::findOrFail($id);
+            $agent = Agent::findOrFail($id);
 
-            // Check if user belongs to an organization and if it matches the technician's organization
-            if ($organizationId && $technician->organization_id !== $organizationId) {
+            // Check if user belongs to an organization and if it matches the agent's organization
+            if ($organizationId && $agent->organization_id !== $organizationId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthorized. You can only delete technicians within your organization.'
+                    'message' => 'Unauthorized. You can only delete agents within your organization.'
                 ], 403);
             }
 
-            $technician->delete();
+            $agent->delete();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Technician deleted successfully'
+                'message' => 'Agent deleted successfully'
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to delete technician',
+                'message' => 'Failed to delete agent',
                 'error' => $e->getMessage()
             ], 500);
         }

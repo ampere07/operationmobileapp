@@ -25,13 +25,15 @@ class SmsBlastLog extends Model
         'created_at',
         'created_by_user_id',
         'updated_at',
-        'updated_by_user_id'
+        'updated_by_user_id',
+        'organization_id'
     ];
 
     protected $casts = [
         'timestamp' => 'datetime',
         'credit_used' => 'decimal:2',
         'created_at' => 'datetime',
-        'updated_at' => 'datetime'
+        'updated_at' => 'datetime',
+        'organization_id' => 'integer'
     ];
 }

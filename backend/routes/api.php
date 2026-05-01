@@ -19,6 +19,7 @@ use App\Http\Controllers\DebugController;
 use App\Http\Controllers\EmergencyLocationController;
 use App\Http\Controllers\RadiusController;
 use App\Http\Controllers\RadiusConfigController;
+use App\Http\Controllers\ManualRadiusOperationsController;
 use App\Http\Controllers\SmsConfigController;
 use App\Http\Controllers\SMSTemplateController;
 use App\Http\Controllers\EmailTemplateController;
@@ -41,14 +42,19 @@ use App\Http\Controllers\ConsolidatedNotificationController;
 use App\Http\Controllers\Api\ServiceOrderItemApiController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TechnicianController;
+use App\Http\Controllers\AgentController;
 use App\Http\Controllers\TechInOutController;
 use App\Http\Controllers\Api\PaymentPortalLogsController;
+use App\Http\Controllers\CommissionController;
 
 Route::apiResource('technicians', TechnicianController::class);
+Route::apiResource('agents', AgentController::class);
+Route::apiResource('roles', RoleController::class);
 Route::get('/tech-in-out/status', [TechInOutController::class, 'getStatus']);
 Route::post('/tech-in-out/time-in', [TechInOutController::class, 'timeIn']);
 Route::post('/tech-in-out/time-out', [TechInOutController::class, 'timeOut']);
 Route::get('/reports', [ReportController::class , 'index']);
+Route::get('/commissions', [CommissionController::class, 'index']);
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
     $reports = \App\Models\Report::all();
@@ -89,9 +95,11 @@ Route::get('/reports-migrate-pdf', function () {
     return response()->json(['success' => true, 'message' => "Converted {$count} reports."]);
 });
 
-Route::get('/monitor/handle', [MonitorController::class , 'handle']);
-Route::get('/dashboard/counts', [\App\Http\Controllers\Api\DashboardController::class , 'getCounts']);
-Route::post('/monitor/handle', [MonitorController::class , 'handle']); // Ensure POST is also handled for save_template actions if not using REST
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/monitor/handle', [MonitorController::class , 'handle']);
+    Route::get('/dashboard/counts', [\App\Http\Controllers\Api\DashboardController::class , 'getCounts']);
+    Route::post('/monitor/handle', [MonitorController::class , 'handle']);
+});
 Route::get('/sms-blast', [SmsBlastController::class , 'index']);
 Route::post('/sms-blast', [SmsBlastController::class , 'store']);
 Route::get('/expenses-logs', [ExpensesLogController::class , 'index']);
@@ -2336,6 +2344,14 @@ Route::prefix('installment-schedules')->group(function () {
 
 Route::prefix('radius')->group(function () {
     Route::post('/create-account', [RadiusController::class , 'createAccount']);
+    
+    // Manual Operations
+    Route::post('/operation', [ManualRadiusOperationsController::class, 'handleOperation']);
+    Route::post('/disconnect', [ManualRadiusOperationsController::class, 'disconnectUser']);
+    Route::post('/reconnect', [ManualRadiusOperationsController::class, 'reconnectUser']);
+    Route::post('/update-credentials', [ManualRadiusOperationsController::class, 'updateCredentials']);
+    Route::post('/disable', [ManualRadiusOperationsController::class, 'disabledUser']);
+    Route::post('/enable', [ManualRadiusOperationsController::class, 'enabledUser']);
 });
 
 // Custom Account Number Management Routes

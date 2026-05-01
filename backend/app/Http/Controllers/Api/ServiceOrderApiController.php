@@ -26,10 +26,20 @@ class ServiceOrderApiController extends Controller
             // Fast mode variable kept for compatibility but new logic is inherently faster
             $fastMode = $request->input('fast', false);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             // Base query on service_orders
             $query = DB::table('service_orders as so')
-                ->select('so.*', 'so.id as ticket_id')
-                ->orderBy('so.created_at', 'desc');
+                ->select('so.*', 'so.id as ticket_id');
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('so.organization_id', $organizationId);
+            }
+
+            $query->orderBy('so.timestamp', 'desc');
 
             // Apply filters
             if ($request->has('assigned_email')) {
@@ -248,6 +258,7 @@ class ServiceOrderApiController extends Controller
                 'created_by_user' => $validated['created_by_user'] ?? null,
                 'updated_by_user' => $validated['updated_by_user'] ?? null,
                 'proof_image_url' => $request->input('proof_image_url'),
+                'organization_id' => auth()->user() ? auth()->user()->organization_id : null,
                 'created_at' => now(),
                 'updated_at' => now()
             ];
@@ -345,72 +356,49 @@ class ServiceOrderApiController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $serviceOrder = DB::table('service_orders as so')
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $query = DB::table('service_orders as so')
                 ->leftJoin('billing_accounts as ba', 'so.account_no', '=', 'ba.account_no')
                 ->leftJoin('customers as c', 'ba.customer_id', '=', 'c.id')
                 ->leftJoin('technical_details as td', 'so.account_no', '=', 'td.account_no')
                 ->select(
-                'so.id',
-                'so.id as ticket_id',
-                'so.account_no',
-                'so.timestamp',
-                'ba.id as account_id',
-                'ba.date_installed',
-                DB::raw("CONCAT(IFNULL(c.first_name, ''), ' ', IFNULL(c.middle_initial, ''), ' ', IFNULL(c.last_name, '')) as full_name"),
-                'c.contact_number_primary as contact_number',
-                DB::raw("CONCAT(IFNULL(c.address, ''), ', ', IFNULL(c.barangay, ''), ', ', IFNULL(c.city, ''), ', ', IFNULL(c.region, '')) as full_address"),
-                'c.address as contact_address',
-                'c.email_address',
-                'c.house_front_picture_url',
-                'c.desired_plan as plan',
-                'td.username',
-                'td.connection_type',
-                'td.router_modem_sn',
-                'td.lcp',
-                'td.nap',
-                'td.port',
-                'td.vlan',
-                'so.concern',
-                'so.concern_remarks',
-                'so.requested_by',
-                'so.support_status',
-                'so.assigned_email',
-                'so.repair_category',
-                'so.visit_status',
-                'so.priority_level',
-                'so.visit_by_user',
-                'so.visit_with',
-                'so.visit_remarks',
-                'so.support_remarks',
-                'so.service_charge',
-                'so.new_router_modem_sn',
-                'so.new_lcp',
-                'so.new_nap',
-                'so.new_port',
-                'so.new_vlan',
-                'so.router_model',
-                'so.old_lcp',
-                'so.old_nap',
-                'so.old_port',
-                'so.old_vlan',
-                'so.old_router_modem_sn',
-                'so.new_lcpnap',
-                'so.new_plan',
-                'so.client_signature_url',
-                'so.image1_url',
-                'so.image2_url',
-                'so.image3_url',
-                'so.proof_image_url',
-                'so.status',
-                'so.start_time',
-                'so.end_time',
-                'so.created_at',
-                'so.created_by_user',
-                'so.updated_at',
-                'so.updated_by_user'
-            )
-                ->where('so.id', $id)
-                ->first();
+                    'so.*',
+                    'so.id as ticket_id',
+                    'ba.id as account_id',
+                    'ba.date_installed',
+                    DB::raw("CONCAT(IFNULL(c.first_name, ''), ' ', IFNULL(c.middle_initial, ''), ' ', IFNULL(c.last_name, '')) as full_name"),
+                    'c.contact_number_primary as contact_number',
+                    DB::raw("CONCAT(IFNULL(c.address, ''), ', ', IFNULL(c.barangay, ''), ', ', IFNULL(c.city, ''), ', ', IFNULL(c.region, '')) as full_address"),
+                    'c.address as contact_address',
+                    'c.email_address',
+                    'c.house_front_picture_url',
+                    'c.desired_plan as plan',
+                    'td.username',
+                    'td.connection_type',
+                    'td.router_modem_sn',
+                    'td.lcp',
+                    'td.nap',
+                    'td.port',
+                    'td.vlan'
+                )
+                ->where('so.id', $id);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('so.organization_id', $organizationId);
+            }
+
+            $serviceOrder = $query->first();
+
+            if (!$serviceOrder) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Service order not found or unauthorized access'
+                ], 404);
+            }
 
             if (!$serviceOrder) {
                 return response()->json([
@@ -443,6 +431,11 @@ class ServiceOrderApiController extends Controller
                 'data' => $request->all()
             ]);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $serviceOrder = DB::table('service_orders')->where('id', $id)->first();
 
             if (!$serviceOrder) {
@@ -450,6 +443,13 @@ class ServiceOrderApiController extends Controller
                     'success' => false,
                     'message' => 'Service order not found'
                 ], 404);
+            }
+
+            if (!$isSuperAdmin && $organizationId && $serviceOrder->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to service order'
+                ], 403);
             }
 
             $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
@@ -960,22 +960,7 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
 
-            // Step 2: Trigger RADIUS Reconnection
-            try {
-                $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusParams = [
-                    'accountNumber' => $accountNo,
-                    'remarks' => 'Reconnected via Service Order API',
-                    'updatedBy' => $updatedByUser
-                ];
-                $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
-                \Log::info('[API SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
-            }
-            catch (\Exception $radEx) {
-                \Log::error('[API SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
-            }
-
-            // Step 3: Get account details (PPPoE Username and Plan)
+            // Step 2: Get account details (PPPoE Username and Plan)
             $accountInfo = DB::table('billing_accounts')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
@@ -986,14 +971,42 @@ class ServiceOrderApiController extends Controller
             $username = $accountInfo->pppoe_username ?? null;
             $plan = $accountInfo->desired_plan ?? null;
 
+            // If there's a new_plan in the service order (e.g. Upgrade/Downgrade), use that instead
+            if ($serviceOrderId) {
+                $soPlan = DB::table('service_orders')->where('id', $serviceOrderId)->value('new_plan');
+                if ($soPlan && trim($soPlan) !== '') {
+                    $plan = $soPlan;
+                    \Log::info('[API SERVICE ORDER RECONNECT] Using new_plan from Service Order: ' . $plan);
+                }
+            }
+
             if (empty($username)) {
-                \Log::info('[API SERVICE ORDER RECONNECT SKIP] No PPPoE username found in technical_details');
+                \Log::info('[API SERVICE ORDER RECONNECT SKIP] No PPPoE username found for ' . $accountNo);
                 return 'no_username';
             }
 
             if (empty($plan)) {
-                \Log::info('[API SERVICE ORDER RECONNECT SKIP] No plan found');
+                \Log::info('[API SERVICE ORDER RECONNECT SKIP] No plan found for ' . $accountNo);
                 return 'no_plan';
+            }
+
+            // Step 3: Trigger RADIUS Reconnection
+            try {
+                $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusParams = [
+                    'accountNumber' => $accountNo,
+                    'username' => $username,
+                    'plan' => $plan, // This is the customer's desired_plan
+                    'serviceOrderId' => $serviceOrderId,
+                    'remarks' => 'Reconnected via Service Order API',
+                    'updatedBy' => $updatedByUser
+                ];
+                $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
+                \Log::info('[API SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
+            }
+            catch (\Exception $radEx) {
+                \Log::error('[API SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
+                // We might want to handle failures differently, but keeping current flow of proceeding to DB update
             }
 
             \Log::info('[API SERVICE ORDER RECONNECT PROCEED] Reconnecting user for account: ' . $accountNo);
@@ -1118,10 +1131,10 @@ class ServiceOrderApiController extends Controller
                 \Log::error('[API SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
-            // Update billing_status_id to 6 (Restricted)
-            $statusId = DB::table('billing_status')->where('status_name', 'Restricted')->value('id');
+            // Update billing_status_id to 4 (Inactive)
+            $statusId = DB::table('billing_status')->where('status_name', 'Inactive')->value('id');
             if (!$statusId) {
-                $statusId = 6; // Fallback
+                $statusId = 4; // Fallback
             }
 
             $billingAccount->billing_status_id = $statusId;
@@ -1130,7 +1143,7 @@ class ServiceOrderApiController extends Controller
             $billingAccount->updated_by = Auth::id() ?: 1;
             $billingAccount->save();
 
-            \Log::info("[API SERVICE ORDER RESTRICT DB] Updated billing_status_id to {$statusId} (Restricted) for Account: {$accountNo}");
+            \Log::info("[API SERVICE ORDER RESTRICT DB] Updated billing_status_id to {$statusId} (Inactive) for Account: {$accountNo}");
 
             return 'success';
         } catch (\Exception $e) {
@@ -1453,6 +1466,56 @@ class ServiceOrderApiController extends Controller
                 return 'no_username';
             }
 
+            \Log::info('[API SERVICE ORDER MIGRATION] Found old username: ' . $oldUsername);
+
+            // SPECIAL CASE: Transfer LCP/NAP/PORT
+            // The user wants to first call disabledUser, and if success, skip username update and call enabledUser
+            $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
+            if ($normalizedCategory === 'transfer lcp/nap/port') {
+                \Log::info('[API SERVICE ORDER] Handling Transfer LCP/NAP/PORT via Disable/Update/Enable sequence');
+                $radiusOps = app(ManualRadiusOperationsService::class);
+
+                // 1. Disable Old User
+                $radiusOps->disabledUser([
+                    'username' => $oldUsername,
+                    'accountNumber' => $accountNo,
+                    'updatedBy' => $updatedByUser
+                ]);
+
+                // 2. Generate ONLY New Username (keep existing password)
+                $pppoeService = new PppoeUsernameService();
+                $customerData = (array)$fullInfo;
+                $newUsername = $pppoeService->generateUniqueUsername($customerData);
+
+                \Log::info("[API SERVICE ORDER] Transfer: Updating username from {$oldUsername} to {$newUsername}");
+
+                // 3. Update Credentials (RADIUS + DB username)
+                $credResult = $radiusOps->updateCredentials([
+                    'accountNumber' => $accountNo,
+                    'username' => $oldUsername,
+                    'newUsername' => $newUsername,
+                    'newPassword' => null, // Don't update password
+                    'updatedBy' => $updatedByUser
+                ]);
+
+                if ($credResult['status'] === 'success') {
+                    \Log::info('[API SERVICE ORDER] Credentials updated successfully, now enabling...');
+
+                    // 4. Enable New User
+                    $radiusOps->enabledUser([
+                        'username' => $newUsername,
+                        'accountNumber' => $accountNo,
+                        'updatedBy' => $updatedByUser
+                    ]);
+
+                    \Log::info('[API SERVICE ORDER] User enabled successfully. Transfer complete.');
+                    return 'success';
+                } else {
+                    \Log::error('[API SERVICE ORDER] Failed to update credentials during transfer.');
+                    return 'radius_failed';
+                }
+            }
+
             // Generate new username using the same logic as JobOrderController
             $pppoeService = new PppoeUsernameService();
             $customerData = (array)$fullInfo;
@@ -1469,8 +1532,7 @@ class ServiceOrderApiController extends Controller
             }
 
             // RADIUS ACCOUNT CREATION LOGIC
-            $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
-            $targetCategories = ['relocate', 'transfer lcp/nap/port', 'relocate router', 'transfer lcp nap vlan'];
+            $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info('[API SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);

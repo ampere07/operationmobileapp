@@ -15,7 +15,7 @@ class NapApiController extends Controller
      */
     private function resolveUserId(Request $request)
     {
-        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
         
         if ($email) {
             $user = \App\Models\User::where('email_address', $email)->first();
@@ -29,6 +29,43 @@ class NapApiController extends Controller
         }
 
         return null;
+    }
+
+    private function resolveUserOrgId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->organization_id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::user()->organization_id;
+        }
+
+        return null;
+    }
+
+    private function isGlobalAdmin(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->role_id == 7 && $user->organization_id === null;
+            }
+        }
+
+        if (\Auth::check()) {
+            $user = \Auth::user();
+            return $user->role_id == 7 && $user->organization_id === null;
+        }
+
+        return false;
     }
 
     /**
@@ -54,11 +91,25 @@ class NapApiController extends Controller
             $offset = ($page - 1) * $limit;
 
             // Build the base query
-            $whereClause = '';
+            $whereClause = 'WHERE 1=1';
             $params = [];
+
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $whereClause .= ' AND organization_id = ?';
+                    $params[] = $orgId;
+                } else {
+                    $whereClause .= ' AND organization_id IS NULL';
+                }
+            } else {
+                $whereClause .= ' AND organization_id IS NULL';
+            }
             
             if (!empty($search)) {
-                $whereClause = 'WHERE nap_name LIKE ?';
+                $whereClause .= ' AND nap_name LIKE ?';
                 $params[] = '%' . $search . '%';
             }
 
@@ -71,7 +122,7 @@ class NapApiController extends Controller
             $totalPages = ceil($totalItems / $limit);
             
             // Get paginated data
-            $dataQuery = "SELECT id, nap_name, created_at, updated_at 
+            $dataQuery = "SELECT id, nap_name, organization_id, created_at, updated_at 
                          FROM nap $whereClause 
                          ORDER BY nap_name 
                          LIMIT ? OFFSET ?";
@@ -130,8 +181,25 @@ class NapApiController extends Controller
             $userId = $this->resolveUserId($request);
             $now = now();
             
-            // Check for duplicate NAP name in nap table
-            $existing = DB::select('SELECT id FROM nap WHERE LOWER(nap_name) = LOWER(?)', [$name]);
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            // Check for duplicate NAP name in nap table within the same organization context
+            $existingQuery = 'SELECT id FROM nap WHERE LOWER(nap_name) = LOWER(?)';
+            $existingParams = [$name];
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $existingQuery .= ' AND organization_id = ?';
+                    $existingParams[] = $orgId;
+                } else {
+                    $existingQuery .= ' AND organization_id IS NULL';
+                }
+            } else {
+                $existingQuery .= ' AND organization_id IS NULL';
+            }
+
+            $existing = DB::select($existingQuery, $existingParams);
             if (!empty($existing)) {
                 return response()->json([
                     'success' => false,
@@ -142,6 +210,7 @@ class NapApiController extends Controller
             // Insert new NAP
             $insertData = [
                 'nap_name' => $name,
+                'organization_id' => $orgId,
                 'created_by_user_id' => $userId,
                 'updated_by_user_id' => $userId,
                 'created_at' => $now,
@@ -151,7 +220,7 @@ class NapApiController extends Controller
             $id = DB::table('nap')->insertGetId($insertData);
             
             // Get the inserted record
-            $nap = DB::select('SELECT id, nap_name, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
+            $nap = DB::select('SELECT id, nap_name, organization_id, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
             
             // Log Activity
             ActivityLog::log(
@@ -187,13 +256,32 @@ class NapApiController extends Controller
     public function show($id)
     {
         try {
-            $nap = DB::select('SELECT id, nap_name, created_at, updated_at FROM nap WHERE id = ?', [$id]);
+            $nap = DB::select('SELECT id, nap_name, organization_id, created_at, updated_at FROM nap WHERE id = ?', [$id]);
             
             if (empty($nap)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'NAP not found'
                 ], 404);
+            }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($nap[0]->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to NAP'
+                    ], 403);
+                }
+            } else {
+                if ($nap[0]->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to NAP'
+                    ], 403);
+                }
             }
             
             return response()->json([
@@ -234,6 +322,25 @@ class NapApiController extends Controller
                     'message' => 'NAP not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+            if (!$isGlobalAdmin) {
+                if ($existing[0]->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this NAP'
+                    ], 403);
+                }
+            } else {
+                if ($existing[0]->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this NAP'
+                    ], 403);
+                }
+            }
             
             $name = $request->input('name');
             
@@ -242,7 +349,21 @@ class NapApiController extends Controller
             $now = now();
             
             // Check for duplicate name (excluding current NAP)
-            $duplicates = DB::select('SELECT id FROM nap WHERE LOWER(nap_name) = LOWER(?) AND id != ?', [$name, $id]);
+            $dupQuery = 'SELECT id FROM nap WHERE LOWER(nap_name) = LOWER(?) AND id != ?';
+            $dupParams = [$name, $id];
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $dupQuery .= ' AND organization_id = ?';
+                    $dupParams[] = $orgId;
+                } else {
+                    $dupQuery .= ' AND organization_id IS NULL';
+                }
+            } else {
+                $dupQuery .= ' AND organization_id IS NULL';
+            }
+
+            $duplicates = DB::select($dupQuery, $dupParams);
             if (!empty($duplicates)) {
                 return response()->json([
                     'success' => false,
@@ -260,7 +381,7 @@ class NapApiController extends Controller
             DB::table('nap')->where('id', $id)->update($updateData);
             
             // Get updated record
-            $nap = DB::select('SELECT id, nap_name, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
+            $nap = DB::select('SELECT id, nap_name, organization_id, created_at, updated_at FROM nap WHERE id = ?', [$id])[0];
             
             // Log Activity
             ActivityLog::log(
@@ -302,6 +423,25 @@ class NapApiController extends Controller
                     'message' => 'NAP not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($existing[0]->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this NAP'
+                    ], 403);
+                }
+            } else {
+                if ($existing[0]->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this NAP'
+                    ], 403);
+                }
+            }
             
             // HARD DELETE - permanently remove from database
             $deleted = DB::table('nap')->where('id', $id)->delete();
@@ -341,10 +481,27 @@ class NapApiController extends Controller
     /**
      * Get NAP statistics from app_nap table
      */
-    public function getStatistics()
+    public function getStatistics(Request $request)
     {
         try {
-            $totalNap = DB::select("SELECT COUNT(*) as count FROM nap")[0]->count ?? 0;
+            $whereClause = 'WHERE 1=1';
+            $params = [];
+
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $whereClause .= ' AND organization_id = ?';
+                    $params[] = $orgId;
+                } else {
+                    $whereClause .= ' AND organization_id IS NULL';
+                }
+            } else {
+                $whereClause .= ' AND organization_id IS NULL';
+            }
+
+            $totalNap = DB::select("SELECT COUNT(*) as count FROM nap $whereClause", $params)[0]->count ?? 0;
             
             return response()->json([
                 'success' => true,

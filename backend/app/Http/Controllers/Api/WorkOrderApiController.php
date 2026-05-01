@@ -21,6 +21,16 @@ class WorkOrderApiController extends Controller
             $status = $request->get('status', '');
             
             $query = WorkOrder::query();
+
+            // Apply organization filter
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
             
             if (!empty($search)) {
                 $query->where(function($q) use ($search) {
@@ -85,7 +95,8 @@ class WorkOrderApiController extends Controller
                 'requested_by' => 'required|string|max:255',
                 'updated_by' => 'nullable|string|max:255',
                 'start_time' => 'nullable|string',
-                'end_time' => 'nullable|string'
+                'end_time' => 'nullable|string',
+                'organization_id' => 'nullable|integer'
             ]);
 
             if ($validator->fails()) {
@@ -103,6 +114,11 @@ class WorkOrderApiController extends Controller
             
             if (!$request->has('work_status')) {
                 $workOrder->work_status = 'Pending';
+            }
+
+            // Auto-assign organization_id from current user if not provided
+            if (!$workOrder->organization_id && Auth::user()?->organization_id) {
+                $workOrder->organization_id = Auth::user()->organization_id;
             }
 
             $workOrder->save();
@@ -223,7 +239,16 @@ class WorkOrderApiController extends Controller
                 ], 422);
             }
 
-            $workOrder = WorkOrder::findOrFail($id);
+            $query = WorkOrder::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            $workOrder = $query->findOrFail($id);
             $folderName = $request->input('folder_name');
 
             $driveService = new \App\Services\GoogleDriveService();
@@ -289,7 +314,16 @@ class WorkOrderApiController extends Controller
     public function show($id)
     {
         try {
-            $workOrder = WorkOrder::find($id);
+            $query = WorkOrder::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            $workOrder = $query->find($id);
             
             if (!$workOrder) {
                 return response()->json([
@@ -322,7 +356,8 @@ class WorkOrderApiController extends Controller
                 'work_category' => 'nullable|string|max:255',
                 'updated_by' => 'nullable|string|max:255',
                 'start_time' => 'nullable|string',
-                'end_time' => 'nullable|string'
+                'end_time' => 'nullable|string',
+                'organization_id' => 'nullable|integer'
             ]);
 
             if ($validator->fails()) {
@@ -333,7 +368,16 @@ class WorkOrderApiController extends Controller
                 ], 422);
             }
 
-            $workOrder = WorkOrder::find($id);
+            $query = WorkOrder::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            $workOrder = $query->find($id);
             if (!$workOrder) {
                 return response()->json([
                     'success' => false,
@@ -343,7 +387,7 @@ class WorkOrderApiController extends Controller
             
             $data = $request->only([
                 'instructions', 'report_to', 'assign_to', 'remarks', 
-                'work_status', 'work_category', 'updated_by', 'start_time', 'end_time'
+                'work_status', 'work_category', 'updated_by', 'start_time', 'end_time', 'organization_id'
             ]);
             
             $workOrder->fill($data);
@@ -418,7 +462,16 @@ class WorkOrderApiController extends Controller
     public function destroy($id)
     {
         try {
-            $workOrder = WorkOrder::find($id);
+            $query = WorkOrder::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            $workOrder = $query->find($id);
             if (!$workOrder) {
                 return response()->json([
                     'success' => false,
@@ -453,9 +506,19 @@ class WorkOrderApiController extends Controller
     public function getStatistics()
     {
         try {
-            $total = WorkOrder::count();
-            $pending = WorkOrder::where('work_status', 'Pending')->count();
-            $completed = WorkOrder::where('work_status', 'Completed')->count();
+            $query = WorkOrder::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $total = (clone $query)->count();
+            $pending = (clone $query)->where('work_status', 'Pending')->count();
+            $completed = (clone $query)->where('work_status', 'Completed')->count();
             
             return response()->json([
                 'success' => true,

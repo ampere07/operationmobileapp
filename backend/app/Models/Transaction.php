@@ -28,6 +28,7 @@ class Transaction extends Model
         'updated_by_user',
         'approved_by',
         'account_balance_before',
+        'organization_id',
     ];
 
     protected $casts = [

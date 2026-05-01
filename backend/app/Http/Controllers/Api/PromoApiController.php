@@ -16,15 +16,39 @@ class PromoApiController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $promos = Promo::leftJoin('users as creators', 'promo_list.created_by_user_id', '=', 'creators.id')
+            $user = auth()->user();
+            if (!$user && request()->input('email_address')) {
+                $user = User::where('email_address', request()->input('email_address'))->first();
+            }
+
+            $query = Promo::leftJoin('users as creators', 'promo_list.created_by_user_id', '=', 'creators.id')
                 ->leftJoin('users as updaters', 'promo_list.updated_by_user_id', '=', 'updaters.id')
                 ->select(
                     'promo_list.*',
                     'creators.email_address as creator_email',
                     'updaters.email_address as updater_email'
-                )
-                ->orderBy('promo_list.name', 'asc')
-                ->get();
+                );
+
+            if ($user) {
+                $roleId = $user->role_id;
+                $organizationId = $user->organization_id;
+
+                // A Global Admin has role_id 7 AND no organization_id
+                $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
+
+                if (!$isGlobalAdmin) {
+                    if ($organizationId) {
+                        $query->where('promo_list.organization_id', $organizationId);
+                    } else {
+                        $query->whereNull('promo_list.organization_id');
+                    }
+                } else {
+                    // Global admin can only see promos with no organization
+                    $query->whereNull('promo_list.organization_id');
+                }
+            }
+
+            $promos = $query->orderBy('promo_list.name', 'asc')->get();
 
             $formattedPromos = $promos->map(function ($promo) {
                 return [
@@ -65,17 +89,21 @@ class PromoApiController extends Controller
             ]);
 
             $userEmail = $request->input('email_address');
-            $userId = auth()->id();
+            $user = auth()->user();
+            $userId = $user ? $user->id : null;
+            $organizationId = $user ? $user->organization_id : null;
 
             if (!$userId && $userEmail) {
                 $user = User::where('email_address', $userEmail)->first();
                 if ($user) {
                     $userId = $user->id;
+                    $organizationId = $user->organization_id;
                 }
             }
 
             $validated['created_by_user_id'] = $userId;
             $validated['updated_by_user_id'] = $userId;
+            $validated['organization_id'] = $organizationId;
 
             $promo = Promo::create($validated);
 
@@ -153,12 +181,29 @@ class PromoApiController extends Controller
             ]);
 
             $userEmail = $request->input('email_address');
-            $userId = auth()->id();
+            $user = auth()->user();
+            $userId = $user ? $user->id : null;
+            $userOrgId = $user ? $user->organization_id : null;
 
             if (!$userId && $userEmail) {
-                $user = User::where('email_address', $userEmail)->first();
-                if ($user) {
-                    $userId = $user->id;
+                $authUser = User::where('email_address', $userEmail)->first();
+                if ($authUser) {
+                    $userId = $authUser->id;
+                    $userOrgId = $authUser->organization_id;
+                }
+            }
+
+            // Authorization check
+            $isGlobalAdmin = (auth()->user() && auth()->user()->role_id == 7 && auth()->user()->organization_id === null);
+            if (!$isGlobalAdmin) {
+                if ($userOrgId) {
+                    if ($promo->organization_id !== $userOrgId) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update promos within your organization.'], 403);
+                    }
+                } else {
+                    if ($promo->organization_id !== null) {
+                        return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update promos without an organization.'], 403);
+                    }
                 }
             }
 
@@ -204,6 +249,28 @@ class PromoApiController extends Controller
     {
         try {
             $promo = Promo::findOrFail($id);
+
+            // Authorization check
+            $user = auth()->user();
+            if (!$user && request()->input('email_address')) {
+                $user = User::where('email_address', request()->input('email_address'))->first();
+            }
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        if ($promo->organization_id !== $user->organization_id) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete promos within your organization.'], 403);
+                        }
+                    } else {
+                        if ($promo->organization_id !== null) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete promos without an organization.'], 403);
+                        }
+                    }
+                }
+            }
+
             $promoName = $promo->name;
             $promo->delete();
 

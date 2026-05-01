@@ -18,6 +18,7 @@ class TransactionRevert extends Model
         'status',
         'requested_by',
         'updated_by',
+        'organization_id',
     ];
 
     protected $casts = [

@@ -49,6 +49,16 @@ class JobOrderController extends Controller
             ]);
 
             $query = JobOrder::with(['application', 'items'])->orderBy('id', 'desc');
+
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
             
             if ($request->has('assigned_email')) {
                 $assignedEmail = $request->query('assigned_email');
@@ -264,6 +274,7 @@ class JobOrderController extends Controller
                 'created_by_user_email' => 'nullable|email|max:255',
                 'updated_by_user_email' => 'nullable|email|max:255',
                 'contract_link' => 'nullable|string|max:500',
+                'organization_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
@@ -298,6 +309,14 @@ class JobOrderController extends Controller
 
             
             // Set default values if not provided
+            if (!isset($data['billing_status'])) {
+                $data['billing_status'] = 'Pending';
+            }
+            
+            // Auto-assign organization_id from current user if not provided
+            if (!isset($data['organization_id']) && auth()->user()?->organization_id) {
+                $data['organization_id'] = auth()->user()->organization_id;
+            }
             if (!isset($data['billing_status'])) {
                 $data['billing_status'] = 'Pending';
             }
@@ -376,7 +395,17 @@ class JobOrderController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $jobOrder = JobOrder::with(['application', 'items'])->findOrFail($id);
+            $query = JobOrder::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            
+            $jobOrder = $query->with(['application', 'items'])->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -400,7 +429,17 @@ class JobOrderController extends Controller
                 'request_data' => $request->all()
             ]);
 
-            $jobOrder = JobOrder::with('lcpnapLocation')->findOrFail($id);
+            $query = JobOrder::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $jobOrder = $query->with('lcpnapLocation')->findOrFail($id);
             
             $generateCredentials = $request->input('generate_credentials', false);
             
@@ -579,6 +618,7 @@ class JobOrderController extends Controller
                 'updated_by_user_email' => 'nullable|email|max:255',
                 'start_time' => 'nullable|date',
                 'end_time' => 'nullable|date',
+                'organization_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
@@ -790,7 +830,8 @@ class JobOrderController extends Controller
                 'title' => 'Job Order Completed',
                 'message' => 'Onsite status marked as Done',
                 'timestamp' => now()->timestamp,
-                'formatted_date' => now()->format('Y-m-d h:i:s A')
+                'formatted_date' => now()->format('Y-m-d h:i:s A'),
+                'organization_id' => $jobOrder->organization_id
             ];
 
             event(new \App\Events\JobOrderDone($data));
@@ -855,7 +896,17 @@ class JobOrderController extends Controller
         try {
             DB::beginTransaction();
 
-            $jobOrder = JobOrder::with(['application', 'lcpnapLocation'])->lockForUpdate()->findOrFail($id);
+            $query = JobOrder::query();
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $jobOrder = $query->with(['application', 'lcpnapLocation'])->lockForUpdate()->findOrFail($id);
             
             if (!$jobOrder->application) {
                 throw new \Exception('Job order must have an associated application');

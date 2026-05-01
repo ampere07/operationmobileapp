@@ -1158,11 +1158,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 // Use Notification Service to Generate PDF and Send Notifications
                 $notificationResult = $this->notificationService->notifyOverdue($inv);
                 
-                if (!$notificationResult['pdf_generated']) {
-                     throw new \Exception("Failed to generate PDF: " . implode(', ', $notificationResult['errors']));
-                }
-                
-                $pdfUrl = $notificationResult['pdf_url'];
+                $pdfUrl = $notificationResult['pdf_url'] ?? null;
 
                 // Insert into Overdue table
                 Overdue::create([
@@ -1234,11 +1230,7 @@ class EnhancedBillingGenerationServiceWithNotifications
                 // Use Notification Service
                 $notificationResult = $this->notificationService->notifyDcNotice($inv);
 
-                if (!$notificationResult['pdf_generated']) {
-                     throw new \Exception("Failed to generate PDF: " . implode(', ', $notificationResult['errors']));
-                }
-                
-                $pdfUrl = $notificationResult['pdf_url'];
+                $pdfUrl = $notificationResult['pdf_url'] ?? null;
                 
                 if (!$inv->account_no) {
                      throw new \Exception("Invoice {$inv->id} has no account_no");

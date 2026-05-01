@@ -10,6 +10,23 @@ class MonitorController extends Controller
 {
     public function handle(Request $request)
     {
+        $authUser = auth()->user();
+        if (!$authUser) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
+        }
+
+        $organizationId = $authUser->organization_id;
+
+        // Allow SuperAdmins (null org) to filter by a specific organization if provided in request
+        if ($organizationId === null && $request->has('organization_id')) {
+            $reqOrgId = $request->input('organization_id');
+            if ($reqOrgId !== '' && $reqOrgId !== 'null' && $reqOrgId !== 'All') {
+                $organizationId = $reqOrgId;
+            }
+        }
+
+        $roleId = $authUser->role_id;
+
         $action = $request->query('action', $request->input('action', ''));
         $param = $request->query('param', '');
         $year = $request->query('year', date('Y'));
@@ -76,6 +93,10 @@ class MonitorController extends Controller
                 if (!$bgy || $bgy === 'All')
                     return $qb;
                 return $qb->where($col, $bgy);
+            };
+
+            $applyOrg = function ($qb, string $table) use ($organizationId) {
+                return $qb->where($table . '.organization_id', $organizationId);
             };
 
             // -------------------------
@@ -187,8 +208,8 @@ class MonitorController extends Controller
             if ($action === 'billing_status') {
                 $qb = DB::table('billing_accounts')
                     ->leftJoin('billing_status', 'billing_accounts.billing_status_id', '=', 'billing_status.id')
-                    // OPTIONAL barangay filtering via customers table
                     ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                    ->where('customers.organization_id', $organizationId)
                     ->select(
                         DB::raw("COALESCE(billing_status.status_name, 'Regular') as label"),
                         DB::raw('COUNT(*) as value')
@@ -207,11 +228,14 @@ class MonitorController extends Controller
             // 2) ONLINE STATUS (online_status.session_status or session_status?)
             if ($action === 'online_status') {
                 $qb = DB::table('online_status')
+                    ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                    ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                    ->where('customers.organization_id', $organizationId)
                     ->select(
-                        DB::raw("COALESCE(session_status, 'Unknown') as label"),
+                        DB::raw("COALESCE(online_status.session_status, 'Unknown') as label"),
                         DB::raw('COUNT(*) as value')
                     )
-                    ->groupBy('session_status');
+                    ->groupBy('online_status.session_status');
 
                 $response['data'] = $qb->get();
                 $response['status'] = 'success';
@@ -220,8 +244,9 @@ class MonitorController extends Controller
 
             // 3) APPLICATION STATUS (applications.status)
             if ($action === 'app_status') {
-                $qb = DB::table('applications')
-                    ->select(
+                $qb = DB::table('applications');
+                $applyOrg($qb, 'applications');
+                $qb->select(
                         DB::raw("COALESCE(status, 'Pending') as label"),
                         DB::raw('COUNT(*) as value')
                     );
@@ -242,8 +267,9 @@ class MonitorController extends Controller
                 // param: onsite | billing (you had more in old file; your table has onsite_status)
                 $col = ($param === 'onsite') ? 'job_orders.onsite_status' : 'job_orders.onsite_status';
 
-                $qb = DB::table('job_orders')
-                    ->select(
+                $qb = DB::table('job_orders');
+                $applyOrg($qb, 'job_orders');
+                $qb->select(
                         DB::raw("COALESCE($col, 'Unknown') as label"),
                         DB::raw('COUNT(*) as value')
                     );
@@ -266,8 +292,9 @@ class MonitorController extends Controller
                 // param: visit | support (your table has support_status + visit_status)
                 $col = ($param === 'support') ? 'service_orders.support_status' : 'service_orders.visit_status';
 
-                $qb = DB::table('service_orders')
-                    ->select(
+                $qb = DB::table('service_orders');
+                $applyOrg($qb, 'service_orders');
+                $qb->select(
                         DB::raw("COALESCE($col, 'Unknown') as label"),
                         DB::raw('COUNT(*) as value')
                     );
@@ -295,8 +322,9 @@ class MonitorController extends Controller
                 $isJo = ($param === 'jo');
 
                 if ($isJo) {
-                    $qb = DB::table('job_orders')
-                        ->select('assigned_email as raw_email', DB::raw('COUNT(*) as value'))
+                    $qb = DB::table('job_orders');
+                    $applyOrg($qb, 'job_orders');
+                    $qb->select('assigned_email as raw_email', DB::raw('COUNT(*) as value'))
                         ->where('onsite_status', 'In Progress')
                         ->whereNotNull('assigned_email')
                         ->where('assigned_email', '!=', '');
@@ -308,8 +336,9 @@ class MonitorController extends Controller
                     $qb->leftJoin('applications', 'job_orders.application_id', '=', 'applications.id');
                     $applyBarangayOnApplications($qb, 'applications.barangay');
                 } else {
-                    $qb = DB::table('service_orders')
-                        ->select('assigned_email as raw_email', DB::raw('COUNT(*) as value'))
+                    $qb = DB::table('service_orders');
+                    $applyOrg($qb, 'service_orders');
+                    $qb->select('assigned_email as raw_email', DB::raw('COUNT(*) as value'))
                         ->where('visit_status', 'In Progress')
                         ->whereNotNull('assigned_email')
                         ->where('assigned_email', '!=', '');
@@ -344,8 +373,9 @@ class MonitorController extends Controller
             // service_orders: visit_by_user, visit_with + visit_status
             if ($action === 'tech_mon_jo') {
                 // Query 1: visit_by
-                $qb1 = DB::table('job_orders')
-                    ->select(
+                $qb1 = DB::table('job_orders');
+                $applyOrg($qb1, 'job_orders');
+                $qb1->select(
                         DB::raw("UPPER(TRIM(visit_by)) as tech"),
                         DB::raw("onsite_status as status"),
                         DB::raw("COUNT(*) as count")
@@ -357,8 +387,9 @@ class MonitorController extends Controller
                 $rows1 = $qb1->groupBy(DB::raw("UPPER(TRIM(visit_by))"), 'onsite_status')->get();
 
                 // Query 2: visit_with
-                $qb2 = DB::table('job_orders')
-                    ->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
+                $qb2 = DB::table('job_orders');
+                $applyOrg($qb2, 'job_orders');
+                $qb2->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('onsite_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with')->where('visit_with', '!=', '');
 
@@ -366,8 +397,9 @@ class MonitorController extends Controller
                 $rows2 = $qb2->groupBy(DB::raw("UPPER(TRIM(visit_with))"), 'onsite_status')->get();
 
                 // Query 3: visit_with_other
-                $qb3 = DB::table('job_orders')
-                    ->select(DB::raw("UPPER(TRIM(visit_with_other)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
+                $qb3 = DB::table('job_orders');
+                $applyOrg($qb3, 'job_orders');
+                $qb3->select(DB::raw("UPPER(TRIM(visit_with_other)) as tech"), DB::raw("onsite_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('onsite_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with_other')->where('visit_with_other', '!=', '');
 
@@ -391,8 +423,9 @@ class MonitorController extends Controller
 
             if ($action === 'tech_mon_so') {
                 // Query 1: visit_by_user
-                $qb1 = DB::table('service_orders')
-                    ->select(DB::raw("UPPER(TRIM(visit_by_user)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
+                $qb1 = DB::table('service_orders');
+                $applyOrg($qb1, 'service_orders');
+                $qb1->select(DB::raw("UPPER(TRIM(visit_by_user)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('visit_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_by_user')->where('visit_by_user', '!=', '');
 
@@ -400,8 +433,9 @@ class MonitorController extends Controller
                 $rows1 = $qb1->groupBy(DB::raw("UPPER(TRIM(visit_by_user))"), 'visit_status')->get();
 
                 // Query 2: visit_with
-                $qb2 = DB::table('service_orders')
-                    ->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
+                $qb2 = DB::table('service_orders');
+                $applyOrg($qb2, 'service_orders');
+                $qb2->select(DB::raw("UPPER(TRIM(visit_with)) as tech"), DB::raw("visit_status as status"), DB::raw("COUNT(*) as count"))
                     ->whereIn('visit_status', ['Done', 'Reschedule', 'Failed'])
                     ->whereNotNull('visit_with')->where('visit_with', '!=', '');
 
@@ -429,8 +463,9 @@ class MonitorController extends Controller
             if (in_array($action, ['invoice_mon', 'transactions_mon', 'portal_mon'], true)) {
                 if ($action === 'invoice_mon') {
                     // Get count/sum for each invoice status per month in the given year
-                    $qb = DB::table('invoices')
-                        ->select(
+                    $qb = DB::table('invoices');
+                    $applyOrg($qb, 'invoices');
+                    $qb->select(
                             DB::raw("MONTH(invoice_date) as month_num"),
                             DB::raw("MONTHNAME(invoice_date) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
@@ -466,8 +501,9 @@ class MonitorController extends Controller
                     ]);
                 } elseif ($action === 'transactions_mon') {
                     // Get all transaction statuses per month
-                    $qb = DB::table('transactions')
-                        ->select(
+                    $qb = DB::table('transactions');
+                    $applyOrg($qb, 'transactions');
+                    $qb->select(
                             DB::raw("MONTH(date_processed) as month_num"),
                             DB::raw("MONTHNAME(date_processed) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
@@ -503,8 +539,9 @@ class MonitorController extends Controller
                     ]);
                 } else {
                     // Get all portal payment statuses per month
-                    $qb = DB::table('payment_portal_logs')
-                        ->select(
+                    $qb = DB::table('payment_portal_logs');
+                    $applyOrg($qb, 'payment_portal_logs');
+                    $qb->select(
                             DB::raw("MONTH(date_time) as month_num"),
                             DB::raw("MONTHNAME(date_time) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
@@ -543,8 +580,9 @@ class MonitorController extends Controller
 
             // 8) EXPENSES (your real table is expenses_log; category_id exists)
             if ($action === 'expenses_mon') {
-                $qb = DB::table('expenses_log')
-                    ->leftJoin('expenses_category', 'expenses_log.category_id', '=', 'expenses_category.id')
+                $qb = DB::table('expenses_log');
+                $applyOrg($qb, 'expenses_log');
+                $qb->leftJoin('expenses_category', 'expenses_log.category_id', '=', 'expenses_category.id')
                     ->select(
                         DB::raw("COALESCE(expenses_category.category_name, 'Unknown') as label"),
                         DB::raw("SUM(COALESCE(expenses_log.amount,0)) as value")
@@ -559,8 +597,9 @@ class MonitorController extends Controller
 
             // 9) PAYMENT METHODS (transactions.payment_method)
             if ($action === 'pay_method_mon') {
-                $qb = DB::table('transactions')
-                    ->select(
+                $qb = DB::table('transactions');
+                $applyOrg($qb, 'transactions');
+                $qb->select(
                         DB::raw("COALESCE(payment_method, 'Unknown') as label"),
                         DB::raw("SUM(COALESCE(received_payment,0)) as value")
                     )
@@ -576,8 +615,9 @@ class MonitorController extends Controller
 
             // 10) MAP (applications.long_lat or applications.location? you have long_lat varchar(255))
             if ($action === 'app_map') {
-                $qb = DB::table('applications')
-                    ->select('first_name', 'middle_initial', 'last_name', 'long_lat', 'desired_plan', 'barangay')
+                $qb = DB::table('applications');
+                $applyOrg($qb, 'applications');
+                $qb->select('first_name', 'middle_initial', 'last_name', 'long_lat', 'desired_plan', 'barangay')
                     ->whereNotNull('long_lat')
                     ->where('long_lat', '!=', '');
 
@@ -601,8 +641,11 @@ class MonitorController extends Controller
             // 11) REFER RANK (applications.referred_by via job_orders.application_id)
             if ($action === 'jo_refer_rank') {
                 $qb = DB::table('job_orders')
-                    ->join('applications', 'job_orders.application_id', '=', 'applications.id')
-                    ->select(
+                    ->join('applications', 'job_orders.application_id', '=', 'applications.id');
+                
+                $applyOrg($qb, 'job_orders');
+
+                $qb->select(
                         DB::raw("COALESCE(applications.referred_by, 'Unknown') as label"),
                         DB::raw("COUNT(*) as value")
                     )
@@ -621,8 +664,9 @@ class MonitorController extends Controller
 
             // 12) INVOICE OVERALL (invoices.status)
             if ($action === 'invoice_overall') {
-                $qb = DB::table('invoices')
-                    ->select(
+                $qb = DB::table('invoices');
+                $applyOrg($qb, 'invoices');
+                $qb->select(
                         DB::raw("COALESCE(status, 'Unknown') as label"),
                         DB::raw("COUNT(*) as value")
                     )
@@ -634,22 +678,39 @@ class MonitorController extends Controller
             // 12.1) DASHBOARD COUNTS (New)
             if ($action === 'dashboard_counts') {
                 $counts = [
-                    'so_support_in_progress' => DB::table('service_orders')->where('support_status', 'In Progress')->count(),
-                    'so_visit_in_progress' => DB::table('service_orders')->where('visit_status', 'In Progress')->count(),
+                    'so_support_in_progress' => DB::table('service_orders')->where('organization_id', $organizationId)->where('support_status', 'In Progress')->count(),
+                    'so_visit_in_progress' => DB::table('service_orders')->where('organization_id', $organizationId)->where('visit_status', 'In Progress')->count(),
                     'so_visit_pullout_in_progress' => DB::table('service_orders')
                         ->leftJoin('support_concern', 'service_orders.concern_id', '=', 'support_concern.id')
+                        ->where('service_orders.organization_id', $organizationId)
                         ->where('service_orders.visit_status', 'In Progress')
                         ->where(function ($q) {
                             $q->where('support_concern.concern_name', 'LIKE', '%Pullout%')
                                 ->orWhere('service_orders.concern_remarks', 'LIKE', '%Pullout%');
                         })
                         ->count(),
-                    'app_pending' => DB::table('applications')->where('status', 'Pending')->count(),
-                    'jo_in_progress' => DB::table('job_orders')->where('onsite_status', 'In Progress')->count(),
-                    'radius_online' => DB::table('online_status')->where('session_status', 'Online')->count(),
-                    'radius_offline' => DB::table('online_status')->where('session_status', 'Offline')->count(),
-                    'radius_restricted' => DB::table('online_status')->where('session_status', 'Restricted')->count(),
-                    'radius_disconnected' => DB::table('online_status')->where('session_status', 'Disconnected')->count(),
+                    'app_pending' => DB::table('applications')->where('organization_id', $organizationId)->where('status', 'Pending')->count(),
+                    'jo_in_progress' => DB::table('job_orders')->where('organization_id', $organizationId)->where('onsite_status', 'In Progress')->count(),
+                    'radius_online' => DB::table('online_status')
+                        ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('customers.organization_id', $organizationId)
+                        ->where('online_status.session_status', 'Online')->count(),
+                    'radius_offline' => DB::table('online_status')
+                        ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('customers.organization_id', $organizationId)
+                        ->where('online_status.session_status', 'Offline')->count(),
+                    'radius_restricted' => DB::table('online_status')
+                        ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('customers.organization_id', $organizationId)
+                        ->where('online_status.session_status', 'Restricted')->count(),
+                    'radius_disconnected' => DB::table('online_status')
+                        ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                        ->where('customers.organization_id', $organizationId)
+                        ->where('online_status.session_status', 'Disconnected')->count(),
                 ];
 
                 return response()->json(['status' => 'success', 'data' => $counts]);
@@ -661,6 +722,7 @@ class MonitorController extends Controller
                 $customStartTime = $request->query('custom_start_time');
                 $techs = DB::table('users')
                     ->where('users.role_id', 2)
+                    ->where('users.organization_id', $organizationId)
                     ->leftJoin('tech_in_out', 'users.id', '=', 'tech_in_out.tech_id')
                     ->select('users.id as tech_id', 'users.username', 'users.email_address', 'users.first_name', 'users.last_name', 'users.created_at', 'tech_in_out.status as tech_status', 'tech_in_out.time_in', 'tech_in_out.time_out', 'tech_in_out.last_updated')
                     ->get();
@@ -718,12 +780,14 @@ class MonitorController extends Controller
 
                     // 1. Fetch ALL tasks (JO/SO) strictly where start_time is Today onwards
                     $dailyJOs = DB::table('job_orders')
+                        ->where('organization_id', $organizationId)
                         ->where('assigned_email', $email)
                         ->where('start_time', '>=', $viewStartStr)
                         ->select('id', 'start_time', 'end_time', 'onsite_status as status', DB::raw("'jo' as task_type"))
                         ->get();
 
                     $dailySOs = DB::table('service_orders')
+                        ->where('organization_id', $organizationId)
                         ->where('assigned_email', $email)
                         ->where('start_time', '>=', $viewStartStr)
                         ->select('id', 'start_time', 'end_time', 'visit_status as status', DB::raw("'so' as task_type"), 'concern')
@@ -854,6 +918,7 @@ class MonitorController extends Controller
             if ($action === 'team_detailed_queue') {
                 // 1) Job Orders
                 $jobs = DB::table('job_orders')
+                    ->where('job_orders.organization_id', $organizationId)
                     ->leftJoin('users', 'job_orders.assigned_email', '=', 'users.email_address')
                     ->join('applications', 'job_orders.application_id', '=', 'applications.id')
                     ->select(
@@ -880,6 +945,7 @@ class MonitorController extends Controller
 
                 // 2) Service Orders
                 $services = DB::table('service_orders')
+                    ->where('service_orders.organization_id', $organizationId)
                     ->leftJoin('users', 'service_orders.assigned_email', '=', 'users.email_address')
                     ->join('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
                     ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
@@ -954,6 +1020,7 @@ class MonitorController extends Controller
             if ($action === 'agent_detailed_queue') {
                 // 1) Job Orders
                 $jobs = DB::table('job_orders')
+                    ->where('job_orders.organization_id', $organizationId)
                     ->join('applications', 'job_orders.application_id', '=', 'applications.id')
                     ->select(
                         'applications.referred_by as team_name',
@@ -979,6 +1046,7 @@ class MonitorController extends Controller
 
                 // 2) Service Orders
                 $services = DB::table('service_orders')
+                    ->where('service_orders.organization_id', $organizationId)
                     ->join('billing_accounts', 'service_orders.account_no', '=', 'billing_accounts.account_no')
                     ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                     ->select(

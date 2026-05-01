@@ -25,6 +25,7 @@ class User extends Authenticatable
         'contact_number',
         'organization_id',
         'role_id',
+        'agent_id',
         'group_id',
         'status',
         'darkmode',
@@ -68,6 +69,11 @@ class User extends Authenticatable
     public function group()
     {
         return $this->belongsTo(Group::class, 'group_id', 'id');
+    }
+
+    public function agent()
+    {
+        return $this->belongsTo(Agent::class, 'agent_id', 'id');
     }
 
     // Accessor for full name

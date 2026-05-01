@@ -15,16 +15,26 @@ class DiscountController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $discounts = Discount::with([
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $query = Discount::with([
                 'billingAccount.customer',
                 'billingAccount.plan',
                 'processedByUser',
                 'approvedByUser',
                 'createdByUser',
                 'updatedByUser'
-            ])
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ]);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
+
+            $discounts = $query->orderBy('created_at', 'desc')
+                ->get();
 
             return response()->json([
                 'success' => true,
@@ -69,6 +79,10 @@ class DiscountController extends Controller
 
             $validated['created_by_user_id'] = Auth::id();
             $validated['updated_by_user_id'] = Auth::id();
+            
+            if (Auth::user() && Auth::user()->organization_id) {
+                $validated['organization_id'] = Auth::user()->organization_id;
+            }
 
             $discount = Discount::create($validated);
 
@@ -131,6 +145,18 @@ class DiscountController extends Controller
             ])
             ->findOrFail($id);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $discount->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to this discount record'
+                ], 403);
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $discount
@@ -149,6 +175,18 @@ class DiscountController extends Controller
     {
         try {
             $discount = Discount::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $discount->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to update this discount record'
+                ], 403);
+            }
 
             $validated = $request->validate([
                 'account_no' => 'sometimes|exists:billing_accounts,account_no',
@@ -227,6 +265,18 @@ class DiscountController extends Controller
     {
         try {
             $discount = Discount::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $discount->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to delete this discount record'
+                ], 403);
+            }
 
             DB::beginTransaction();
 

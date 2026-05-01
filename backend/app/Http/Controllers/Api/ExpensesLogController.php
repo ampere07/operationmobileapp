@@ -12,7 +12,17 @@ class ExpensesLogController extends Controller
     public function index(Request $request)
     {
         try {
+            $currentUser = auth()->user();
             $query = DB::table('expenses_logs');
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
 
             // Apply search filter if provided
             if ($request->has('search') && !empty($request->search)) {
@@ -50,6 +60,7 @@ class ExpensesLogController extends Controller
                     'receivedDate' => $record->received_date ? Carbon::parse($record->received_date)->format('n/j/Y') : '',
                     'supplier' => $record->supplier ?? '',
                     'city' => $record->city ?? 'All',
+                    'organization_id' => $record->organization_id ?? null,
                 ];
             });
 

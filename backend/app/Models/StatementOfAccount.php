@@ -28,7 +28,8 @@ class StatementOfAccount extends Model
         'total_amount_due',
         'print_link',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'organization_id'
     ];
 
     protected $casts = [

@@ -16,6 +16,7 @@ class PaymentPortalLogsController extends Controller
     public function index(Request $request)
     {
         try {
+            $currentUser = auth()->user();
             $query = DB::table('payment_portal_logs')
                 ->leftJoin('billing_accounts', 'payment_portal_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
@@ -29,9 +30,19 @@ class PaymentPortalLogsController extends Controller
                     'customers.address',
                     'customers.city',
                     'customers.barangay',
-                    'customers.desired_plan as plan'
+                    'customers.desired_plan as plan',
+                    'payment_portal_logs.organization_id'
                 )
                 ->orderBy('payment_portal_logs.date_time', 'desc');
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('payment_portal_logs.organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('payment_portal_logs.organization_id');
+                }
+            }
             
             if ($request->has('updated_since')) {
                 $query->where('payment_portal_logs.updated_at', '>', $request->input('updated_since'));
@@ -127,6 +138,7 @@ class PaymentPortalLogsController extends Controller
     public function show($id)
     {
         try {
+            $currentUser = auth()->user();
             $record = DB::table('payment_portal_logs')
                 ->leftJoin('billing_accounts', 'payment_portal_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
@@ -141,9 +153,20 @@ class PaymentPortalLogsController extends Controller
                     'customers.address',
                     'customers.city',
                     'customers.barangay',
-                    'customers.desired_plan as plan'
-                )
-                ->first();
+                    'customers.desired_plan as plan',
+                    'payment_portal_logs.organization_id'
+                );
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $record->where('payment_portal_logs.organization_id', $currentUser->organization_id);
+                } else {
+                    $record->whereNull('payment_portal_logs.organization_id');
+                }
+            }
+
+            $record = $record->first();
 
             if (!$record) {
                 return response()->json([

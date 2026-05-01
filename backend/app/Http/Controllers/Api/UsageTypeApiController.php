@@ -12,7 +12,7 @@ class UsageTypeApiController extends Controller
 {
     private function resolveUserId(Request $request)
     {
-        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
         
         if ($email) {
             $user = \App\Models\User::where('email_address', $email)->first();
@@ -28,6 +28,43 @@ class UsageTypeApiController extends Controller
         return null;
     }
 
+    private function resolveUserOrgId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->organization_id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::user()->organization_id;
+        }
+
+        return null;
+    }
+
+    private function isGlobalAdmin(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->role_id == 7 && $user->organization_id === null;
+            }
+        }
+
+        if (\Auth::check()) {
+            $user = \Auth::user();
+            return $user->role_id == 7 && $user->organization_id === null;
+        }
+
+        return false;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -36,6 +73,19 @@ class UsageTypeApiController extends Controller
             $search = $request->get('search', '');
             
             $query = UsageType::query();
+
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
             
             if (!empty($search)) {
                 $query->where('usage_name', 'like', '%' . $search . '%');
@@ -75,8 +125,31 @@ class UsageTypeApiController extends Controller
     public function store(Request $request)
     {
         try {
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
             $validator = Validator::make($request->all(), [
-                'usage_name' => 'required|string|max:255|unique:usage_type,usage_name',
+                'usage_name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($orgId, $isGlobalAdmin) {
+                        $existsQuery = UsageType::where('usage_name', $value);
+                        if (!$isGlobalAdmin) {
+                            if ($orgId) {
+                                $existsQuery->where('organization_id', $orgId);
+                            } else {
+                                $existsQuery->whereNull('organization_id');
+                            }
+                        } else {
+                            $existsQuery->whereNull('organization_id');
+                        }
+                        
+                        if ($existsQuery->exists()) {
+                            $fail('The usage name has already been taken.');
+                        }
+                    },
+                ],
             ]);
 
             if ($validator->fails()) {
@@ -89,6 +162,7 @@ class UsageTypeApiController extends Controller
             
             $usageType = new UsageType();
             $usageType->usage_name = $request->input('usage_name');
+            $usageType->organization_id = $orgId;
             $userId = $this->resolveUserId($request);
             $usageType->created_by_user_id = $userId;
             $usageType->updated_by_user_id = $userId;
@@ -133,6 +207,25 @@ class UsageTypeApiController extends Controller
                     'message' => 'Usage type not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($usageType->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to usage type'
+                    ], 403);
+                }
+            } else {
+                if ($usageType->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to usage type'
+                    ], 403);
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -149,8 +242,31 @@ class UsageTypeApiController extends Controller
     public function update(Request $request, $id)
     {
         try {
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
             $validator = Validator::make($request->all(), [
-                'usage_name' => 'required|string|max:255|unique:usage_type,usage_name,' . $id,
+                'usage_name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($id, $orgId, $isGlobalAdmin) {
+                        $existsQuery = UsageType::where('usage_name', $value)->where('id', '!=', $id);
+                        if (!$isGlobalAdmin) {
+                            if ($orgId) {
+                                $existsQuery->where('organization_id', $orgId);
+                            } else {
+                                $existsQuery->whereNull('organization_id');
+                            }
+                        } else {
+                            $existsQuery->whereNull('organization_id');
+                        }
+                        
+                        if ($existsQuery->exists()) {
+                            $fail('The usage name has already been taken.');
+                        }
+                    },
+                ],
             ]);
 
             if ($validator->fails()) {
@@ -167,6 +283,23 @@ class UsageTypeApiController extends Controller
                     'success' => false,
                     'message' => 'Usage type not found'
                 ], 404);
+            }
+
+            // Authorization check
+            if (!$isGlobalAdmin) {
+                if ($usageType->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this usage type'
+                    ], 403);
+                }
+            } else {
+                if ($usageType->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this usage type'
+                    ], 403);
+                }
             }
             
             $usageType->usage_name = $request->input('usage_name');
@@ -209,6 +342,25 @@ class UsageTypeApiController extends Controller
                     'message' => 'Usage type not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($usageType->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this usage type'
+                    ], 403);
+                }
+            } else {
+                if ($usageType->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this usage type'
+                    ], 403);
+                }
+            }
             
             $usageTypeData = $usageType->toArray();
             $usageType->delete();
@@ -238,10 +390,25 @@ class UsageTypeApiController extends Controller
         }
     }
 
-    public function getStatistics()
+    public function getStatistics(Request $request)
     {
         try {
-            $totalUsageTypes = UsageType::count();
+            $query = UsageType::query();
+            
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
+
+            $totalUsageTypes = $query->count();
             
             return response()->json([
                 'success' => true,

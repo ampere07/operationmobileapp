@@ -15,6 +15,7 @@ import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
 import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { techInOutService } from '../services/techInOutService';
 
 interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
   userRoleProp?: string;
@@ -48,6 +49,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [isStarted, setIsStarted] = useState(!!(jobOrder as any).start_time);
   const [isEnded, setIsEnded] = useState(!!(jobOrder as any).end_time);
+  const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
+  const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
   useEffect(() => {
     setIsStarted(!!(jobOrder as any).start_time);
@@ -119,18 +122,35 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
 
       const authData = await AsyncStorage.getItem('authData');
-      if (authData && (!userRoleProp || userRoleIdProp === null)) {
+      let userData = null;
+      if (authData) {
         try {
-          const userData = JSON.parse(authData);
+          userData = JSON.parse(authData);
           if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
           if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
+
+          // Check technician status - Always check if user is a technician
+          const currentRole = userRoleProp || userData.role?.toLowerCase() || '';
+          const currentRoleId = userRoleIdProp !== null ? userRoleIdProp : Number(userData.role_id);
+          const isTechnician = (currentRole === 'technician' || currentRoleId === 2);
+          
+          if (isTechnician) {
+            const userId = userData.id || userData.user_id || userData.user?.id;
+            if (userId) {
+              const response = await techInOutService.getStatus(userId);
+              if (response.success && response.data) {
+                const isOnline = !!(response.data.time_in && !response.data.time_out);
+                setTechStatus(isOnline ? 'online' : 'offline');
+              }
+            }
+          }
         } catch (error) {
-          console.error('Error parsing auth data:', error);
+          console.error('Error parsing auth data or fetching tech status:', error);
         }
       }
     };
     loadSettings();
-  }, []);
+  }, [userRoleProp, userRoleIdProp]);
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -558,6 +578,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
   const handleStartTimer = async () => {
     try {
+      const isTechnician = userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2';
+      if (isTechnician && techStatus === 'offline') {
+        setShowTimeInWarning(true);
+        return;
+      }
+
       setLoading(true);
       if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
 
@@ -962,6 +988,16 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         cancelText="Close"
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={showTimeInWarning}
+        title="Action Required"
+        message="You need to time in first in the menu before starting a job order."
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setShowTimeInWarning(false)}
+        onCancel={() => setShowTimeInWarning(false)}
       />
     </View>
   );

@@ -8,12 +8,14 @@ use Illuminate\Support\Facades\DB;
 use App\Models\SmsBlastLog;
 use App\Models\SmsConfig;
 use App\Models\ActivityLog;
+use Illuminate\Support\Facades\Auth;
 
 class SmsBlastController extends Controller
 {
     public function index(Request $request)
     {
         try {
+            $currentUser = Auth::user();
             $query = DB::table('sms_blast_logs')
                 ->leftJoin('barangay', 'sms_blast_logs.barangay_id', '=', 'barangay.id')
                 ->leftJoin('city', 'barangay.city_id', '=', 'city.id')
@@ -29,8 +31,18 @@ class SmsBlastController extends Controller
                     'lcp.lcp_name',
                     'creator.email_address as user_email',
                     'updater.email_address as modified_email'
-                )
-                ->orderBy('sms_blast_logs.created_at', 'desc');
+                );
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('sms_blast_logs.organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('sms_blast_logs.organization_id');
+                }
+            }
+
+            $query->orderBy('sms_blast_logs.created_at', 'desc');
 
             if ($request->has('barangay') && $request->barangay !== 'All') {
                 $query->where('barangay.barangay', $request->barangay);
@@ -78,6 +90,7 @@ class SmsBlastController extends Controller
                     'modifiedDate' => $record->updated_at ? \Carbon\Carbon::parse($record->updated_at)->format('n/j/Y g:i:s A') : ($record->created_at ? \Carbon\Carbon::parse($record->created_at)->format('n/j/Y g:i:s A') : 'N/A'),
                     'modifiedEmail' => $record->modified_email ?? $record->user_email ?? 'N/A',
                     'userEmail' => $record->user_email ?? 'N/A',
+                    'organization_id' => $record->organization_id
                 ];
             });
 
@@ -90,6 +103,7 @@ class SmsBlastController extends Controller
     public function store(Request $request)
     {
         try {
+            $currentUser = Auth::user();
             $validated = $request->validate([
                 'message' => 'required|string',
                 'barangay_id' => 'nullable|integer',
@@ -104,45 +118,65 @@ class SmsBlastController extends Controller
                 // Get the barangay name from barangay table
                 $barangay = DB::table('barangay')->where('id', $validated['barangay_id'])->first();
                 if ($barangay) {
-                    $recipients = DB::table('customers')
+                    $customerQuery = DB::table('customers')
                         ->join('billing_accounts', 'customers.id', '=', 'billing_accounts.customer_id')
                         ->where('customers.barangay', $barangay->barangay)
                         ->where('billing_accounts.billing_status_id', 1)
-                        ->whereNotNull('customers.contact_number_primary')
-                        ->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
+                        ->whereNotNull('customers.contact_number_primary');
+                    
+                    if ($currentUser && $currentUser->organization_id) {
+                        $customerQuery->where('customers.organization_id', $currentUser->organization_id);
+                    }
+                    
+                    $recipients = $customerQuery->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
                         ->get();
                 }
             } elseif (!empty($validated['lcp_id'])) {
                 $lcp = DB::table('lcp')->where('id', $validated['lcp_id'])->first();
                 if ($lcp) {
-                    $recipients = DB::table('technical_details')
+                    $techQuery = DB::table('technical_details')
                         ->join('billing_accounts', 'technical_details.account_no', '=', 'billing_accounts.account_no')
                         ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                         ->where('technical_details.lcp', $lcp->lcp_name)
                         ->where('billing_accounts.billing_status_id', 1)
-                        ->whereNotNull('customers.contact_number_primary')
-                        ->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
+                        ->whereNotNull('customers.contact_number_primary');
+                    
+                    if ($currentUser && $currentUser->organization_id) {
+                        $techQuery->where('technical_details.organization_id', $currentUser->organization_id);
+                    }
+                    
+                    $recipients = $techQuery->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
                         ->get();
                 }
             } elseif (!empty($validated['lcpnap_id'])) {
                 $lcpnap = DB::table('lcpnap')->where('id', $validated['lcpnap_id'])->first();
                 if ($lcpnap) {
-                    $recipients = DB::table('technical_details')
+                    $napQuery = DB::table('technical_details')
                         ->join('billing_accounts', 'technical_details.account_no', '=', 'billing_accounts.account_no')
                         ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                         ->where('technical_details.lcpnap', $lcpnap->lcpnap_name)
                         ->where('billing_accounts.billing_status_id', 1)
-                        ->whereNotNull('customers.contact_number_primary')
-                        ->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
+                        ->whereNotNull('customers.contact_number_primary');
+                    
+                    if ($currentUser && $currentUser->organization_id) {
+                        $napQuery->where('technical_details.organization_id', $currentUser->organization_id);
+                    }
+                    
+                    $recipients = $napQuery->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
                         ->get();
                 }
             } elseif (!empty($validated['billing_day'])) {
-                $recipients = DB::table('billing_accounts')
+                $billingQuery = DB::table('billing_accounts')
                     ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                     ->where('billing_accounts.billing_day', $validated['billing_day'])
                     ->where('billing_accounts.billing_status_id', 1) // Active
-                    ->whereNotNull('customers.contact_number_primary')
-                    ->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
+                    ->whereNotNull('customers.contact_number_primary');
+                
+                if ($currentUser && $currentUser->organization_id) {
+                    $billingQuery->where('billing_accounts.organization_id', $currentUser->organization_id);
+                }
+                
+                $recipients = $billingQuery->select('customers.contact_number_primary as contact_no', 'customers.id as customer_id')
                     ->get();
             }
 
@@ -153,8 +187,9 @@ class SmsBlastController extends Controller
             $smsLog->timestamp = now();
             $smsLog->message_count = $recipientCount;
             $smsLog->credit_used = $recipientCount; 
-            $smsLog->created_by_user_id = $request->user()->id ?? 1;
-            $smsLog->updated_by_user_id = $request->user()->id ?? 1;
+            $smsLog->created_by_user_id = $currentUser->id ?? 1;
+            $smsLog->updated_by_user_id = $currentUser->id ?? 1;
+            $smsLog->organization_id = $currentUser->organization_id ?? null;
             $smsLog->save();
 
             // Create Activity Log
@@ -168,7 +203,8 @@ class SmsBlastController extends Controller
                     'additional_data' => [
                         'message_count' => $recipientCount,
                         'target_type' => !empty($validated['barangay_id']) ? 'Barangay' : (!empty($validated['lcp_id']) ? 'LCP' : (!empty($validated['lcpnap_id']) ? 'LCPNAP' : (!empty($validated['billing_day']) ? 'Billing Day' : 'Unknown'))),
-                        'target_id' => $validated['barangay_id'] ?? $validated['lcp_id'] ?? $validated['lcpnap_id'] ?? $validated['billing_day'] ?? null
+                        'target_id' => $validated['barangay_id'] ?? $validated['lcp_id'] ?? $validated['lcpnap_id'] ?? $validated['billing_day'] ?? null,
+                        'organization_id' => $smsLog->organization_id
                     ]
                 ]
             );

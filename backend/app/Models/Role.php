@@ -15,6 +15,14 @@ class Role extends Model
     protected $fillable = [
         'role_name',
         'description',
+        'permissions',
+        'created_by_user_id',
+        'updated_by_user_id',
+        'organization_id'
+    ];
+
+    protected $casts = [
+        'permissions' => 'array',
     ];
 
     public function users()

@@ -36,13 +36,15 @@ class InventoryLog extends Model
         'modified_by',
         'modified_date',
         'user_email',
-        'item_id'
+        'item_id',
+        'organization_id'
     ];
 
     protected $casts = [
         'date' => 'datetime',
         'item_quantity' => 'integer',
         'modified_date' => 'datetime',
+        'organization_id' => 'integer'
     ];
 
     /**

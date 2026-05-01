@@ -26,7 +26,8 @@ class Inventory extends Model
         'total_quantity',
         'image_url',
         'created_by_user_id',
-        'updated_by_user_id'
+        'updated_by_user_id',
+        'organization_id'
     ];
     
     protected $casts = [
@@ -36,6 +37,7 @@ class Inventory extends Model
         'supplier_id' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'organization_id' => 'integer'
     ];
 
     /**

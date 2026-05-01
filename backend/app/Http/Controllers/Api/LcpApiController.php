@@ -12,7 +12,7 @@ class LcpApiController extends Controller
 {
     private function resolveUserId(Request $request)
     {
-        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
         
         if ($email) {
             $user = \App\Models\User::where('email_address', $email)->first();
@@ -28,6 +28,43 @@ class LcpApiController extends Controller
         return null;
     }
 
+    private function resolveUserOrgId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->organization_id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::user()->organization_id;
+        }
+
+        return null;
+    }
+
+    private function isGlobalAdmin(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->role_id == 7 && $user->organization_id === null;
+            }
+        }
+
+        if (\Auth::check()) {
+            $user = \Auth::user();
+            return $user->role_id == 7 && $user->organization_id === null;
+        }
+
+        return false;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -36,6 +73,19 @@ class LcpApiController extends Controller
             $search = $request->get('search', '');
             
             $query = LCP::query();
+
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
             
             if (!empty($search)) {
                 $query->where('lcp_name', 'like', '%' . $search . '%');
@@ -100,6 +150,7 @@ class LcpApiController extends Controller
             $lcp = new LCP();
             $lcp->lcp_name = $name;
             $userId = $this->resolveUserId($request);
+            $lcp->organization_id = $this->resolveUserOrgId($request);
             $lcp->created_by_user_id = $userId;
             $lcp->updated_by_user_id = $userId;
             $lcp->save();
@@ -143,6 +194,25 @@ class LcpApiController extends Controller
                     'message' => 'LCP not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($lcp->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to LCP'
+                    ], 403);
+                }
+            } else {
+                if ($lcp->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to LCP'
+                    ], 403);
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -177,6 +247,25 @@ class LcpApiController extends Controller
                     'success' => false,
                     'message' => 'LCP not found'
                 ], 404);
+            }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+            if (!$isGlobalAdmin) {
+                if ($lcp->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this LCP'
+                    ], 403);
+                }
+            } else {
+                if ($lcp->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this LCP'
+                    ], 403);
+                }
             }
             
             $name = $request->input('name');
@@ -229,6 +318,25 @@ class LcpApiController extends Controller
                     'message' => 'LCP not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($lcp->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this LCP'
+                    ], 403);
+                }
+            } else {
+                if ($lcp->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this LCP'
+                    ], 403);
+                }
+            }
             
             $lcp->delete();
             
@@ -257,10 +365,25 @@ class LcpApiController extends Controller
         }
     }
 
-    public function getStatistics()
+    public function getStatistics(Request $request)
     {
         try {
-            $totalLcp = LCP::count();
+            $query = LCP::query();
+            
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
+
+            $totalLcp = $query->count();
             
             return response()->json([
                 'success' => true,

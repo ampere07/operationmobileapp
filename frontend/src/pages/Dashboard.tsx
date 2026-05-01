@@ -155,7 +155,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             case 'support':
                 return <Support />;
             case 'job-order':
-                return <JobOrder />;
+                return <JobOrder onLogout={onLogout} />;
             case 'service-order':
                 return <ServiceOrder />;
             case 'work-order':

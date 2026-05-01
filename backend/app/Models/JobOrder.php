@@ -54,6 +54,7 @@ class JobOrder extends Model
         'start_time',
         'end_time',
         'proof_image_url',
+        'organization_id',
     ];
 
     protected $dates = [
@@ -68,6 +69,7 @@ class JobOrder extends Model
         'billing_day' => 'integer',
         'timestamp' => 'datetime',
         'date_installed' => 'date',
+        'organization_id' => 'integer',
     ];
 
     public function application()

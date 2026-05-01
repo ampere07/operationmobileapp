@@ -29,7 +29,7 @@ class ManualRadiusOperationsController extends Controller
         try {
             // Validate the action parameter
             $validator = Validator::make($request->all(), [
-                'action' => 'required|in:disconnectUser,reconnectUser,updateCredentials',
+                'action' => 'required|in:disconnectUser,reconnectUser,updateCredentials,disabledUser,enabledUser,deleteAccount',
                 'accountNumber' => 'nullable|string',
                 'username' => 'required|string',
                 'updatedBy' => 'nullable|string',
@@ -58,6 +58,9 @@ class ManualRadiusOperationsController extends Controller
                 'disconnectUser' => $this->handleDisconnect($request, $params),
                 'reconnectUser' => $this->handleReconnect($request, $params),
                 'updateCredentials' => $this->handleCredentialUpdate($request, $params),
+                'disabledUser' => $this->handleDisabled($request, $params),
+                'enabledUser' => $this->handleEnabled($request, $params),
+                'deleteAccount' => $this->handleDeletion($request, $params),
                 default => [
                     'status' => 'error',
                     'message' => 'Unknown action',
@@ -148,6 +151,48 @@ class ManualRadiusOperationsController extends Controller
         }
 
         return $this->radiusService->updateCredentials($params);
+    }
+
+    /**
+     * Handle disabled user operation
+     */
+    private function handleDisabled(Request $request, array $params): array
+    {
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return [
+                'status' => 'error',
+                'message' => 'Validation failed for disabled operation',
+                'errors' => $validator->errors(),
+                'output' => 'Error: Validation failed'
+            ];
+        }
+
+        return $this->radiusService->disabledUser($params);
+    }
+
+    /**
+     * Handle enabled user operation
+     */
+    private function handleEnabled(Request $request, array $params): array
+    {
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return [
+                'status' => 'error',
+                'message' => 'Validation failed for enabled operation',
+                'errors' => $validator->errors(),
+                'output' => 'Error: Validation failed'
+            ];
+        }
+
+        return $this->radiusService->enabledUser($params);
     }
 
     /**
@@ -269,5 +314,102 @@ class ManualRadiusOperationsController extends Controller
                 'output' => 'Error: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Disable user (dedicated endpoint)
+     */
+    public function disabledUser(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'accountNumber' => 'nullable|string',
+                'username' => 'required|string',
+                'updatedBy' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'output' => 'Error: Validation failed'
+                ], 422);
+            }
+
+            $result = $this->radiusService->disabledUser($request->all());
+            $statusCode = $result['status'] === 'success' ? 200 : 400;
+
+            return response()->json($result, $statusCode);
+
+        } catch (Exception $e) {
+            Log::error("Disable User Error", [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'output' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Enable user (dedicated endpoint)
+     */
+    public function enabledUser(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'accountNumber' => 'nullable|string',
+                'username' => 'required|string',
+                'updatedBy' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'output' => 'Error: Validation failed'
+                ], 422);
+            }
+
+            $result = $this->radiusService->enabledUser($request->all());
+            $statusCode = $result['status'] === 'success' ? 200 : 400;
+
+            return response()->json($result, $statusCode);
+
+        } catch (Exception $e) {
+            Log::error("Enable User Error", [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'output' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    /**
+     * Handle delete user operation
+     */
+    private function handleDeletion(Request $request, array $params): array
+    {
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return [
+                'status' => 'error',
+                'message' => 'Username is required',
+                'output' => 'Error: Username is required'
+            ];
+        }
+
+        return $this->radiusService->deleteAccount($params['username']);
     }
 }

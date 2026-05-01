@@ -12,12 +12,26 @@ class OrganizationController extends Controller
     public function index()
     {
         try {
-            $organizations = Organization::with(['users'])->get();
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+
+            $query = Organization::with(['users']);
+
+            if ($organizationId) {
+                // If user has organization_id, only show organizations that belong to it
+                // Or if the organization itself is the one the user belongs to?
+                // Given the pattern "i added the organization_id im the organizations table",
+                // we treat it as a parent-child or tenant grouping.
+                $query->where('organization_id', $organizationId);
+            }
+
+            $organizations = $query->get();
             return response()->json([
                 'success' => true,
                 'data' => $organizations
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Log::error('Failed to fetch organizations: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch organizations',
@@ -33,6 +47,7 @@ class OrganizationController extends Controller
             'address' => 'nullable|string|max:500',
             'contact_number' => 'nullable|string|max:50',
             'email_address' => 'nullable|email|max:255',
+            'created_by_user_id' => 'nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -44,11 +59,16 @@ class OrganizationController extends Controller
         }
 
         try {
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+
             $organization = Organization::create([
                 'organization_name' => $request->organization_name,
                 'address' => $request->address,
                 'contact_number' => $request->contact_number,
                 'email_address' => $request->email_address,
+                'created_by_user_id' => $request->created_by_user_id,
+                'organization_id' => $organizationId
             ]);
 
             try {
@@ -66,7 +86,8 @@ class OrganizationController extends Controller
                 'message' => 'Organization created successfully',
                 'data' => $organization
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Log::error('Failed to create organization: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create organization',
@@ -78,7 +99,18 @@ class OrganizationController extends Controller
     public function show($id)
     {
         try {
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+
             $organization = Organization::with(['users'])->findOrFail($id);
+
+            if ($organizationId && $organization->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to organization data.'
+                ], 403);
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $organization
@@ -99,6 +131,7 @@ class OrganizationController extends Controller
             'address' => 'sometimes|nullable|string|max:500',
             'contact_number' => 'sometimes|nullable|string|max:50',
             'email_address' => 'sometimes|nullable|email|max:255',
+            'updated_by_user_id' => 'sometimes|nullable|string|max:255',
         ]);
 
         if ($validator->fails()) {
@@ -110,9 +143,23 @@ class OrganizationController extends Controller
         }
 
         try {
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+
             $organization = Organization::findOrFail($id);
+
+            if ($organizationId && $organization->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only update organizations within your scope.'
+                ], 403);
+            }
+
             $oldData = $organization->toArray();
-            $organization->update($request->only(['organization_name', 'address', 'contact_number', 'email_address']));
+            
+            // Don't allow organization_id to be changed via update
+            $updateData = $request->only(['organization_name', 'address', 'contact_number', 'email_address', 'updated_by_user_id']);
+            $organization->update($updateData);
 
             try {
                 $changes = array_diff_assoc($request->only(['organization_name', 'address', 'contact_number', 'email_address']), $oldData);
@@ -130,7 +177,8 @@ class OrganizationController extends Controller
                 'message' => 'Organization updated successfully',
                 'data' => $organization
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            \Log::error('Failed to update organization: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update organization',
@@ -142,7 +190,18 @@ class OrganizationController extends Controller
     public function destroy($id)
     {
         try {
+            $user = auth()->user();
+            $organizationId = $user ? $user->organization_id : null;
+
             $organization = Organization::findOrFail($id);
+
+            if ($organizationId && $organization->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only delete organizations within your scope.'
+                ], 403);
+            }
+
             $orgName = $organization->organization_name;
             $organization->delete();
 

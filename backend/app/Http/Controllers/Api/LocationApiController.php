@@ -44,11 +44,30 @@ class LocationApiController extends Controller
     /**
      * Get all locations with hierarchical structure
      */
-    public function getAllLocations()
+    public function getAllLocations(Request $request)
     {
         try {
-            $regions = Region::with(['cities.barangays'])
-                ->orderBy('region')
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = Region::with(['cities.barangays']);
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $regions = $query->orderBy('region')
                 ->get();
             
             $result = $regions->map(function($region) {
@@ -103,10 +122,30 @@ class LocationApiController extends Controller
     /**
      * Get all regions
      */
-    public function getRegions()
+    public function getRegions(Request $request)
     {
         try {
-            $regions = Region::orderBy('region')->get();
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = Region::query();
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $regions = $query->orderBy('region')->get();
             
             // Transform to match frontend expectations
             $transformedRegions = $regions->map(function($region) {
@@ -134,11 +173,30 @@ class LocationApiController extends Controller
     /**
      * Get cities by region
      */
-    public function getCitiesByRegion($regionId)
+    public function getCitiesByRegion($regionId, Request $request)
     {
         try {
-            $cities = City::where('region_id', $regionId)
-                ->orderBy('city')
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = City::where('region_id', $regionId);
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $cities = $query->orderBy('city')
                 ->get();
             
             // Transform to match frontend expectations
@@ -168,10 +226,30 @@ class LocationApiController extends Controller
     /**
      * Get all cities
      */
-    public function getAllCities()
+    public function getAllCities(Request $request)
     {
         try {
-            $cities = City::orderBy('city')->get();
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = City::query();
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $cities = $query->orderBy('city')->get();
             
             // Transform to match frontend expectations
             $transformedCities = $cities->map(function($city) {
@@ -200,11 +278,30 @@ class LocationApiController extends Controller
     /**
      * Get barangays by city
      */
-    public function getBarangaysByCity($cityId)
+    public function getBarangaysByCity($cityId, Request $request)
     {
         try {
-            $barangays = Barangay::where('city_id', $cityId)
-                ->orderBy('barangay')
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = Barangay::where('city_id', $cityId);
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $barangays = $query->orderBy('barangay')
                 ->get();
             
             // Transform to match frontend expectations
@@ -234,10 +331,30 @@ class LocationApiController extends Controller
     /**
      * Get all barangays
      */
-    public function getAllBarangays()
+    public function getAllBarangays(Request $request)
     {
         try {
-            $barangays = Barangay::orderBy('barangay')->get();
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = Barangay::query();
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $barangays = $query->orderBy('barangay')->get();
             
             // Transform to match frontend expectations
             $transformedBarangays = $barangays->map(function($barangay) {
@@ -301,10 +418,36 @@ class LocationApiController extends Controller
     /**
      * Get all locations
      */
-    public function getAllDetails()
+    public function getAllDetails(Request $request)
     {
         try {
-            $locations = LocationDetail::orderBy('location_name')->get();
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $query = LocationDetail::query();
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->whereHas('barangay', function($q) use ($user) {
+                            $q->where('organization_id', $user->organization_id);
+                        });
+                    } else {
+                        $query->whereHas('barangay', function($q) {
+                            $q->whereNull('organization_id');
+                        });
+                    }
+                } else {
+                    $query->whereHas('barangay', function($q) {
+                        $q->whereNull('organization_id');
+                    });
+                }
+            }
+
+            $locations = $query->orderBy('location_name')->get();
             
             // Transform to match frontend expectations
             $transformedLocations = $locations->map(function($location) {
@@ -359,8 +502,15 @@ class LocationApiController extends Controller
                 ], 422);
             }
             
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+            $organizationId = $user ? $user->organization_id : null;
+
             $region = Region::create([
                 'region' => $name,
+                'organization_id' => $organizationId,
                 'modified_by' => $this->resolveUserEmail($request),
                 'modified_at' => now()
             ]);
@@ -424,9 +574,16 @@ class LocationApiController extends Controller
                 ], 422);
             }
             
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+            $organizationId = $user ? $user->organization_id : null;
+
             $city = City::create([
                 'region_id' => $regionId,
                 'city' => $name,
+                'organization_id' => $organizationId,
                 'modified_by' => $this->resolveUserEmail($request),
                 'modified_at' => now()
             ]);
@@ -490,9 +647,16 @@ class LocationApiController extends Controller
                 ], 422);
             }
             
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+            $organizationId = $user ? $user->organization_id : null;
+
             $barangay = Barangay::create([
                 'city_id' => $cityId,
                 'barangay' => $name,
+                'organization_id' => $organizationId,
                 'modified_by' => $this->resolveUserEmail($request),
                 'modified_at' => now()
             ]);
@@ -629,6 +793,19 @@ class LocationApiController extends Controller
                             'message' => 'Region not found'
                         ], 404);
                     }
+
+                    // Authorization
+                    if (!$isGlobalAdmin) {
+                        if ($userOrgId) {
+                            if ($location->organization_id !== $userOrgId) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update regions within your organization.'], 403);
+                            }
+                        } else {
+                            if ($location->organization_id !== null) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update regions without an organization.'], 403);
+                            }
+                        }
+                    }
                     
                     $existing = Region::where('id', '!=', $id)
                         ->whereRaw('LOWER(region) = ?', [strtolower($name)])
@@ -653,6 +830,19 @@ class LocationApiController extends Controller
                             'success' => false,
                             'message' => 'City not found'
                         ], 404);
+                    }
+
+                    // Authorization
+                    if (!$isGlobalAdmin) {
+                        if ($userOrgId) {
+                            if ($location->organization_id !== $userOrgId) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update cities within your organization.'], 403);
+                            }
+                        } else {
+                            if ($location->organization_id !== null) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update cities without an organization.'], 403);
+                            }
+                        }
                     }
                     
                     $existing = City::where('id', '!=', $id)
@@ -679,6 +869,19 @@ class LocationApiController extends Controller
                             'success' => false,
                             'message' => 'Barangay not found'
                         ], 404);
+                    }
+
+                    // Authorization
+                    if (!$isGlobalAdmin) {
+                        if ($userOrgId) {
+                            if ($location->organization_id !== $userOrgId) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update barangays within your organization.'], 403);
+                            }
+                        } else {
+                            if ($location->organization_id !== null) {
+                                return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update barangays without an organization.'], 403);
+                            }
+                        }
                     }
                     
                     $existing = Barangay::where('id', '!=', $id)
@@ -767,6 +970,14 @@ class LocationApiController extends Controller
             
             $cascade = $request->query('cascade', false);
             
+            // Get current user and organization
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+            $isGlobalAdmin = $user && ($user->role_id == 7 && $user->organization_id === null);
+            $userOrgId = $user ? $user->organization_id : null;
+
             DB::beginTransaction();
             
             try {
@@ -779,6 +990,21 @@ class LocationApiController extends Controller
                                 'success' => false,
                                 'message' => 'Region not found'
                             ], 404);
+                        }
+
+                        // Authorization
+                        if (!$isGlobalAdmin) {
+                            if ($userOrgId) {
+                                if ($region->organization_id !== $userOrgId) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete regions within your organization.'], 403);
+                                }
+                            } else {
+                                if ($region->organization_id !== null) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete regions without an organization.'], 403);
+                                }
+                            }
                         }
                         
                         $cities = City::where('region_id', $id)->get();
@@ -826,6 +1052,21 @@ class LocationApiController extends Controller
                                 'message' => 'City not found'
                             ], 404);
                          }
+
+                        // Authorization
+                        if (!$isGlobalAdmin) {
+                            if ($userOrgId) {
+                                if ($city->organization_id !== $userOrgId) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete cities within your organization.'], 403);
+                                }
+                            } else {
+                                if ($city->organization_id !== null) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete cities without an organization.'], 403);
+                                }
+                            }
+                        }
                         
                         $barangays = Barangay::where('city_id', $id)->get();
                         
@@ -861,6 +1102,21 @@ class LocationApiController extends Controller
                                 'success' => false,
                                 'message' => 'Barangay not found'
                             ], 404);
+                        }
+
+                        // Authorization
+                        if (!$isGlobalAdmin) {
+                            if ($userOrgId) {
+                                if ($barangay->organization_id !== $userOrgId) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete barangays within your organization.'], 403);
+                                }
+                            } else {
+                                if ($barangay->organization_id !== null) {
+                                    DB::rollBack();
+                                    return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete barangays without an organization.'], 403);
+                                }
+                            }
                         }
                         
                         $locationDetails = LocationDetail::where('barangay_id', $id)->get();
@@ -940,13 +1196,52 @@ class LocationApiController extends Controller
     /**
      * Get statistics
      */
-    public function getStatistics()
+    public function getStatistics(Request $request)
     {
         try {
-            $regions = Region::count();
-            $cities = City::count();  
-            $barangays = Barangay::count();
-            $locations = LocationDetail::count();
+            $user = auth()->user();
+            if (!$user && $request->has('user_email')) {
+                $user = User::where('email_address', $request->user_email)->first();
+            }
+
+            $regionQuery = Region::query();
+            $cityQuery = City::query();
+            $barangayQuery = Barangay::query();
+            $locationQuery = LocationDetail::query();
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $regionQuery->where('organization_id', $user->organization_id);
+                        $cityQuery->where('organization_id', $user->organization_id);
+                        $barangayQuery->where('organization_id', $user->organization_id);
+                        // location table might not have organization_id yet, but let's filter by its parent
+                        $locationQuery->whereHas('barangay', function($q) use ($user) {
+                            $q->where('organization_id', $user->organization_id);
+                        });
+                    } else {
+                        $regionQuery->whereNull('organization_id');
+                        $cityQuery->whereNull('organization_id');
+                        $barangayQuery->whereNull('organization_id');
+                        $locationQuery->whereHas('barangay', function($q) {
+                            $q->whereNull('organization_id');
+                        });
+                    }
+                } else {
+                    $regionQuery->whereNull('organization_id');
+                    $cityQuery->whereNull('organization_id');
+                    $barangayQuery->whereNull('organization_id');
+                    $locationQuery->whereHas('barangay', function($q) {
+                        $q->whereNull('organization_id');
+                    });
+                }
+            }
+
+            $regions = $regionQuery->count();
+            $cities = $cityQuery->count();  
+            $barangays = $barangayQuery->count();
+            $locations = $locationQuery->count();
             
             return response()->json([
                 'success' => true,

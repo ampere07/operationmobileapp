@@ -5,26 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class InventoryCategory extends Model
+class Agent extends Model
 {
     use HasFactory;
 
-    protected $table = 'inventory_category';
+    protected $table = 'agents';
     
-    public $timestamps = true;
-    
+    public $timestamps = false; // We use created_at from SQL default
+
     protected $fillable = [
-        'category_name',
-        'created_by_user_id',
-        'updated_by_user_id',
+        'id',
+        'team_name',
+        'created_by',
+        'created_at',
         'organization_id'
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'organization_id' => 'integer'
     ];
-
-
 }

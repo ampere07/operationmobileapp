@@ -16,8 +16,14 @@ class Barangay extends Model
     protected $fillable = [
         'barangay',
         'city_id',
+        'organization_id',
         'modified_by',
         'modified_at'
+    ];
+
+    protected $casts = [
+        'organization_id' => 'integer',
+        'modified_at' => 'datetime'
     ];
 
     public function city()

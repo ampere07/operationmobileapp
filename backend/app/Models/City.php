@@ -16,8 +16,14 @@ class City extends Model
     protected $fillable = [
         'city',
         'region_id',
+        'organization_id',
         'modified_by',
         'modified_at'
+    ];
+
+    protected $casts = [
+        'organization_id' => 'integer',
+        'modified_at' => 'datetime'
     ];
 
     public function region()

@@ -11,11 +11,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 
 class InventoryLogApiController extends Controller
 {
     private function getCurrentUser(Request $request)
     {
+        if (auth()->check()) {
+            return auth()->user()->email_address;
+        }
         if ($request->has('user_email')) {
             return $request->user_email;
         }
@@ -24,9 +28,6 @@ class InventoryLogApiController extends Controller
         }
         if ($request->has('modifiedBy')) {
             return $request->modifiedBy;
-        }
-        if (auth()->check()) {
-            return auth()->user()->email;
         }
         throw new \Exception('Unauthenticated: User email is required for this operation.');
     }
@@ -37,7 +38,14 @@ class InventoryLogApiController extends Controller
     public function index()
     {
         try {
-            $logs = InventoryLog::orderBy('date', 'desc')->get();
+            $currentUser = Auth::user();
+            $query = InventoryLog::query();
+            
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where('organization_id', $currentUser->organization_id);
+            }
+            
+            $logs = $query->orderBy('date', 'desc')->get();
             return response()->json([
                 'success' => true,
                 'data' => $logs
@@ -56,6 +64,7 @@ class InventoryLogApiController extends Controller
     public function store(Request $request)
     {
         try {
+            $currentUser = Auth::user();
             $validator = Validator::make($request->all(), [
                 'item_id' => 'required|exists:inventory_items,id',
                 'item_quantity' => 'required|integer',
@@ -79,6 +88,11 @@ class InventoryLogApiController extends Controller
 
             $item = Inventory::findOrFail($request->item_id);
 
+            // Ensure user belongs to the same organization as the item
+            if ($currentUser && $currentUser->organization_id && $item->organization_id && $item->organization_id !== $currentUser->organization_id) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized access to this inventory item'], 403);
+            }
+
             DB::beginTransaction();
 
             // Create the log
@@ -100,6 +114,7 @@ class InventoryLogApiController extends Controller
             $log->modified_by = $this->getCurrentUser($request);
             $log->modified_date = now();
             $log->user_email = $this->getCurrentUser($request);
+            $log->organization_id = $currentUser->organization_id ?? null;
             $log->save();
 
             // Update item total quantity
@@ -125,7 +140,8 @@ class InventoryLogApiController extends Controller
                         'quantity' => $request->item_quantity,
                         'sn' => $request->sn,
                         'requested_by' => $request->requested_by,
-                        'new_total_quantity' => $item->total_quantity
+                        'new_total_quantity' => $item->total_quantity,
+                        'organization_id' => $log->organization_id
                     ]
                 ]
             );
@@ -148,4 +164,3 @@ class InventoryLogApiController extends Controller
         }
     }
 }
-

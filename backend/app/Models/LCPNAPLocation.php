@@ -30,11 +30,13 @@ class LCPNAPLocation extends Model
         'image2_url',
         'modified_by',
         'modified_date',
-        'coordinates'
+        'coordinates',
+        'organization_id'
     ];
 
     protected $casts = [
         'port_total' => 'integer',
-        'modified_date' => 'datetime'
+        'modified_date' => 'datetime',
+        'organization_id' => 'integer'
     ];
 }

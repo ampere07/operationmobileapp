@@ -15,6 +15,7 @@ class Overdue extends Model
         'print_link',
         'created_by_user_id',
         'updated_by_user_id',
+        'organization_id'
     ];
 
     protected $casts = [

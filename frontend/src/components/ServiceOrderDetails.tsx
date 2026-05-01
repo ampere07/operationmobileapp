@@ -8,6 +8,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
+import { techInOutService } from '../services/techInOutService';
 
 interface ServiceOrderDetailsProps {
   serviceOrder: {
@@ -262,6 +263,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
+  const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
+  const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -299,12 +302,31 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   useEffect(() => {
     const loadSettings = async () => {
       const authData = await AsyncStorage.getItem('authData');
-      if (authData && (!userRoleProp || userRoleIdProp === null)) {
+      let userData = null;
+      if (authData) {
         try {
-          const userData = JSON.parse(authData);
+          userData = JSON.parse(authData);
           if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
           if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
-        } catch (error) { }
+
+          // Check technician status - Always check if user is a technician
+          const currentRole = userRoleProp || userData.role?.toLowerCase() || '';
+          const currentRoleId = userRoleIdProp !== null ? userRoleIdProp : Number(userData.role_id);
+          const isTechnician = (currentRole === 'technician' || currentRoleId === 2);
+          
+          if (isTechnician) {
+            const userId = userData.id || userData.user_id || userData.user?.id;
+            if (userId) {
+              const response = await techInOutService.getStatus(userId);
+              if (response.success && response.data) {
+                const isOnline = !!(response.data.time_in && !response.data.time_out);
+                setTechStatus(isOnline ? 'online' : 'offline');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing auth data or fetching tech status:', error);
+        }
       }
 
       const [savedVisibility, savedOrder] = await Promise.all([
@@ -362,6 +384,12 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
   const handleStartTimer = async () => {
     try {
+      const isTechnician = userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2';
+      if (isTechnician && techStatus === 'offline') {
+        setShowTimeInWarning(true);
+        return;
+      }
+
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
@@ -653,6 +681,16 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         cancelText="Close"
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={showTimeInWarning}
+        title="Action Required"
+        message="You need to time in first in the menu before starting a service order."
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setShowTimeInWarning(false)}
+        onCancel={() => setShowTimeInWarning(false)}
       />
     </View>
   );

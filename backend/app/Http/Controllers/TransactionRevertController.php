@@ -54,6 +54,11 @@ class TransactionRevertController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $query = TransactionRevert::with([
                 'transaction.account.customer',
                 'transaction.processor',
@@ -64,6 +69,10 @@ class TransactionRevertController extends Controller
 
             if ($request->has('updated_since')) {
                 $query->where('updated_at', '>', $request->input('updated_since'));
+            }
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
             }
 
             $reverts = $query->orderBy('created_at', 'desc')->get();
@@ -122,6 +131,7 @@ class TransactionRevertController extends Controller
                 'status' => 'pending',
                 'requested_by' => $requestedByUserId,
                 'updated_by' => null,
+                'organization_id' => auth()->user() ? auth()->user()->organization_id : null,
             ]);
 
             $revert->load(['transaction.account.customer', 'transaction.processor', 'transaction.paymentMethodInfo', 'requester', 'updater']);
@@ -156,6 +166,11 @@ class TransactionRevertController extends Controller
     public function show(string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $revert = TransactionRevert::with([
                 'transaction.account.customer',
                 'transaction.processor',
@@ -163,6 +178,13 @@ class TransactionRevertController extends Controller
                 'requester',
                 'updater'
             ])->findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $revert->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to revert request'
+                ], 403);
+            }
 
             return response()->json([
                 'success' => true,
@@ -180,6 +202,11 @@ class TransactionRevertController extends Controller
     public function updateStatus(Request $request, string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $validated = $request->validate([
                 'status' => 'required|string|in:pending,done,rejected',
                 'updated_by' => 'nullable|string',
@@ -188,6 +215,14 @@ class TransactionRevertController extends Controller
             DB::beginTransaction();
 
             $revert = TransactionRevert::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $revert->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to revert request'
+                ], 403);
+            }
 
             $updatedByUserId = null;
             if (!empty($validated['updated_by'])) {

@@ -50,7 +50,8 @@ class Application extends Model
         'pppoe_password',
         'created_by_user_id',
         'updated_by',
-        'long_lat'
+        'long_lat',
+        'organization_id'
     ];
     
     protected $casts = [
@@ -61,7 +62,8 @@ class Application extends Model
         'created_by_user_id' => 'integer',
         'updated_by' => 'string',
         'created_at' => 'datetime:Y-m-d H:i:s',
-        'updated_at' => 'datetime:Y-m-d H:i:s'
+        'updated_at' => 'datetime:Y-m-d H:i:s',
+        'organization_id' => 'integer'
     ];
 
     protected $dateFormat = 'Y-m-d H:i:s';

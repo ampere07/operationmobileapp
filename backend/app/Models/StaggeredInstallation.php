@@ -34,7 +34,8 @@ class StaggeredInstallation extends Model
         'month9',
         'month10',
         'month11',
-        'month12'
+        'month12',
+        'organization_id'
     ];
 
     protected $casts = [

@@ -51,25 +51,43 @@ class EmailQueueService
             return null;
         }
 
-        $subject = $this->replacePlaceholders($template->Subject_Line, $data);
+        $subject = $this->replacePlaceholders($template->Subject_Line ?? 'Notification', $data);
         
-        // Use email_body exclusively for email content (Body_HTML is for PDF generation)
+        // Try email_body first, then fallback to Body_HTML
         $content = trim($template->email_body ?? '');
+        if (empty($content)) {
+            $content = trim($template->Body_HTML ?? '');
+        }
+
+        // Final fallback if both are empty to avoid DB null constraint error
+        if (empty($content)) {
+            Log::warning('Email template content is empty', ['template_code' => $templateCode]);
+            $content = "Notification for Account: {{Account_No}}";
+        }
         
         $bodyHtml = $this->replacePlaceholders($content, $data);
 
-        return $this->queueEmail([
-            'account_no' => $data['account_no'] ?? null,
-            'recipient_email' => $data['recipient_email'],
-            'cc' => $data['cc'] ?? $template->cc,
-            'bcc' => $data['bcc'] ?? $template->bcc,
-            'subject' => $subject,
-            'body_html' => $bodyHtml,
-            'attachment_path' => $data['attachment_path'] ?? null,
-            'email_sender' => $template->email_sender,
-            'reply_to' => $template->reply_to,
-            'sender_name' => $template->sender_name
-        ]);
+        try {
+            return $this->queueEmail([
+                'account_no' => $data['account_no'] ?? null,
+                'recipient_email' => $data['recipient_email'],
+                'cc' => $data['cc'] ?? $template->cc,
+                'bcc' => $data['bcc'] ?? $template->bcc,
+                'subject' => $subject,
+                'body_html' => $bodyHtml,
+                'attachment_path' => $data['attachment_path'] ?? null,
+                'email_sender' => $template->email_sender,
+                'reply_to' => $template->reply_to,
+                'sender_name' => $template->sender_name
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create email queue record', [
+                'error' => $e->getMessage(),
+                'template_code' => $templateCode,
+                'recipient' => $data['recipient_email']
+            ]);
+            return null;
+        }
     }
 
     public function processPendingEmails(int $batchSize = 50): array

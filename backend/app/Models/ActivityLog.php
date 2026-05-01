@@ -23,12 +23,14 @@ class ActivityLog extends Model
         'ip_address',
         'user_agent',
         'additional_data',
+        'organization_id',
     ];
 
     protected $casts = [
         'additional_data' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'organization_id' => 'integer',
     ];
 
     // Relationship with user who performed the action
@@ -85,10 +87,18 @@ class ActivityLog extends Model
                 if ($user) $userId = $user->id;
             }
             
+            $userRecord = null;
+            if ($userId) {
+                $userRecord = User::find($userId);
+            }
+            
             // Fallback to authenticated user
             if (!$userId) {
-                $userId = auth()->id();
+                $userRecord = auth()->user();
+                $userId = $userRecord?->id;
             }
+
+            $organizationId = $params['organization_id'] ?? $userRecord?->organization_id;
 
             $targetUserId = $params['target_user_id'] ?? null;
             if (!$targetUserId && isset($params['target_user_email'])) {
@@ -109,6 +119,7 @@ class ActivityLog extends Model
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
                 'additional_data' => $params['additional_data'] ?? null,
+                'organization_id' => $organizationId,
             ]);
         } catch (\Exception $e) {
             \Log::error('ActivityLog failed: ' . $e->getMessage());

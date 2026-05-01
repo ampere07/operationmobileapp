@@ -37,6 +37,7 @@ class Customer extends Model
         'group_id',
         'created_by',
         'updated_by',
+        'organization_id',
     ];
 
     protected $appends = ['full_name'];

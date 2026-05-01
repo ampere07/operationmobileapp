@@ -16,7 +16,8 @@ class MassRebate extends Model
         'status',
         'created_by',
         'modified_by',
-        'modified_date'
+        'modified_date',
+        'organization_id'
     ];
 
     protected $casts = [

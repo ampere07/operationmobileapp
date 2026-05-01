@@ -18,12 +18,14 @@ class Plan extends Model
         'description',
         'price',
         'group_id',
+        'organization_id',
         'modified_by_user',
         'modified_date',
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
+        'organization_id' => 'integer',
         'modified_date' => 'datetime',
     ];
 

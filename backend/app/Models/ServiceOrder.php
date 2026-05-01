@@ -68,6 +68,7 @@ class ServiceOrder extends Model
         'start_time',
         'end_time',
         'proof_image_url',
+        'organization_id',
     ];
 
     protected $dates = [

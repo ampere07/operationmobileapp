@@ -32,6 +32,16 @@ class LogsController extends Controller
             $query = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
                 ->orderBy('created_at', 'desc');
 
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
             // Apply filters
             if ($request->filled('level')) {
                 $query->byLevel($request->level);
@@ -94,8 +104,19 @@ class LogsController extends Controller
     public function show($id)
     {
         try {
-            $log = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
-                ->findOrFail($id);
+            $query = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial']);
+            
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $log = $query->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -116,14 +137,39 @@ class LogsController extends Controller
             $days = $request->get('days', 7);
 
             $stats = [
-                'total_logs' => ActivityLog::recent($days)->count(),
+                'total_logs' => ActivityLog::recent($days)->when(auth()->user()?->organization_id, function($q) {
+                    return $q->where('organization_id', auth()->user()->organization_id);
+                }, function($q) {
+                    return $q->whereNull('organization_id');
+                })->count(),
                 'by_level' => [
-                    'info' => ActivityLog::recent($days)->byLevel('info')->count(),
-                    'warning' => ActivityLog::recent($days)->byLevel('warning')->count(),
-                    'error' => ActivityLog::recent($days)->byLevel('error')->count(),
-                    'debug' => ActivityLog::recent($days)->byLevel('debug')->count(),
+                    'info' => ActivityLog::recent($days)->byLevel('info')->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })->count(),
+                    'warning' => ActivityLog::recent($days)->byLevel('warning')->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })->count(),
+                    'error' => ActivityLog::recent($days)->byLevel('error')->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })->count(),
+                    'debug' => ActivityLog::recent($days)->byLevel('debug')->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })->count(),
                 ],
                 'recent_actions' => ActivityLog::recent($days)
+                    ->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })
                     ->select('action')
                     ->selectRaw('COUNT(*) as count')
                     ->groupBy('action')
@@ -132,6 +178,11 @@ class LogsController extends Controller
                     ->get(),
                 'active_users' => ActivityLog::recent($days)
                     ->whereNotNull('user_id')
+                    ->when(auth()->user()?->organization_id, function($q) {
+                        return $q->where('organization_id', auth()->user()->organization_id);
+                    }, function($q) {
+                        return $q->whereNull('organization_id');
+                    })
                     ->with('user:id,username,first_name,last_name,middle_initial')
                     ->select('user_id')
                     ->selectRaw('COUNT(*) as activity_count')
@@ -178,6 +229,16 @@ class LogsController extends Controller
             $query = ActivityLog::with(['user:id,username,first_name,last_name,middle_initial', 'targetUser:id,username,first_name,last_name,middle_initial'])
                 ->recent($days)
                 ->orderBy('created_at', 'desc');
+
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
 
             if ($request->filled('level')) {
                 $query->byLevel($request->level);
@@ -265,6 +326,16 @@ class LogsController extends Controller
             }
 
             $query = ActivityLog::query();
+            
+            // Apply organization filter
+            $currentUser = auth()->user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
 
             if ($request->filled('older_than_days')) {
                 $query->where('created_at', '<', now()->subDays($request->older_than_days));

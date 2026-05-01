@@ -53,10 +53,19 @@ class TransactionController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $limit = $request->input('limit');
             $offset = $request->input('offset');
 
             $query = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request']);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
 
             if ($request->has('updated_since')) {
                 $query->where('updated_at', '>', $request->input('updated_since'));
@@ -89,7 +98,7 @@ class TransactionController extends Controller
                 'success' => true,
                 'data' => $transactions,
                 'count' => $transactions->count(),
-                'total' => Transaction::count()
+                'total' => $isSuperAdmin ? Transaction::count() : Transaction::where('organization_id', $organizationId)->count()
             ]);
         }
         catch (\Exception $e) {
@@ -144,6 +153,12 @@ class TransactionController extends Controller
             // If processed_by_user is not provided in request, default to authenticated user
             if (!isset($validated['processed_by_user'])) {
                 $validated['processed_by_user'] = Auth::check() ?Auth::user()->email_address : 'unknown';
+            }
+
+            // Auto-assign organization_id
+            $authUser = auth()->user();
+            if ($authUser && !isset($validated['organization_id'])) {
+                $validated['organization_id'] = $authUser->organization_id;
             }
 
             $autoApplyPayment = $validated['auto_apply_payment'] ?? false;
@@ -249,8 +264,20 @@ class TransactionController extends Controller
     public function show(string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $transaction = Transaction::with(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo', 'revert_request'])
                 ->findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to transaction'
+                ], 403);
+            }
 
             return response()->json([
                 'success' => true,
@@ -270,6 +297,11 @@ class TransactionController extends Controller
     public function approve(Request $request, string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $request->validate([
                 'approved_by' => 'nullable|string|email'
             ]);
@@ -277,6 +309,14 @@ class TransactionController extends Controller
             DB::beginTransaction();
 
             $transaction = Transaction::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to transaction'
+                ], 403);
+            }
 
             if ($transaction->status !== 'Pending') {
                 return response()->json([
@@ -419,9 +459,22 @@ class TransactionController extends Controller
     public function revert(Request $request, string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             DB::beginTransaction();
 
             $transaction = Transaction::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to transaction'
+                ], 403);
+            }
 
             if ($transaction->status !== 'Done') {
                 return response()->json([
@@ -706,6 +759,11 @@ class TransactionController extends Controller
     public function updateStatus(Request $request, string $id): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $request->validate([
                 'status' => 'required|string|in:Pending,Done,Processing,Cancelled,Failed'
             ]);
@@ -713,6 +771,14 @@ class TransactionController extends Controller
             DB::beginTransaction();
 
             $transaction = Transaction::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to transaction'
+                ], 403);
+            }
             $transaction->status = $request->status;
             $transaction->updated_by_user = Auth::check() ?Auth::user()->email_address : 'unknown';
             $transaction->save();
@@ -741,6 +807,11 @@ class TransactionController extends Controller
     public function batchApprove(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             \Log::info('Batch approve request received', [
                 'transaction_ids' => $request->input('transaction_ids'),
                 'transaction_ids_type' => gettype($request->input('transaction_ids')),
@@ -767,6 +838,15 @@ class TransactionController extends Controller
                     DB::beginTransaction();
 
                     $transaction = Transaction::findOrFail($transactionId);
+
+                    if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                        $results['failed'][] = [
+                            'transaction_id' => $transactionId,
+                            'reason' => 'Unauthorized access to transaction'
+                        ];
+                        DB::rollBack();
+                        continue;
+                    }
 
                     if ($transaction->status !== 'Pending') {
                         $results['failed'][] = [

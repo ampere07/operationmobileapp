@@ -23,6 +23,11 @@ class DCNoticeApiController extends Controller
             $date = $request->input('date', '');
             $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             // Build query based on fast mode
             if ($fastMode) {
                 // Fast mode: No eager loading
@@ -31,6 +36,10 @@ class DCNoticeApiController extends Controller
                 // Normal mode: Include relationships
                 $query = DCNotice::with(['account.customer', 'invoice'])
                     ->orderBy('dc_notice_date', 'desc');
+            }
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
             }
 
             if ($search) {
@@ -152,6 +161,18 @@ class DCNoticeApiController extends Controller
         try {
             $dcNotice = DCNotice::with(['account.customer', 'invoice'])->findOrFail($id);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $dcNotice->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to this DC Notice record'
+                ], 403);
+            }
+
             $account = $dcNotice->account;
             $customer = $account?->customer;
             
@@ -204,6 +225,10 @@ class DCNoticeApiController extends Controller
 
             $authData = $request->user();
             $validated['created_by_user_id'] = $authData?->id;
+            
+            if ($authData && $authData->organization_id) {
+                $validated['organization_id'] = $authData->organization_id;
+            }
 
             $dcNotice = DCNotice::create($validated);
 
@@ -243,6 +268,17 @@ class DCNoticeApiController extends Controller
             $authData = $request->user();
             $validated['updated_by_user_id'] = $authData?->id;
 
+            $organizationId = $authData ? $authData->organization_id : null;
+            $roleId = $authData ? $authData->role_id : null;
+            $isSuperAdmin = !$authData || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $dcNotice->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to update this DC Notice record'
+                ], 403);
+            }
+
             $dcNotice->update($validated);
 
             event(new DCNoticeUpdated(['action' => 'updated', 'dc_notice_id' => $dcNotice->id]));
@@ -271,6 +307,19 @@ class DCNoticeApiController extends Controller
     {
         try {
             $dcNotice = DCNotice::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $dcNotice->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to delete this DC Notice record'
+                ], 403);
+            }
+
             $dcNotice->delete();
 
             event(new DCNoticeUpdated(['action' => 'deleted', 'dc_notice_id' => $id]));
@@ -297,10 +346,22 @@ class DCNoticeApiController extends Controller
     public function getStatistics()
     {
         try {
-            $total = DCNotice::count();
-            $thisMonth = DCNotice::whereMonth('dc_notice_date', now()->month)
-                ->whereYear('dc_notice_date', now()->year)
-                ->count();
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $totalQuery = DCNotice::query();
+            $thisMonthQuery = DCNotice::whereMonth('dc_notice_date', now()->month)
+                ->whereYear('dc_notice_date', now()->year);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $totalQuery->where('organization_id', $organizationId);
+                $thisMonthQuery->where('organization_id', $organizationId);
+            }
+
+            $total = $totalQuery->count();
+            $thisMonth = $thisMonthQuery->count();
 
             return response()->json([
                 'success' => true,

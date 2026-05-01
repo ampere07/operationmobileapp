@@ -8,6 +8,7 @@ use App\Services\GoogleDriveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class LcpNapLocationController extends Controller
 {
@@ -26,6 +27,16 @@ class LcpNapLocationController extends Controller
             $search = $request->get('search', '');
             
             $query = LCPNAPLocation::query();
+            
+            // Apply organization filter
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
             
             if (!empty($search)) {
                 $query->where(function($q) use ($search) {
@@ -73,14 +84,24 @@ class LcpNapLocationController extends Controller
     {
         try {
             $search = $request->get('search');
+            $currentUser = Auth::user();
             
             // Step 1: Pre-aggregate session counts from technical_details + online_status
-            // This runs ONE query instead of 7 correlated subqueries per row
             $sessionStatsQuery = \DB::table('technical_details as td')
                 ->leftJoin('online_status as os', 'td.account_id', '=', 'os.account_id')
                 ->whereNotNull('td.lcpnap')
-                ->where('td.lcpnap', '!=', '')
-                ->groupBy('td.lcpnap')
+                ->where('td.lcpnap', '!=', '');
+            
+            // Filter session stats by organization
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $sessionStatsQuery->where('td.organization_id', $currentUser->organization_id);
+                } else {
+                    $sessionStatsQuery->whereNull('td.organization_id');
+                }
+            }
+
+            $sessionStatsQuery->groupBy('td.lcpnap')
                 ->select(
                     'td.lcpnap',
                     \DB::raw('COUNT(DISTINCT td.id) as total_technical_details'),
@@ -101,6 +122,15 @@ class LcpNapLocationController extends Controller
             // Step 2: Fetch LCPNAP locations with coordinates (lightweight query)
             $lcpnapQuery = LCPNAPLocation::whereNotNull('coordinates')
                 ->where('coordinates', '!=', '');
+
+            // Filter LCPNAP locations by organization
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $lcpnapQuery->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $lcpnapQuery->whereNull('organization_id');
+                }
+            }
 
             if (!empty($search)) {
                 $lcpnapQuery->where('lcpnap_name', '=', $search);
@@ -128,6 +158,7 @@ class LcpNapLocationController extends Controller
                         'image2_url' => $item->image2_url,
                         'modified_by' => $item->modified_by,
                         'modified_date' => $item->modified_date,
+                        'organization_id' => $item->organization_id,
                         'active_sessions' => $stats ? (int) $stats->active_sessions : 0,
                         'restricted_sessions' => $stats ? (int) $stats->restricted_sessions : 0,
                         'offline_sessions' => $stats ? (int) $stats->offline_sessions : 0,
@@ -176,7 +207,8 @@ class LcpNapLocationController extends Controller
                 'reading_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'modified_by' => 'required|string|max:255'
+                'modified_by' => 'required|string|max:255',
+                'organization_id' => 'nullable|integer'
             ]);
 
             if ($validator->fails()) {
@@ -187,11 +219,21 @@ class LcpNapLocationController extends Controller
                 ], 422);
             }
 
-            $existing = LCPNAPLocation::where('lcpnap_name', $request->lcpnap_name)->first();
+            $currentUser = Auth::user();
+            $organizationId = $request->input('organization_id') ?? ($currentUser ? $currentUser->organization_id : null);
+
+            $existingQuery = LCPNAPLocation::where('lcpnap_name', $request->lcpnap_name);
+            if ($organizationId) {
+                $existingQuery->where('organization_id', $organizationId);
+            } else {
+                $existingQuery->whereNull('organization_id');
+            }
+            
+            $existing = $existingQuery->first();
             if ($existing) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'A LCPNAP with this name already exists'
+                    'message' => 'A LCPNAP with this name already exists in your organization'
                 ], 422);
             }
 
@@ -241,11 +283,13 @@ class LcpNapLocationController extends Controller
             $lcpnap->modified_by = $request->modified_by;
             $lcpnap->modified_date = now();
             $lcpnap->coordinates = $request->coordinates;
+            $lcpnap->organization_id = $organizationId;
             $lcpnap->save();
 
             Log::info('LCPNAP Created Successfully', [
                 'id' => $lcpnap->id,
-                'name' => $lcpnap->lcpnap_name
+                'name' => $lcpnap->lcpnap_name,
+                'organization_id' => $lcpnap->organization_id
             ]);
             
             return response()->json([
@@ -271,7 +315,19 @@ class LcpNapLocationController extends Controller
     public function show($id)
     {
         try {
-            $lcpnap = LCPNAPLocation::find($id);
+            $query = LCPNAPLocation::query();
+            
+            // Apply organization filter
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+            
+            $lcpnap = $query->find($id);
             
             if (!$lcpnap) {
                 return response()->json([
@@ -308,7 +364,8 @@ class LcpNapLocationController extends Controller
                 'reading_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'modified_by' => 'required|string|max:255'
+                'modified_by' => 'required|string|max:255',
+                'organization_id' => 'nullable|integer'
             ]);
 
             if ($validator->fails()) {
@@ -319,7 +376,17 @@ class LcpNapLocationController extends Controller
                 ], 422);
             }
 
-            $lcpnap = LCPNAPLocation::find($id);
+            $query = LCPNAPLocation::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $lcpnap = $query->find($id);
             if (!$lcpnap) {
                 return response()->json([
                     'success' => false,
@@ -327,13 +394,22 @@ class LcpNapLocationController extends Controller
                 ], 404);
             }
 
-            $duplicate = LCPNAPLocation::where('lcpnap_name', $request->lcpnap_name)
-                ->where('id', '!=', $id)
-                ->first();
+            $organizationId = $request->input('organization_id') ?? $lcpnap->organization_id;
+
+            $duplicateQuery = LCPNAPLocation::where('lcpnap_name', $request->lcpnap_name)
+                ->where('id', '!=', $id);
+            
+            if ($organizationId) {
+                $duplicateQuery->where('organization_id', $organizationId);
+            } else {
+                $duplicateQuery->whereNull('organization_id');
+            }
+            
+            $duplicate = $duplicateQuery->first();
             if ($duplicate) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'A LCPNAP with this name already exists'
+                    'message' => 'A LCPNAP with this name already exists in your organization'
                 ], 422);
             }
 
@@ -375,6 +451,9 @@ class LcpNapLocationController extends Controller
             $lcpnap->modified_by = $request->modified_by;
             $lcpnap->modified_date = now();
             $lcpnap->coordinates = $request->coordinates;
+            if ($request->has('organization_id')) {
+                $lcpnap->organization_id = $request->organization_id;
+            }
             $lcpnap->save();
             
             return response()->json([
@@ -398,7 +477,17 @@ class LcpNapLocationController extends Controller
     public function destroy($id)
     {
         try {
-            $lcpnap = LCPNAPLocation::find($id);
+            $query = LCPNAPLocation::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $lcpnap = $query->find($id);
             if (!$lcpnap) {
                 return response()->json([
                     'success' => false,
@@ -424,9 +513,19 @@ class LcpNapLocationController extends Controller
     public function getStatistics()
     {
         try {
-            $totalLcpnap = LCPNAPLocation::count();
-            $totalPorts = LCPNAPLocation::sum('port_total');
-            $uniqueLocations = LCPNAPLocation::distinct('location')->count('location');
+            $query = LCPNAPLocation::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $totalLcpnap = $query->count();
+            $totalPorts = $query->sum('port_total');
+            $uniqueLocations = $query->distinct('location')->count('location');
             
             return response()->json([
                 'success' => true,
@@ -470,19 +569,38 @@ class LcpNapLocationController extends Controller
     public function getMostUsedLCPNAPs()
     {
         try {
-            $mostUsed = \Illuminate\Support\Facades\DB::table('job_orders')
+            $currentUser = Auth::user();
+            
+            $mostUsedQuery = \Illuminate\Support\Facades\DB::table('job_orders')
                 ->select('lcpnap', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
                 ->whereNotNull('lcpnap')
-                ->where('lcpnap', '!=', '')
-                ->groupBy('lcpnap')
+                ->where('lcpnap', '!=', '');
+            
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $mostUsedQuery->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $mostUsedQuery->whereNull('organization_id');
+                }
+            }
+
+            $mostUsed = $mostUsedQuery->groupBy('lcpnap')
                 ->orderBy('count', 'desc')
                 ->take(5)
                 ->get();
 
             $names = $mostUsed->pluck('lcpnap')->toArray();
             
-            $locations = LCPNAPLocation::whereIn('lcpnap_name', $names)
-                ->get()
+            $locationQuery = LCPNAPLocation::whereIn('lcpnap_name', $names);
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $locationQuery->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $locationQuery->whereNull('organization_id');
+                }
+            }
+
+            $locations = $locationQuery->get()
                 ->sortBy(function($location) use ($names) {
                     return array_search($location->lcpnap_name, $names);
                 })
@@ -504,18 +622,37 @@ class LcpNapLocationController extends Controller
             ], 500);
         }
     }
+
     public function getRelatedCustomers($id)
     {
         try {
-            $lcpnap = LCPNAPLocation::findOrFail($id);
+            $query = LCPNAPLocation::query();
+            $currentUser = Auth::user();
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            }
+
+            $lcpnap = $query->findOrFail($id);
             
-            // Fetch customers connected via technical_details.lcpnap matching lcpnap_name
-            $customers = \DB::table('technical_details as td')
+            $customerQuery = \DB::table('technical_details as td')
                 ->join('billing_accounts as ba', 'td.account_id', '=', 'ba.id')
                 ->join('customers as c', 'ba.customer_id', '=', 'c.id')
                 ->leftJoin('online_status as os', 'td.account_id', '=', 'os.account_id')
-                ->where('td.lcpnap', '=', $lcpnap->lcpnap_name)
-                ->select(
+                ->where('td.lcpnap', '=', $lcpnap->lcpnap_name);
+            
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $customerQuery->where('td.organization_id', $currentUser->organization_id);
+                } else {
+                    $customerQuery->whereNull('td.organization_id');
+                }
+            }
+
+            $customers = $customerQuery->select(
                     'ba.id',
                     'ba.account_no',
                     \DB::raw("TRIM(CONCAT_WS(' ', c.first_name, c.middle_initial, c.last_name)) as full_name"),
@@ -541,4 +678,3 @@ class LcpNapLocationController extends Controller
         }
     }
 }
-

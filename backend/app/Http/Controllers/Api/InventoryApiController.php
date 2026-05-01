@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\ActivityLog;
 use App\Events\InventoryUpdated;
+use Illuminate\Support\Facades\Auth;
 
 class InventoryApiController extends Controller
 {
@@ -19,6 +20,9 @@ class InventoryApiController extends Controller
      */
     private function getCurrentUser(Request $request)
     {
+        if (auth()->check()) {
+            return auth()->user()->email_address;
+        }
         if ($request->has('user_email')) {
             return $request->user_email;
         }
@@ -28,26 +32,19 @@ class InventoryApiController extends Controller
         if ($request->has('modifiedBy')) {
             return $request->modifiedBy;
         }
-        if (auth()->check()) {
-            return auth()->user()->email;
-        }
         throw new \Exception('Unauthenticated: User email is required for this operation.');
     }
 
     private function resolveUserId(Request $request)
     {
+        if (auth()->check()) return auth()->id();
+        
         $email = $request->modified_by ?? $request->modifiedBy ?? $request->user_email;
-        if (!$email && auth()->check()) {
-            $email = auth()->user()->email;
-        }
-
         if ($email) {
-            $user = \App\Models\User::where('email', $email)->first();
+            $user = \App\Models\User::where('email_address', $email)->first();
             if ($user) return $user->id;
             throw new \Exception("User not found with email: {$email}");
         }
-        
-        if (auth()->check()) return auth()->id();
         
         throw new \Exception('Unauthenticated: User identification is required for this operation.');
     }
@@ -58,7 +55,14 @@ class InventoryApiController extends Controller
     public function index(Request $request)
     {
         try {
-            $items = Inventory::with('category')->orderBy('item_name')->get();
+            $currentUser = Auth::user();
+            $query = Inventory::with('category');
+            
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where('organization_id', $currentUser->organization_id);
+            }
+            
+            $items = $query->orderBy('item_name')->get();
             
             $formattedItems = $items->map(function ($item) use ($request) {
                 return [
@@ -73,7 +77,8 @@ class InventoryApiController extends Controller
                     'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
                     'user_email' => $this->getCurrentUser($request),
-                    'total_quantity' => $item->total_quantity
+                    'total_quantity' => $item->total_quantity,
+                    'organization_id' => $item->organization_id
                 ];
             });
             
@@ -98,8 +103,9 @@ class InventoryApiController extends Controller
     public function store(Request $request)
     {
         try {
+            $currentUser = Auth::user();
             $validator = Validator::make($request->all(), [
-                'item_name' => 'required|string|max:255|unique:inventory_items,item_name',
+                'item_name' => 'required|string|max:255',
                 'item_description' => 'nullable|string',
                 'supplier' => 'nullable|string|max:255',
                 'quantity_alert' => 'nullable|integer|min:0',
@@ -115,10 +121,29 @@ class InventoryApiController extends Controller
                 ], 422);
             }
 
+            // Check for duplicate name within organization
+            $duplicateQuery = Inventory::where('item_name', $request->item_name);
+            if ($currentUser && $currentUser->organization_id) {
+                $duplicateQuery->where('organization_id', $currentUser->organization_id);
+            }
+            if ($duplicateQuery->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Item name already exists in your organization'
+                ], 422);
+            }
+
             // Look up category_id from category name
             $categoryId = null;
             if ($request->has('category') && !empty($request->category)) {
-                $category = InventoryCategory::where('category_name', $request->category)->first();
+                $categoryQuery = InventoryCategory::where('category_name', $request->category);
+                if ($currentUser && $currentUser->organization_id) {
+                    $categoryQuery->where(function($q) use ($currentUser) {
+                        $q->where('organization_id', $currentUser->organization_id)
+                          ->orWhereNull('organization_id');
+                    });
+                }
+                $category = $categoryQuery->first();
                 if ($category) {
                     $categoryId = $category->id;
                 } else {
@@ -139,6 +164,7 @@ class InventoryApiController extends Controller
             $userId = $this->resolveUserId($request);
             $item->created_by_user_id = $userId;
             $item->updated_by_user_id = $userId;
+            $item->organization_id = $currentUser->organization_id ?? null;
             $item->save();
 
             // Create Activity Log
@@ -149,7 +175,8 @@ class InventoryApiController extends Controller
                 [
                     'resource_type' => 'Inventory',
                     'resource_id' => $item->id,
-                    'additional_data' => $request->all()
+                    'additional_data' => $request->all(),
+                    'organization_id' => $item->organization_id
                 ]
             );
             
@@ -168,7 +195,8 @@ class InventoryApiController extends Controller
                     'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
                     'user_email' => $this->getCurrentUser($request),
-                    'total_quantity' => $item->total_quantity
+                    'total_quantity' => $item->total_quantity,
+                    'organization_id' => $item->organization_id
                 ]
             ], 201);
             
@@ -188,9 +216,16 @@ class InventoryApiController extends Controller
     public function show(Request $request, $itemName)
     {
         try {
+            $currentUser = Auth::user();
             $decodedItemName = urldecode($itemName);
             
-            $item = Inventory::with('category')->where('item_name', $decodedItemName)->first();
+            $query = Inventory::with('category')->where('item_name', $decodedItemName);
+            
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where('organization_id', $currentUser->organization_id);
+            }
+            
+            $item = $query->first();
             
             if (!$item) {
                 return response()->json([
@@ -213,7 +248,8 @@ class InventoryApiController extends Controller
                     'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
                     'user_email' => $this->getCurrentUser($request),
-                    'total_quantity' => $item->total_quantity
+                    'total_quantity' => $item->total_quantity,
+                    'organization_id' => $item->organization_id
                 ]
             ]);
             
@@ -233,9 +269,14 @@ class InventoryApiController extends Controller
     public function update(Request $request, $itemName)
     {
         try {
+            $currentUser = Auth::user();
             $decodedItemName = urldecode($itemName);
             
-            $item = Inventory::where('item_name', $decodedItemName)->first();
+            $query = Inventory::where('item_name', $decodedItemName);
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where('organization_id', $currentUser->organization_id);
+            }
+            $item = $query->first();
             
             if (!$item) {
                 return response()->json([
@@ -245,7 +286,7 @@ class InventoryApiController extends Controller
             }
             
             $validator = Validator::make($request->all(), [
-                'item_name' => 'required|string|max:255|unique:inventory_items,item_name,' . $item->id,
+                'item_name' => 'required|string|max:255',
                 'item_description' => 'nullable|string',
                 'supplier' => 'nullable|string|max:255',
                 'quantity_alert' => 'nullable|integer|min:0',
@@ -261,10 +302,29 @@ class InventoryApiController extends Controller
                 ], 422);
             }
 
+            // Check duplicate name within organization excluding self
+            $duplicateQuery = Inventory::where('item_name', $request->item_name)->where('id', '!=', $item->id);
+            if ($currentUser && $currentUser->organization_id) {
+                $duplicateQuery->where('organization_id', $currentUser->organization_id);
+            }
+            if ($duplicateQuery->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Item name already exists in your organization'
+                ], 422);
+            }
+
             // Look up category_id from category name
             $categoryId = null;
             if ($request->has('category') && !empty($request->category)) {
-                $category = InventoryCategory::where('category_name', $request->category)->first();
+                $categoryQuery = InventoryCategory::where('category_name', $request->category);
+                if ($currentUser && $currentUser->organization_id) {
+                    $categoryQuery->where(function($q) use ($currentUser) {
+                        $q->where('organization_id', $currentUser->organization_id)
+                          ->orWhereNull('organization_id');
+                    });
+                }
+                $category = $categoryQuery->first();
                 if ($category) {
                     $categoryId = $category->id;
                 } else {
@@ -291,7 +351,8 @@ class InventoryApiController extends Controller
                 [
                     'resource_type' => 'Inventory',
                     'resource_id' => $item->id,
-                    'additional_data' => $request->all()
+                    'additional_data' => $request->all(),
+                    'organization_id' => $item->organization_id
                 ]
             );
             
@@ -314,7 +375,8 @@ class InventoryApiController extends Controller
                     'modified_by' => $this->getCurrentUser($request),
                     'modified_date' => $item->updated_at,
                     'user_email' => $this->getCurrentUser($request),
-                    'total_quantity' => $item->total_quantity
+                    'total_quantity' => $item->total_quantity,
+                    'organization_id' => $item->organization_id
                 ]
             ]);
             
@@ -334,8 +396,13 @@ class InventoryApiController extends Controller
     public function destroy($itemName)
     {
         try {
+            $currentUser = Auth::user();
             $decodedItemName = urldecode($itemName);
-            $item = Inventory::where('item_name', $decodedItemName)->first();
+            $query = Inventory::where('item_name', $decodedItemName);
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where('organization_id', $currentUser->organization_id);
+            }
+            $item = $query->first();
             
             if (!$item) {
                 return response()->json([
@@ -356,7 +423,8 @@ class InventoryApiController extends Controller
                     'resource_id' => $item->id,
                     'additional_data' => [
                         'item_name' => $item->item_name,
-                        'category_id' => $item->category_id
+                        'category_id' => $item->category_id,
+                        'organization_id' => $item->organization_id
                     ]
                 ]
             );
@@ -384,7 +452,17 @@ class InventoryApiController extends Controller
     public function getCategories()
     {
         try {
-            $categories = InventoryCategory::orderBy('category_name')->get();
+            $currentUser = Auth::user();
+            $query = InventoryCategory::query();
+            
+            if ($currentUser && $currentUser->organization_id) {
+                $query->where(function($q) use ($currentUser) {
+                    $q->where('organization_id', $currentUser->organization_id)
+                      ->orWhereNull('organization_id');
+                });
+            }
+            
+            $categories = $query->orderBy('category_name')->get();
             return response()->json([
                 'success' => true,
                 'data' => $categories
@@ -414,11 +492,17 @@ class InventoryApiController extends Controller
      */
     public function getStatistics()
     {
+        $currentUser = Auth::user();
+        $query = Inventory::query();
+        if ($currentUser && $currentUser->organization_id) {
+            $query->where('organization_id', $currentUser->organization_id);
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
-                'total_items' => Inventory::count(),
-                'low_stock' => Inventory::whereRaw('id in (select item_id from inventory_logs group by item_id having sum(item_quantity) < 10)')->count() // dummy logic
+                'total_items' => $query->count(),
+                'low_stock' => (clone $query)->whereColumn('total_quantity', '<=', 'quantity_alert')->count()
             ]
         ]);
     }
@@ -490,4 +574,3 @@ class InventoryApiController extends Controller
         }
     }
 }
-

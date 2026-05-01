@@ -486,6 +486,150 @@ class ManualRadiusOperationsService
     }
 
     /**
+     * Disable user in RADIUS by setting disabled=yes
+     */
+    public function disabledUser(array $params): array
+    {
+        try {
+            $accountNo = $params['accountNumber'] ?? '';
+            $username = $params['username'] ?? '';
+            $updatedBy = $params['updatedBy'] ?? 'System';
+
+            $this->writeLog("=== DISABLE USER START ===");
+            $this->writeLog("Account: $accountNo | Username: $username");
+
+            if (empty($username)) {
+                throw new Exception("Username is required");
+            }
+
+            $radiusEndpoints = $this->getRadiusEndpoints();
+            $radiusId = null;
+
+            // Step 1: Find user ID in RADIUS
+            $userPath = "/rest/user-manage/user/" . urlencode($username);
+            foreach ($radiusEndpoints as $endpoint) {
+                $fullUrl = $endpoint['url'] . $userPath;
+                $result = $this->callApiWithRetry($fullUrl, 'GET', null, $endpoint['username'], $endpoint['password']);
+                if ($result && isset($result['.id'])) {
+                    $radiusId = $result['.id'];
+                    break;
+                }
+            }
+
+            if (!$radiusId) {
+                throw new Exception("User '$username' not found in RADIUS");
+            }
+
+            // Step 2: Patch user to set disabled=yes
+            $payload = ['disabled' => 'true'];
+            $success = false;
+            foreach ($radiusEndpoints as $endpoint) {
+                $targetUrl = $endpoint['url'] . "/rest/user-manage/user/" . $radiusId;
+                $result = $this->callApiWithRetry($targetUrl, 'PATCH', $payload, $endpoint['username'], $endpoint['password']);
+                if ($result !== false) {
+                    $success = true;
+                    $this->writeLog("[DISABLE] Set disabled=yes for '$username' at {$endpoint['url']}");
+                }
+            }
+
+            if (!$success) {
+                throw new Exception("Failed to update disabled status in RADIUS");
+            }
+
+            // Step 3: Kill active session
+            $this->killUserSession($radiusEndpoints, $username);
+
+            $this->writeLog("[SUCCESS] User disabled successfully");
+            $this->writeLog("=== DISABLE USER END ===");
+
+            return [
+                'status' => 'success',
+                'message' => 'User disabled successfully',
+                'output' => 'Success: User Disabled (disabled=yes)'
+            ];
+
+        } catch (Throwable $e) {
+            $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("=== DISABLE USER END ===");
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Enable user in RADIUS by setting disabled=no
+     */
+    public function enabledUser(array $params): array
+    {
+        try {
+            $accountNo = $params['accountNumber'] ?? '';
+            $username = $params['username'] ?? '';
+            $updatedBy = $params['updatedBy'] ?? 'System';
+
+            $this->writeLog("=== ENABLE USER START ===");
+            $this->writeLog("Account: $accountNo | Username: $username");
+
+            if (empty($username)) {
+                throw new Exception("Username is required");
+            }
+
+            $radiusEndpoints = $this->getRadiusEndpoints();
+            $radiusId = null;
+
+            // Step 1: Find user ID in RADIUS
+            $userPath = "/rest/user-manage/user/" . urlencode($username);
+            foreach ($radiusEndpoints as $endpoint) {
+                $fullUrl = $endpoint['url'] . $userPath;
+                $result = $this->callApiWithRetry($fullUrl, 'GET', null, $endpoint['username'], $endpoint['password']);
+                if ($result && isset($result['.id'])) {
+                    $radiusId = $result['.id'];
+                    break;
+                }
+            }
+
+            if (!$radiusId) {
+                throw new Exception("User '$username' not found in RADIUS");
+            }
+
+            // Step 2: Patch user to set disabled=no
+            $payload = ['disabled' => 'false'];
+            $success = false;
+            foreach ($radiusEndpoints as $endpoint) {
+                $targetUrl = $endpoint['url'] . "/rest/user-manage/user/" . $radiusId;
+                $result = $this->callApiWithRetry($targetUrl, 'PATCH', $payload, $endpoint['username'], $endpoint['password']);
+                if ($result !== false) {
+                    $success = true;
+                    $this->writeLog("[ENABLE] Set disabled=no for '$username' at {$endpoint['url']}");
+                }
+            }
+
+            if (!$success) {
+                throw new Exception("Failed to update disabled status in RADIUS");
+            }
+
+            $this->writeLog("[SUCCESS] User enabled successfully");
+            $this->writeLog("=== ENABLE USER END ===");
+
+            return [
+                'status' => 'success',
+                'message' => 'User enabled successfully',
+                'output' => 'Success: User Enabled (disabled=no)'
+            ];
+
+        } catch (Throwable $e) {
+            $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("=== ENABLE USER END ===");
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+
+    /**
      * Update RADIUS credentials (username and password)
      */
     public function updateRadiusCredentials(array $radiusEndpoints, string $oldUsername, string $newUsername, ?string $newPassword = null): bool

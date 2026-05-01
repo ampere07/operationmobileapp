@@ -26,21 +26,38 @@ class PlanApiController extends Controller
         return $userId;
     }
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $plans = DB::table('plan_list')
+            $userId = $this->resolveUserId($request);
+            $user = User::find($userId);
+
+            $query = DB::table('plan_list')
                 ->leftJoin('users', 'plan_list.modified_by_user', '=', 'users.id')
                 ->select(
                     'plan_list.id',
                     'plan_list.plan_name as name',
                     'plan_list.description',
                     'plan_list.price',
+                    'plan_list.organization_id',
                     'plan_list.modified_date',
                     'users.email_address as modified_by'
-                )
-                ->orderBy('plan_list.plan_name')
-                ->get();
+                );
+
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        $query->where('plan_list.organization_id', $user->organization_id);
+                    } else {
+                        $query->whereNull('plan_list.organization_id');
+                    }
+                } else {
+                    $query->whereNull('plan_list.organization_id');
+                }
+            }
+
+            $plans = $query->orderBy('plan_list.plan_name')->get();
             
             return response()->json([
                 'success' => true,
@@ -75,12 +92,15 @@ class PlanApiController extends Controller
             }
 
             $currentUserId = $this->resolveUserId($request);
+            $user = User::find($currentUserId);
+            $organizationId = $user ? $user->organization_id : null;
             $now = now();
             
             $planId = DB::table('plan_list')->insertGetId([
                 'plan_name' => $request->input('name'),
                 'description' => $request->input('description', ''),
                 'price' => $request->input('price'),
+                'organization_id' => $organizationId,
                 'modified_date' => $now,
                 'modified_by_user' => $currentUserId
             ]);
@@ -92,6 +112,7 @@ class PlanApiController extends Controller
                     'plan_list.plan_name as name',
                     'plan_list.description',
                     'plan_list.price',
+                    'plan_list.organization_id',
                     'plan_list.modified_date',
                     'users.email_address as modified_by'
                 )
@@ -185,6 +206,24 @@ class PlanApiController extends Controller
                     'message' => 'Plan not found'
                 ], 404);
             }
+
+            // Authorization check
+            $currentUserId = $this->resolveUserId($request);
+            $user = User::find($currentUserId);
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        if ($existing->organization_id !== $user->organization_id) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update plans within your organization.'], 403);
+                        }
+                    } else {
+                        if ($existing->organization_id !== null) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only update plans without an organization.'], 403);
+                        }
+                    }
+                }
+            }
             
             $duplicate = DB::table('plan_list')
                 ->where('plan_name', $request->input('name'))
@@ -259,6 +298,24 @@ class PlanApiController extends Controller
                     'success' => false,
                     'message' => 'Plan not found'
                 ], 404);
+            }
+
+            // Authorization check
+            $userId = $this->resolveUserId(request());
+            $user = User::find($userId);
+            if ($user) {
+                $isGlobalAdmin = ($user->role_id == 7 && $user->organization_id === null);
+                if (!$isGlobalAdmin) {
+                    if ($user->organization_id) {
+                        if ($existing->organization_id !== $user->organization_id) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete plans within your organization.'], 403);
+                        }
+                    } else {
+                        if ($existing->organization_id !== null) {
+                            return response()->json(['success' => false, 'message' => 'Unauthorized. You can only delete plans without an organization.'], 403);
+                        }
+                    }
+                }
             }
             
             $planData = (array) $existing;

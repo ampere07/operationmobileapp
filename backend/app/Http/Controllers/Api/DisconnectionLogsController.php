@@ -12,6 +12,7 @@ class DisconnectionLogsController extends Controller
     public function index(Request $request)
     {
         try {
+            $currentUser = auth()->user();
             $query = DB::table('disconnected_logs')
                 ->leftJoin('billing_accounts', 'disconnected_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
@@ -31,8 +32,18 @@ class DisconnectionLogsController extends Controller
                     'customers.city',
                     'customers.contact_number_primary',
                     'customers.email_address',
-                    'plan_list.plan_name'
+                    'plan_list.plan_name',
+                    'disconnected_logs.organization_id'
                 );
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('disconnected_logs.organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('disconnected_logs.organization_id');
+                }
+            }
 
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;

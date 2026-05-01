@@ -13,7 +13,7 @@ class PaymentMethodApiController extends Controller
 {
     private function resolveUserId(Request $request)
     {
-        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by');
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
         
         if ($email) {
             $user = \App\Models\User::where('email_address', $email)->first();
@@ -29,6 +29,43 @@ class PaymentMethodApiController extends Controller
         return null;
     }
 
+    private function resolveUserOrgId(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->organization_id;
+            }
+        }
+
+        if (\Auth::check()) {
+            return \Auth::user()->organization_id;
+        }
+
+        return null;
+    }
+
+    private function isGlobalAdmin(Request $request)
+    {
+        $email = $request->input('email_address') ?? $request->input('created_by') ?? $request->input('updated_by') ?? $request->input('modified_by');
+        
+        if ($email) {
+            $user = \App\Models\User::where('email_address', $email)->first();
+            if ($user) {
+                return $user->role_id == 7 && $user->organization_id === null;
+            }
+        }
+
+        if (\Auth::check()) {
+            $user = \Auth::user();
+            return $user->role_id == 7 && $user->organization_id === null;
+        }
+
+        return false;
+    }
+
     public function index(Request $request)
     {
         try {
@@ -37,6 +74,19 @@ class PaymentMethodApiController extends Controller
             $search = $request->get('search', '');
             
             $query = PaymentMethod::query();
+
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
             
             if (!empty($search)) {
                 $query->where('payment_method', 'like', '%' . $search . '%');
@@ -76,8 +126,31 @@ class PaymentMethodApiController extends Controller
     public function store(Request $request)
     {
         try {
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
             $validator = Validator::make($request->all(), [
-                'payment_method' => 'required|string|max:255|unique:payment_methods,payment_method',
+                'payment_method' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($orgId, $isGlobalAdmin) {
+                        $existsQuery = PaymentMethod::where('payment_method', $value);
+                        if (!$isGlobalAdmin) {
+                            if ($orgId) {
+                                $existsQuery->where('organization_id', $orgId);
+                            } else {
+                                $existsQuery->whereNull('organization_id');
+                            }
+                        } else {
+                            $existsQuery->whereNull('organization_id');
+                        }
+                        
+                        if ($existsQuery->exists()) {
+                            $fail('The payment method has already been taken.');
+                        }
+                    },
+                ],
             ]);
 
             if ($validator->fails()) {
@@ -90,6 +163,7 @@ class PaymentMethodApiController extends Controller
             
             $paymentMethod = new PaymentMethod();
             $paymentMethod->payment_method = $request->input('payment_method');
+            $paymentMethod->organization_id = $orgId;
             $userId = $this->resolveUserId($request);
             $paymentMethod->created_by_user_id = $userId;
             $paymentMethod->updated_by_user_id = $userId;
@@ -134,6 +208,25 @@ class PaymentMethodApiController extends Controller
                     'message' => 'Payment method not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($paymentMethod->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to payment method'
+                    ], 403);
+                }
+            } else {
+                if ($paymentMethod->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to payment method'
+                    ], 403);
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -150,8 +243,31 @@ class PaymentMethodApiController extends Controller
     public function update(Request $request, $id)
     {
         try {
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
             $validator = Validator::make($request->all(), [
-                'payment_method' => 'required|string|max:255|unique:payment_methods,payment_method,' . $id,
+                'payment_method' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($id, $orgId, $isGlobalAdmin) {
+                        $existsQuery = PaymentMethod::where('payment_method', $value)->where('id', '!=', $id);
+                        if (!$isGlobalAdmin) {
+                            if ($orgId) {
+                                $existsQuery->where('organization_id', $orgId);
+                            } else {
+                                $existsQuery->whereNull('organization_id');
+                            }
+                        } else {
+                            $existsQuery->whereNull('organization_id');
+                        }
+                        
+                        if ($existsQuery->exists()) {
+                            $fail('The payment method has already been taken.');
+                        }
+                    },
+                ],
             ]);
 
             if ($validator->fails()) {
@@ -168,6 +284,23 @@ class PaymentMethodApiController extends Controller
                     'success' => false,
                     'message' => 'Payment method not found'
                 ], 404);
+            }
+
+            // Authorization check
+            if (!$isGlobalAdmin) {
+                if ($paymentMethod->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this payment method'
+                    ], 403);
+                }
+            } else {
+                if ($paymentMethod->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to update this payment method'
+                    ], 403);
+                }
             }
             
             $paymentMethod->payment_method = $request->input('payment_method');
@@ -210,6 +343,25 @@ class PaymentMethodApiController extends Controller
                     'message' => 'Payment method not found'
                 ], 404);
             }
+
+            // Authorization check
+            $orgId = $this->resolveUserOrgId(request());
+            $isGlobalAdmin = $this->isGlobalAdmin(request());
+            if (!$isGlobalAdmin) {
+                if ($paymentMethod->organization_id != $orgId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this payment method'
+                    ], 403);
+                }
+            } else {
+                if ($paymentMethod->organization_id !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to delete this payment method'
+                    ], 403);
+                }
+            }
             
             $paymentMethodData = $paymentMethod->toArray();
             $paymentMethod->delete();
@@ -239,10 +391,25 @@ class PaymentMethodApiController extends Controller
         }
     }
 
-    public function getStatistics()
+    public function getStatistics(Request $request)
     {
         try {
-            $totalPaymentMethods = PaymentMethod::count();
+            $query = PaymentMethod::query();
+            
+            $orgId = $this->resolveUserOrgId($request);
+            $isGlobalAdmin = $this->isGlobalAdmin($request);
+
+            if (!$isGlobalAdmin) {
+                if ($orgId) {
+                    $query->where('organization_id', $orgId);
+                } else {
+                    $query->whereNull('organization_id');
+                }
+            } else {
+                $query->whereNull('organization_id');
+            }
+
+            $totalPaymentMethods = $query->count();
             
             return response()->json([
                 'success' => true,

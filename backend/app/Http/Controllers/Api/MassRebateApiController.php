@@ -15,7 +15,16 @@ class MassRebateApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $query = MassRebate::query();
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
 
             if ($request->has('status')) {
                 $query->where('status', $request->status);
@@ -61,6 +70,10 @@ class MassRebateApiController extends Controller
             $validated['status'] = 'Unused';
             $validated['created_by_user_id'] = $request->user()->id ?? 1;
             $validated['updated_by_user_id'] = $request->user()->id ?? 1;
+            
+            if ($request->user() && $request->user()->organization_id) {
+                $validated['organization_id'] = $request->user()->organization_id;
+            }
 
             $rebate = MassRebate::create($validated);
 
@@ -104,6 +117,18 @@ class MassRebateApiController extends Controller
         try {
             $rebate = MassRebate::findOrFail($id);
 
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $rebate->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to this rebate record'
+                ], 403);
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $rebate
@@ -120,19 +145,19 @@ class MassRebateApiController extends Controller
     public function update(Request $request, $id): JsonResponse
     {
         try {
-            $rebate = MassRebate::findOrFail($id);
-
-            $validated = $request->validate([
-                'rebate_days' => 'sometimes|integer|min:1',
-                'billing_day' => 'sometimes|integer|min:1|max:31',
-                'barangay_code' => 'sometimes|string',
-                'rebate_date' => 'sometimes|date',
-                'status' => 'sometimes|in:Unused,Used',
-                'description' => 'nullable|string',
-                'remarks' => 'nullable|string'
-            ]);
-
             $validated['updated_by_user_id'] = $request->user()->id ?? 1;
+
+            $authUser = $request->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $rebate->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to update this rebate record'
+                ], 403);
+            }
 
             $rebate->update($validated);
 
@@ -169,6 +194,19 @@ class MassRebateApiController extends Controller
     {
         try {
             $rebate = MassRebate::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $rebate->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to delete this rebate record'
+                ], 403);
+            }
+
             $rebateData = $rebate->toArray();
             $rebate->delete();
 
@@ -203,8 +241,18 @@ class MassRebateApiController extends Controller
     public function markAsUsed(Request $request, $id): JsonResponse
     {
         try {
-            $rebate = MassRebate::findOrFail($id);
-            
+            $authUser = $request->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $rebate->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to apply this rebate'
+                ], 403);
+            }
+
             $rebate->update([
                 'status' => 'Used',
                 'updated_by_user_id' => $request->user()->id ?? 1

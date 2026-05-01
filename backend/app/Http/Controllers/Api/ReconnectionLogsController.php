@@ -12,6 +12,7 @@ class ReconnectionLogsController extends Controller
     public function index(Request $request)
     {
         try {
+            $currentUser = auth()->user();
             $query = DB::table('reconnection_logs')
                 ->leftJoin('billing_accounts', 'reconnection_logs.account_id', '=', 'billing_accounts.id')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
@@ -32,8 +33,18 @@ class ReconnectionLogsController extends Controller
                     'customers.barangay',
                     'customers.city',
                     'customers.contact_number_primary',
-                    'customers.email_address'
+                    'customers.email_address',
+                    'reconnection_logs.organization_id'
                 );
+
+            // Apply organization filter
+            if ($currentUser) {
+                if ($currentUser->organization_id) {
+                    $query->where('reconnection_logs.organization_id', $currentUser->organization_id);
+                } else {
+                    $query->whereNull('reconnection_logs.organization_id');
+                }
+            }
 
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;

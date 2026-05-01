@@ -13,8 +13,13 @@ class LCP extends Model
     
     protected $fillable = [
         'lcp_name',
+        'organization_id',
         'created_by_user_id',
         'updated_by_user_id',
+    ];
+
+    protected $casts = [
+        'organization_id' => 'integer',
     ];
 
     public function lcpnaps()

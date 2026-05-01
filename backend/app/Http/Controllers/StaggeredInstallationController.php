@@ -53,8 +53,18 @@ class StaggeredInstallationController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $staggeredInstallations = StaggeredInstallation::with(['billingAccount.customer'])
-                ->orderBy('modified_date', 'desc')
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $query = StaggeredInstallation::with(['billingAccount.customer']);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
+
+            $staggeredInstallations = $query->orderBy('modified_date', 'desc')
                 ->get();
 
             return response()->json([
@@ -92,6 +102,11 @@ class StaggeredInstallationController extends Controller
             DB::beginTransaction();
 
             $validated['status'] = 'Pending';
+            
+            $authUser = auth()->user();
+            if ($authUser && $authUser->organization_id) {
+                $validated['organization_id'] = $authUser->organization_id;
+            }
 
             $staggeredInstallation = StaggeredInstallation::create($validated);
 
@@ -129,6 +144,18 @@ class StaggeredInstallationController extends Controller
     {
         try {
             $staggered = StaggeredInstallation::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $staggered->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to update this staggered installation'
+                ], 403);
+            }
 
             $validated = $request->validate([
                 'account_no' => 'sometimes|exists:billing_accounts,account_no',
@@ -188,6 +215,19 @@ class StaggeredInstallationController extends Controller
             DB::beginTransaction();
 
             $staggered = StaggeredInstallation::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $staggered->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to approve this staggered installation'
+                ], 403);
+            }
 
             if ($staggered->status !== 'Pending') {
                 return response()->json([

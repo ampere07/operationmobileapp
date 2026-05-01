@@ -16,13 +16,21 @@ class OverdueApiController extends Controller
     public function index(Request $request)
     {
         try {
-            $page = $request->input('page', 1);
-            $limit = $request->input('limit', 50); // Reduced to 50 for faster response
-            $search = $request->input('search', '');
-            $date = $request->input('date', '');
-            $fastMode = $request->input('fast', false); // Fast mode: skip customer data loading
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $search = $request->get('search');
+            $date = $request->get('date');
+            $page = $request->get('page', 1);
+            $limit = $request->get('limit', 25);
 
             $query = Overdue::orderBy('overdue_date', 'desc');
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -95,7 +103,7 @@ class OverdueApiController extends Controller
                     'current_page' => (int) $page,
                     'per_page' => (int) $limit,
                     'has_more' => $hasMore,
-                    'total' => Overdue::count()
+                    'total' => (!$isSuperAdmin && $organizationId) ? Overdue::where('organization_id', $organizationId)->count() : Overdue::count()
                 ]
             ]);
 
@@ -119,6 +127,19 @@ class OverdueApiController extends Controller
     {
         try {
             $overdue = Overdue::with(['account.customer'])->findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $overdue->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to this overdue record'
+                ], 403);
+            }
+
             $customer = $overdue->account?->customer;
             
             // Safe date formatting
@@ -187,6 +208,10 @@ class OverdueApiController extends Controller
 
             $authData = $request->user();
             $validated['created_by_user_id'] = $authData?->id;
+            
+            if ($authData && $authData->organization_id) {
+                $validated['organization_id'] = $authData->organization_id;
+            }
 
             $overdue = Overdue::create($validated);
 
@@ -226,6 +251,17 @@ class OverdueApiController extends Controller
             $authData = $request->user();
             $validated['updated_by_user_id'] = $authData?->id;
 
+            $organizationId = $authData ? $authData->organization_id : null;
+            $roleId = $authData ? $authData->role_id : null;
+            $isSuperAdmin = !$authData || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $overdue->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to update this overdue record'
+                ], 403);
+            }
+
             $overdue->update($validated);
 
             event(new OverdueUpdated(['action' => 'updated', 'overdue_id' => $overdue->id, 'account_no' => $overdue->account_no]));
@@ -254,6 +290,19 @@ class OverdueApiController extends Controller
     {
         try {
             $overdue = Overdue::findOrFail($id);
+
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            if (!$isSuperAdmin && $organizationId && $overdue->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized to delete this overdue record'
+                ], 403);
+            }
+
             $overdue->delete();
 
             event(new OverdueUpdated(['action' => 'deleted', 'overdue_id' => $id]));
@@ -280,10 +329,22 @@ class OverdueApiController extends Controller
     public function getStatistics()
     {
         try {
-            $total = Overdue::count();
-            $thisMonth = Overdue::whereMonth('overdue_date', now()->month)
-                ->whereYear('overdue_date', now()->year)
-                ->count();
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $totalQuery = Overdue::query();
+            $thisMonthQuery = Overdue::whereMonth('overdue_date', now()->month)
+                ->whereYear('overdue_date', now()->year);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $totalQuery->where('organization_id', $organizationId);
+                $thisMonthQuery->where('organization_id', $organizationId);
+            }
+
+            $total = $totalQuery->count();
+            $thisMonth = $thisMonthQuery->count();
 
             return response()->json([
                 'success' => true,

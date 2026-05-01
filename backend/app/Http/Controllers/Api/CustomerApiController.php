@@ -12,7 +12,16 @@ class CustomerApiController extends Controller
     public function index(Request $request)
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $query = Customer::with(['group', 'createdBy', 'updatedBy']);
+
+            if (!$isSuperAdmin && $organizationId) {
+                $query->where('organization_id', $organizationId);
+            }
             
             if ($request->has('group_id')) {
                 $query->where('group_id', $request->group_id);
@@ -48,7 +57,19 @@ class CustomerApiController extends Controller
     public function show($id)
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $customer = Customer::with(['group', 'createdBy', 'updatedBy'])->findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $customer->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to customer record'
+                ], 403);
+            }
             
             return response()->json([
                 'success' => true,
@@ -86,8 +107,14 @@ class CustomerApiController extends Controller
                 'house_front_picture_url' => 'nullable|string',
                 'group_id' => 'nullable|exists:groups,id',
                 'created_by' => 'nullable|exists:users,id',
-                'updated_by' => 'nullable|exists:users,id'
+                'updated_by' => 'nullable|exists:users,id',
+                'organization_id' => 'nullable|integer'
             ]);
+            
+            $authUser = auth()->user();
+            if ($authUser && !isset($validated['organization_id'])) {
+                $validated['organization_id'] = $authUser->organization_id;
+            }
             
             $customer = Customer::create($validated);
             
@@ -109,7 +136,19 @@ class CustomerApiController extends Controller
     public function update(Request $request, $id)
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $customer = Customer::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $customer->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only update customers within your organization.'
+                ], 403);
+            }
             
             $validated = $request->validate([
                 'first_name' => 'sometimes|required|string|max:255',
@@ -152,7 +191,20 @@ class CustomerApiController extends Controller
     public function destroy($id)
     {
         try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
             $customer = Customer::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $customer->organization_id !== $organizationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only delete customers within your organization.'
+                ], 403);
+            }
+
             $customer->delete();
             
             return response()->json([

@@ -19,12 +19,14 @@ class Promo extends Model
     protected $fillable = [
         'name',
         'status',
+        'organization_id',
         'created_by_user_id',
         'updated_by_user_id'
     ];
 
     protected $casts = [
         'id' => 'integer',
+        'organization_id' => 'integer',
         'created_by_user_id' => 'integer',
         'updated_by_user_id' => 'integer',
         'created_at' => 'datetime',
