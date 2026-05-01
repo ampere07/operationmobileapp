@@ -146,7 +146,16 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   {renderInput('vlan', 'VLAN', false)}
 
                   {/* STATUS SECTION */}
-                  {renderPickerTrigger('supportStatus', 'Support Status', formData.supportStatus, 'Select Support Status', true)}
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Support Status <Text style={styles.required}>*</Text></Text>
+                    {isTechnician ? (
+                      <TextInput 
+                        style={[styles.textInput, { backgroundColor: isDarkMode ? '#374151' : '#f3f4f6', color: isDarkMode ? '#9ca3af' : '#6b7280' }]} 
+                        value={formData.supportStatus} 
+                        editable={false} 
+                      />
+                    ) : renderPickerTrigger('supportStatus', 'Support Status', formData.supportStatus, 'Select Support Status', true)}
+                  </View>
 
                   {formData.supportStatus === 'Failed' && (
                     <ImagePreview

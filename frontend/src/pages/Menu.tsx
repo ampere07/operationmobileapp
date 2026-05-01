@@ -22,9 +22,10 @@ import { version } from '../../package.json';
 
 interface MenuProps {
     onLogout?: () => void;
+    onSectionChange?: (section: string) => void;
 }
 
-const Menu: React.FC<MenuProps> = ({ onLogout }) => {
+const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
     const { customerDetail, isLoading: contextLoading } = useCustomerDataContext();
@@ -79,6 +80,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                 ...(isTechnician ? [{ id: 'time-in-out', label: 'Time In/Out', icon: Clock }] : []),
                 { id: 'notifications', label: 'Notifications', icon: Bell },
                 { id: 'about', label: 'About App', icon: Info },
+                { id: 'release-notes', label: 'Release Notes', icon: Clock },
             ]
         }
     ];
@@ -151,6 +153,9 @@ const Menu: React.FC<MenuProps> = ({ onLogout }) => {
                                                 setShowNotificationModal(true);
                                             } else if (item.id === 'about') {
                                                 setShowAboutModal(true);
+                                            } else if (item.id === 'release-notes') {
+                                                console.log('[Menu] Navigating to release-notes');
+                                                if (onSectionChange) onSectionChange('release-notes');
                                             } else if (item.id === 'time-in-out') {
                                                 setShowTimeInOutModal(true);
                                             }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Dimensions, useWindowDimensions, ActivityIndicator, Linking, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -69,6 +69,7 @@ import Support from './Support';
 import DashboardCustomer from './DashboardCustomer';
 import Bills from './Bills';
 import Menu from './Menu';
+import ReleaseNotes from './ReleaseNotes';
 import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -143,6 +144,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         console.log('Active section changed to:', activeSection);
     }, [activeSection]);
 
+    // Add effect to log the active section when it changes
+    const handleSectionChange = useCallback((section: string, extra?: string) => {
+        console.log('[Dashboard] handleSectionChange:', section);
+        setActiveSection(section);
+        if (section === 'customer-bills') {
+            setBillsInitialTab((extra as any) || 'soa');
+        } else if (section === 'customer') {
+            // setCustomerInitialSearch(extra || '');
+            // setCustomerAutoOpenAccountNo(extra || '');
+        }
+
+        if (width < 768) {
+            closeMobileMenu();
+        }
+    }, [width]);
+
     const content = useMemo(() => {
         switch (activeSection) {
             // Customer Routes
@@ -167,7 +184,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             case 'inventory-category-list':
                 return <InventoryCategoryList />;
             case 'menu':
-                return <Menu onLogout={onLogout} />;
+                return <Menu onLogout={onLogout} onSectionChange={handleSectionChange} />;
+            case 'release-notes':
+                return <ReleaseNotes onBack={() => handleSectionChange('menu')} />;
             case 'dashboard':
             default:
                 if (userData && String(userData.role_id) === '3') {
@@ -179,7 +198,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <DashboardContent />;
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeSection, billsInitialTab, userData?.role_id, onLogout]);
+    }, [activeSection, billsInitialTab, userData?.role_id, onLogout, handleSectionChange]);
 
     const handleSearch = (query: string) => {
         setSearchQuery(query);
@@ -213,22 +232,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         }
     };
 
-    const handleSectionChange = (section: string, extra?: string) => {
-        setActiveSection(section);
-        if (section === 'customer-bills') {
-            setBillsInitialTab((extra as any) || 'soa');
-        } else if (section === 'customer') {
-            // setCustomerInitialSearch(extra || '');
-            // setCustomerAutoOpenAccountNo(extra || '');
-        }
-
-        if (width < 768) {
-            closeMobileMenu();
-        }
-    };
 
     // Helper to determine if we should show sidebar
-    const showSidebar = userData !== null;
+    const showSidebar = userData !== null && activeSection !== 'release-notes';
 
     if (isLoading) {
         return (

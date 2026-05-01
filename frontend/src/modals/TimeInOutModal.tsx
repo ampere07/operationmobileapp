@@ -21,9 +21,96 @@ interface TimeInOutModalProps {
     onClose: () => void;
     userData: any;
     colorPalette: ColorPalette | null;
+    isMandatory?: boolean;
 }
 
-const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userData, colorPalette }) => {
+interface SwipeButtonProps {
+    onComplete: () => void;
+    label: string;
+    color: string;
+    icon: any;
+    width: number;
+    isLoading: boolean;
+}
+
+const SwipeButton: React.FC<SwipeButtonProps> = ({ onComplete, label, color, icon: Icon, width, isLoading }) => {
+    const pan = useRef(new Animated.Value(0)).current;
+    const buttonWidth = width - 48; // modal padding
+    const thumbSize = 48;
+    const padding = 4;
+    const maxSwipe = buttonWidth - thumbSize - (padding * 2);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => !isLoading,
+            onMoveShouldSetPanResponder: () => !isLoading,
+            onPanResponderMove: (_, gestureState) => {
+                if (gestureState.dx > 0 && gestureState.dx <= maxSwipe) {
+                    pan.setValue(gestureState.dx);
+                }
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dx >= maxSwipe * 0.7) {
+                    Animated.timing(pan, {
+                        toValue: maxSwipe,
+                        duration: 150,
+                        useNativeDriver: true,
+                    }).start(() => {
+                        onComplete();
+                        // Reset back after completion
+                        setTimeout(() => {
+                            Animated.spring(pan, {
+                                toValue: 0,
+                                useNativeDriver: true,
+                                bounciness: 0,
+                            }).start();
+                        }, 1000);
+                    });
+                } else {
+                    Animated.spring(pan, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                        bounciness: 0,
+                        speed: 20
+                    }).start();
+                }
+            },
+        })
+    ).current;
+
+    const opacity = pan.interpolate({
+        inputRange: [0, maxSwipe * 0.5],
+        outputRange: [1, 0],
+        extrapolate: 'clamp'
+    });
+
+    return (
+        <View style={[styles.swipeContainer, { width: buttonWidth, backgroundColor: color + '15', borderColor: color + '30' }]}>
+            <Animated.View style={[styles.swipeTextContainer, { opacity }]}>
+                <Text style={[styles.swipeText, { color }]}>{label}</Text>
+            </Animated.View>
+            
+            <Animated.View
+                {...panResponder.panHandlers}
+                style={[
+                    styles.swipeThumb,
+                    { 
+                        backgroundColor: color,
+                        transform: [{ translateX: pan }]
+                    }
+                ]}
+            >
+                {isLoading ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                    <Icon size={20} color="#ffffff" />
+                )}
+            </Animated.View>
+        </View>
+    );
+};
+
+const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userData, colorPalette, isMandatory }) => {
     const { width } = useWindowDimensions();
     const pan = useRef(new Animated.ValueXY()).current;
 
@@ -31,6 +118,10 @@ const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userD
     const [isLoading, setIsLoading] = useState(false);
     const [statusData, setStatusData] = useState<any>(null);
     const primaryColor = colorPalette?.primary || '#ef4444';
+
+    // Check if the user is currently timed in
+    const isCurrentlyTimedIn = !!statusData?.time_in && !statusData?.time_out;
+    const canClose = !isMandatory || isCurrentlyTimedIn;
 
     // Helper to get User ID safely
     const getUserId = () => {
@@ -134,17 +225,17 @@ const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userD
 
     const panResponder = useRef(
         PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
+            onStartShouldSetPanResponder: () => canClose,
             onMoveShouldSetPanResponder: (_, gestureState) => {
-                return Math.abs(gestureState.dy) > 10;
+                return canClose && Math.abs(gestureState.dy) > 10;
             },
             onPanResponderMove: (_, gestureState) => {
-                if (gestureState.dy > 0) {
+                if (canClose && gestureState.dy > 0) {
                     pan.setValue({ x: 0, y: gestureState.dy });
                 }
             },
             onPanResponderRelease: (_, gestureState) => {
-                if (gestureState.dy > 120) {
+                if (gestureState.dy > 120 && canClose) {
                     Animated.timing(pan, {
                         toValue: { x: 0, y: 1000 },
                         duration: 250,
@@ -171,13 +262,22 @@ const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userD
             onRequestClose={onClose}
         >
             <View style={styles.modalOverlay}>
-                <Pressable style={styles.modalBackdrop} onPress={onClose} />
+                <Pressable 
+                    style={styles.modalBackdrop} 
+                    onPress={() => { if (canClose) onClose(); }} 
+                />
                 <Animated.View style={[styles.modalSheet, { transform: [{ translateY: pan.y }] }]}>
 
                     <View {...panResponder.panHandlers} style={styles.modalHeader}>
-                        <Pressable onPress={onClose} style={styles.modalHandleBtn}>
-                            <View style={styles.modalHandle} />
-                        </Pressable>
+                        {canClose ? (
+                            <Pressable onPress={onClose} style={styles.modalHandleBtn}>
+                                <View style={styles.modalHandle} />
+                            </Pressable>
+                        ) : (
+                            <View style={styles.modalHandleBtn}>
+                                <View style={[styles.modalHandle, { opacity: 0.3 }]} />
+                            </View>
+                        )}
                         <Text style={styles.modalTitle}>Time In/Out</Text>
                     </View>
 
@@ -226,27 +326,27 @@ const TimeInOutModal: React.FC<TimeInOutModalProps> = ({ visible, onClose, userD
                                         </View>
                                     </View>
 
-                                    {/* Ultra simplified buttons container */}
+                                    {/* Swipe Gestures Container */}
                                     <View style={styles.buttonContainer}>
-                                        <View style={[styles.buttonWrapper, isTimeInDisabled && styles.disabledButtonWrapper]}>
-                                            <Pressable
-                                                onPress={handleTimeIn}
-                                                disabled={isLoading || isTimeInDisabled}
-                                                style={styles.timeInBtn}
-                                            >
-                                                <Text style={styles.btnText}>TIME IN</Text>
-                                            </Pressable>
-                                        </View>
-
-                                        <View style={[styles.buttonWrapper, isTimeOutDisabled && styles.disabledButtonWrapper]}>
-                                            <Pressable
-                                                onPress={handleTimeOut}
-                                                disabled={isLoading || isTimeOutDisabled}
-                                                style={styles.timeOutBtn}
-                                            >
-                                                <Text style={styles.btnText}>TIME OUT</Text>
-                                            </Pressable>
-                                        </View>
+                                        {!isCurrentlyTimedIn ? (
+                                            <SwipeButton
+                                                label="SWIPE TO TIME IN"
+                                                color="#10b981"
+                                                icon={LogIn}
+                                                width={width}
+                                                onComplete={handleTimeIn}
+                                                isLoading={isLoading}
+                                            />
+                                        ) : (
+                                            <SwipeButton
+                                                label="SWIPE TO TIME OUT"
+                                                color="#ef4444"
+                                                icon={LogOut}
+                                                width={width}
+                                                onComplete={handleTimeOut}
+                                                isLoading={isLoading}
+                                            />
+                                        )}
                                     </View>
 
                                 </View>
@@ -438,6 +538,39 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
         letterSpacing: 1
+    },
+    swipeContainer: {
+        height: 56,
+        borderRadius: 28,
+        borderWidth: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+        position: 'relative',
+        overflow: 'hidden'
+    },
+    swipeTextContainer: {
+        position: 'absolute',
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    swipeText: {
+        fontSize: 14,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    swipeThumb: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
     },
     spacer: {
         height: 40

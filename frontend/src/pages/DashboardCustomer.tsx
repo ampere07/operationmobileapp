@@ -402,7 +402,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                         >
                             <View style={styles.balanceLeft}>
                                 <Text style={styles.balanceLabel}>Total Amount</Text>
-                                <Text style={[styles.balanceAmountText, { fontSize: isMobile ? 32 : 40 }]}>
+                                <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? 24 : 32) : (isMobile ? 32 : 40) }]}>
                                     {formatCurrency(balance)}
                                 </Text>
                             </View>

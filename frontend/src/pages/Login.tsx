@@ -22,6 +22,7 @@ import { formUIService } from '../services/formUIService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { ArrowRight, Eye, EyeOff } from 'lucide-react-native';
 
+
 interface LoginProps {
   onLogin: (userData: UserData) => void;
 }
@@ -39,6 +40,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [showPassword, setShowPassword] = useState(false);
+
 
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
@@ -102,6 +104,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       } else {
         setError('Login failed. Please try again.');
       }
+
+
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
     } finally {
@@ -445,6 +449,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </View>
       </Modal>
     </SafeAreaView>
+
+
   );
 };
 

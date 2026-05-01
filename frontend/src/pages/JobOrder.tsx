@@ -9,6 +9,9 @@ import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrder } from '../types/jobOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { techInOutService } from '../services/techInOutService';
+import TimeInOutModal from '../modals/TimeInOutModal';
+
 
 const StatusText = React.memo(({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>-</Text>;
@@ -289,6 +292,9 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [showReloginModal, setShowReloginModal] = useState<boolean>(false);
+  const [showTimeModal, setShowTimeModal] = useState<boolean>(false);
+  const [authUserData, setAuthUserData] = useState<any>(null);
+
 
   // Watch for 401 error to show relogin modal
   useEffect(() => {
@@ -356,10 +362,29 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
       if (authResult.status === 'fulfilled' && authResult.value) {
         try {
           const userData = JSON.parse(authResult.value);
-          setUserRole(userData.role || '');
+          setAuthUserData(userData);
+          const rName = userData.role || '';
+          setUserRole(rName);
           setUserEmail(userData.email || '');
-          setUserRoleId(userData.role_id ? Number(userData.role_id) : null);
+          const rId = userData.role_id ? Number(userData.role_id) : null;
+          setUserRoleId(rId);
           setUserFullName(userData.full_name || '');
+
+          // Check time in status for technicians
+          const isTech = rId === 2 || rName.toLowerCase() === 'technician';
+          if (isTech) {
+            const userId = userData.id || userData.user_id || userData.user?.id;
+            if (userId) {
+              techInOutService.getStatus(userId).then(statusRes => {
+                if (statusRes.success) {
+                  const s = statusRes.data;
+                  if (!s?.time_in || !!s?.time_out) {
+                    setShowTimeModal(true);
+                  }
+                }
+              }).catch(err => console.error('[JobOrder] Status check failed:', err));
+            }
+          }
         } catch (error) { }
       }
       if (paletteResult.status === 'fulfilled') {
@@ -787,7 +812,16 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
           </View>
         </View>
       </Modal>
+
+      <TimeInOutModal
+        visible={showTimeModal}
+        onClose={() => setShowTimeModal(false)}
+        userData={authUserData}
+        colorPalette={colorPalette}
+        isMandatory={true}
+      />
     </View >
+
   );
 };
 
