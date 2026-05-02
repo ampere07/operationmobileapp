@@ -217,7 +217,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     onChangeText={setMobileNo}
                     placeholder="Password"
                     placeholderTextColor="#6b7280"
-                    secureTextEntry={!showPassword}
                     keyboardType="default"
                     autoComplete="password"
                     textContentType="password"

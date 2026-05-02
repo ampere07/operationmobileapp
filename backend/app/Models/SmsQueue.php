@@ -5,31 +5,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class EmailQueue extends Model
+class SmsQueue extends Model
 {
-    protected $table = 'email_queue';
+    protected $table = 'sms_queue';
 
     protected $fillable = [
         'account_no',
-        'recipient_email',
-        'cc',
-        'bcc',
-        'subject',
-        'body_html',
-        'attachment_path',
+        'contact_no',
+        'message',
         'status',
         'sent_at',
         'time_sent',
         'attempts',
-        'error_message',
-        'email_sender',
-        'reply_to',
-        'sender_name'
+        'error_message'
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'sent_at' => 'datetime',
+        'time_sent' => 'datetime',
         'attempts' => 'integer'
     ];
 
@@ -48,22 +42,6 @@ class EmailQueue extends Model
                      });
     }
 
-    public function scopeSent($query)
-    {
-        return $query->where('status', 'sent');
-    }
-
-    public function scopeFailed($query)
-    {
-        return $query->where('status', 'failed');
-    }
-
-    public function scopeRetryable($query, int $maxAttempts = 3)
-    {
-        return $query->where('status', 'failed')
-                     ->where('attempts', '<', $maxAttempts);
-    }
-
     public function markAsSent(): void
     {
         $this->update([
@@ -80,13 +58,4 @@ class EmailQueue extends Model
             'error_message' => $errorMessage
         ]);
     }
-
-    public function resetToPending(): void
-    {
-        $this->update([
-            'status' => 'pending',
-            'error_message' => null
-        ]);
-    }
 }
-

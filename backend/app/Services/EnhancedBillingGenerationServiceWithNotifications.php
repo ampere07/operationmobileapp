@@ -135,10 +135,14 @@ class EnhancedBillingGenerationServiceWithNotifications
             // NOTE: dispatch()->afterResponse() was used previously but it does NOT work
             // in CLI/Artisan context (no HTTP response lifecycle), so notifications were
             // silently never executed during cron jobs.
+            // Set the time to send at 8:00 AM GMT+8 (Asia/Manila)
+            $timeToSend = Carbon::now('Asia/Manila')->setTime(8, 0, 0)->format('Y-m-d H:i:s');
+
             $notificationResult = $this->notificationService->notifyBillingGenerated(
                 $account,
                 $invoice,
-                $soa
+                $soa,
+                $timeToSend
             );
             
             $this->log('info', 'Notification completed', [
@@ -1253,4 +1257,5 @@ class EnhancedBillingGenerationServiceWithNotifications
         return $results;
     }
 }
+
 

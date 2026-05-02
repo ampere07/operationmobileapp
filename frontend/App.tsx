@@ -11,12 +11,14 @@ import { settingsColorPaletteService } from './src/services/settingsColorPalette
 import { PaymentSuccessProvider } from './src/contexts/PaymentSuccessContext';
 import IdleWarningModal from './src/modals/IdleWarningModal';
 
-import { View, AppState, PanResponder } from 'react-native';
+import { View, AppState, PanResponder, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
+import * as NavigationBar from 'expo-navigation-bar';
 import { getAppVersionConfig, compareVersions } from './src/services/appVersionService';
 import { version as currentVersion } from './package.json';
 import ForceUpdateModal from './src/modals/ForceUpdateModal';
+import { StatusBar } from 'expo-status-bar';
 
 const IDLE_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours in ms
 const WARNING_TIMEOUT = 1.5 * 60 * 60 * 1000; // 1.5 hours in ms
@@ -89,6 +91,13 @@ function App() {
       if (logoutTimer.current) clearTimeout(logoutTimer.current);
     }
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync("hidden");
+      NavigationBar.setBehaviorAsync("overlay-swipe");
+    }
+  }, []);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -240,6 +249,7 @@ function App() {
 
   return (
     <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+      <StatusBar hidden={true} />
       {isLoggedIn ? (
         <PaymentSuccessProvider>
           <Dashboard onLogout={handleLogout} />

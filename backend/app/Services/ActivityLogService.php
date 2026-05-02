@@ -166,11 +166,11 @@ class ActivityLogService
     {
         self::info(
             'create_organization',
-            "Organization '{$organization->organization_name}' was created",
+            "Organization '{$organization->org_name}' ({$organization->org_type}) was created",
             $createdBy,
             null,
             'organization',
-            $organization->id,
+            $organization->org_id,
             $additionalData
         );
     }
@@ -181,11 +181,11 @@ class ActivityLogService
         
         self::info(
             'update_organization',
-            "Organization '{$organization->organization_name}' was updated (changed: {$changesList})",
+            "Organization '{$organization->org_name}' was updated (changed: {$changesList})",
             $updatedBy,
             null,
             'organization',
-            $organization->id,
+            $organization->org_id,
             ['changes' => $changes]
         );
     }

@@ -767,7 +767,7 @@ class MonitorController extends Controller
                         break;
                     case 'overall':
                     default:
-                        $viewStart = \Carbon\Carbon::create(2000, 1, 1, 0, 0, 0, 'Asia/Manila');
+                        $viewStart = $applyCustomStart($now->copy());
                         break;
                 }
 

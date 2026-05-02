@@ -1168,7 +1168,27 @@ class TransactionController extends Controller
                     \Log::error('[TRANSACTION RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
 
-                // Email Notification is now handled by ManualRadiusOperationsService
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+
+                    if ($emailTemplate && $customerInfo && !empty($customerInfo->email_address)) {
+                        $emailService = app(\App\Services\EmailQueueService::class);
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
+
+                        $emailData = [
+                            'customer_name' => $customerName,
+                            'account_no' => $accountNo,
+                            'plan_name' => $planNameFormatted,
+                            'recipient_email' => $customerInfo->email_address,
+                        ];
+                        $emailService->queueFromTemplate('RECONNECT', $emailData);
+                        \Log::info('[TRANSACTION RECONNECT EMAIL] Email queued for: ' . $customerInfo->email_address);
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('[TRANSACTION RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
 
                 return 'success';
             }

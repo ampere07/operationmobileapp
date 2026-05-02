@@ -499,7 +499,40 @@ class PaymentWorkerService
                     $this->workerLog("[RECONNECT SMS EXCEPTION] " . $e->getMessage());
                 }
 
-                // Email Notification is now handled by ManualRadiusOperationsService
+                // Send Email Notification
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+
+                    if ($emailTemplate && $emailAddress && !empty($emailAddress)) {
+                        $emailService = app(\App\Services\EmailQueueService::class);
+
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                                'customers.email_address',
+                                'customers.desired_plan as plan_name',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                            )
+                            ->first();
+
+                        if ($customerInfo) {
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+
+                            $emailData = [
+                                'customer_name' => $customerName,
+                                'account_no' => $accountNo,
+                                'plan_name' => $planNameFormatted,
+                                'recipient_email' => $customerInfo->email_address,
+                            ];
+                            $emailService->queueFromTemplate('RECONNECT', $emailData);
+                            $this->workerLog("[RECONNECT EMAIL] Email queued for: " . $customerInfo->email_address);
+                        }
+                    }
+                } catch (Exception $e) {
+                    $this->workerLog("[RECONNECT EMAIL EXCEPTION] " . $e->getMessage());
+                }
 
                 return 'success';
             } else {

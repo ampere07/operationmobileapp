@@ -26,6 +26,7 @@ class EmailQueueService
             'body_html' => $data['body_html'],
             'attachment_path' => $data['attachment_path'] ?? null,
             'status' => 'pending',
+            'time_sent' => $data['time_sent'] ?? null,
             'email_sender' => $data['email_sender'] ?? null,
             'reply_to' => $data['reply_to'] ?? null,
             'sender_name' => $data['sender_name'] ?? null
@@ -76,6 +77,7 @@ class EmailQueueService
                 'subject' => $subject,
                 'body_html' => $bodyHtml,
                 'attachment_path' => $data['attachment_path'] ?? null,
+                'time_sent' => $data['time_sent'] ?? null,
                 'email_sender' => $template->email_sender,
                 'reply_to' => $template->reply_to,
                 'sender_name' => $template->sender_name
@@ -254,4 +256,5 @@ class EmailQueueService
         ]);
     }
 }
+
 

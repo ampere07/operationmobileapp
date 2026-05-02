@@ -14,7 +14,7 @@ interface ReleaseNote {
     version: string;
     date: string;
     title: string;
-    updates: { text: string; isCustomerVisible: boolean }[];
+    updates: { text: string; visibility: 'all' | 'customer' | 'technician' }[];
 }
 
 interface ReleaseNotesProps {
@@ -28,13 +28,22 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.18',
+            date: 'May 3, 2026',
+            title: 'Fullscreen Mode & Screen Sharing Fixes',
+            updates: [
+                { text: 'Immersive Fullscreen: The app now automatically opens in true fullscreen mode. The top status bar and bottom navigation buttons are hidden by default for an uninterrupted experience.', visibility: 'all' },
+                { text: 'Login Screen Sharing: Fixed a security issue that caused the login screen to turn black when sharing your screen or recording.', visibility: 'all' }
+            ]
+        },
+        {
             version: '2.5.17',
             date: 'May 2, 2026',
             title: 'Billing Layout & App Updates',
             updates: [
-                { text: 'Bills UI Update: Unified the layout structure for Invoices, SOA, and History tabs to ensure a consistent look and feel.', isCustomerVisible: true },
-                { text: 'Invoice Status: Replaced the PDF download button in the Invoices tab with a dynamic status badge (PAID/UNPAID) for better clarity.', isCustomerVisible: true },
-                { text: 'Support Center UI: Completely redesigned the Ticket Details page for a cleaner, full-screen experience without bulky modals or drop shadows.', isCustomerVisible: true }
+                { text: 'Bills UI Update: Unified the layout structure for Invoices, SOA, and History tabs to ensure a consistent look and feel.', visibility: 'customer' },
+                { text: 'Invoice Status: Replaced the PDF download button in the Invoices tab with a dynamic status badge (PAID/UNPAID) for better clarity.', visibility: 'customer' },
+                { text: 'Support Center UI: Completely redesigned the Ticket Details page for a cleaner, full-screen experience without bulky modals or drop shadows.', visibility: 'customer' }
             ]
         },
         {
@@ -42,10 +51,10 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
             date: 'May 1, 2026',
             title: 'Role-Based Permissions & UI Optimizations',
             updates: [
-                { text: 'Mandatory Attendance: Technicians are now required to "Time In" before they can access Job Orders. The modal cannot be dismissed until they are clocked in.', isCustomerVisible: false },
-                { text: 'Dashboard UI: Fixed an issue where high account balances (thousands) would wrap to two lines. The font size now dynamically adjusts to stay on a single line.', isCustomerVisible: true },
-                { text: 'Login Flow: Technicians are now automatically checked for their attendance status immediately after login or when opening the app.', isCustomerVisible: false },
-                { text: 'New Section: Added this Release Notes page to keep track of application improvements.', isCustomerVisible: true }
+                { text: 'Mandatory Attendance: Technicians are now required to "Time In" before they can access Job Orders. The modal cannot be dismissed until they are clocked in.', visibility: 'technician' },
+                { text: 'Dashboard UI: Fixed an issue where high account balances (thousands) would wrap to two lines. The font size now dynamically adjusts to stay on a single line.', visibility: 'customer' },
+                { text: 'Login Flow: Technicians are now automatically checked for their attendance status immediately after login or when opening the app.', visibility: 'technician' },
+                { text: 'New Section: Added this Release Notes page to keep track of application improvements.', visibility: 'all' }
             ]
         },
         {
@@ -53,8 +62,8 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
             date: 'April 18, 2026',
             title: 'Technician Attendance & Modal Improvements',
             updates: [
-                { text: 'Time In/Out Modal: Finalized the attendance tracking modal with mobile-friendly swipe gestures.', isCustomerVisible: false },
-                { text: 'Service Restrictions: Blocked technicians from starting orders if they haven\'t timed in.', isCustomerVisible: false }
+                { text: 'Time In/Out Modal: Finalized the attendance tracking modal with mobile-friendly swipe gestures.', visibility: 'technician' },
+                { text: 'Service Restrictions: Blocked technicians from starting orders if they haven\'t timed in.', visibility: 'technician' }
             ]
         }
     ];
@@ -81,7 +90,11 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
                 // Filter notes based on role
                 const isCustomer = role === 'customer';
                 const filteredNotes = allNotes.map(note => {
-                    const visibleUpdates = note.updates.filter(u => isCustomer ? u.isCustomerVisible : !u.isCustomerVisible);
+                    const visibleUpdates = note.updates.filter(u => {
+                        if (u.visibility === 'all') return true;
+                        if (isCustomer) return u.visibility === 'customer';
+                        return u.visibility === 'technician';
+                    });
                     return { ...note, updates: visibleUpdates };
                 }).filter(note => note.updates.length > 0);
 

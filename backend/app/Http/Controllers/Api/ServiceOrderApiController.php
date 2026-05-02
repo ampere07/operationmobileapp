@@ -1145,6 +1145,74 @@ class ServiceOrderApiController extends Controller
 
             \Log::info("[API SERVICE ORDER RESTRICT DB] Updated billing_status_id to {$statusId} (Inactive) for Account: {$accountNo}");
 
+            // Fetch customer info for notifications
+            $customerInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.contact_number_primary',
+                    'customers.email_address',
+                    'customers.desired_plan as plan_name',
+                    DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                    'billing_accounts.account_balance'
+                )
+                ->first();
+
+            // Send SMS Notification
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Disconnected')
+                    ->where('is_active', 1)
+                    ->first();
+
+                if ($smsTemplate && $customerInfo && !empty($customerInfo->contact_number_primary)) {
+                    $message = $smsTemplate->message_content;
+                    $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                    $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $accountNo, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+
+                    $smsService = new \App\Services\ItexmoSmsService();
+                    $smsResult = $smsService->send([
+                        'contact_no' => $customerInfo->contact_number_primary,
+                        'message' => $message
+                    ]);
+
+                    if ($smsResult['success']) {
+                        \Log::info('[API SERVICE ORDER RESTRICT SMS] SMS sent to: ' . $customerInfo->contact_number_primary);
+                    } else {
+                        \Log::warning('[API SERVICE ORDER RESTRICT SMS] SMS send failed', $smsResult);
+                    }
+                }
+            } catch (\Exception $smsEx) {
+                \Log::error('[API SERVICE ORDER RESTRICT SMS EXCEPTION] ' . $smsEx->getMessage());
+            }
+
+            // Send Email Notification
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
+
+                if (!empty($emailTemplate) && $customerInfo && !empty($customerInfo->email_address)) {
+                    $emailService = app(\App\Services\EmailQueueService::class);
+                    $emailData = [
+                        'customer_name' => preg_replace('/\s+/', ' ', trim($customerInfo->full_name)),
+                        'account_no' => $accountNo,
+                        'plan_name' => $customerInfo->plan_name,
+                        'amount_due' => number_format($customerInfo->account_balance, 2),
+                        'balance' => number_format($customerInfo->account_balance, 2),
+                        'recipient_email' => $customerInfo->email_address,
+                    ];
+                    $emailService->queueFromTemplate('DISCONNECTED', $emailData);
+                    \Log::info('[API SERVICE ORDER RESTRICT EMAIL] Email queued for: ' . $customerInfo->email_address);
+                }
+            } catch (\Exception $emailEx) {
+                \Log::error('[API SERVICE ORDER RESTRICT EMAIL EXCEPTION] ' . $emailEx->getMessage());
+            }
+
             return 'success';
         } catch (\Exception $e) {
             \Log::error('[API SERVICE ORDER RESTRICT EXCEPTION] ' . $e->getMessage());

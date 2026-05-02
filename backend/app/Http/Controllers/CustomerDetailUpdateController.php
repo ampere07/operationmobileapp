@@ -257,8 +257,8 @@ class CustomerDetailUpdateController extends Controller
     {
         try {
             $validated = $request->validate([
-                'billingStatus' => 'nullable',
-                'billingDay' => 'nullable|integer|min:0|max:31',
+                'billing_status_id' => 'nullable',
+                'billing_day' => 'nullable|integer|min:0|max:31',
                 'vip_expiration' => 'nullable|date',
                 'vip_remarks' => 'nullable|string'
             ]);
@@ -277,12 +277,12 @@ class CustomerDetailUpdateController extends Controller
 
             // Resolve billing_status_id
             $billingStatusId = $billingAccount->billing_status_id;
-            if (!empty($validated['billingStatus'])) {
-                if (is_numeric($validated['billingStatus'])) {
-                    $billingStatusId = (int)$validated['billingStatus'];
+            if ($request->has('billing_status_id') && !empty($validated['billing_status_id'])) {
+                if (is_numeric($validated['billing_status_id'])) {
+                    $billingStatusId = (int)$validated['billing_status_id'];
                 } else {
                     // Attempt to find by name in the database
-                    $dbStatus = DB::table('billing_status')->where('status_name', $validated['billingStatus'])->first();
+                    $dbStatus = DB::table('billing_status')->where('status_name', $validated['billing_status_id'])->first();
                     if ($dbStatus) {
                         $billingStatusId = $dbStatus->id;
                     } else {
@@ -294,7 +294,7 @@ class CustomerDetailUpdateController extends Controller
                             'Terminated' => 4,
                             'Suspended' => 5
                         ];
-                        $billingStatusId = $statusMap[$validated['billingStatus']] ?? $billingStatusId;
+                        $billingStatusId = $statusMap[$validated['billing_status_id']] ?? $billingStatusId;
                     }
                 }
             }
@@ -307,8 +307,8 @@ class CustomerDetailUpdateController extends Controller
                 $updateData['updated_by'] = $request->input('updatedBy');
             }
 
-            if ($request->has('billingDay')) {
-                $updateData['billing_day'] = $validated['billingDay'];
+            if ($request->has('billing_day')) {
+                $updateData['billing_day'] = $validated['billing_day'];
             }
 
             if ($request->has('vip_expiration')) {
@@ -416,16 +416,16 @@ class CustomerDetailUpdateController extends Controller
         try {
             $validated = $request->validate([
                 'username' => 'nullable|string|max:255',
-                'connectionType' => 'nullable|string|max:100',
-                'routerModel' => 'nullable|string|max:255',
-                'routerModemSn' => 'nullable|string|max:255',
-                'ipAddress' => 'nullable|string|max:45',
+                'connection_type' => 'nullable|string|max:100',
+                'router_model' => 'nullable|string|max:255',
+                'router_modem_sn' => 'nullable|string|max:255',
+                'ip_address' => 'nullable|string|max:45',
                 'lcp' => 'nullable|string|max:255',
                 'nap' => 'nullable|string|max:255',
                 'lcpnap' => 'nullable|string|max:255',
                 'port' => 'nullable|string|max:255',
                 'vlan' => 'nullable|string|max:255',
-                'usageType' => 'nullable|string|max:255'
+                'usage_type' => 'nullable|string|max:255'
             ]);
 
             DB::beginTransaction();
@@ -480,16 +480,16 @@ class CustomerDetailUpdateController extends Controller
             }
 
             $technicalDetail->username = (!empty($validated['username'])) ? $validated['username'] : $technicalDetail->username;
-            $technicalDetail->connection_type = (!empty($validated['connectionType'])) ? $validated['connectionType'] : $technicalDetail->connection_type;
-            $technicalDetail->router_model = (!empty($validated['routerModel'])) ? $validated['routerModel'] : $technicalDetail->router_model;
-            $technicalDetail->router_modem_sn = $validated['routerModemSn'] ?? $technicalDetail->router_modem_sn;
-            $technicalDetail->ip_address = $validated['ipAddress'] ?? $technicalDetail->ip_address;
+            $technicalDetail->connection_type = (!empty($validated['connection_type'])) ? $validated['connection_type'] : $technicalDetail->connection_type;
+            $technicalDetail->router_model = (!empty($validated['router_model'])) ? $validated['router_model'] : $technicalDetail->router_model;
+            $technicalDetail->router_modem_sn = $validated['router_modem_sn'] ?? $technicalDetail->router_modem_sn;
+            $technicalDetail->ip_address = $validated['ip_address'] ?? $technicalDetail->ip_address;
             $technicalDetail->lcp = $newLcp ?? $technicalDetail->lcp;
             $technicalDetail->nap = $newNap ?? $technicalDetail->nap;
             $technicalDetail->port = $validated['port'] ?? $technicalDetail->port;
             $technicalDetail->vlan = $validated['vlan'] ?? $technicalDetail->vlan;
             $technicalDetail->lcpnap = $lcpnap;
-            $technicalDetail->usage_type = $validated['usageType'] ?? $technicalDetail->usage_type;
+            $technicalDetail->usage_type = $validated['usage_type'] ?? $technicalDetail->usage_type;
             
             if ($request->has('updatedBy')) {
                 $technicalDetail->updated_by = $request->input('updatedBy');
