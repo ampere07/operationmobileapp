@@ -494,10 +494,69 @@ class AutoDisconnectService
                         continue;
                     }
 
+                    // Get technical details for RADIUS username
+                    $technicalDetail = $billingAccount->technicalDetails->first();
+                    if (!$technicalDetail || empty($technicalDetail->username)) {
+                        $this->writeLog("  [SKIP] PPPoE username not found");
+                        $this->writeLog("[{$counter}/{$totalCount}] ⊘ SKIPPED");
+                        $skippedCount++;
+                        continue;
+                    }
+
+                    $username = $technicalDetail->username;
+                    $this->writeLog("  [INFO] Username: {$username}");
+
+                    // 1. Create pullout service order
                     $this->writeLog("  [CREATE] Creating pullout service order...");
                     $this->createPulloutRequest($billingAccount, $pulloutOffset);
+                    $this->writeLog("  [CREATE] ✓ Pullout service order created");
+
+                    // 2. Restrict user via RADIUS (also creates disconnected_logs entry)
+                    $this->writeLog("  [RADIUS] Restricting user via RADIUS...");
+                    $restrictResult = $this->radiusService->restrictedUser([
+                        'username' => $username,
+                        'accountNumber' => $accountNo,
+                        'remarks' => 'Pullout',
+                        'updatedBy' => 'System'
+                    ]);
+
+                    if ($restrictResult['status'] === 'success') {
+                        $this->writeLog("  [RADIUS] ✓ Successfully restricted");
+                    } else {
+                        $this->writeLog("  [RADIUS] ✗ Restrict failed: " . ($restrictResult['message'] ?? 'Unknown'));
+                    }
+
+                    // 3. Update billing status to Inactive
+                    $inactiveStatusId = DB::table('billing_status')->where('status_name', 'Inactive')->value('id') ?? 4;
+                    DB::table('billing_accounts')
+                        ->where('id', $billingAccount->id)
+                        ->update([
+                            'billing_status_id' => $inactiveStatusId,
+                            'updated_by' => 'System',
+                            'updated_at' => Carbon::now()
+                        ]);
+                    $this->writeLog("  [DB] ✓ Billing status updated to Inactive (ID: {$inactiveStatusId})");
+
+                    // 4. Send SMS notification
+                    if ($this->smsService && $billingAccount->customer && $billingAccount->customer->contact_number_primary) {
+                        $this->writeLog("  [SMS] Sending pullout notification...");
+                        $this->triggerSMS($billingAccount, 'Disconnected');
+                        $this->writeLog("  [SMS] ✓ SMS sent");
+                    } else {
+                        $this->writeLog("  [SMS] Skipping (no SMS service or no contact number)");
+                    }
+
+                    // 5. Send Email notification
+                    if ($this->emailQueueService && $billingAccount->customer && $billingAccount->customer->email_address) {
+                        $this->writeLog("  [EMAIL] Sending pullout notification...");
+                        $this->triggerEmail($billingAccount);
+                        $this->writeLog("  [EMAIL] ✓ Email queued");
+                    } else {
+                        $this->writeLog("  [EMAIL] Skipping (no email service or no email address)");
+                    }
+
                     $createdCount++;
-                    $this->writeLog("  [COMPLETE] Pullout request created");
+                    $this->writeLog("  [COMPLETE] Pullout fully processed for {$accountNo}");
                     $this->writeLog("[{$counter}/{$totalCount}] ✓ SUCCESS");
 
                 } catch (Exception $e) {
@@ -567,36 +626,15 @@ class AutoDisconnectService
      */
     private function createPulloutRequest(BillingAccount $billingAccount, int $pulloutOffset): void
     {
-        $customer = $billingAccount->customer;
-        $technicalDetail = $billingAccount->technicalDetails->first();
-
         $serviceOrder = new ServiceOrder();
-        $serviceOrder->timestamp = Carbon::now();
+        $serviceOrder->Timestamp = Carbon::now();
         $serviceOrder->account_no = $billingAccount->account_no;
-        $serviceOrder->date_installed = $billingAccount->date_installed;
-        $serviceOrder->full_name = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ''));
-        $serviceOrder->contact_number = $customer->contact_number_primary ?? null;
-        $serviceOrder->email_address = $customer->email_address ?? null;
-        $serviceOrder->address = $customer->complete_address ?? null;
-        $serviceOrder->location = $customer->location ?? null;
-        $planNameRaw = $billingAccount->plan->name ?? $customer->desired_plan ?? null;
-        $serviceOrder->plan = str_replace('₱', 'P', $planNameRaw ?? '');
-        $serviceOrder->provider = $technicalDetail->provider ?? null;
-        $serviceOrder->username = $technicalDetail->username ?? null;
-        $serviceOrder->connection_type = $technicalDetail->connection_type ?? null;
-        $serviceOrder->router_modem_sn = $technicalDetail->router_model ?? null;
-        $serviceOrder->lcp = $technicalDetail->lcp ?? null;
-        $serviceOrder->nap = $technicalDetail->nap ?? null;
-        $serviceOrder->port = $technicalDetail->port ?? null;
-        $serviceOrder->vlan = $technicalDetail->vlan ?? null;
-        $serviceOrder->support_status = 'In Progress';
+        $serviceOrder->support_status = 'For Visit';
         $serviceOrder->concern = 'Pullout';
         $serviceOrder->concern_remarks = "System Auto Generated (Overdue {$pulloutOffset} Days)";
         $serviceOrder->requested_by = 'System';
-        $serviceOrder->barangay = $customer->barangay ?? null;
-        $serviceOrder->city = $customer->city ?? null;
-        $serviceOrder->created_by = 'System';
-        $serviceOrder->updated_by = 'System';
+        $serviceOrder->created_by_user = 'System';
+        $serviceOrder->updated_by_user = 'System';
         $serviceOrder->save();
     }
 

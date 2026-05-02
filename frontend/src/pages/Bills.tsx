@@ -24,6 +24,7 @@ interface InvoiceRecord {
     invoice_date?: string;
     invoice_balance?: number;
     print_link?: string;
+    status?: string;
 }
 
 interface PaymentRecord {
@@ -153,7 +154,7 @@ const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { recor
 
     return (
         <View style={styles.card}>
-            <View style={styles.cardRow}>
+            <View style={[styles.cardRow, { marginBottom: 14 }]}>
                 <View>
                     <Text style={styles.labelText}>{label}</Text>
                     <Text style={styles.valueText}>{formatDate(date)}</Text>
@@ -163,7 +164,6 @@ const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { recor
                     <Text style={styles.valueText}>#{record.id}</Text>
                 </View>
             </View>
-            <View style={styles.divider} />
             <View style={styles.cardRow}>
                 <View>
                     <Text style={styles.labelText}>{amountLabel}</Text>
@@ -171,15 +171,30 @@ const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { recor
                         {formatCurrency(amount || 0)}
                     </Text>
                 </View>
-                <Pressable
-                    onPress={() => onDownload(record.print_link)}
-                    disabled={!record.print_link}
-                    style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' } : styles.pdfBtnDisabled]}
-                >
-                    <Download width={14} height={14} color={record.print_link ? primaryColor : '#9ca3af'} />
-                    <Text style={[styles.pdfText, { color: record.print_link ? primaryColor : '#9ca3af' }]}>PDF</Text>
-                </Pressable>
+                {isSoa ? (
+                    <Pressable
+                        onPress={() => onDownload(record.print_link)}
+                        disabled={!record.print_link}
+                        style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' } : styles.pdfBtnDisabled]}
+                    >
+                        <Download width={14} height={14} color={record.print_link ? primaryColor : '#9ca3af'} />
+                        <Text style={[styles.pdfText, { color: record.print_link ? primaryColor : '#9ca3af' }]}>PDF</Text>
+                    </Pressable>
+                ) : (
+                    <View style={[
+                        styles.statusBadge, 
+                        { backgroundColor: record.status?.toUpperCase() === 'PAID' ? '#f0fdf4' : record.status?.toUpperCase() === 'UNPAID' ? '#fef2f2' : '#f3f4f6' }
+                    ]}>
+                        <Text style={[
+                            styles.statusText, 
+                            { color: record.status?.toUpperCase() === 'PAID' ? '#15803d' : record.status?.toUpperCase() === 'UNPAID' ? '#ef4444' : '#374151' }
+                        ]}>
+                            {(record.status || 'UNKNOWN').toUpperCase()}
+                        </Text>
+                    </View>
+                )}
             </View>
+            <View style={styles.divider} />
         </View>
     );
 });
@@ -188,10 +203,20 @@ const HistoryCard = React.memo(({ record }: { record: PaymentRecord }) => {
     const isPositive = record.status === 'Completed' || record.status === 'PAID';
     return (
         <View style={styles.card}>
-            <View style={styles.cardRow}>
+            <View style={[styles.cardRow, { marginBottom: 14 }]}>
                 <View>
                     <Text style={styles.labelText}>Payment Date</Text>
                     <Text style={styles.valueText}>{formatDate(record.date)}</Text>
+                </View>
+                <View style={[styles.alignEnd, { flex: 1, marginLeft: 16 }]}>
+                    <Text style={styles.labelText}>Ref: {record.source}</Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.refText}>{record.reference}</Text>
+                </View>
+            </View>
+            <View style={styles.cardRow}>
+                <View>
+                    <Text style={styles.labelText}>Amount Paid</Text>
+                    <Text style={styles.paymentAmount}>{formatCurrency(record.amount)}</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: isPositive ? '#f0fdf4' : '#f3f4f6' }]}>
                     <Text style={[styles.statusText, { color: isPositive ? '#15803d' : '#374151' }]}>
@@ -200,16 +225,6 @@ const HistoryCard = React.memo(({ record }: { record: PaymentRecord }) => {
                 </View>
             </View>
             <View style={styles.divider} />
-            <View style={styles.cardRow}>
-                <View style={styles.refContainer}>
-                    <Text style={styles.labelText}>Ref: {record.source}</Text>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.refText}>{record.reference}</Text>
-                </View>
-                <View style={styles.alignEnd}>
-                    <Text style={styles.labelText}>Amount Paid</Text>
-                    <Text style={styles.paymentAmount}>+{formatCurrency(record.amount)}</Text>
-                </View>
-            </View>
         </View>
     );
 });

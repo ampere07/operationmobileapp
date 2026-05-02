@@ -239,6 +239,10 @@ Route::get('/settings-color-palette/active', [SettingsColorPaletteController::cl
 // Image Proxy - Public Route (no auth required)
 Route::get('/proxy/image', [ImageProxyController::class , 'proxyGoogleDriveImage']);
 
+// App Version Config - Public Route
+Route::get('/app-version/config', [\App\Http\Controllers\SystemConfigController::class , 'getAppVersionConfig']);
+Route::post('/app-version/config', [\App\Http\Controllers\SystemConfigController::class , 'updateAppVersionConfig']);
+
 // Service Charge Logs Routes
 Route::prefix('service-charges')->group(function () {
     Route::get('/', function (Request $request) {

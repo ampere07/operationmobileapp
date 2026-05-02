@@ -113,38 +113,31 @@ class GenerateDailyBillingsCron extends Command
                 return Command::SUCCESS;
             }
 
-            $logger->info('Starting SOA generation', [
+            $logger->info('Starting Unified Billing generation (SOA + Invoice + Notification)', [
                 'billing_day' => $targetBillingDay,
                 'accounts_to_process' => $accountsCount
             ]);
 
-            $soaResults = $this->billingService->generateSOAForBillingDay(
+            $unifiedResults = $this->billingService->generateUnifiedBilling(
                 $targetBillingDay,
                 $today,
                 1
             );
 
             $logger->info('SOA generation completed', [
-                'success' => $soaResults['success'],
-                'failed' => $soaResults['failed'],
+                'success' => $unifiedResults['statements']['success'],
+                'failed' => $unifiedResults['statements']['failed'],
                 'total_accounts' => $accountsCount
             ]);
-
-            $logger->info('Starting Invoice generation', [
-                'billing_day' => $targetBillingDay,
-                'accounts_to_process' => $accountsCount
-            ]);
-
-            $invoiceResults = $this->billingService->generateInvoicesForBillingDay(
-                $targetBillingDay,
-                $today,
-                1
-            );
 
             $logger->info('Invoice generation completed', [
-                'success' => $invoiceResults['success'],
-                'failed' => $invoiceResults['failed'],
+                'success' => $unifiedResults['invoices']['success'],
+                'failed' => $unifiedResults['invoices']['failed'],
                 'total_accounts' => $accountsCount
+            ]);
+
+            $logger->info('Notifications completed', [
+                'count' => count($unifiedResults['notifications'] ?? [])
             ]);
 
             // [NEW] Generate Overdue Notices
@@ -162,6 +155,9 @@ class GenerateDailyBillingsCron extends Command
                 'success' => $dcResults['success'],
                 'failed' => $dcResults['failed']
             ]);
+
+            $soaResults = $unifiedResults['statements'];
+            $invoiceResults = $unifiedResults['invoices'];
 
             $totalSuccess = $soaResults['success'] + $invoiceResults['success'] + $overdueResults['success'] + $dcResults['success'];
             $totalFailed = $soaResults['failed'] + $invoiceResults['failed'] + $overdueResults['failed'] + $dcResults['failed'];

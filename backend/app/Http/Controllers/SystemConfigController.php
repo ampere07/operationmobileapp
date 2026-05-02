@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SystemConfig;
 use App\Models\FormUI;
+use App\Models\AppVersionConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -122,6 +123,70 @@ class SystemConfigController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete logo'
+            ], 500);
+        }
+    }
+
+    public function getAppVersionConfig()
+    {
+        try {
+            $configs = AppVersionConfig::whereIn('config_key', [
+                'latest_version',
+                'min_version',
+                'playstore_url'
+            ])->get()->pluck('config_value', 'config_key');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'latest_version' => $configs['latest_version'] ?? '1.0.0',
+                    'min_version' => $configs['min_version'] ?? '1.0.0',
+                    'playstore_url' => $configs['playstore_url'] ?? ''
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching app version config: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch app version config'
+            ], 500);
+        }
+    }
+
+    public function updateAppVersionConfig(Request $request)
+    {
+        try {
+            $request->validate([
+                'latest_version' => 'required|string',
+                'min_version' => 'required|string',
+                'playstore_url' => 'required|string|url',
+                'updated_by' => 'required|string'
+            ]);
+
+            AppVersionConfig::updateOrCreate(
+                ['config_key' => 'latest_version'],
+                ['config_value' => $request->latest_version, 'updated_by' => $request->updated_by]
+            );
+
+            AppVersionConfig::updateOrCreate(
+                ['config_key' => 'min_version'],
+                ['config_value' => $request->min_version, 'updated_by' => $request->updated_by]
+            );
+
+            AppVersionConfig::updateOrCreate(
+                ['config_key' => 'playstore_url'],
+                ['config_value' => $request->playstore_url, 'updated_by' => $request->updated_by]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'App version configuration updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating app version config: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update app version config: ' . $e->getMessage()
             ], 500);
         }
     }

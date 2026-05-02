@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, Pressable, Animated, PanResponder, StyleSheet, useWindowDimensions, Image, ScrollView } from 'react-native';
 import { ColorPalette, settingsColorPaletteService } from '../services/settingsColorPaletteService';
 import { formUIService } from '../services/formUIService';
+import { version } from '../../package.json';
 
 interface AboutAppModalProps {
     visible: boolean;
@@ -115,6 +116,7 @@ const AboutAppModal: React.FC<AboutAppModalProps> = ({ visible, onClose }) => {
                                 <Text style={[styles.mainTitle, { color: colorPalette?.primary || '#ef4444' }]}>
                                     Quality Internet Speed
                                 </Text>
+                                <Text style={styles.versionText}>Version {version}</Text>
                                 <Text style={styles.mainDescription}>
                                     Get ready to upgrade your internet experience with ATSS Telecommunication Services. Enjoy lightning-fast fiber connectivity for homes and businesses. Experience the reliability and speed you deserve. Discover our high-speed internet solutions now!
                                 </Text>
@@ -210,8 +212,14 @@ const styles = StyleSheet.create({
     mainTitle: {
         fontSize: 22,
         fontWeight: '800',
-        marginBottom: 16,
+        marginBottom: 8,
         textAlign: 'center',
+    },
+    versionText: {
+        fontSize: 14,
+        color: '#9ca3af',
+        marginBottom: 16,
+        fontWeight: '600',
     },
     mainDescription: {
         fontSize: 15,

@@ -45,22 +45,47 @@ class BillingNotificationService
                 throw new \Exception("Customer not found for account {$account->account_no}");
             }
 
-            $pdfResult = $this->pdfService->generateBillingPdf($account, $invoice, $soa);
-
-            if (!$pdfResult['success']) {
-                $results['errors'][] = "PDF generation failed: " . $pdfResult['error'];
-                return $results;
-            }
-
-            $results['pdf_generated'] = true;
-            $results['pdf_url'] = $pdfResult['url'];
-            $results['google_drive_file_id'] = $pdfResult['folder_id'];
-            $results['filename'] = $pdfResult['filename'];
+            // PDF generation is for SOA only — Invoice does not have a PDF template.
+            // Also reuse existing print_link if SOA PDF was already generated during SOA creation.
+            $pdfResult = ['success' => false, 'url' => null, 'filename' => null, 'folder_id' => null];
 
             if ($soa) {
-                $this->updateSoaPdfLink($soa, $pdfResult['url']);
+                if (!empty($soa->print_link)) {
+                    // SOA PDF was already generated in createEnhancedStatement — reuse it
+                    $pdfResult = [
+                        'success' => true,
+                        'url' => $soa->print_link,
+                        'filename' => 'SOA_' . $account->account_no . '.pdf',
+                        'folder_id' => null
+                    ];
+                    $results['pdf_generated'] = true;
+                    $results['pdf_url'] = $soa->print_link;
+
+                    Log::info('Using existing SOA PDF link', [
+                        'account_no' => $account->account_no,
+                        'print_link' => $soa->print_link
+                    ]);
+                } else {
+                    // Generate PDF for SOA only (pass null for invoice)
+                    $pdfResult = $this->pdfService->generateBillingPdf($account, null, $soa);
+
+                    if ($pdfResult['success']) {
+                        $results['pdf_generated'] = true;
+                        $results['pdf_url'] = $pdfResult['url'];
+                        $results['google_drive_file_id'] = $pdfResult['folder_id'];
+                        $results['filename'] = $pdfResult['filename'];
+                        $this->updateSoaPdfLink($soa, $pdfResult['url']);
+                    } else {
+                        $results['errors'][] = "SOA PDF generation failed: " . $pdfResult['error'];
+                        Log::warning('SOA PDF generation failed, continuing with email/SMS', [
+                            'account_no' => $account->account_no,
+                            'error' => $pdfResult['error']
+                        ]);
+                    }
+                }
             }
 
+            // Always proceed to email — do NOT block on PDF failure
             if ($customer->email_address) {
                 $emailQueued = $this->queueBillingEmail($account, $invoice, $soa, $pdfResult);
                 $results['email_queued'] = $emailQueued;
@@ -72,6 +97,7 @@ class BillingNotificationService
                 $results['errors'][] = 'Customer has no email address';
             }
 
+            // Always proceed to SMS — do NOT block on PDF or email failure
             if ($customer->contact_number_primary) {
                 $smsResult = $this->sendBillingSms($account, $invoice, $soa);
                 $results['sms_sent'] = $smsResult['success'];
@@ -91,7 +117,7 @@ class BillingNotificationService
                 'account_no' => $account->account_no,
                 'email_queued' => $results['email_queued'],
                 'sms_sent' => $results['sms_sent'],
-                'google_drive_url' => $pdfResult['url']
+                'pdf_generated' => $results['pdf_generated']
             ]);
 
         } catch (\Exception $e) {
@@ -264,16 +290,17 @@ class BillingNotificationService
             // Prepare Data for Template
             $emailData = $this->prepareEmailData($account, $invoice, $soa);
             
-            // Handle PDF Attachment (if physical attachment is needed)
-            // Note: queueFromTemplate creates the body from template, but we can pass attachment connection
-            if (config('billing.notifications.include_pdf_attachment', true)) {
-                $fileUrl = $pdfResult['url'];
-                preg_match('/\/d\/(.*?)\//', $fileUrl, $matches);
-                $fileId = $matches[1] ?? null;
+            // Handle PDF Attachment (only if PDF was successfully generated)
+            if (($pdfResult['success'] ?? false) && !empty($pdfResult['url'])) {
+                if (config('billing.notifications.include_pdf_attachment', true)) {
+                    $fileUrl = $pdfResult['url'];
+                    preg_match('/\/d\/(.*?)\//', $fileUrl, $matches);
+                    $fileId = $matches[1] ?? null;
 
-                if ($fileId) {
-                    // This creates a temp file
-                    $tempPdfPath = $this->pdfService->downloadPdfFromGoogleDrive($fileId);
+                    if ($fileId) {
+                        // This creates a temp file
+                        $tempPdfPath = $this->pdfService->downloadPdfFromGoogleDrive($fileId);
+                    }
                 }
             }
 
@@ -282,8 +309,8 @@ class BillingNotificationService
                 $templateCode,
                 array_merge($emailData, [
                     'recipient_email' => $customer->email_address,
-                    'google_drive_url' => $pdfResult['url'],
-                    'filename' => $pdfResult['filename'],
+                    'google_drive_url' => $pdfResult['url'] ?? null,
+                    'filename' => $pdfResult['filename'] ?? null,
                     'attachment_path' => $tempPdfPath // Pass the temp path if it exists
                 ])
             );
@@ -464,6 +491,7 @@ class BillingNotificationService
                     $message = str_replace('{{amount}}', number_format($invoice->total_amount, 2), $message);
                     $message = str_replace('{{balance}}', number_format($invoice->total_amount, 2), $message);
                     $message = str_replace('{{dc_date}}', $dcDate->format('M d, Y'), $message);
+                    $message = str_replace('{{due_date}}', $invoice->due_date->format('M d, Y'), $message);
                     
                     $message = $this->replaceGlobalVariables($message);
                     
@@ -533,6 +561,8 @@ class BillingNotificationService
             'total_amount' => number_format($totalDue ?? 0, 2),
             'due_date' => $dueDate->format('F j Y'),
             'plan' => $planFormatted,
+            'plan_name' => $planFormatted,
+            'plan_nam' => $planFormatted,
             'contact_no' => $customer->contact_number_primary
         ];
 

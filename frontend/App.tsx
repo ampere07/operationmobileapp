@@ -14,6 +14,9 @@ import IdleWarningModal from './src/modals/IdleWarningModal';
 import { View, AppState, PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
+import { getAppVersionConfig, compareVersions } from './src/services/appVersionService';
+import { version as currentVersion } from './package.json';
+import ForceUpdateModal from './src/modals/ForceUpdateModal';
 
 const IDLE_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours in ms
 const WARNING_TIMEOUT = 1.5 * 60 * 60 * 1000; // 1.5 hours in ms
@@ -23,6 +26,9 @@ function App() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isForceUpdate, setIsForceUpdate] = useState(false);
+  const [versionConfig, setVersionConfig] = useState<any>(null);
   const [showPaymentResult, setShowPaymentResult] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
@@ -59,7 +65,7 @@ function App() {
     if (logoutTimer.current) {
       clearTimeout(logoutTimer.current);
     }
-    
+
     if (isWarningVisible.current) {
       setShowIdleWarning(false);
     }
@@ -93,10 +99,10 @@ function App() {
         } else if (timeSinceLastInteraction >= WARNING_TIMEOUT) {
           // Warning window
           setShowIdleWarning(true);
-          
+
           if (warningTimer.current) clearTimeout(warningTimer.current);
           if (logoutTimer.current) clearTimeout(logoutTimer.current);
-          
+
           const remainingTime = IDLE_TIMEOUT - timeSinceLastInteraction;
           logoutTimer.current = setTimeout(() => {
             handleLogout();
@@ -148,6 +154,26 @@ function App() {
       } catch (e) {
         console.error('Failed to parse linking URL:', e);
       }
+
+      // App Version Check
+      try {
+        const config = await getAppVersionConfig();
+        setVersionConfig(config);
+        
+        const compareMin = compareVersions(currentVersion, config.min_version);
+        const compareLatest = compareVersions(currentVersion, config.latest_version);
+
+        if (compareMin < 0) {
+          setIsForceUpdate(true);
+          setShowUpdateModal(true);
+        } else if (compareLatest < 0) {
+          setIsForceUpdate(false);
+          setShowUpdateModal(true);
+        }
+      } catch (error) {
+        console.error('Failed to check app version:', error);
+      }
+
 
       // Initialize CSRF cookie and check auth status
       try {
@@ -224,7 +250,7 @@ function App() {
             referenceNo={paymentRef}
             isDarkMode={false}
           />
-          <IdleWarningModal 
+          <IdleWarningModal
             visible={showIdleWarning}
             onStayLoggedIn={resetTimer}
             onLogout={handleLogout}
@@ -233,6 +259,16 @@ function App() {
         </PaymentSuccessProvider>
       ) : (
         <Login onLogin={handleLogin} />
+      )}
+
+      {versionConfig && (
+        <ForceUpdateModal
+          visible={showUpdateModal}
+          playstoreUrl={versionConfig.playstore_url}
+          latestVersion={versionConfig.latest_version}
+          isForce={isForceUpdate}
+          onClose={() => setShowUpdateModal(false)}
+        />
       )}
     </View>
   );

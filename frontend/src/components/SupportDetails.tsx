@@ -10,8 +10,10 @@ import {
     StyleSheet,
     Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     ChevronRight,
+    ChevronLeft,
     X,
     Clock,
     User,
@@ -151,59 +153,36 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }}>
             {/* Header */}
             <View style={{
+                height: 60,
                 flexDirection: 'row',
                 alignItems: 'center',
-                paddingHorizontal: 20,
-                paddingTop: isTablet ? 16 : 60,
-                paddingBottom: 20,
-                backgroundColor: headerBg,
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                backgroundColor: '#ffffff',
                 borderBottomWidth: 1,
-                borderBottomColor: borderColor,
+                borderBottomColor: '#e2e8f0',
             }}>
-                <TouchableOpacity
-                    onPress={onClose}
-                    style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        backgroundColor: '#ffffff',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        marginRight: 16,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 4,
-                        elevation: 3
-                    }}
-                >
-                    <X size={20} color={iconColor} />
-                </TouchableOpacity>
+                <Pressable onPress={onClose} style={{ padding: 8 }}>
+                    <ChevronLeft size={24} color="#000000" />
+                </Pressable>
 
-                <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, color: labelColor, marginBottom: 2 }}>Ticket Details</Text>
-                    <Text style={{ fontSize: 20, fontWeight: '700', color: valueColor }}>
-                        #{request.requestId}
-                    </Text>
-                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: '#1e293b' }}>
+                    Ticket #{request.requestId}
+                </Text>
 
                 <StatusBadge status={request.status} />
             </View>
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 20 }}>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
                 {/* Core Info Card */}
                 <View style={{
-                    backgroundColor: cardBg,
-                    borderRadius: 16,
-                    padding: 20,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 8,
-                    elevation: 4,
+                    marginBottom: 30, 
+                    paddingBottom: 20, 
+                    borderBottomWidth: 1, 
+                    borderBottomColor: '#eee'
                 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20, borderBottomWidth: 1, borderBottomColor: borderColor, paddingBottom: 15 }}>
                         <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: primaryColor + '15', justifyContent: 'center', alignItems: 'center' }}>
@@ -223,7 +202,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                         <Text style={{ fontSize: 14, fontWeight: '600', color: labelColor, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
                             <MessageSquare size={14} color={labelColor} /> Issue Details
                         </Text>
-                        <View style={{ backgroundColor: '#f9fafb', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: borderColor }}>
+                        <View style={{ paddingVertical: 10 }}>
                             <Text style={{ fontSize: 15, lineHeight: 22, color: valueColor }}>
                                 {request.issueDetails || 'No additional details provided.'}
                             </Text>
@@ -234,14 +213,10 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                 {/* Status Notes Card */}
                 {(request.statusNote || request.visitNote) && (
                     <View style={{
-                        backgroundColor: cardBg,
-                        borderRadius: 16,
-                        padding: 20,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.05,
-                        shadowRadius: 8,
-                        elevation: 4,
+                        marginBottom: 30, 
+                        paddingBottom: 20, 
+                        borderBottomWidth: 1, 
+                        borderBottomColor: '#eee',
                         gap: 20
                     }}>
                         <Text style={{ fontSize: 18, fontWeight: '700', color: valueColor, marginBottom: 4 }}>Staff Feedback</Text>
@@ -249,7 +224,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                         {request.statusNote && (
                             <View>
                                 <Text style={{ fontSize: 14, fontWeight: '600', color: labelColor, marginBottom: 8 }}>Status Note</Text>
-                                <View style={{ backgroundColor: '#3b82f610', padding: 16, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#3b82f6' }}>
+                                <View style={{ paddingVertical: 10 }}>
                                     <Text style={{ fontSize: 14, color: valueColor }}>{request.statusNote}</Text>
                                 </View>
                             </View>
@@ -258,7 +233,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                         {request.visitNote && (
                             <View>
                                 <Text style={{ fontSize: 14, fontWeight: '600', color: labelColor, marginBottom: 8 }}>Visit Note</Text>
-                                <View style={{ backgroundColor: '#10b98110', padding: 16, borderRadius: 12, borderLeftWidth: 4, borderLeftColor: '#10b981' }}>
+                                <View style={{ paddingVertical: 10 }}>
                                     <Text style={{ fontSize: 14, color: valueColor }}>{request.visitNote}</Text>
                                 </View>
                             </View>
@@ -267,7 +242,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                 )}
 
                 {/* Helpful Info Section */}
-                <View style={{ padding: 20, backgroundColor: primaryColor + '08', borderRadius: 16, borderWidth: 1, borderColor: primaryColor + '20', flexDirection: 'row', gap: 12 }}>
+                <View style={{ paddingVertical: 10, flexDirection: 'row', gap: 12 }}>
                     <Info size={20} color={primaryColor} />
                     <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 14, fontWeight: '700', color: primaryColor, marginBottom: 4 }}>Need more help?</Text>
@@ -277,7 +252,7 @@ const SupportDetails: React.FC<SupportDetailsProps> = ({
                     </View>
                 </View>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 };
 

@@ -408,19 +408,15 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         )}
       />
 
-      {/* Support Details Modal */}
-      <Modal
-        visible={!!selectedRequest}
-        animationType="slide"
-        onRequestClose={() => setSelectedRequest(null)}
-      >
-        {selectedRequest && (
+      {/* Support Details View */}
+      {selectedRequest && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
           <SupportDetails
             request={selectedRequest}
             onClose={() => setSelectedRequest(null)}
           />
-        )}
-      </Modal>
+        </View>
+      )}
 
       {/* Floating Action Button */}
       <Pressable

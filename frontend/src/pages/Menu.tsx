@@ -18,7 +18,8 @@ import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import NotificationModal from '../modals/NotificationModal';
 import AboutAppModal from '../modals/AboutAppModal';
 import TimeInOutModal from '../modals/TimeInOutModal';
-import { version } from '../../package.json';
+import packageJson from '../../package.json';
+const version = packageJson.version;
 
 interface MenuProps {
     onLogout?: () => void;

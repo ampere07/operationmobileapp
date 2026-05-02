@@ -125,42 +125,36 @@ class EnhancedBillingGenerationServiceWithNotifications
         ?StatementOfAccount $soa
     ): array {
         try {
-            $accountId = $account->id;
-            $invoiceId = $invoice ? $invoice->id : null;
-            $soaId = $soa ? $soa->id : null;
-
-            dispatch(function() use ($accountId, $invoiceId, $soaId) {
-                /** @var \App\Services\BillingNotificationService $notificationService */
-                $notificationService = app(\App\Services\BillingNotificationService::class);
-                
-                $accountModel = \App\Models\BillingAccount::find($accountId);
-                if (!$accountModel) {
-                    Log::warning("Queue Notification: Account not found for ID {$accountId}");
-                    return;
-                }
-
-                $invoiceModel = $invoiceId ? \App\Models\Invoice::find($invoiceId) : null;
-                $soaModel = $soaId ? \App\Models\StatementOfAccount::find($soaId) : null;
-
-                $notificationService->notifyBillingGenerated(
-                    $accountModel,
-                    $invoiceModel,
-                    $soaModel
-                );
-            })->afterResponse();
-            
-            $this->log('info', 'Notification queued', [
+            $this->log('info', 'Sending notification synchronously', [
                 'account_no' => $account->account_no,
                 'has_invoice' => $invoice !== null,
                 'has_soa' => $soa !== null
             ]);
+
+            // Execute notification synchronously.
+            // NOTE: dispatch()->afterResponse() was used previously but it does NOT work
+            // in CLI/Artisan context (no HTTP response lifecycle), so notifications were
+            // silently never executed during cron jobs.
+            $notificationResult = $this->notificationService->notifyBillingGenerated(
+                $account,
+                $invoice,
+                $soa
+            );
+            
+            $this->log('info', 'Notification completed', [
+                'account_no' => $account->account_no,
+                'email_queued' => $notificationResult['email_queued'] ?? false,
+                'sms_sent' => $notificationResult['sms_sent'] ?? false,
+                'errors' => $notificationResult['errors'] ?? []
+            ]);
             
             return [
                 'account_no' => $account->account_no,
-                'queued' => true
+                'queued' => true,
+                'notification_result' => $notificationResult
             ];
         } catch (\Exception $e) {
-            $this->log('error', 'Failed to queue notification', [
+            $this->log('error', 'Failed to send notification', [
                 'account_no' => $account->account_no,
                 'error' => $e->getMessage()
             ]);
