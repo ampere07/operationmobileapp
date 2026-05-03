@@ -28,6 +28,18 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.21',
+            date: 'May 4, 2026',
+            title: 'Modern Dashboard & Interactive UI',
+            updates: [
+                { text: 'Gliding Navigation: Experience a modern, floating oval navigation bar with a smooth gliding indicator that follows your active section.', visibility: 'customer' },
+                { text: 'Interactive Ads Stack: Replaced the ad slider with a Tinder-style stacked card system featuring smooth slide animations.', visibility: 'customer' },
+                { text: 'Vertical Flip Balance Card: Added a vertical flip animation to the balance card. Flip it to instantly view your Plan, Usage Type, and Email details.', visibility: 'customer' },
+                { text: 'Payment History Polish: Cleaned up the payment list by removing icons and adding smart truncation for long reference numbers.', visibility: 'customer' },
+                { text: 'On-Demand SOA: Generate your Statement of Account PDF on-demand directly from the Bills page if it hasn\'t been created yet.', visibility: 'customer' }
+            ]
+        },
+        {
             version: '2.5.20',
             date: 'May 3, 2026',
             title: 'UI/UX Overhaul & Technician Workflow Updates',

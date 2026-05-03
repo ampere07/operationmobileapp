@@ -63,12 +63,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
         borderRadius: 12, position: 'relative',
     },
-    tabActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+    tabActive: { 
+        backgroundColor: '#ffffff', 
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2
+    },
     tabInactive: { backgroundColor: 'transparent' },
     tabText: { fontSize: 13, fontWeight: '800' },
     tabTextActive: { color: '#111827' },
     tabTextInactive: { color: '#9ca3af' },
-    tabIndicator: { position: 'absolute', bottom: 0, width: '40%', height: 3, borderRadius: 3 },
+    tabIndicator: { position: 'absolute', bottom: 0, width: '50%', height: 3, borderRadius: 3 },
     contentContainer: {
         paddingHorizontal: 16, paddingTop: 0, paddingBottom: 120,
         backgroundColor: '#ffffff',
@@ -164,7 +175,7 @@ const styles = StyleSheet.create({
     payBtnTextCard: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 },
 });
 
-const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (url?: string) => void }) => {
+const BillCard = React.memo(({ record, type, primaryColor, onDownload, isGenerating }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (record: any) => void, isGenerating: boolean }) => {
     const isSoa = type === 'soa';
     const date = isSoa ? record.statement_date : record.invoice_date;
     const amount = isSoa ? record.total_amount_due : record.invoice_balance;
@@ -192,12 +203,16 @@ const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { recor
                 </View>
                 {isSoa ? (
                     <Pressable
-                        onPress={() => onDownload(record.print_link)}
-                        disabled={!record.print_link}
-                        style={[styles.pdfBtnBase, record.print_link ? { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' } : styles.pdfBtnDisabled]}
+                        onPress={() => onDownload(record)}
+                        disabled={isGenerating}
+                        style={[styles.pdfBtnBase, { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' }, isGenerating && { opacity: 0.5 }]}
                     >
-                        <Download width={14} height={14} color={record.print_link ? primaryColor : '#9ca3af'} />
-                        <Text style={[styles.pdfText, { color: record.print_link ? primaryColor : '#9ca3af' }]}>PDF</Text>
+                        {isGenerating ? (
+                            <ActivityIndicator size="small" color={primaryColor} />
+                        ) : (
+                            <Download width={14} height={14} color={primaryColor} />
+                        )}
+                        <Text style={[styles.pdfText, { color: primaryColor }]}>{isGenerating ? '...' : 'PDF'}</Text>
                     </Pressable>
                 ) : (
                     <View style={[
@@ -253,26 +268,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const isMobile = width < 768;
     const isShort = height < 700;
     const { customerDetail, payments: paymentRecords, soaRecords, invoiceRecords, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
-    const initials = (customerDetail?.firstName && customerDetail?.lastName)
-        ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
-        : (customerDetail?.fullName || 'Customer').split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
-    
-    let dueDateString = 'Upon Receipt';
-    if (customerDetail?.billingAccount?.billingDay) {
-        const today = new Date();
-        const billingDay = customerDetail.billingAccount.billingDay;
-        let dueYear = today.getFullYear();
-        let dueMonth = today.getMonth();
-        if (today.getDate() > billingDay) {
-            dueMonth++;
-            if (dueMonth > 11) {
-                dueMonth = 0;
-                dueYear++;
-            }
-        }
-        const nextDueDate = new Date(dueYear, dueMonth, billingDay);
-        dueDateString = `${String(nextDueDate.getMonth() + 1).padStart(2, '0')}/${String(nextDueDate.getDate()).padStart(2, '0')}/${nextDueDate.getFullYear()}`;
-    }
     const accountNo = customerDetail?.billingAccount?.accountNo || '';
     const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
     const [activeTab, setActiveTab] = useState<'soa' | 'invoices' | 'payments'>(initialTab);
@@ -310,6 +305,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
     const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState<number | null>(null);
 
     const ITEMS_PER_PAGE = 5;
     const [currentPage, setCurrentPage] = useState(0);
@@ -487,8 +483,35 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         </View>
     );
 
-    const handleDownloadPDF = (url?: string) => {
-        if (url) Linking.openURL(url);
+    const handleDownloadPDF = async (record: SOARecord) => {
+        if (record.print_link) {
+            Linking.openURL(record.print_link);
+            return;
+        }
+
+        setIsGeneratingPDF(record.id);
+        try {
+            const response = await fetch(`${API_BASE_URL}/statement-of-accounts/${record.id}/generate-pdf`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                }
+            });
+            const result = await response.json();
+            if (result.success && result.pdf_url) {
+                Linking.openURL(result.pdf_url);
+                // Silently refresh to update the list with the new print_link
+                await silentRefresh();
+            } else {
+                console.error('PDF Generation failed:', result.message);
+                // Fallback or alert if needed
+            }
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+        } finally {
+            setIsGeneratingPDF(null);
+        }
     };
 
     const currentRecords = useMemo(() => {
@@ -545,52 +568,6 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         <View style={styles.container}>
             <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? (isShort ? 20 : 60) : 16, gap: isShort ? 12 : 20 }}>
                 
-                {/* Balance Card Section */}
-                <View style={styles.balanceCard}>
-                    <LinearGradient
-                        colors={[primaryColor, '#000000']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.gradientInner}
-                    >
-                        <View style={styles.profileRow}>
-                            <View style={styles.initialsCircle}>
-                                <Text style={styles.initialsText}>{initials}</Text>
-                            </View>
-                            <View>
-                                <Text style={styles.customerNameText}>{displayName}</Text>
-                                <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.billingRow}>
-                            <View style={styles.billingLeft}>
-                                <Text style={styles.balanceLabelCard}>Total Amount</Text>
-                                <Text style={[styles.balanceAmountTextCard, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
-                                    {formatCurrency(balance)}
-                                </Text>
-                            </View>
-
-                            <View style={styles.billingRightCol}>
-                                <View style={styles.dueDateContainerCard}>
-                                    <Text style={styles.infoTextCard}>Due Date: <Text style={styles.infoValueCard}>{dueDateString}</Text></Text>
-                                </View>
-
-                                <Pressable
-                                    onPress={handlePayNow}
-                                    disabled={isPaymentProcessing}
-                                    style={[styles.payBtnCard, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
-                                >
-                                    <View style={styles.payBtnInner}>
-                                        <Text style={styles.payBtnTextCard}>
-                                            {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
-                                        </Text>
-                                    </View>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </LinearGradient>
-                </View>
 
                 <View style={[styles.tabRow, { position: 'relative' }]}>
                     <Animated.View style={[
@@ -668,7 +645,13 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 renderItem={({ item }) => (
                     activeTab === 'payments'
                         ? <HistoryCard record={item as any} />
-                        : <BillCard record={item} type={activeTab === 'soa' ? 'soa' : 'invoice'} primaryColor={primaryColor} onDownload={handleDownloadPDF} />
+                        : <BillCard 
+                            record={item} 
+                            type={activeTab === 'soa' ? 'soa' : 'invoice'} 
+                            primaryColor={primaryColor} 
+                            onDownload={handleDownloadPDF}
+                            isGenerating={isGeneratingPDF === item.id}
+                          />
                 )}
                 ListFooterComponent={renderPagination}
             />

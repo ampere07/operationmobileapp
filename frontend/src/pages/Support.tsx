@@ -33,6 +33,12 @@ interface SupportProps {
   forceLightMode?: boolean;
 }
 
+const formatCurrency = (amount: number) => {
+  const isNegative = (amount || 0) < 0;
+  const formatted = Math.abs(amount || 0).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+  return `₱${isNegative ? '-' : ''}${formatted}`;
+};
+
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 const SupportCard = React.memo<{
@@ -89,26 +95,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const userAccountNo = customerDetail?.billingAccount?.accountNo || '';
   const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
   const displayName = customerDetail?.fullName || 'Customer';
-  const initials = (customerDetail?.firstName && customerDetail?.lastName)
-    ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
-    : displayName.split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
-
-  let dueDateString = 'Upon Receipt';
-  if (customerDetail?.billingAccount?.billingDay) {
-    const today = new Date();
-    const billingDay = customerDetail.billingAccount.billingDay;
-    let dueYear = today.getFullYear();
-    let dueMonth = today.getMonth();
-    if (today.getDate() > billingDay) {
-      dueMonth++;
-      if (dueMonth > 11) {
-        dueMonth = 0;
-        dueYear++;
-      }
-    }
-    const nextDueDate = new Date(dueYear, dueMonth, billingDay);
-    dueDateString = `${String(nextDueDate.getMonth() + 1).padStart(2, '0')}/${String(nextDueDate.getDate()).padStart(2, '0')}/${nextDueDate.getFullYear()}`;
-  }
   const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const primaryColor = colorPalette?.primary || '#ef4444';
@@ -501,52 +487,6 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     <View style={s.container}>
       <View style={[s.header, { paddingTop: isMobile ? (isShort ? 20 : 60) : 20, gap: isShort ? 12 : 24, paddingHorizontal: isMobile ? 16 : 24 }]}>
         
-        {/* Balance Card Section */}
-        <View style={s.balanceCard}>
-          <LinearGradient
-            colors={[primaryColor, '#000000']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[s.gradientInner, { paddingVertical: isShort ? 24 : 32 }]}
-          >
-            <View style={[s.profileRow, { marginBottom: isShort ? 16 : 32 }]}>
-              <View style={[s.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
-                <Text style={[s.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
-              </View>
-              <View>
-                <Text style={[s.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
-                <Text style={s.customerAccountText}>Account No: {userAccountNo}</Text>
-              </View>
-            </View>
-
-            <View style={s.billingRow}>
-              <View style={s.billingLeft}>
-                <Text style={s.balanceLabelCard}>Total Amount</Text>
-                <Text style={[s.balanceAmountTextCard, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
-                  {formatCurrency(balance)}
-                </Text>
-              </View>
-
-              <View style={s.billingRightCol}>
-                <View style={s.dueDateContainerCard}>
-                  <Text style={s.infoTextCard}>Due Date: <Text style={s.infoValueCard}>{dueDateString}</Text></Text>
-                </View>
-
-                <Pressable
-                  onPress={handlePayNow}
-                  disabled={isPaymentProcessing}
-                  style={[s.payBtnCard, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
-                >
-                  <View style={s.payBtnInner}>
-                    <Text style={s.payBtnTextCard}>
-                      {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
-                    </Text>
-                  </View>
-                </Pressable>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
 
         <View style={s.titleContainer}>
           <Text style={s.title}>Support Center</Text>
@@ -606,7 +546,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         onPress={() => setShowNewRequestModal(true)}
         style={{
           position: 'absolute',
-          bottom: isMobile ? 20 : 30,
+          bottom: isMobile ? 110 : 30,
           right: isMobile ? 20 : 30,
           width: 60,
           height: 60,

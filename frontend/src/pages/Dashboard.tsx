@@ -279,22 +279,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
                                 {/* Bottom Navigation Bar */}
                                 {showSidebar && (
-                                    <View style={{ flexShrink: 0 }}>
-                                        <Sidebar
-                                            activeSection={activeSection}
-                                            onSectionChange={handleSectionChange}
-                                            userRole={userData?.role || ''}
-                                            userEmail={userData?.email || ''}
-                                            roleId={userData?.role_id}
-                                        />
-                                    </View>
+                                    <Sidebar
+                                        activeSection={activeSection}
+                                        onSectionChange={handleSectionChange}
+                                        userRole={userData?.role || ''}
+                                        userEmail={userData?.email || ''}
+                                        roleId={userData?.role_id}
+                                    />
                                 )}
 
                                 {/* Persistent Floating Messenger Button for Customers (role_id 3) */}
                                 {String(userData?.role_id) === '3' && activeSection !== 'menu' && (
                                     <View style={{
                                         position: 'absolute',
-                                        bottom: 95,
+                                        bottom: 110,
                                         left: 20,
                                         zIndex: 99999,
                                         elevation: 10,

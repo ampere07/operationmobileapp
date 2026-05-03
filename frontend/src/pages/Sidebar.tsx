@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Animated, useWindowDimensions } from 'react-native';
 import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List, ClipboardCheck } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -23,6 +23,8 @@ interface MenuItem {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userRole, roleId }) => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const { width } = useWindowDimensions();
+  const glideAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchColorPalette = async () => {
@@ -36,8 +38,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
 
     fetchColorPalette();
   }, []);
-
-  // No longer returning null for customers to allow showing the updated bottom navbar
 
   const menuItems: MenuItem[] = [
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
@@ -71,19 +71,60 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
 
   const filteredMenuItems = filterMenuByRole(menuItems);
 
+  useEffect(() => {
+    const activeIndex = filteredMenuItems.findIndex(item => item.id === activeSection);
+    if (activeIndex !== -1) {
+      Animated.spring(glideAnim, {
+        toValue: activeIndex,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 60
+      }).start();
+    }
+  }, [activeSection, filteredMenuItems]);
+
   return (
     <View style={{
-      width: '100%',
-      height: 75,
+      position: 'absolute',
+      bottom: 25,
+      left: 16,
+      right: 16,
+      height: 68,
       flexDirection: 'row',
       backgroundColor: '#ffffff',
-      borderTopWidth: 1,
-      borderTopColor: '#d1d5db',
+      borderRadius: 34,
       justifyContent: 'space-around',
       alignItems: 'center',
-      paddingHorizontal: 10,
-      paddingBottom: 15,
+      paddingHorizontal: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: '#f1f5f9',
     }}>
+      {/* Gliding Pill Indicator */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          height: 48,
+          width: (width - 32 - 24) / filteredMenuItems.length - 8,
+          backgroundColor: (colorPalette?.primary || '#7c3aed') + '15',
+          borderRadius: 24,
+          transform: [{
+            translateX: glideAnim.interpolate({
+              inputRange: filteredMenuItems.map((_, i) => i),
+              outputRange: filteredMenuItems.map((_, i) => {
+                const itemWidth = (width - 32 - 24) / filteredMenuItems.length;
+                return (i * itemWidth) + 12 + 4; // Adjusted for padding and centering
+              })
+            })
+          }],
+          left: 0,
+        }}
+      />
+
       {filteredMenuItems.map((item) => {
         const isActive = activeSection === item.id;
         const IconComponent = item.icon;
@@ -93,13 +134,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
             key={item.id}
             onPress={() => onSectionChange(item.id)}
             style={{
+              flex: 1,
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 8,
+              height: '100%',
+              zIndex: 10,
             }}
           >
             <IconComponent
-              size={24}
+              size={22}
               color={isActive
                 ? (colorPalette?.primary || '#7c3aed')
                 : '#4b5563'}
@@ -107,6 +150,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
             <Text style={{
               fontSize: 10,
               marginTop: 4,
+              fontWeight: isActive ? '700' : '500',
               color: isActive
                 ? (colorPalette?.primary || '#7c3aed')
                 : '#4b5563'

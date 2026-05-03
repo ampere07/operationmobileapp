@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
   mapContainer: { flex: 1, position: 'relative' },
   map: { ...StyleSheet.absoluteFillObject },
   pausedMap: { alignItems: 'center', justifyContent: 'center' },
-  mapActionButtons: { position: 'absolute', bottom: 24, right: 24, alignItems: 'center' },
+  mapActionButtons: { position: 'absolute', bottom: 100, right: 24, alignItems: 'center' },
   mapActionButton: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84 },
   loaderOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   loaderContent: { alignItems: 'center', gap: 12 },

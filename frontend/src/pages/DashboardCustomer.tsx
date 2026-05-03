@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
-import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle } from 'lucide-react-native';
+import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle, RefreshCcw } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { paymentService, PendingPayment } from '../services/paymentService';
@@ -15,14 +15,7 @@ interface Payment {
     reference: string;
     amount: number;
     source: string;
-}
-
-interface Referral {
-    id: string;
-    date: string;
-    name: string;
-    stage: string;
-    status: 'Done' | 'Failed' | 'Scheduled' | 'Pending';
+    status?: string;
 }
 
 interface DashboardCustomerProps {
@@ -35,11 +28,21 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const isShort = height < 700;
     const { customerDetail, payments, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
     const [user, setUser] = useState<any>(null);
-    const [referrals, setReferrals] = useState<Referral[]>([]);
 
     const [isPaymentProcessing, setIsPaymentProcessing] = useState<boolean>(false);
     const [showPaymentVerifyModal, setShowPaymentVerifyModal] = useState<boolean>(false);
     const [paymentAmount, setPaymentAmount] = useState<number>(0);
+
+    const latestPayments = useMemo(() => {
+        return (payments || []).slice(0, 3);
+    }, [payments]);
+
+    const formatDate = useCallback((dateStr?: string) => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    }, []);
     const [showPaymentLinkModal, setShowPaymentLinkModal] = useState<boolean>(false);
     const [paymentLinkData, setPaymentLinkData] = useState<{ referenceNo: string; amount: number; paymentUrl: string } | null>(null);
     const [showPendingPaymentModal, setShowPendingPaymentModal] = useState<boolean>(false);
@@ -49,17 +52,43 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
     const [currentAdPos, setCurrentAdPos] = useState(1);
     const [refreshing, setRefreshing] = useState(false);
+    const [isCardFlipped, setIsCardFlipped] = useState(false);
+    const flipAnim = React.useRef(new Animated.Value(0)).current;
     const adsScrollRef = React.useRef<ScrollView>(null);
 
     const ads = [
-        { id: 1, title: 'Payment Made Easy', desc: 'Secured Payment by Xendit', color: colorPalette?.primary || '#ef4444' },
-        { id: 2, title: 'Upgrade Now', desc: 'Boost your speed message us', color: '#3b82f6' },
-        { id: 3, title: 'Dont forget to pay', desc: 'Pay now', color: '#10b981' }
+        { id: 1, title: 'Payment Made Easy', desc: 'Secure payments powered by Xendit. Fast & Reliable.', colors: ['#6366f1', '#3730a3'] as string[] },
+        { id: 2, title: 'Upgrade Your Plan', desc: 'Need more speed? Contact us to boost your connection today.', colors: ['#3b82f6', '#1e3a8a'] as string[] },
+        { id: 3, title: 'Stay Connected', desc: 'Settle your balance easily to avoid service interruption.', colors: ['#10b981', '#064e3b'] as string[] }
     ];
 
     const displayAds = [ads[ads.length - 1], ...ads, ads[0]];
 
     const pan = React.useRef(new Animated.ValueXY()).current;
+    const stackAnim = React.useRef(new Animated.Value(0)).current;
+
+    const handleFlipCard = useCallback(() => {
+        // Phase 1: squish card horizontally (like turning sideways)
+        Animated.timing(flipAnim, {
+            toValue: 1,
+            duration: 250,
+            useNativeDriver: true,
+        }).start(() => {
+            // Swap content at the midpoint
+            setIsCardFlipped(prev => !prev);
+            // Phase 2: expand back out
+            Animated.timing(flipAnim, {
+                toValue: 0,
+                duration: 250,
+                useNativeDriver: true,
+            }).start();
+        });
+    }, [flipAnim]);
+
+    const cardScaleY = flipAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0]
+    });
 
     // Reset pan position when modal opens
     useEffect(() => {
@@ -115,6 +144,8 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const address = customerDetail?.address || 'No Address';
     const installationDate = customerDetail?.billingAccount?.dateInstalled || 'Pending';
     const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
+    const usageType = customerDetail?.technicalDetails?.usageType || 'N/A';
+    const emailAddress = customerDetail?.emailAddress || user?.email || 'N/A';
 
     let dueDateString = 'Upon Receipt';
     if (customerDetail?.billingAccount?.billingDay) {
@@ -138,7 +169,6 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
     useEffect(() => {
         const loadData = async () => {
-            const storedUser = await AsyncStorage.getItem('authData');
             if (storedUser) setUser(JSON.parse(storedUser));
 
             if (accountNo && accountNo !== 'N/A') {
@@ -154,6 +184,22 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         silentRefresh();
     }, [accountNo]);
 
+    useEffect(() => {
+        if (ads.length > 0) {
+            const adTimer = setInterval(() => {
+                Animated.timing(stackAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    useNativeDriver: true,
+                }).start(() => {
+                    setCurrentAdPos(prev => (prev % ads.length) + 1);
+                    stackAnim.setValue(0);
+                });
+            }, 5000);
+            return () => clearInterval(adTimer);
+        }
+    }, [ads.length, width]);
+
 
 
     useEffect(() => {
@@ -168,37 +214,6 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
         fetchColorPalette();
     }, []);
-
-    useEffect(() => {
-        if (ads.length > 0) {
-            const adWidth = width - (isMobile ? 32 : 48);
-            const timer = setInterval(() => {
-                const nextPos = currentAdPos + 1;
-                adsScrollRef.current?.scrollTo({ x: nextPos * adWidth, animated: true });
-
-                // Position update and infinite jump will be handled by onMomentumScrollEnd
-                // via a small delay to allow the animation to finish
-                setTimeout(() => {
-                    handleScrollEnd(nextPos);
-                }, 500);
-            }, 3000);
-            return () => clearInterval(timer);
-        }
-    }, [currentAdPos, width, isMobile]);
-
-    const handleScrollEnd = (pos: number) => {
-        const adWidth = width - (isMobile ? 32 : 48);
-        let finalPos = pos;
-
-        if (pos <= 0) {
-            finalPos = ads.length;
-            adsScrollRef.current?.scrollTo({ x: finalPos * adWidth, animated: false });
-        } else if (pos >= displayAds.length - 1) {
-            finalPos = 1;
-            adsScrollRef.current?.scrollTo({ x: finalPos * adWidth, animated: false });
-        }
-        setCurrentAdPos(finalPos);
-    };
 
     const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
@@ -397,100 +412,183 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
 
                 <View style={styles.contentGap}>
-                    <View style={styles.balanceCard}>
+                    <Animated.View style={[styles.balanceCard, { transform: [{ scaleY: cardScaleY }] }]}>
                         <LinearGradient
-                            colors={[colorPalette?.primary || '#ef4444', '#000000']}
+                            colors={isCardFlipped ? ['#000000', colorPalette?.primary || '#ef4444'] : [colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={[styles.gradientInner, { paddingVertical: isShort ? 24 : 32 }]}
+                            style={[styles.gradientInner, { paddingVertical: isShort ? 24 : 32, height: isShort ? 200 : 230 }]}
                         >
-                            <View style={[styles.profileRow, { marginBottom: isShort ? 16 : 32 }]}>
-                                <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
-                                    <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+                            <View style={[styles.profileRow, { marginBottom: isShort ? 16 : 32, justifyContent: 'space-between' }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                    <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
+                                        <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
+                                        <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
+                                        {isCardFlipped && <Text style={styles.customerAccountText}>{emailAddress}</Text>}
+                                    </View>
                                 </View>
-                                <View>
-                                    <Text style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
-                                    <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
-                                </View>
+                                <Pressable 
+                                    onPress={handleFlipCard}
+                                    style={({ pressed }) => ({
+                                        opacity: pressed ? 0.6 : 1,
+                                        padding: 8
+                                    })}
+                                >
+                                    <RefreshCcw size={20} color="#ffffff" />
+                                </Pressable>
                             </View>
 
-                            <View style={styles.billingRow}>
-                                <View style={styles.billingLeft}>
-                                    <Text style={styles.balanceLabel}>Total Amount</Text>
-                                    <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
-                                        {formatCurrency(balance)}
-                                    </Text>
-                                </View>
-
-                                <View style={styles.billingRightCol}>
-                                    <View style={styles.dueDateContainer}>
-                                        <Text style={styles.infoText}>Due Date: <Text style={styles.infoValue}>{dueDateString}</Text></Text>
+                            {!isCardFlipped ? (
+                                <View style={{ minHeight: isShort ? 80 : 90 }}>
+                                <View style={styles.billingRow}>
+                                    <View style={styles.billingLeft}>
+                                        <Text style={styles.balanceLabel}>Total Amount</Text>
+                                        <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
+                                            {formatCurrency(balance)}
+                                        </Text>
                                     </View>
 
-                                    <Pressable
-                                        onPress={handlePayNow}
-                                        disabled={isPaymentProcessing}
-                                        style={[styles.payBtn, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
-                                    >
-                                        <View style={styles.payBtnInner}>
-                                            <Text style={styles.payBtnText}>
-                                                {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
-                                            </Text>
+                                    <View style={styles.billingRightCol}>
+                                        <View style={styles.dueDateContainer}>
+                                            <Text style={styles.infoText}>Due Date: <Text style={styles.infoValue}>{dueDateString}</Text></Text>
                                         </View>
-                                    </Pressable>
+
+                                        <Pressable
+                                            onPress={handlePayNow}
+                                            disabled={isPaymentProcessing}
+                                            style={[styles.payBtn, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
+                                        >
+                                            <View style={styles.payBtnInner}>
+                                                <Text style={styles.payBtnText}>
+                                                    {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
+                                                </Text>
+                                            </View>
+                                        </Pressable>
+                                    </View>
                                 </View>
-                            </View>
+                                </View>
+                            ) : (
+                                <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4 }}>Plan</Text>
+                                            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '700' }}>{planName}</Text>
+                                        </View>
+                                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4 }}>Usage Type</Text>
+                                            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '700' }}>{usageType}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
                         </LinearGradient>
-                    </View>
+                    </Animated.View>
 
 
 
 
-                    {/* My Referrals Section */}
+                    {/* Payment History Section */}
                     <View style={styles.sectionGap}>
                         <View style={styles.sectionHeader}>
-                            <Users size={20} color={colorPalette?.primary || '#ef4444'} />
-                            <Text style={styles.sectionTitle}>My Referrals</Text>
+                            <Text style={styles.sectionTitle}>Payment History</Text>
                         </View>
 
-                        <ScrollView
-                            style={styles.referralScroll}
-                            showsVerticalScrollIndicator={false}
-                            nestedScrollEnabled={true}
-                            contentContainerStyle={styles.referralContent}
-                        >
-                            <View style={styles.emptyReferrals}>
-                                <Text style={styles.emptyReferralsText}>No referrals</Text>
-                            </View>
-                        </ScrollView>
+                        <View style={styles.referralContent}>
+                            {latestPayments.length > 0 ? (
+                                latestPayments.map((payment: any) => (
+                                    <View key={payment.id} style={styles.paymentItem}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text numberOfLines={1} ellipsizeMode="tail" style={styles.paymentRef}>Ref: {payment.reference}</Text>
+                                            <Text style={styles.paymentDate}>{formatDate(payment.date)}</Text>
+                                        </View>
+                                        <View style={styles.alignEnd}>
+                                            <Text style={styles.paymentAmountValue}>{formatCurrency(payment.amount)}</Text>
+                                            <View style={[styles.statusBadgeSmall, { backgroundColor: 'transparent' }]}>
+                                                <Text style={[
+                                                    styles.statusTextSmall, 
+                                                    { color: (payment.status === 'Completed' || payment.status === 'PAID' || payment.status === 'Success' || payment.status === 'Done') ? '#16a34a' : (payment.status === 'Failed' ? '#ef4444' : '#374151') }
+                                                ]}>
+                                                    {(payment.status || 'Posted').toUpperCase()}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))
+                            ) : (
+                                <View style={styles.emptyReferrals}>
+                                    <Text style={styles.emptyReferralsText}>No payments found</Text>
+                                </View>
+                            )}
+                        </View>
                         <View style={styles.divider} />
                         {/* Promotional Ads Section */}
                         <View style={styles.adsWrapper}>
                             <View style={styles.adsInner}>
-                                <ScrollView
-                                    ref={adsScrollRef}
-                                    horizontal
-                                    pagingEnabled
-                                    showsHorizontalScrollIndicator={false}
-                                    scrollEnabled={true}
-                                    onMomentumScrollEnd={(e) => {
+                                <View style={{ height: 160, position: 'relative' }}>
+                                    {[2, 1, 0].map((stackIdx) => {
+                                        const actualActiveIndex = (currentAdPos - 1 + ads.length) % ads.length;
+                                        const adIdx = (actualActiveIndex + stackIdx) % ads.length;
+                                        const ad = ads[adIdx];
                                         const adWidth = width - (isMobile ? 32 : 48);
-                                        const newPos = Math.round(e.nativeEvent.contentOffset.x / adWidth);
-                                        handleScrollEnd(newPos);
-                                    }}
-                                    style={{ borderRadius: 20 }}
-                                    contentOffset={{ x: width - (isMobile ? 32 : 48), y: 0 }}
-                                >
-                                    {displayAds.map((ad, idx) => (
-                                        <View
-                                            key={`${ad.id}-${idx}`}
-                                            style={[styles.adCard, { width: width - (isMobile ? 32 : 48), backgroundColor: ad.color }]}
-                                        >
-                                            <Text style={styles.adTitle}>{ad.title}</Text>
-                                            <Text style={styles.adDesc}>{ad.desc}</Text>
-                                        </View>
-                                    ))}
-                                </ScrollView>
+                                        
+                                        const translateX = stackIdx === 0 
+                                            ? stackAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -width] })
+                                            : 0;
+                                        
+                                        const scale = stackAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [1 - (stackIdx * 0.05), 1 - (Math.max(0, stackIdx - 1) * 0.05)]
+                                        });
+
+                                        const translateY = stackAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [stackIdx * 8, (Math.max(0, stackIdx - 1) * 8)]
+                                        });
+
+                                        const opacity = stackAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [1 - (stackIdx * 0.3), 1 - (Math.max(0, stackIdx - 1) * 0.3)]
+                                        });
+                                        
+                                        return (
+                                            <Animated.View
+                                                key={ad.id}
+                                                style={[
+                                                    styles.adCard,
+                                                    {
+                                                        width: adWidth,
+                                                        position: 'absolute',
+                                                        transform: [
+                                                            { scale },
+                                                            { translateX },
+                                                            { translateY }
+                                                        ],
+                                                        zIndex: 10 - stackIdx,
+                                                        opacity
+                                                    }
+                                                ]}
+                                            >
+                                                <LinearGradient
+                                                    colors={ad.colors as string[]}
+                                                    start={{ x: 0, y: 0 }}
+                                                    end={{ x: 1, y: 1 }}
+                                                    style={StyleSheet.absoluteFill}
+                                                />
+                                                {/* Design Elements */}
+                                                <View style={[styles.adCircle, { top: -20, right: -20, width: 100, height: 100, opacity: 0.2 }]} />
+                                                <View style={[styles.adCircle, { bottom: -50, left: -30, width: 150, height: 150, opacity: 0.1 }]} />
+                                                
+                                                <View style={styles.adContent}>
+                                                    <Text style={styles.adTitle}>{ad.title}</Text>
+                                                    <Text style={styles.adDesc}>{ad.desc}</Text>
+                                                </View>
+                                            </Animated.View>
+                                        );
+                                    })}
+                                </View>
 
                                 <View style={styles.dotsRow}>
                                     {ads.map((_, i) => {
@@ -764,16 +862,33 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
     referralScroll: { maxHeight: 270 },
     referralContent: { gap: 12, paddingBottom: 8 },
-    emptyReferrals: { padding: 24, alignItems: 'center', justifyContent: 'center' },
+    paymentItem: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        paddingVertical: 14, 
+        backgroundColor: 'transparent', 
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9'
+    },
+    paymentRef: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
+    paymentDate: { fontSize: 12, color: '#64748b', marginTop: 2 },
+    paymentAmountValue: { fontSize: 15, fontWeight: '800', color: '#1e293b', textAlign: 'right' },
+    statusBadgeSmall: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginTop: 4, alignSelf: 'flex-end' },
+    statusTextSmall: { fontSize: 10, fontWeight: '800' },
+    alignEnd: { alignItems: 'flex-end' },
+    emptyReferrals: { padding: 40, alignItems: 'center', justifyContent: 'center' },
     emptyReferralsText: { color: '#6b7280', fontSize: 14 },
     divider: { height: 2, backgroundColor: '#e2e8f0', marginVertical: 16, width: '80%', alignSelf: 'center', borderRadius: 1 },
     adsWrapper: { gap: 0 },
     adsInner: { position: 'relative' },
-    adCard: { height: 120, borderRadius: 20, padding: 24, justifyContent: 'center' },
-    adTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
-    adDesc: { color: '#ffffff', opacity: 0.9, marginTop: 4 },
-    dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 12 },
-    dotBase: { width: 8, height: 8, borderRadius: 4 },
+    adCard: { height: 140, borderRadius: 24, overflow: 'hidden', justifyContent: 'center', position: 'relative' },
+    adContent: { paddingHorizontal: 24, zIndex: 10 },
+    adTitle: { color: '#ffffff', fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+    adDesc: { color: '#ffffff', opacity: 0.85, marginTop: 6, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+    adCircle: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 100 },
+    dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 14 },
+    dotBase: { width: 6, height: 6, borderRadius: 3 },
     // Modal styles
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
     modalOverlayDark: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },

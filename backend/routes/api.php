@@ -305,6 +305,7 @@ Route::prefix('service-charges')->group(function () {
 Route::prefix('statement-of-accounts')->group(function () {
     Route::get('/by-account/{accountNo}', [RelatedDataController::class , 'getStatementOfAccountsByAccount']);
     Route::get('/{id}', [RelatedDataController::class , 'getStatementOfAccountById']);
+    Route::post('/{id}/generate-pdf', [RelatedDataController::class, 'generateSoaPdf']);
 });
 
 // Invoice Routes
