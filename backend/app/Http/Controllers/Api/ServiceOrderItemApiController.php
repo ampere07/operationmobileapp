@@ -255,5 +255,92 @@ class ServiceOrderItemApiController extends Controller
             ], 500);
         }
     }
+
+    public function getByServiceOrderId($serviceOrderId)
+    {
+        try {
+            $items = ServiceOrderItem::where('service_order_id', $serviceOrderId)->get();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $items
+            ]);
+        } catch (\Exception $e) {
+            Log::error('ServiceOrderItemApiController::getByServiceOrderId - Error', [
+                'service_order_id' => $serviceOrderId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching service order items: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+
+    public function updateByServiceOrderId(Request $request, $serviceOrderId)
+    {
+        try {
+            Log::info('ServiceOrderItemApiController::updateByServiceOrderId - Request received', [
+                'service_order_id' => $serviceOrderId,
+                'payload' => $request->all()
+            ]);
+
+            $validator = Validator::make($request->all(), [
+                'items' => 'required|array',
+                'items.*.item_name' => 'required|string|max:255',
+                'items.*.quantity' => 'required|integer|min:1',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $items = $request->input('items');
+            
+            // Delete existing items for this service order to sync
+            ServiceOrderItem::where('service_order_id', $serviceOrderId)->delete();
+            
+            $insertedItems = [];
+            foreach ($items as $item) {
+                $itemData = [
+                    'service_order_id' => $serviceOrderId,
+                    'item_name' => $item['item_name'],
+                    'quantity' => $item['quantity'],
+                    'is_pullout' => $item['is_pullout'] ?? false,
+                    'serial_number' => $item['serial_number'] ?? null,
+                ];
+                
+                // Add optional item_id if present
+                if (isset($item['item_id'])) {
+                    $itemData['item_id'] = $item['item_id'];
+                }
+
+                $insertedItems[] = ServiceOrderItem::create($itemData);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Service order items updated successfully',
+                'data' => $insertedItems,
+                'count' => count($insertedItems)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('ServiceOrderItemApiController::updateByServiceOrderId - Error', [
+                'service_order_id' => $serviceOrderId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating service order items: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
 

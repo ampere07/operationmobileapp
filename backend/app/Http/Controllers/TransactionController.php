@@ -1050,11 +1050,8 @@ class TransactionController extends Controller
                 return 'balance_positive';
             }
 
-            // Step 2: Check if billing status is NOT 1 (Active)
-            if ($billingAccount->billing_status_id == 1) {
-                \Log::info('[TRANSACTION RECONNECT SKIP] Account is already Active (Status ID: 1)');
-                return 'already_active';
-            }
+            // Step 2: Check if already active (we'll still proceed to reconnect if needed)
+            $isAlreadyActive = ($billingAccount->billing_status_id == 1);
 
             // Step 3: Get account details (PPPoE Username and Plan)
             // Join with technical_details for username, and customers for plan
@@ -1077,17 +1074,7 @@ class TransactionController extends Controller
                 \Log::info('[TRANSACTION RECONNECT SKIP] No plan found');
                 return 'no_plan';
             }
-
-            \Log::info('[TRANSACTION RECONNECT PROCEED] Conditions met - Status not Active, Balance: ₱' . $balance);
-
-            // Step 4: Update billing_status_id to 1 (Active) BEFORE reconnecting
-            // The user requested: "it will update the billing_status_id of that account_no to 1 and after the update it will use the reconnectUser"
-            $billingAccount->billing_status_id = 1;
-            $billingAccount->updated_at = now();
-            $billingAccount->updated_by = Auth::id();
-            $billingAccount->save();
-
-            \Log::info('[TRANSACTION RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
+            \Log::info('[TRANSACTION RECONNECT PROCEED] Conditions met - Proceeding with reconnection. Current Status Active: ' . ($isAlreadyActive ? 'Yes' : 'No') . ', Balance: ₱' . $balance);
 
             // Step 5: Prepare parameters for ManualRadiusOperationsService
             $params = [
@@ -1110,6 +1097,17 @@ class TransactionController extends Controller
 
             if ($result['status'] === 'success') {
                 \Log::info('[TRANSACTION RECONNECT SUCCESS] Reconnection and Session Kill completed successfully');
+
+                // Step 7: Update billing_status_id to 1 (Active) if not already 1
+                if (!$isAlreadyActive) {
+                    $billingAccount->billing_status_id = 1;
+                    $billingAccount->updated_at = now();
+                    $billingAccount->updated_by = Auth::id();
+                    $billingAccount->save();
+                    \Log::info('[TRANSACTION RECONNECT DB] Updated billing_status_id to 1 for Account: ' . $accountNo);
+                } else {
+                    \Log::info('[TRANSACTION RECONNECT DB SKIP] Account already 1, skipping status update');
+                }
 
                 // Send SMS Notification
                 try {

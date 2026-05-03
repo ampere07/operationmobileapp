@@ -4,6 +4,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
 import { Download, FileText, Clock, CheckCircle, File, ChevronLeft, ChevronRight, ReceiptText } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlashList } from '@shopify/flash-list';
 import { paymentService, PendingPayment } from '../services/paymentService';
@@ -143,6 +144,24 @@ const styles = StyleSheet.create({
     cancelBtnText: { color: '#4b5563', fontWeight: '800', fontSize: 16 },
     successDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 26, paddingHorizontal: 10 },
     successBtn: { paddingVertical: 18, borderRadius: 20, width: '100%', alignItems: 'center' },
+    // Balance Card Styles
+    balanceCard: { borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 8, backgroundColor: '#ffffff' },
+    gradientInner: { borderRadius: 24, paddingVertical: 24, paddingHorizontal: 24, position: 'relative', overflow: 'hidden' },
+    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
+    initialsCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.3)' },
+    initialsText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+    customerNameText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', textTransform: 'capitalize' },
+    customerAccountText: { color: '#e5e7eb', fontSize: 11, opacity: 0.9 },
+    billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    billingLeft: { flex: 1 },
+    billingRightCol: { alignItems: 'flex-end', gap: 12 },
+    dueDateContainerCard: { alignItems: 'flex-end' },
+    balanceLabelCard: { color: '#e5e7eb', fontSize: 11, marginBottom: 2 },
+    balanceAmountTextCard: { fontWeight: 'bold', color: '#ffffff' },
+    infoTextCard: { color: '#e5e7eb', fontSize: 11 },
+    infoValueCard: { color: '#ffffff', fontWeight: 'bold', fontSize: 11 },
+    payBtnCard: { borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12 },
+    payBtnTextCard: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 },
 });
 
 const BillCard = React.memo(({ record, type, primaryColor, onDownload }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (url?: string) => void }) => {
@@ -230,9 +249,30 @@ const HistoryCard = React.memo(({ record }: { record: PaymentRecord }) => {
 });
 
 const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
+    const isShort = height < 700;
     const { customerDetail, payments: paymentRecords, soaRecords, invoiceRecords, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
+    const initials = (customerDetail?.firstName && customerDetail?.lastName)
+        ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
+        : (customerDetail?.fullName || 'Customer').split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
+    
+    let dueDateString = 'Upon Receipt';
+    if (customerDetail?.billingAccount?.billingDay) {
+        const today = new Date();
+        const billingDay = customerDetail.billingAccount.billingDay;
+        let dueYear = today.getFullYear();
+        let dueMonth = today.getMonth();
+        if (today.getDate() > billingDay) {
+            dueMonth++;
+            if (dueMonth > 11) {
+                dueMonth = 0;
+                dueYear++;
+            }
+        }
+        const nextDueDate = new Date(dueYear, dueMonth, billingDay);
+        dueDateString = `${String(nextDueDate.getMonth() + 1).padStart(2, '0')}/${String(nextDueDate.getDate()).padStart(2, '0')}/${nextDueDate.getFullYear()}`;
+    }
     const accountNo = customerDetail?.billingAccount?.accountNo || '';
     const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
     const [activeTab, setActiveTab] = useState<'soa' | 'invoices' | 'payments'>(initialTab);
@@ -503,7 +543,55 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
 
     return (
         <View style={styles.container}>
-            <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? 60 : 16 }}>
+            <View style={{ paddingHorizontal: isMobile ? 16 : 24, paddingTop: isMobile ? (isShort ? 20 : 60) : 16, gap: isShort ? 12 : 20 }}>
+                
+                {/* Balance Card Section */}
+                <View style={styles.balanceCard}>
+                    <LinearGradient
+                        colors={[primaryColor, '#000000']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.gradientInner}
+                    >
+                        <View style={styles.profileRow}>
+                            <View style={styles.initialsCircle}>
+                                <Text style={styles.initialsText}>{initials}</Text>
+                            </View>
+                            <View>
+                                <Text style={styles.customerNameText}>{displayName}</Text>
+                                <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.billingRow}>
+                            <View style={styles.billingLeft}>
+                                <Text style={styles.balanceLabelCard}>Total Amount</Text>
+                                <Text style={[styles.balanceAmountTextCard, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
+                                    {formatCurrency(balance)}
+                                </Text>
+                            </View>
+
+                            <View style={styles.billingRightCol}>
+                                <View style={styles.dueDateContainerCard}>
+                                    <Text style={styles.infoTextCard}>Due Date: <Text style={styles.infoValueCard}>{dueDateString}</Text></Text>
+                                </View>
+
+                                <Pressable
+                                    onPress={handlePayNow}
+                                    disabled={isPaymentProcessing}
+                                    style={[styles.payBtnCard, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
+                                >
+                                    <View style={styles.payBtnInner}>
+                                        <Text style={styles.payBtnTextCard}>
+                                            {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
+                                        </Text>
+                                    </View>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </LinearGradient>
+                </View>
+
                 <View style={[styles.tabRow, { position: 'relative' }]}>
                     <Animated.View style={[
                         styles.tabActive,

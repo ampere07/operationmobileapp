@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Events\CustomerViewingUpdate;
-
+use App\Models\ActivityLog;
 class CustomerController extends Controller
 {
     public function broadcastViewing(Request $request): JsonResponse
@@ -323,6 +323,70 @@ class CustomerController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete customer',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function uploadImages(Request $request, $id): JsonResponse
+    {
+        try {
+            $customer = Customer::findOrFail($id);
+            $driveService = resolve(\App\Services\GoogleDriveService::class);
+
+            $folderName = $request->input('folder_name', "(customer) " . trim($customer->first_name . " " . $customer->last_name));
+            $folderId = $driveService->findFolder($folderName) ?? $driveService->createFolder($folderName);
+
+            $imageUrls = [];
+            $fields = [
+                'proof_of_billing' => 'proof_of_billing_url',
+                'government_valid_id' => 'government_valid_id_url',
+                'second_government_valid_id' => 'second_government_valid_id_url',
+                'house_front_picture' => 'house_front_picture_url',
+                'document_attachment' => 'document_attachment_url',
+                'other_isp_bill' => 'other_isp_bill_url'
+            ];
+
+            foreach ($fields as $requestKey => $dbColumn) {
+                if ($request->hasFile($requestKey)) {
+                    $file = $request->file($requestKey);
+                    $fileName = $requestKey . '_' . time() . '.' . $file->getClientOriginalExtension();
+                    $imageUrls[$dbColumn] = $driveService->uploadFile(
+                        $file,
+                        $folderId,
+                        $fileName,
+                        $file->getMimeType()
+                    );
+                }
+            }
+
+            if (!empty($imageUrls)) {
+                $customer->update($imageUrls);
+
+                // Log Activity
+                ActivityLog::log(
+                    'Customer Attachments Uploaded',
+                    "Uploaded " . count($imageUrls) . " attachments for Customer #{$id}",
+                    'info',
+                    [
+                        'resource_type' => 'Customer',
+                        'resource_id' => $id,
+                        'additional_data' => array_keys($imageUrls)
+                    ]
+                );
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Images uploaded successfully',
+                'data' => $imageUrls
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('CustomerController uploadImages error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload images',
                 'error' => $e->getMessage()
             ], 500);
         }

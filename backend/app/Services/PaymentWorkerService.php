@@ -388,11 +388,8 @@ class PaymentWorkerService
                 return 'balance_positive';
             }
 
-            // Step 2: Check if billing status is NOT 1 (Active)
-            if ($billingAccount->billing_status_id == 1) {
-                $this->workerLog("[RECONNECT SKIP] Account is already Active (Status ID: 1)");
-                return 'status_already_active';
-            }
+            // Step 2: Check if already active (we'll still proceed to reconnect if needed)
+            $isAlreadyActive = ($billingAccount->billing_status_id == 1);
 
             // Step 3: Get account details with PPPoE username and plan
             $accountDetails = DB::table('billing_accounts')
@@ -417,18 +414,7 @@ class PaymentWorkerService
                 return 'no_plan';
             }
 
-            $this->workerLog("[RECONNECT PROCEED] Conditions met - Status not Active, Balance: ₱{$balance}");
-
-            // Step 4: Update billing_status_id to 1 (Active) BEFORE calling reconnectUser
-            DB::table('billing_accounts')
-                ->where('id', $billingAccount->id)
-                ->update([
-                    'billing_status_id' => 1,
-                    'updated_at' => now(),
-                    'updated_by' => 'Payment Worker'
-                ]);
-            
-            $this->workerLog("[RECONNECT DB] Updated billing_status_id to 1 for Account: {$accountNo}");
+            $this->workerLog("[RECONNECT PROCEED] Conditions met - Proceeding with reconnection. Current Status Active: " . ($isAlreadyActive ? 'Yes' : 'No') . ", Balance: ₱{$balance}");
 
             // Step 5: Prepare parameters for ManualRadiusOperationsService
             $params = [
@@ -446,6 +432,20 @@ class PaymentWorkerService
             
             if ($result['status'] === 'success') {
                 $this->workerLog("[RECONNECT SUCCESS] Reconnection and Session Kill completed successfully");
+
+                // Step 7: Update billing_status_id to 1 (Active) if not already 1
+                if (!$isAlreadyActive) {
+                    DB::table('billing_accounts')
+                        ->where('id', $billingAccount->id)
+                        ->update([
+                            'billing_status_id' => 1,
+                            'updated_at' => now(),
+                            'updated_by' => 'Payment Worker'
+                        ]);
+                    $this->workerLog("[RECONNECT DB] Updated billing_status_id to 1 for Account: {$accountNo}");
+                } else {
+                    $this->workerLog("[RECONNECT DB SKIP] Account already 1, skipping status update");
+                }
 
                 // Send SMS Notification
                 try {

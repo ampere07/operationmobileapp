@@ -72,10 +72,11 @@ class RadiusReconnectionService
                 ];
             }
 
-            // Clean plan name (use first word only)
-            $rawPlan = $account->desired_plan ?? '';
-            $planParts = explode(' ', $rawPlan);
-            $cleanPlan = $planParts[0];
+            // Clean plan name (strip price suffix but preserve multi-word plan names and names with numbers like "FLASH 1999")
+            // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
+            $cleanPlan = preg_replace('/\s*-\s*.*/', '', $rawPlan);
+            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $cleanPlan);
+            $cleanPlan = trim($cleanPlan);
             $this->writeLog("Raw Plan: '$rawPlan' -> Clean Plan: '$cleanPlan'");
 
             // Perform reconnection using the global ManualRadiusOperationsService

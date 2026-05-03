@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { FileText, Upload, Clock, CheckCircle, Plus, X, ChevronLeft, ChevronRight, MessageSquare, AlertCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as LinkingExpo from 'expo-linking';
+import { paymentService, PendingPayment } from '../services/paymentService';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
@@ -79,10 +82,33 @@ const SupportCard = React.memo<{
 });
 
 const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isMobile = width < 768;
+  const isShort = height < 700;
   const { customerDetail, serviceOrders: requests, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
   const userAccountNo = customerDetail?.billingAccount?.accountNo || '';
+  const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
+  const displayName = customerDetail?.fullName || 'Customer';
+  const initials = (customerDetail?.firstName && customerDetail?.lastName)
+    ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
+    : displayName.split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
+
+  let dueDateString = 'Upon Receipt';
+  if (customerDetail?.billingAccount?.billingDay) {
+    const today = new Date();
+    const billingDay = customerDetail.billingAccount.billingDay;
+    let dueYear = today.getFullYear();
+    let dueMonth = today.getMonth();
+    if (today.getDate() > billingDay) {
+      dueMonth++;
+      if (dueMonth > 11) {
+        dueMonth = 0;
+        dueYear++;
+      }
+    }
+    const nextDueDate = new Date(dueYear, dueMonth, billingDay);
+    dueDateString = `${String(nextDueDate.getMonth() + 1).padStart(2, '0')}/${String(nextDueDate.getDate()).padStart(2, '0')}/${nextDueDate.getFullYear()}`;
+  }
   const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const primaryColor = colorPalette?.primary || '#ef4444';
@@ -146,6 +172,18 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [showNewRequestModal, setShowNewRequestModal] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Payment States
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+  const [showPaymentVerifyModal, setShowPaymentVerifyModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
+  const [paymentLinkData, setPaymentLinkData] = useState<{ referenceNo: string; amount: number; paymentUrl: string } | null>(null);
+  const [showPendingPaymentModal, setShowPendingPaymentModal] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
+
   const ITEMS_PER_PAGE = 5;
   const [currentPage, setCurrentPage] = useState(0);
   const [user, setUser] = useState<any>(null);
@@ -305,6 +343,103 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     }
   };
 
+  // Payment Handlers
+  const handleCloseVerifyModal = useCallback(() => {
+    setShowPaymentVerifyModal(false);
+    setPaymentAmount(balance);
+  }, [balance]);
+
+  const handleCancelPaymentLink = useCallback(() => {
+    setShowPaymentLinkModal(false);
+    setPaymentLinkData(null);
+  }, []);
+
+  const handleCancelPendingPayment = useCallback(() => {
+    setShowPendingPaymentModal(false);
+    setPendingPayment(null);
+  }, []);
+
+  const handlePayNow = useCallback(async () => {
+    setErrorMessage('');
+    setIsPaymentProcessing(true);
+    try {
+      const pending = await paymentService.checkPendingPayment(userAccountNo);
+      if (pending && pending.payment_url) {
+        setPendingPayment(pending);
+        setShowPendingPaymentModal(true);
+      } else {
+        setPaymentAmount(balance);
+        setShowPaymentVerifyModal(true);
+      }
+    } catch (error: any) {
+      console.error('Error checking pending payment:', error);
+      setPaymentAmount(balance);
+      setShowPaymentVerifyModal(true);
+    } finally {
+      setIsPaymentProcessing(false);
+    }
+  }, [userAccountNo, balance]);
+
+  const handleProceedToCheckout = useCallback(async () => {
+    if (paymentAmount < 1) {
+      setErrorMessage('Payment amount must be at least ₱1.00');
+      return;
+    }
+    if (isPaymentProcessing) return;
+    setIsPaymentProcessing(true);
+    setErrorMessage('');
+    try {
+      const deepLink = LinkingExpo.createURL('payment-success');
+      const response = await paymentService.createPayment(userAccountNo, paymentAmount, deepLink);
+      if (response.status === 'success' && response.payment_url) {
+        setShowPaymentVerifyModal(false);
+        setPaymentLinkData({
+          referenceNo: response.reference_no || '',
+          amount: response.amount || paymentAmount,
+          paymentUrl: response.payment_url
+        });
+        setShowPaymentLinkModal(true);
+      } else {
+        throw new Error(response.message || 'Failed to create payment link');
+      }
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to create payment.');
+    } finally {
+      setIsPaymentProcessing(false);
+    }
+  }, [userAccountNo, paymentAmount, isPaymentProcessing]);
+
+  const handleOpenPaymentLink = useCallback(async () => {
+    const url = paymentLinkData?.paymentUrl || pendingPayment?.payment_url;
+    const refNo = paymentLinkData?.referenceNo || pendingPayment?.reference_no || '';
+    if (url) {
+      try {
+        const deepLink = LinkingExpo.createURL('payment-success');
+        await WebBrowser.openAuthSessionAsync(url, deepLink);
+        await silentRefresh();
+        setShowPaymentLinkModal(false);
+        setShowPendingPaymentModal(false);
+        setPaymentLinkData(null);
+        setPendingPayment(null);
+        if (refNo) {
+          try {
+            const statusRes = await paymentService.checkPaymentStatus(refNo);
+            if (statusRes.status === 'success' && statusRes.payment?.status === 'PAID') {
+              setShowPaymentSuccessModal(true);
+            }
+          } catch (err) {
+            console.error('Error checking payment status:', err);
+          }
+        }
+      } catch (error) {
+        console.error('Error opening browser:', error);
+        Linking.openURL(url);
+      }
+    }
+  }, [paymentLinkData, pendingPayment, silentRefresh]);
+
+  const handleResumePendingPayment = handleOpenPaymentLink;
+
   const handleOpenChat = async () => {
     const webUrl = 'https://m.me/atssfiber2022';
     const messengerAppUrl = 'fb-messenger://user-thread/';
@@ -364,7 +499,55 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
 
   return (
     <View style={s.container}>
-      <View style={[s.header, { paddingTop: !isMobile ? 20 : 60 }]}>
+      <View style={[s.header, { paddingTop: isMobile ? (isShort ? 20 : 60) : 20, gap: isShort ? 12 : 24, paddingHorizontal: isMobile ? 16 : 24 }]}>
+        
+        {/* Balance Card Section */}
+        <View style={s.balanceCard}>
+          <LinearGradient
+            colors={[primaryColor, '#000000']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.gradientInner, { paddingVertical: isShort ? 24 : 32 }]}
+          >
+            <View style={[s.profileRow, { marginBottom: isShort ? 16 : 32 }]}>
+              <View style={[s.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
+                <Text style={[s.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+              </View>
+              <View>
+                <Text style={[s.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
+                <Text style={s.customerAccountText}>Account No: {userAccountNo}</Text>
+              </View>
+            </View>
+
+            <View style={s.billingRow}>
+              <View style={s.billingLeft}>
+                <Text style={s.balanceLabelCard}>Total Amount</Text>
+                <Text style={[s.balanceAmountTextCard, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
+                  {formatCurrency(balance)}
+                </Text>
+              </View>
+
+              <View style={s.billingRightCol}>
+                <View style={s.dueDateContainerCard}>
+                  <Text style={s.infoTextCard}>Due Date: <Text style={s.infoValueCard}>{dueDateString}</Text></Text>
+                </View>
+
+                <Pressable
+                  onPress={handlePayNow}
+                  disabled={isPaymentProcessing}
+                  style={[s.payBtnCard, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
+                >
+                  <View style={s.payBtnInner}>
+                    <Text style={s.payBtnTextCard}>
+                      {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
         <View style={s.titleContainer}>
           <Text style={s.title}>Support Center</Text>
         </View>
@@ -878,6 +1061,172 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
           </View>
         </View>
       </Modal>
+      {/* Payment Modals */}
+      <Modal
+        visible={showPaymentVerifyModal}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={handleCloseVerifyModal}
+      >
+        <View style={s.modalOverlayPay}>
+          <Pressable style={s.modalBackdropPay} onPress={handleCloseVerifyModal} />
+          <Animated.View style={[s.modalSheetPay, { transform: [{ translateY: pan.y }] }]}>
+            <View {...panResponder.panHandlers} style={s.modalHeaderPay}>
+              <View style={s.modalHandlePay} />
+              <Text style={s.modalTitlePay}>Confirm Payment</Text>
+            </View>
+            <ScrollView contentContainerStyle={s.modalContentPay} keyboardShouldPersistTaps="handled">
+              <View style={s.verifyBoxPay}>
+                <View style={s.verifyRowMbPay}>
+                  <Text style={s.verifyLabelPay}>Account Name</Text>
+                  <Text style={s.verifyValuePay}>{displayName}</Text>
+                </View>
+                <View style={s.verifyRowPay}>
+                  <Text style={s.verifyLabelPay}>Current Balance</Text>
+                  <Text style={[s.verifyValuePay, { fontWeight: 'bold', color: balance > 0 ? primaryColor : '#16a34a' }]}>
+                    {formatCurrency(balance)}
+                  </Text>
+                </View>
+              </View>
+
+              {errorMessage && (
+                <View style={[s.errorBoxPay, { backgroundColor: primaryColor + '15', borderColor: primaryColor + '30' }]}>
+                  <Text style={[s.errorTextPay, { color: primaryColor }]}>{errorMessage}</Text>
+                </View>
+              )}
+
+              <View style={s.inputWrapPay}>
+                <Text style={s.inputLabelPay}>Payment Amount</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  value={paymentAmount.toString()}
+                  onChangeText={(val) => setPaymentAmount(parseFloat(val) || 0)}
+                  placeholder="0.00"
+                  style={s.inputFieldPay}
+                />
+              </View>
+
+              <Pressable
+                onPress={handleProceedToCheckout}
+                disabled={isPaymentProcessing || paymentAmount < 1}
+                style={[s.primaryBtnPay, { backgroundColor: primaryColor, opacity: (isPaymentProcessing || paymentAmount < 1) ? 0.5 : 1 }]}
+              >
+                <Text style={s.primaryBtnTextPay}>
+                  {isPaymentProcessing ? 'Processing...' : 'Pay Now'}
+                </Text>
+              </Pressable>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPaymentLinkModal && !!paymentLinkData}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={handleCancelPaymentLink}
+      >
+        <View style={s.modalOverlayPay}>
+          <Pressable style={s.modalBackdropPay} onPress={handleCancelPaymentLink} />
+          <Animated.View style={[s.modalSheetPay, { transform: [{ translateY: pan.y }] }]}>
+            <View {...panResponder.panHandlers} style={s.modalHeaderPay}>
+              <View style={s.modalHandlePay} />
+              <Text style={s.modalTitlePay}>Payment Link Created!</Text>
+            </View>
+            <ScrollView contentContainerStyle={s.modalContentPay}>
+              <View style={s.verifyBoxPay}>
+                <View style={s.verifyRowMbPay}>
+                  <Text style={s.verifyLabelPay}>Reference No.</Text>
+                  <Text style={s.verifyValuePay}>{paymentLinkData?.referenceNo}</Text>
+                </View>
+                <View style={s.verifyRowPay}>
+                  <Text style={s.verifyLabelPay}>Amount</Text>
+                  <Text style={[s.verifyValuePay, { fontWeight: 'bold', color: primaryColor }]}>
+                    {formatCurrency(paymentLinkData?.amount || 0)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={s.linkDescPay}>Please click the button below to complete your payment.</Text>
+              <Pressable onPress={handleOpenPaymentLink} style={[s.primaryBtnPay, { backgroundColor: '#16a34a', marginBottom: 12 }]}>
+                <Text style={s.primaryBtnTextPay}>Open Payment Portal</Text>
+              </Pressable>
+              <Pressable onPress={handleCancelPaymentLink}>
+                <Text style={s.closeTextPay}>Maybe Later</Text>
+              </Pressable>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPendingPaymentModal && !!pendingPayment}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={handleCancelPendingPayment}
+      >
+        <View style={s.modalOverlayPay}>
+          <Pressable style={s.modalBackdropPay} onPress={handleCancelPendingPayment} />
+          <Animated.View style={[s.modalSheetPay, { transform: [{ translateY: pan.y }] }]}>
+            <View {...panResponder.panHandlers} style={s.modalHeaderPay}>
+              <View style={s.modalHandlePay} />
+              <Text style={s.modalTitlePay}>Pending Payment Found</Text>
+            </View>
+            <ScrollView contentContainerStyle={s.modalContentPay}>
+              <View style={s.pendingBoxPay}>
+                <View style={s.verifyRowPay}>
+                  <Text style={s.pendingLabelPay}>Amount Due</Text>
+                  <Text style={s.pendingAmountPay}>{formatCurrency(pendingPayment?.amount || 0)}</Text>
+                </View>
+              </View>
+              <Text style={s.pendingDescPay}>You have a pending payment session. Would you like to resume it?</Text>
+              <View style={{ gap: 12 }}>
+                <Pressable onPress={handleResumePendingPayment} style={[s.primaryBtnPay, { backgroundColor: primaryColor }]}>
+                  <Text style={s.primaryBtnTextPay}>Resume Payment</Text>
+                </Pressable>
+                <Pressable onPress={handleCancelPendingPayment} style={s.cancelBtnPay}>
+                  <Text style={s.cancelBtnTextPay}>Cancel</Text>
+                </Pressable>
+              </View>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPaymentSuccessModal}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShowPaymentSuccessModal(false)}
+      >
+        <View style={s.modalOverlayPay}>
+          <Pressable style={s.modalBackdropPay} onPress={() => setShowPaymentSuccessModal(false)} />
+          <Animated.View style={[s.modalSheetPay, { transform: [{ translateY: pan.y }] }]}>
+            <View {...panResponder.panHandlers} style={s.modalHeaderPay}>
+              <View style={s.modalHandlePay} />
+              <Text style={s.modalTitlePay}>Payment Successful!</Text>
+            </View>
+            <ScrollView contentContainerStyle={s.modalContentCenterPay} keyboardShouldPersistTaps="handled">
+              <View style={s.successCirclePay}>
+                <CheckCircle size={48} color="#16a34a" />
+              </View>
+              <Text style={s.successDescPay}>
+                Thank you! Your payment has been processed successfully. Your balance will be updated shortly.
+              </Text>
+              <Pressable onPress={() => setShowPaymentSuccessModal(false)} style={[s.primaryBtnPay, { backgroundColor: primaryColor, width: '100%' }]}>
+                <Text style={s.primaryBtnTextPay}>Great!</Text>
+              </Pressable>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -917,6 +1266,56 @@ const s = StyleSheet.create({
   paginationBtnDisabled: { backgroundColor: '#f3f4f6', opacity: 0.5 },
   paginationText: { fontSize: 14, fontWeight: '700' },
   pageIndicator: { fontSize: 14, color: '#111827', fontWeight: '700' },
+  // Balance Card Styles
+  balanceCard: { borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 8, backgroundColor: '#ffffff', marginBottom: 8, width: '100%' },
+  gradientInner: { borderRadius: 24, paddingHorizontal: 24, position: 'relative', overflow: 'hidden' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  initialsCircle: { backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.3)' },
+  initialsText: { color: '#ffffff', fontWeight: 'bold' },
+  customerNameText: { color: '#ffffff', fontWeight: 'bold', textTransform: 'capitalize' },
+  customerAccountText: { color: '#e5e7eb', fontSize: 11, opacity: 0.9 },
+  billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  billingLeft: { flex: 1 },
+  billingRightCol: { alignItems: 'flex-end', gap: 12 },
+  dueDateContainerCard: { alignItems: 'flex-end' },
+  balanceLabelCard: { color: '#e5e7eb', fontSize: 11, marginBottom: 2 },
+  balanceAmountTextCard: { fontWeight: 'bold', color: '#ffffff' },
+  infoTextCard: { color: '#e5e7eb', fontSize: 11 },
+  infoValueCard: { color: '#ffffff', fontWeight: 'bold', fontSize: 11 },
+  payBtnCard: { borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12 },
+  payBtnInner: { alignItems: 'center' },
+  payBtnTextCard: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 },
+  // Payment Modal Styles
+  modalOverlayPay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalBackdropPay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  modalSheetPay: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, width: '100%', maxHeight: '90%' },
+  modalHeaderPay: { padding: 24, alignItems: 'center' },
+  modalHandlePay: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 },
+  modalTitlePay: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  modalContentPay: { padding: 24 },
+  modalContentCenterPay: { padding: 32, alignItems: 'center' },
+  verifyBoxPay: { backgroundColor: '#f9fafb', padding: 20, borderRadius: 20, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' },
+  verifyRowMbPay: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  verifyRowPay: { flexDirection: 'row', justifyContent: 'space-between' },
+  verifyLabelPay: { color: '#6b7280', fontSize: 14 },
+  verifyValuePay: { fontWeight: '700', color: '#111827' },
+  inputWrapPay: { marginBottom: 24 },
+  inputLabelPay: { fontWeight: '600', marginBottom: 8, color: '#374151' },
+  inputFieldPay: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 12, padding: 12, fontSize: 16, color: '#111827' },
+  primaryBtnPay: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  primaryBtnTextPay: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
+  errorBoxPay: { padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1 },
+  errorTextPay: { fontSize: 14, textAlign: 'center' },
+  linkDescPay: { color: '#4b5563', marginBottom: 24, textAlign: 'center' },
+  closeTextPay: { color: '#6b7280', textAlign: 'center', fontWeight: '600' },
+  pendingBoxPay: { backgroundColor: '#fffbeb', padding: 16, borderRadius: 12, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#f59e0b' },
+  pendingLabelPay: { color: '#92400e', fontSize: 14 },
+  pendingAmountPay: { fontWeight: 'bold', color: '#92400e' },
+  pendingDescPay: { color: '#4b5563', marginBottom: 32, textAlign: 'center' },
+  cancelBtnPay: { paddingVertical: 14, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center' },
+  cancelBtnTextPay: { color: '#4b5563', fontWeight: 'bold' },
+  successCirclePay: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  successDescPay: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 24 },
 });
 
 

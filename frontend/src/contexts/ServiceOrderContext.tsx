@@ -44,6 +44,12 @@ interface ServiceOrder {
     newRouterSn?: string;
     newLcpnap?: string;
     newPlan?: string;
+    newLcp?: string;
+    newNap?: string;
+    newPort?: string;
+    newVlan?: string;
+    routerModel?: string;
+    proofImageUrl?: string;
     clientSignatureUrl?: string;
     image1Url?: string;
     image2Url?: string;
@@ -128,6 +134,12 @@ const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => {
         newRouterSn: order.new_router_sn || '',
         newLcpnap: order.new_lcpnap || '',
         newPlan: order.new_plan || '',
+        newLcp: order.new_lcp || '',
+        newNap: order.new_nap || '',
+        newPort: order.new_port || '',
+        newVlan: order.new_vlan || '',
+        routerModel: order.router_model || '',
+        proofImageUrl: order.proof_image_url || '',
         clientSignatureUrl: order.client_signature_url || '',
         image1Url: order.image1_url || '',
         image2Url: order.image2_url || '',

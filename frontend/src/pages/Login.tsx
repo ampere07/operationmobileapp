@@ -169,7 +169,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const response = await forgotPassword(forgotAccountNo);
       if (response.status === 'success') {
         setForgotMessage(response.message);
-        
+
         // Set 3-minute cooldown
         const expiryTime = Date.now() + (3 * 60 * 1000);
         await AsyncStorage.setItem('forgot_password_expiry', expiryTime.toString());
@@ -243,7 +243,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     }}
                     value={accountNo}
                     onChangeText={setAccountNo}
-                    placeholder="Username or Email"
+                    placeholder="Account No./Username/Email"
                     placeholderTextColor="#6b7280"
                     autoCapitalize="none"
                   />

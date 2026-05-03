@@ -251,9 +251,10 @@ class ManualRadiusOperationsService
                 throw new Exception("Plan is required for reconnect operation");
             }
 
-            // Clean plan name (use first word only)
-            $planParts = explode(' ', $rawPlan);
-            $cleanPlan = $planParts[0];
+            // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
+            $cleanPlan = preg_replace('/\s*-\s*.*/', '', $rawPlan);
+            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $cleanPlan);
+            $cleanPlan = trim($cleanPlan);
             $this->writeLog("Clean Plan: $cleanPlan");
 
             // Get RADIUS configurations

@@ -619,6 +619,15 @@ class JobOrderController extends Controller
                 'start_time' => 'nullable|date',
                 'end_time' => 'nullable|date',
                 'organization_id' => 'nullable|integer',
+                'client_signature_url' => 'nullable|string|max:500',
+                'setup_image_url' => 'nullable|string|max:500',
+                'speedtest_image_url' => 'nullable|string|max:500',
+                'signed_contract_image_url' => 'nullable|string|max:500',
+                'box_reading_image_url' => 'nullable|string|max:500',
+                'router_reading_image_url' => 'nullable|string|max:500',
+                'port_label_image_url' => 'nullable|string|max:500',
+                'house_front_picture_url' => 'nullable|string|max:500',
+                'proof_image_url' => 'nullable|string|max:500',
             ]);
 
             if ($validator->fails()) {
@@ -709,7 +718,12 @@ class JobOrderController extends Controller
                 // Trigger RADIUS account creation
                 $radiusResult = $this->createRadiusAccountInternal($jobOrder);
                 if (!$radiusResult['success']) {
-                    throw new \Exception('radius api error occured contact support');
+                    $detailedError = $radiusResult['error'] ?? $radiusResult['message'] ?? 'radius api error occured contact support';
+                    \Log::error('RADIUS Account Creation Failed during JobOrder Done', [
+                        'job_order_id' => $id,
+                        'radius_error' => $detailedError
+                    ]);
+                    throw new \Exception($detailedError);
                 }
             }
             
@@ -803,7 +817,8 @@ class JobOrderController extends Controller
             ]);
 
             $errorMessage = $e->getMessage();
-            if ($errorMessage === 'radius api error occured contact support') {
+            // Check if it's a RADIUS related error (either the generic one or a detailed one)
+            if (str_contains($errorMessage, 'radius') || str_contains($errorMessage, 'RADIUS') || str_contains($errorMessage, 'HTTP')) {
                 return response()->json([
                     'success' => false,
                     'message' => $errorMessage,
@@ -1522,6 +1537,7 @@ class JobOrderController extends Controller
                 'client_signature_image' => 'nullable|image|max:10240',
                 'speed_test_image' => 'nullable|image|max:10240',
                 'proof_image' => 'nullable|image|max:10240',
+                'house_front_image' => 'nullable|image|max:10240',
             ]);
 
             if ($validator->fails()) {
@@ -1533,162 +1549,62 @@ class JobOrderController extends Controller
             }
 
             $jobOrder = JobOrder::findOrFail($id);
-            $folderName = $request->input('folder_name');
-
-            $driveService = new GoogleDriveService();
+            $applicationId = $jobOrder->application_id ?? $jobOrder->Application_ID;
             
-            $folderId = $driveService->createFolder($folderName);
-
-            $imageUrls = [];
-
-            if ($request->hasFile('signed_contract_image')) {
-                $file = $request->file('signed_contract_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Signed contract received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'signed_contract_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['signed_contract_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
+            if (!$applicationId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Job Order does not have an associated application_id'
+                ], 400);
             }
 
-            if ($request->hasFile('setup_image')) {
-                $file = $request->file('setup_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Setup image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'setup_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['setup_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
+            $imageFields = [
+                'signed_contract_image',
+                'setup_image',
+                'box_reading_image',
+                'router_reading_image',
+                'port_label_image',
+                'client_signature_image',
+                'speed_test_image',
+                'proof_image',
+                'house_front_image'
+            ];
+
+            $queuedCount = 0;
+
+            foreach ($imageFields as $field) {
+                if ($request->hasFile($field)) {
+                    $file = $request->file($field);
+                    $fileSizeKB = round($file->getSize() / 1024, 2);
+                    Log::info("[BACKEND] $field received", [
+                        'size_kb' => $fileSizeKB,
+                        'mime_type' => $file->getMimeType(),
+                    ]);
+
+                    $fileName = $field . '_' . time() . '.' . $file->getClientOriginalExtension();
+                    $localPath = $file->storeAs('images_queue', $fileName, 'public');
+
+                    \App\Models\JobOrderImageQueue::create([
+                        'job_order_id' => $id,
+                        'field_name' => $field,
+                        'local_path' => $localPath,
+                        'original_filename' => $file->getClientOriginalName(),
+                        'status' => 'pending',
+                    ]);
+
+                    $queuedCount++;
+                }
             }
 
-            if ($request->hasFile('box_reading_image')) {
-                $file = $request->file('box_reading_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Box reading image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'box_reading_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['box_reading_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            if ($request->hasFile('router_reading_image')) {
-                $file = $request->file('router_reading_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Router reading image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'router_reading_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['router_reading_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            if ($request->hasFile('port_label_image')) {
-                $file = $request->file('port_label_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Port label image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'port_label_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['port_label_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            if ($request->hasFile('client_signature_image')) {
-                $file = $request->file('client_signature_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Client signature image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'client_signature_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['client_signature_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            if ($request->hasFile('speed_test_image')) {
-                $file = $request->file('speed_test_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Speed test image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'speed_test_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['speedtest_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            if ($request->hasFile('proof_image')) {
-                $file = $request->file('proof_image');
-                $fileSizeKB = round($file->getSize() / 1024, 2);
-                Log::info('[BACKEND] Proof image received', [
-                    'size_kb' => $fileSizeKB,
-                    'size_mb' => round($fileSizeKB / 1024, 2),
-                    'mime_type' => $file->getMimeType(),
-                ]);
-                $fileName = 'proof_' . time() . '.' . $file->getClientOriginalExtension();
-                $imageUrls['proof_image_url'] = $driveService->uploadFile(
-                    $file,
-                    $folderId,
-                    $fileName,
-                    $file->getMimeType()
-                );
-            }
-
-            Log::info('Job order images uploaded successfully', [
+            Log::info('Job order images queued successfully', [
                 'job_order_id' => $id,
-                'folder_name' => $folderName,
-                'folder_id' => $folderId,
-                'image_count' => count($imageUrls),
+                'image_count' => $queuedCount,
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Images uploaded successfully to Google Drive',
-                'data' => $imageUrls,
-                'folder_id' => $folderId,
+                'message' => 'Images queued successfully for background upload',
+                'data' => [],
             ]);
 
         } catch (\Exception $e) {
@@ -1794,9 +1710,12 @@ class JobOrderController extends Controller
             $desiredPlan = $application->desired_plan;
             $plan = $desiredPlan;
             
-            if ($desiredPlan && strpos($desiredPlan, ' - ') !== false) {
-                $parts = explode(' - ', $desiredPlan);
-                $plan = trim($parts[0]);
+            if ($desiredPlan) {
+                // Remove price suffix (e.g., "SWIFT 1000", "STARTER - P799.00", "FLASH 1999")
+                // Strips everything after a hyphen, or space followed by digits/currency
+                $plan = preg_replace('/\s*-\s*.*/', '', $desiredPlan);
+                $plan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $plan);
+                $plan = trim($plan);
             }
             
             try {

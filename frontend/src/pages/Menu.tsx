@@ -5,8 +5,6 @@ import {
     User,
     Settings,
     Bell,
-    Shield,
-    CreditCard,
     LogOut,
     Info,
     Clock,
@@ -27,9 +25,10 @@ interface MenuProps {
 }
 
 const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
-    const { customerDetail, isLoading: contextLoading } = useCustomerDataContext();
+    const isShort = height < 700;
+    const { customerDetail, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
     const [userData, setUserData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -39,11 +38,20 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showTimeInOutModal, setShowTimeInOutModal] = useState(false);
 
+    const initials = (customerDetail?.firstName && customerDetail?.lastName)
+        ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
+        : (customerDetail?.fullName || 'Customer').split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
+
+
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
         const apiUrl = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
         return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
     };
+
+    const handleCancelPendingPayment = useCallback(() => {
+        // Reserved for future use if needed
+    }, []);
 
     useEffect(() => {
         const initialize = async () => {
@@ -72,7 +80,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
         initialize();
     }, []);
 
-    const isTechnician = userData?.role?.toLowerCase() === 'technician' || userData?.role_id === 2;
+    const isTechnician = (typeof userData?.role === 'string' ? userData.role.toLowerCase() : userData?.role?.name?.toLowerCase()) === 'technician' || userData?.role_id === 2;
 
     const menuGroups = [
         {
@@ -89,7 +97,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
     const displayName = customerDetail?.fullName || userData?.full_name || userData?.name || 'User Name';
     const accountNo = customerDetail?.billingAccount?.accountNo || userData?.username || 'username';
     const email = customerDetail?.emailAddress || userData?.email || 'user@example.com';
-    const role = userData?.role?.toUpperCase() || 'ROLE';
+    const role = (typeof userData?.role === 'string' ? userData.role : userData?.role?.name)?.toUpperCase() || 'ROLE';
 
     if (isLoading && !customerDetail) {
         return (
@@ -106,10 +114,10 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                 colors={[colorPalette?.primary || '#ef4444', '#000000']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={s.headerGradient}
+                style={[s.headerGradient, { paddingTop: isShort ? 30 : 60 }]}
             >
                 {/* Logo Section */}
-                <View style={s.logoWrap}>
+                <View style={[s.logoWrap, { marginBottom: isShort ? 20 : 40 }]}>
                     {logoUrl ? (
                         <Image source={{ uri: logoUrl }} style={s.logoImage} />
                     ) : (
@@ -124,17 +132,16 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                     )}
                 </View>
 
-                {/* Profile Section */}
-                <View style={s.profileRow}>
-                    <View style={s.avatarCircle}>
-                        <User color={colorPalette?.primary || '#ef4444'} size={32} />
-                    </View>
-                    <View style={s.profileInfo}>
-                        <Text style={s.profileName}>{displayName}</Text>
-                        <Text style={s.profileUsername}>@{accountNo}</Text>
-                        <Text style={s.profileEmail}>{email}</Text>
-                        <View style={s.roleBadge}>
-                            <Text style={s.roleText}>{role}</Text>
+                {/* Standardized Balance Card */}
+                <View style={s.balanceCard}>
+                    <View style={[s.profileRow, { marginBottom: isShort ? 12 : 24 }]}>
+                        <View style={[s.initialsCircle, { width: isShort ? 56 : 64, height: isShort ? 56 : 64, borderRadius: isShort ? 28 : 32 }]}>
+                            <Text style={[s.initialsText, { fontSize: isShort ? 20 : 24 }]}>{initials}</Text>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                            <Text style={[s.customerNameText, { fontSize: isShort ? 18 : 22, textAlign: 'center' }]}>{displayName}</Text>
+                            <Text style={[s.customerAccountText, { textAlign: 'center', marginTop: 4 }]}>{isTechnician ? 'Username' : 'Account No'}: {accountNo}</Text>
+                            <Text style={[s.customerEmailText, { textAlign: 'center', marginTop: 2 }]}>{email}</Text>
                         </View>
                     </View>
                 </View>
@@ -242,6 +249,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                 userData={userData}
                 colorPalette={colorPalette}
             />
+
         </ScrollView>
     );
 };
@@ -249,8 +257,8 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
 const s = StyleSheet.create({
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
     scrollView: { flex: 1, backgroundColor: '#f9fafb' },
-    headerGradient: { paddingTop: 60, paddingBottom: 30, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
-    logoWrap: { marginBottom: 40, alignItems: 'center' },
+    headerGradient: { paddingBottom: 30, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+    logoWrap: { alignItems: 'center' },
     logoImage: { height: 90, width: 280, resizeMode: 'contain', tintColor: '#ffffff' },
     logoFallbackRow: { flexDirection: 'row', alignItems: 'center' },
     logoCircle: { width: 56, height: 56, borderRadius: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
@@ -263,6 +271,56 @@ const s = StyleSheet.create({
     profileName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff' },
     profileUsername: { fontSize: 15, color: 'rgba(255, 255, 255, 0.9)', fontWeight: '600' },
     profileEmail: { fontSize: 13, color: 'rgba(255, 255, 255, 0.7)', marginTop: 2 },
+    // Standardized Balance Card Styles
+    balanceCard: { width: '100%' },
+    profileRow: { flexDirection: 'column', alignItems: 'center', gap: 16 },
+    initialsCircle: { backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.3)' },
+    initialsText: { color: '#ffffff', fontWeight: 'bold' },
+    customerNameText: { color: '#ffffff', fontWeight: 'bold', textTransform: 'capitalize' },
+    customerAccountText: { color: '#e5e7eb', fontSize: 13, opacity: 0.9 },
+    customerEmailText: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 },
+    billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    billingLeft: { flex: 1 },
+    billingRightCol: { alignItems: 'flex-end', gap: 12 },
+    dueDateContainerCard: { alignItems: 'flex-end' },
+    balanceLabelCard: { color: '#e5e7eb', fontSize: 11, marginBottom: 2 },
+    balanceAmountTextCard: { fontWeight: 'bold', color: '#ffffff' },
+    infoTextCard: { color: '#e5e7eb', fontSize: 11 },
+    infoValueCard: { color: '#ffffff', fontWeight: 'bold', fontSize: 11 },
+    payBtnCard: { borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12 },
+    payBtnInner: { alignItems: 'center' },
+    payBtnTextCard: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 },
+    // Payment Modal Styles
+    modalOverlayPay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    modalBackdropPay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    modalSheetPay: { backgroundColor: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, width: '100%', maxHeight: '90%' },
+    modalHeaderPay: { padding: 24, alignItems: 'center' },
+    modalHandlePay: { width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: 2, marginBottom: 12 },
+    modalTitlePay: { fontSize: 20, fontWeight: '800', color: '#111827' },
+    modalContentPay: { padding: 24 },
+    modalContentCenterPay: { padding: 32, alignItems: 'center' },
+    verifyBoxPay: { backgroundColor: '#f9fafb', padding: 20, borderRadius: 20, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' },
+    verifyRowMbPay: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+    verifyRowPay: { flexDirection: 'row', justifyContent: 'space-between' },
+    verifyLabelPay: { color: '#6b7280', fontSize: 14 },
+    verifyValuePay: { fontWeight: '700', color: '#111827' },
+    inputWrapPay: { marginBottom: 24 },
+    inputLabelPay: { fontWeight: '600', marginBottom: 8, color: '#374151' },
+    inputFieldPay: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 12, padding: 12, fontSize: 16, color: '#111827' },
+    primaryBtnPay: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+    primaryBtnTextPay: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
+    errorBoxPay: { padding: 12, borderRadius: 8, marginBottom: 24, borderWidth: 1 },
+    errorTextPay: { fontSize: 14, textAlign: 'center' },
+    linkDescPay: { color: '#4b5563', marginBottom: 24, textAlign: 'center' },
+    closeTextPay: { color: '#6b7280', textAlign: 'center', fontWeight: '600' },
+    pendingBoxPay: { backgroundColor: '#fffbeb', padding: 16, borderRadius: 12, marginBottom: 24, borderLeftWidth: 4, borderLeftColor: '#f59e0b' },
+    pendingLabelPay: { color: '#92400e', fontSize: 14 },
+    pendingAmountPay: { fontWeight: 'bold', color: '#92400e' },
+    pendingDescPay: { color: '#4b5563', marginBottom: 32, textAlign: 'center' },
+    cancelBtnPay: { paddingVertical: 14, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center' },
+    cancelBtnTextPay: { color: '#4b5563', fontWeight: 'bold' },
+    successCirclePay: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+    successDescPay: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     roleBadge: { backgroundColor: 'rgba(255, 255, 255, 0.25)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start', marginTop: 12 },
     roleText: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
     menuContainer: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },

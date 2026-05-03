@@ -28,6 +28,19 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.20',
+            date: 'May 3, 2026',
+            title: 'UI/UX Overhaul & Technician Workflow Updates',
+            updates: [
+                { text: 'Redesigned Customer Dashboard: Experience a more premium, modern interface with vibrant gradients, glassmorphism effects, and dynamic color palettes.', visibility: 'customer' },
+                { text: 'Streamlined Menu: The Menu page has been simplified by removing redundant billing info and centering user profile details for a cleaner look.', visibility: 'all' },
+                { text: 'Enhanced Mobile Support: Optimized layouts across all pages to ensure a seamless experience on various mobile screen sizes and orientations.', visibility: 'all' },
+                { text: 'Service Order Efficiency: Technicians can now select and copy field values in Service Order Details for easier information sharing.', visibility: 'technician' },
+                { text: 'Simplified Job Order Completion: Removed the mandatory Speed Test image requirement from the technician completion form for a faster workflow.', visibility: 'technician' },
+                { text: 'Technician UI Refinement: The Menu header now displays "Username" instead of "Account No" and includes the email address for technical accounts.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.19',
             date: 'May 3, 2026',
             title: 'Forgot Password & Security Updates',

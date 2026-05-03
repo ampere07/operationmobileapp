@@ -1374,6 +1374,7 @@ Route::prefix('applications')->middleware('auth:sanctum')->group(function () {
     Route::post('/broadcast-viewing', [ApplicationController::class, 'broadcastViewing']);
     Route::get('/{id}', [ApplicationController::class , 'show']);
     Route::put('/{id}', [ApplicationController::class , 'update']);
+    Route::post('/{id}/upload-images', [ApplicationController::class, 'uploadImages']);
     Route::delete('/{id}', [ApplicationController::class , 'destroy']);
 });
 
@@ -2122,7 +2123,8 @@ Route::prefix('customers')->group(function () {
     Route::post('/', [\App\Http\Controllers\CustomerController::class , 'store']);
     Route::get('/{id}', [\App\Http\Controllers\CustomerController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\CustomerController::class , 'update']);
-    Route::delete('/{id}', [\App\Http\Controllers\CustomerController::class , 'destroy']);
+    Route::post('/{id}/upload-images', [\App\Http\Controllers\CustomerController::class, 'uploadImages']);
+    Route::delete('/{id}', [\App\Http\Controllers\CustomerController::class, 'destroy']);
 });
 
 // Billing API Routes - Fetches from customers, billing_accounts, and technical_details
@@ -3480,6 +3482,13 @@ Route::get('/transactions/by-account/{accountNo}', [RelatedDataController::class
 Route::get('/staggered-installations/by-account/{accountNo}', [RelatedDataController::class , 'getStaggeredByAccount']);
 Route::get('/discounts/by-account/{accountNo}', [RelatedDataController::class , 'getDiscountsByAccount']);
 Route::get('/service-orders/by-account/{accountNo}', [RelatedDataController::class , 'getServiceOrdersByAccount']);
+
+// Service Order Items Routes
+Route::get('/service-order-items/{serviceOrderId}', [ServiceOrderItemApiController::class, 'getByServiceOrderId']);
+Route::put('/service-order-items/{serviceOrderId}', [ServiceOrderItemApiController::class, 'updateByServiceOrderId']);
+Route::apiResource('service-order-items', ServiceOrderItemApiController::class)->except(['show', 'update']);
+Route::get('/service-order-items/item/{id}', [ServiceOrderItemApiController::class, 'show']);
+Route::put('/service-order-items/item/{id}', [ServiceOrderItemApiController::class, 'update']);
 Route::get('/reconnection-logs/by-account/{accountNo}', [RelatedDataController::class , 'getReconnectionLogsByAccount']);
 Route::get('/disconnected-logs/by-account/{accountNo}', [RelatedDataController::class , 'getDisconnectedLogsByAccount']);
 Route::get('/details-update-logs/by-account/{accountNo}', [RelatedDataController::class , 'getDetailsUpdateLogsByAccount']);

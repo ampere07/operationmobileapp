@@ -56,7 +56,6 @@ interface JobOrderDoneFormData {
   routerReadingImage: File | null;
   portLabelImage: File | null;
   clientSignatureImage: File | null;
-  speedTestImage: File | null;
   modifiedBy: string;
   modifiedDate: string;
   itemName1: string;
@@ -184,7 +183,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
-    speedTestImage: null,
     modifiedBy: currentUserEmail,
     modifiedDate: new Date().toLocaleString('en-US', {
       month: '2-digit',
@@ -239,7 +237,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: string | null;
     portLabelImage: string | null;
     clientSignatureImage: string | null;
-    speedTestImage: string | null;
     proofImage: string | null;
   }>({
     signedContractImage: null,
@@ -248,7 +245,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
-    speedTestImage: null,
     proofImage: null
   });
 
@@ -403,7 +399,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         routerReadingImage: null,
         portLabelImage: null,
         clientSignatureImage: null,
-        speedTestImage: null,
         modifiedBy: currentUserEmail,
         modifiedDate: new Date().toLocaleString('en-US', {
           month: '2-digit', day: '2-digit', year: 'numeric',
@@ -426,7 +421,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         routerReadingImage: null,
         portLabelImage: null,
         clientSignatureImage: null,
-        speedTestImage: null,
         proofImage: null
       });
       setErrors({});
@@ -852,7 +846,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
       portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
       clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
-      speedTestImage: safeConvert(jobOrderData.speedtest_image_url || jobOrderData.Speedtest_Image_URL),
       proofImage: safeConvert(jobOrderData.proof_image_url || jobOrderData.Proof_Image_URL)
     });
 
@@ -924,7 +917,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     });
   }, []);
 
-  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'speedTestImage' | 'proofImage', file: any) => {
+  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'proofImage', file: any) => {
     setFormData(prev => ({ ...prev, [field]: file }));
     setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
     setErrors(prev => prev[field] ? { ...prev, [field]: '' } : prev);
@@ -1063,11 +1056,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.signedContractImage && !jobOrderData?.signed_contract_image_url && !jobOrderData?.Signed_Contract_Image_URL)
         newErrors.signedContractImage = 'Signed Contract Image is required';
 
-      if (!formData.clientSignatureImage && !jobOrderData?.client_signature_url && !jobOrderData?.Client_Signature_URL)
-        newErrors.clientSignatureImage = 'Client Signature is required';
 
-      if (!formData.speedTestImage && !jobOrderData?.speedtest_image_url && !jobOrderData?.Speedtest_Image_URL)
-        newErrors.speedTestImage = 'Speed Test Image is required';
 
 
     }
@@ -1225,20 +1214,29 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         String(now.getMinutes()).padStart(2, '0') + ':' + 
         String(now.getSeconds()).padStart(2, '0');
 
-      const jobOrderUpdateData: any = {
-        date_installed: updatedFormData.dateInstalled,
-        usage_type: updatedFormData.usageType,
-        router_model: updatedFormData.routerModel,
-        lcpnap: updatedFormData.lcpnap,
-        port: updatedFormData.port,
-        vlan: updatedFormData.vlan,
-        visit_by: updatedFormData.visit_by,
-        visit_with: updatedFormData.visit_with,
-        visit_with_other: updatedFormData.visit_with_other,
-        updated_by_user_email: updatedFormData.modifiedBy,
-        desired_plan: updatedFormData.choosePlan,
-        end_time: currentDateTime
-      };
+      let jobOrderUpdateData: any = {};
+
+      if (updatedFormData.onsiteStatus === 'In Progress') {
+        jobOrderUpdateData = {
+          onsite_status: 'In Progress',
+          updated_by_user_email: updatedFormData.modifiedBy,
+        };
+      } else {
+        jobOrderUpdateData = {
+          date_installed: updatedFormData.dateInstalled,
+          usage_type: updatedFormData.usageType,
+          router_model: updatedFormData.routerModel,
+          lcpnap: updatedFormData.lcpnap,
+          port: updatedFormData.port,
+          vlan: updatedFormData.vlan,
+          visit_by: updatedFormData.visit_by,
+          visit_with: updatedFormData.visit_with,
+          visit_with_other: updatedFormData.visit_with_other,
+          updated_by_user_email: updatedFormData.modifiedBy,
+          desired_plan: updatedFormData.choosePlan,
+          end_time: currentDateTime
+        };
+      }
 
       if (updatedFormData.onsiteStatus === 'Done') {
         jobOrderUpdateData.connection_type = updatedFormData.connectionType;
@@ -1279,7 +1277,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           safeAppendImage('router_reading_image', formData.routerReadingImage);
           safeAppendImage('port_label_image', formData.portLabelImage);
           safeAppendImage('client_signature_image', formData.clientSignatureImage);
-          safeAppendImage('speed_test_image', formData.speedTestImage);
         }
 
         if (updatedFormData.onsiteStatus === 'Failed' || updatedFormData.onsiteStatus === 'Reschedule') {
@@ -1299,7 +1296,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               router_reading_image_url?: string;
               port_label_image_url?: string;
               client_signature_image_url?: string;
-              speedtest_image_url?: string;
               proof_image_url?: string;
             };
             folder_id?: string;
@@ -1330,9 +1326,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             if (imageUrls.client_signature_image_url) {
               jobOrderUpdateData.client_signature_url = imageUrls.client_signature_image_url;
             }
-            if (imageUrls.speedtest_image_url) {
-              jobOrderUpdateData.speedtest_image_url = imageUrls.speedtest_image_url;
-            }
             if (imageUrls.proof_image_url) {
               jobOrderUpdateData.proof_image_url = imageUrls.proof_image_url;
             }
@@ -1353,10 +1346,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         jobOrderUpdateData.onsite_status = updatedFormData.onsiteStatus;
       }
 
-      if (updatedFormData.onsiteStatus === 'In Progress') {
-        jobOrderUpdateData.onsite_status = 'In Progress';
 
-      }
 
       console.log('[API CALL] ========================================');
       console.log('[API CALL] ABOUT TO CALL: updateJobOrder()');
@@ -1425,7 +1415,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       }
 
-      if (applicationId) {
+      if (applicationId && updatedFormData.onsiteStatus !== 'In Progress') {
         try {
           const firstName = jobOrderData?.First_Name || jobOrderData?.first_name || '';
           const middleInitial = jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || '';
@@ -3102,7 +3092,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <View style={styles.inputGroup}>
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                            Client Signature Image<Text style={styles.required}>*</Text>
+                            Client Signature Image
                           </Text>
                           {!isDrawingSignature ? (
                             <View>
@@ -3181,13 +3171,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           )}
                         </View>
 
-                        <ImagePreview
-                          imageUrl={imagePreviews.speedTestImage}
-                          label="Speed Test Image *"
-                          onUpload={(file) => handleImageUpload('speedTestImage', file)}
-                          error={errors.speedTestImage}
-                          colorPrimary={colorPalette?.primary || '#7c3aed'}
-                        />
 
                         <View style={styles.inputGroup}>
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>

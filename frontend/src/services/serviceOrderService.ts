@@ -50,6 +50,12 @@ export interface ServiceOrderData {
   new_lcpnap?: string;
   new_plan_id?: number;
   new_plan?: string;
+  new_lcp?: string;
+  new_nap?: string;
+  new_port?: string;
+  new_vlan?: string;
+  router_model?: string;
+  proof_image_url?: string;
   client_signature_url?: string;
   image1_url?: string;
   image2_url?: string;

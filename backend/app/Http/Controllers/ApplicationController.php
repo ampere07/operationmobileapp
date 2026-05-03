@@ -640,4 +640,71 @@ class ApplicationController extends Controller
             ], 500);
         }
     }
+
+    public function uploadImages(Request $request, $id)
+    {
+        try {
+            $application = Application::findOrFail($id);
+            $driveService = resolve(\App\Services\GoogleDriveService::class);
+
+            $folderName = $request->input('folder_name', "(application) " . $application->first_name . " " . $application->last_name);
+            $folderId = $driveService->findFolder($folderName) ?? $driveService->createFolder($folderName);
+
+            $imageUrls = [];
+            $fields = [
+                'proof_of_billing' => 'proof_of_billing_url',
+                'government_valid_id' => 'government_valid_id_url',
+                'secondary_government_valid_id' => 'secondary_government_valid_id_url',
+                'house_front_image' => 'house_front_picture_url',
+                'promo_image' => 'promo_url',
+                'nearest_landmark1' => 'nearest_landmark1_url',
+                'nearest_landmark2' => 'nearest_landmark2_url',
+                'document_attachment' => 'document_attachment_url',
+                'other_isp_bill' => 'other_isp_bill_url'
+            ];
+
+            foreach ($fields as $requestKey => $dbColumn) {
+                if ($request->hasFile($requestKey)) {
+                    $file = $request->file($requestKey);
+                    $fileName = $requestKey . '_' . time() . '.' . $file->getClientOriginalExtension();
+                    $imageUrls[$dbColumn] = $driveService->uploadFile(
+                        $file,
+                        $folderId,
+                        $fileName,
+                        $file->getMimeType()
+                    );
+                }
+            }
+
+            if (!empty($imageUrls)) {
+                $application->update($imageUrls);
+
+                // Log Activity
+                ActivityLog::log(
+                    'Application Attachments Uploaded',
+                    "Uploaded " . count($imageUrls) . " attachments for Application #{$id}",
+                    'info',
+                    [
+                        'resource_type' => 'Application',
+                        'resource_id' => $id,
+                        'additional_data' => array_keys($imageUrls)
+                    ]
+                );
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Images uploaded successfully',
+                'data' => $imageUrls
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('ApplicationController uploadImages error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload images',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

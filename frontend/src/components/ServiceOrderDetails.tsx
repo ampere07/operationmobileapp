@@ -9,6 +9,7 @@ import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { techInOutService } from '../services/techInOutService';
+import { getServiceOrderItems, ServiceOrderItem } from '../services/serviceOrderItemService';
 
 interface ServiceOrderDetailsProps {
   serviceOrder: {
@@ -51,6 +52,12 @@ interface ServiceOrderDetailsProps {
     newRouterSn?: string;
     newLcpnap?: string;
     newPlan?: string;
+    newLcp?: string;
+    newNap?: string;
+    newPort?: string;
+    newVlan?: string;
+    routerModel?: string;
+    proofImageUrl?: string;
     clientSignatureUrl?: string;
     image1Url?: string;
     image2Url?: string;
@@ -110,15 +117,28 @@ const defaultFields = [
   'assignedEmail',
   'supportRemarks',
   'supportStatus',
+  'priorityLevel',
   'repairCategory',
   'newRouterSn',
   'newLcpnap',
+  'newLcp',
+  'newNap',
+  'newPort',
+  'newVlan',
+  'routerModel',
   'newPlan',
+  'orderItems',
   'image1Url',
   'image2Url',
   'image3Url',
   'clientSignatureUrl',
+  'proofImageUrl',
   'serviceCharge',
+  'affiliate',
+  'referredBy',
+  'region',
+  'city',
+  'barangay',
   'proof_of_billing_url',
   'government_valid_id_url',
   'second_government_valid_id_url',
@@ -208,12 +228,25 @@ const getFieldLabel = (fieldKey: string): string => {
     repairCategory: 'Repair Category',
     newRouterSn: 'New Router SN',
     newLcpnap: 'New LCP/NAP',
+    newLcp: 'New LCP',
+    newNap: 'New NAP',
+    newPort: 'New PORT',
+    newVlan: 'New VLAN',
+    routerModel: 'Router Model',
     newPlan: 'New Plan',
+    orderItems: 'Items Used',
     image1Url: 'Time In Image',
     image2Url: 'Modem Setup Image',
     image3Url: 'Time Out Image',
     clientSignatureUrl: 'Client Signature',
+    proofImageUrl: 'Proof Image',
     serviceCharge: 'Service Charge',
+    priorityLevel: 'Priority Level',
+    affiliate: 'Affiliate/Group',
+    referredBy: 'Referred By',
+    region: 'Region',
+    city: 'City',
+    barangay: 'Barangay',
     proof_of_billing_url: 'Proof of Billing',
     government_valid_id_url: 'Government Valid ID',
     second_government_valid_id_url: 'Second Government Valid ID',
@@ -239,6 +272,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
   const [customerDetail, setCustomerDetail] = useState<CustomerDetailData | null>(null);
+  const [orderItems, setOrderItems] = useState<ServiceOrderItem[]>([]);
 
   // Sync props to state if props change
   useEffect(() => {
@@ -298,6 +332,18 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     };
     fetchCustomerDetail();
   }, [serviceOrder.accountNumber]);
+
+  useEffect(() => {
+    const fetchOrderItems = async () => {
+      if (serviceOrder.id) {
+        const response = await getServiceOrderItems(Number(serviceOrder.id));
+        if (response.success) {
+          setOrderItems(response.data);
+        }
+      }
+    };
+    fetchOrderItems();
+  }, [serviceOrder.id]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -500,25 +546,25 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   };
 
   const fieldRenderers: Record<string, () => React.ReactNode> = useMemo(() => ({
-    ticketId: () => <Text style={valStyle}>{serviceOrder.ticketId}</Text>,
-    timestamp: () => <Text style={valStyle}>{formatDate(serviceOrder.timestamp)}</Text>,
+    ticketId: () => <Text style={valStyle} selectable={true}>{serviceOrder.ticketId}</Text>,
+    timestamp: () => <Text style={valStyle} selectable={true}>{formatDate(serviceOrder.timestamp)}</Text>,
     accountNumber: () => (
       <Text style={[styles.accountDetailsText, styles.valueText]} selectable={true}>
         {serviceOrder.accountNumber} | {serviceOrder.fullName} | {serviceOrder.fullAddress}
       </Text>
     ),
-    dateInstalled: () => <Text style={valStyle}>{formatDateOnly(serviceOrder.dateInstalled)}</Text>,
-    startTime: () => <Text style={valStyle}>{formatDate((serviceOrder as any).start_time)}</Text>,
-    endTime: () => <Text style={valStyle}>{formatDate((serviceOrder as any).end_time)}</Text>,
-    duration: () => <Text style={valStyle}>{getDurationString((serviceOrder as any).start_time, (serviceOrder as any).end_time)}</Text>,
-    fullName: () => <Text style={valStyle}>{serviceOrder.fullName}</Text>,
-    contactNumber: () => <Text style={valStyle}>{serviceOrder.contactNumber}</Text>,
-    fullAddress: () => <Text style={valStyle}>{serviceOrder.fullAddress}</Text>,
+    dateInstalled: () => <Text style={valStyle} selectable={true}>{formatDateOnly(serviceOrder.dateInstalled)}</Text>,
+    startTime: () => <Text style={valStyle} selectable={true}>{formatDate((serviceOrder as any).start_time)}</Text>,
+    endTime: () => <Text style={valStyle} selectable={true}>{formatDate((serviceOrder as any).end_time)}</Text>,
+    duration: () => <Text style={valStyle} selectable={true}>{getDurationString((serviceOrder as any).start_time, (serviceOrder as any).end_time)}</Text>,
+    fullName: () => <Text style={valStyle} selectable={true}>{serviceOrder.fullName}</Text>,
+    contactNumber: () => <Text style={valStyle} selectable={true}>{serviceOrder.contactNumber}</Text>,
+    fullAddress: () => <Text style={valStyle} selectable={true}>{serviceOrder.fullAddress}</Text>,
     addressCoordinates: () => {
       const coords = customerDetail?.addressCoordinates;
       return (
         <View style={styles.imageLinkContainer}>
-          <Text style={valStyle}>{coords || 'Not provided'}</Text>
+          <Text style={valStyle} selectable={true}>{coords || 'Not provided'}</Text>
           {coords && (
             <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
               <MapPin width={24} height={24} color="#4b5563" />
@@ -528,50 +574,76 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       );
     },
     houseFrontPicture: () => renderImageLinkContent(customerDetail?.houseFrontPictureUrl || serviceOrder.houseFrontPicture),
-    emailAddress: () => <Text style={valStyle}>{serviceOrder.emailAddress}</Text>,
-    plan: () => <Text style={valStyle}>{serviceOrder.plan}</Text>,
-    username: () => <Text style={valStyle}>{serviceOrder.username}</Text>,
-    connectionType: () => <Text style={valStyle}>{serviceOrder.connectionType}</Text>,
-    routerModemSN: () => <Text style={valStyle}>{serviceOrder.routerModemSN}</Text>,
-    lcp: () => <Text style={valStyle}>{serviceOrder.lcp}</Text>,
-    nap: () => <Text style={valStyle}>{serviceOrder.nap}</Text>,
-    port: () => <Text style={valStyle}>{serviceOrder.port}</Text>,
-    vlan: () => <Text style={valStyle}>{serviceOrder.vlan}</Text>,
-    concern: () => <Text style={valStyle}>{serviceOrder.concern}</Text>,
-    concernRemarks: () => <Text style={valStyle}>{serviceOrder.concernRemarks}</Text>,
+    emailAddress: () => <Text style={valStyle} selectable={true}>{serviceOrder.emailAddress}</Text>,
+    plan: () => <Text style={valStyle} selectable={true}>{serviceOrder.plan}</Text>,
+    username: () => <Text style={valStyle} selectable={true}>{serviceOrder.username}</Text>,
+    connectionType: () => <Text style={valStyle} selectable={true}>{serviceOrder.connectionType}</Text>,
+    routerModemSN: () => <Text style={valStyle} selectable={true}>{serviceOrder.routerModemSN}</Text>,
+    lcp: () => <Text style={valStyle} selectable={true}>{serviceOrder.lcp}</Text>,
+    nap: () => <Text style={valStyle} selectable={true}>{serviceOrder.nap}</Text>,
+    port: () => <Text style={valStyle} selectable={true}>{serviceOrder.port}</Text>,
+    vlan: () => <Text style={valStyle} selectable={true}>{serviceOrder.vlan}</Text>,
+    concern: () => <Text style={valStyle} selectable={true}>{serviceOrder.concern}</Text>,
+    concernRemarks: () => <Text style={valStyle} selectable={true}>{serviceOrder.concernRemarks}</Text>,
     visitStatus: () => (
-      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.visitStatus, 'visit') }]}>
+      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.visitStatus, 'visit') }]} selectable={true}>
         {serviceOrder.visitStatus === 'inprogress' ? 'In Progress' : (serviceOrder.visitStatus || 'Not set')}
       </Text>
     ),
-    visitBy: () => <Text style={valStyle}>{serviceOrder.visitBy || 'Not assigned'}</Text>,
-    visitWith: () => <Text style={valStyle}>{serviceOrder.visitWith || 'None'}</Text>,
-    visitWithOther: () => <Text style={valStyle}>{serviceOrder.visitWithOther || 'None'}</Text>,
-    visitRemarks: () => <Text style={valStyle}>{serviceOrder.visitRemarks || 'No remarks'}</Text>,
-    modifiedBy: () => <Text style={valStyle}>{serviceOrder.modifiedBy || 'System'}</Text>,
-    modifiedDate: () => <Text style={valStyle}>{formatDate(serviceOrder.modifiedDate)}</Text>,
-    requestedBy: () => <Text style={valStyle}>{serviceOrder.requestedBy}</Text>,
-    assignedEmail: () => <Text style={valStyle}>{serviceOrder.assignedEmail || 'Not assigned'}</Text>,
-    supportRemarks: () => <Text style={valStyle}>{serviceOrder.supportRemarks || 'No remarks'}</Text>,
+    visitBy: () => <Text style={valStyle} selectable={true}>{serviceOrder.visitBy || 'Not assigned'}</Text>,
+    visitWith: () => <Text style={valStyle} selectable={true}>{serviceOrder.visitWith || 'None'}</Text>,
+    visitWithOther: () => <Text style={valStyle} selectable={true}>{serviceOrder.visitWithOther || 'None'}</Text>,
+    visitRemarks: () => <Text style={valStyle} selectable={true}>{serviceOrder.visitRemarks || 'No remarks'}</Text>,
+    modifiedBy: () => <Text style={valStyle} selectable={true}>{serviceOrder.modifiedBy || 'System'}</Text>,
+    modifiedDate: () => <Text style={valStyle} selectable={true}>{formatDate(serviceOrder.modifiedDate)}</Text>,
+    requestedBy: () => <Text style={valStyle} selectable={true}>{serviceOrder.requestedBy}</Text>,
+    assignedEmail: () => <Text style={valStyle} selectable={true}>{serviceOrder.assignedEmail || 'Not assigned'}</Text>,
+    supportRemarks: () => <Text style={valStyle} selectable={true}>{serviceOrder.supportRemarks || 'No remarks'}</Text>,
     supportStatus: () => (
-      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.supportStatus, 'support') }]}>
+      <Text style={[styles.statusText, { color: getStatusColor(serviceOrder.supportStatus, 'support') }]} selectable={true}>
         {serviceOrder.supportStatus || 'Not set'}
       </Text>
     ),
-    repairCategory: () => <Text style={valStyle}>{serviceOrder.repairCategory || 'None'}</Text>,
-    newRouterSn: () => <Text style={valStyle}>{serviceOrder.newRouterSn || 'None'}</Text>,
-    newPlan: () => <Text style={valStyle}>{serviceOrder.newPlan || 'None'}</Text>,
+    repairCategory: () => <Text style={valStyle} selectable={true}>{serviceOrder.repairCategory || 'None'}</Text>,
+    newRouterSn: () => <Text style={valStyle} selectable={true}>{serviceOrder.newRouterSn || 'None'}</Text>,
+    newLcpnap: () => <Text style={valStyle} selectable={true}>{serviceOrder.newLcpnap || 'None'}</Text>,
+    newLcp: () => <Text style={valStyle} selectable={true}>{serviceOrder.newLcp || 'None'}</Text>,
+    newNap: () => <Text style={valStyle} selectable={true}>{serviceOrder.newNap || 'None'}</Text>,
+    newPort: () => <Text style={valStyle} selectable={true}>{serviceOrder.newPort || 'None'}</Text>,
+    newVlan: () => <Text style={valStyle} selectable={true}>{serviceOrder.newVlan || 'None'}</Text>,
+    routerModel: () => <Text style={valStyle} selectable={true}>{serviceOrder.routerModel || 'None'}</Text>,
+    newPlan: () => <Text style={valStyle} selectable={true}>{serviceOrder.newPlan || 'None'}</Text>,
+    orderItems: () => (
+      <View style={{ gap: 4 }}>
+        {orderItems.length > 0 ? (
+          orderItems.map((item, idx) => (
+            <Text key={idx} style={valStyle} selectable={true}>
+              • {item.item_name} (Qty: {item.quantity})
+            </Text>
+          ))
+        ) : (
+          <Text style={valStyle} selectable={true}>None</Text>
+        )}
+      </View>
+    ),
     image1Url: () => renderImageLinkContent(serviceOrder.image1Url),
     image2Url: () => renderImageLinkContent(serviceOrder.image2Url),
     image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
     clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
-    serviceCharge: () => <Text style={valStyle}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
+    proofImageUrl: () => renderImageLinkContent(serviceOrder.proofImageUrl),
+    serviceCharge: () => <Text style={valStyle} selectable={true}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
+    priorityLevel: () => <Text style={valStyle} selectable={true}>{serviceOrder.priorityLevel || 'Normal'}</Text>,
+    affiliate: () => <Text style={valStyle} selectable={true}>{serviceOrder.affiliate || 'None'}</Text>,
+    referredBy: () => <Text style={valStyle} selectable={true}>{serviceOrder.referredBy || 'None'}</Text>,
+    region: () => <Text style={valStyle} selectable={true}>{serviceOrder.region || 'None'}</Text>,
+    city: () => <Text style={valStyle} selectable={true}>{serviceOrder.city || 'None'}</Text>,
+    barangay: () => <Text style={valStyle} selectable={true}>{serviceOrder.barangay || 'None'}</Text>,
     proof_of_billing_url: () => renderImageLinkContent(customerDetail?.proof_of_billing_url),
     government_valid_id_url: () => renderImageLinkContent(customerDetail?.government_valid_id_url),
     second_government_valid_id_url: () => renderImageLinkContent(customerDetail?.second_government_valid_id_url),
     document_attachment_url: () => renderImageLinkContent(customerDetail?.document_attachment_url),
     other_isp_bill_url: () => renderImageLinkContent(customerDetail?.other_isp_bill_url),
-  }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded, customerDetail]);
+  }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded, customerDetail, orderItems]);
 
   const renderField = (label: string, content: React.ReactNode) => (
     <View style={[styles.fieldContainer, { borderBottomColor: '#e5e7eb' }]}>
@@ -649,7 +721,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {fieldOrder.map(key => {
-            if (!fieldVisibility[key] || isFieldEmpty(key)) return null;
+            if (!fieldVisibility[key]) return null;
             const renderer = fieldRenderers[key];
             if (!renderer) return null;
             return <React.Fragment key={key}>{renderField(getFieldLabel(key), renderer())}</React.Fragment>;

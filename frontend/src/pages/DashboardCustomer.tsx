@@ -30,8 +30,9 @@ interface DashboardCustomerProps {
 }
 
 const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => {
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768;
+    const isShort = height < 700;
     const { customerDetail, payments, isLoading: contextLoading, silentRefresh } = useCustomerDataContext();
     const [user, setUser] = useState<any>(null);
     const [referrals, setReferrals] = useState<Referral[]>([]);
@@ -106,6 +107,9 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     ).current;
 
     const displayName = customerDetail?.fullName || user?.full_name || 'Customer';
+    const initials = (customerDetail?.firstName && customerDetail?.lastName)
+        ? `${customerDetail.firstName.charAt(0)}${customerDetail.lastName.charAt(0)}`.toUpperCase()
+        : displayName.split(' ').map((n: any) => n[0]).join('').substring(0, 2).toUpperCase();
     const accountNo = customerDetail?.billingAccount?.accountNo || user?.username || 'N/A';
     const planName = customerDetail?.desiredPlan || 'No Plan';
     const address = customerDetail?.address || 'No Address';
@@ -379,7 +383,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         <View style={styles.container}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: !isMobile ? 16 : 60, paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: 24 }}
+                contentContainerStyle={{ paddingTop: !isMobile ? 16 : (isShort ? 20 : 60), paddingHorizontal: isMobile ? 16 : 24, paddingBottom: 100, gap: isShort ? 16 : 24 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -398,36 +402,43 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                             colors={[colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={styles.gradientInner}
+                            style={[styles.gradientInner, { paddingVertical: isShort ? 24 : 32 }]}
                         >
-                            <View style={styles.balanceLeft}>
-                                <Text style={styles.balanceLabel}>Total Amount</Text>
-                                <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? 24 : 32) : (isMobile ? 32 : 40) }]}>
-                                    {formatCurrency(balance)}
-                                </Text>
+                            <View style={[styles.profileRow, { marginBottom: isShort ? 16 : 32 }]}>
+                                <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
+                                    <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+                                </View>
+                                <View>
+                                    <Text style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
+                                    <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
+                                </View>
                             </View>
 
-                            <View style={styles.balanceRight}>
-                                <View style={styles.balanceInfoRight}>
-                                    <Text style={styles.infoText}>
-                                        Reference: <Text style={styles.infoValue}>{accountNo}</Text>
-                                    </Text>
-                                    <Text style={styles.infoText}>
-                                        Due Date: <Text style={{ color: '#ffffff' }}>{dueDateString}</Text>
+                            <View style={styles.billingRow}>
+                                <View style={styles.billingLeft}>
+                                    <Text style={styles.balanceLabel}>Total Amount</Text>
+                                    <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
+                                        {formatCurrency(balance)}
                                     </Text>
                                 </View>
 
-                                <Pressable
-                                    onPress={handlePayNow}
-                                    disabled={isPaymentProcessing}
-                                    style={[styles.payBtn, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
-                                >
-                                    <View style={styles.payBtnInner}>
-                                        <Text style={styles.payBtnText}>
-                                            {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
-                                        </Text>
+                                <View style={styles.billingRightCol}>
+                                    <View style={styles.dueDateContainer}>
+                                        <Text style={styles.infoText}>Due Date: <Text style={styles.infoValue}>{dueDateString}</Text></Text>
                                     </View>
-                                </Pressable>
+
+                                    <Pressable
+                                        onPress={handlePayNow}
+                                        disabled={isPaymentProcessing}
+                                        style={[styles.payBtn, { opacity: isPaymentProcessing ? 0.5 : 1 }]}
+                                    >
+                                        <View style={styles.payBtnInner}>
+                                            <Text style={styles.payBtnText}>
+                                                {isPaymentProcessing ? '...' : (pendingPayment ? 'Proceed' : 'Pay Now')}
+                                            </Text>
+                                        </View>
+                                    </Pressable>
+                                </View>
                             </View>
                         </LinearGradient>
                     </View>
@@ -731,14 +742,20 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f9fafb', position: 'relative' },
     contentGap: { gap: 32 },
     balanceCard: { borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 8, backgroundColor: '#ffffff' },
-    gradientInner: { borderRadius: 24, padding: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' },
-    balanceLeft: { flex: 1, justifyContent: 'center' },
-    balanceLabel: { color: '#e5e7eb', fontSize: 16, marginBottom: 8 },
+    gradientInner: { borderRadius: 24, paddingHorizontal: 24, position: 'relative', overflow: 'hidden' },
+    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    initialsCircle: { backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.3)' },
+    initialsText: { color: '#ffffff', fontWeight: 'bold' },
+    customerNameText: { color: '#ffffff', fontWeight: 'bold', textTransform: 'capitalize' },
+    customerAccountText: { color: '#e5e7eb', fontSize: 11, opacity: 0.9 },
+    billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    billingLeft: { flex: 1 },
+    billingRightCol: { alignItems: 'flex-end', gap: 12 },
+    dueDateContainer: { alignItems: 'flex-end' },
+    balanceLabel: { color: '#e5e7eb', fontSize: 12, marginBottom: 4 },
     balanceAmountText: { fontWeight: 'bold', color: '#ffffff' },
-    balanceRight: { alignItems: 'flex-end', justifyContent: 'center', gap: 16 },
-    balanceInfoRight: { alignItems: 'flex-end', gap: 4 },
     infoText: { color: '#e5e7eb', fontSize: 12 },
-    infoValue: { color: '#ffffff', fontWeight: '500' },
+    infoValue: { color: '#ffffff', fontWeight: 'bold', fontSize: 12 },
     payBtn: { borderWidth: 1, borderColor: '#ffffff', paddingHorizontal: 32, paddingVertical: 10, borderRadius: 12 },
     payBtnInner: { alignItems: 'center' },
     payBtnText: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center' },
