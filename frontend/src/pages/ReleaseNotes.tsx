@@ -28,6 +28,15 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.19',
+            date: 'May 3, 2026',
+            title: 'Forgot Password & Security Updates',
+            updates: [
+                { text: 'Forgot Password Cooldown: Implemented a 3-minute safety timer between recovery requests to prevent misuse and improve security.', visibility: 'all' },
+                { text: 'Expanded Recovery Options: You can now recover your account using your Account Number, Email, or Username for a more flexible login experience.', visibility: 'all' }
+            ]
+        },
+        {
             version: '2.5.18',
             date: 'May 3, 2026',
             title: 'Fullscreen Mode & Screen Sharing Fixes',

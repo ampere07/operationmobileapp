@@ -40,6 +40,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordTimer, setForgotPasswordTimer] = useState(0);
+
 
 
   const convertGoogleDriveUrl = (url: string): string => {
@@ -75,6 +77,45 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     };
     fetchColorPalette();
   }, []);
+
+  useEffect(() => {
+    const checkCooldown = async () => {
+      try {
+        const storedExpiry = await AsyncStorage.getItem('forgot_password_expiry');
+        if (storedExpiry) {
+          const remaining = Math.round((parseInt(storedExpiry) - Date.now()) / 1000);
+          if (remaining > 0) {
+            setForgotPasswordTimer(remaining);
+          } else {
+            await AsyncStorage.removeItem('forgot_password_expiry');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking forgot password cooldown:', err);
+      }
+    };
+    checkCooldown();
+  }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (forgotPasswordTimer > 0) {
+      interval = setInterval(() => {
+        setForgotPasswordTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            AsyncStorage.removeItem('forgot_password_expiry').catch(console.error);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [forgotPasswordTimer]);
+
 
   const handleSubmit = async () => {
     if (!accountNo || !mobileNo) {
@@ -114,6 +155,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   const handleForgotPassword = async () => {
+    if (forgotPasswordTimer > 0) return;
+
     if (!forgotAccountNo) {
       setError('Please enter your account number');
       return;
@@ -126,6 +169,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const response = await forgotPassword(forgotAccountNo);
       if (response.status === 'success') {
         setForgotMessage(response.message);
+        
+        // Set 3-minute cooldown
+        const expiryTime = Date.now() + (3 * 60 * 1000);
+        await AsyncStorage.setItem('forgot_password_expiry', expiryTime.toString());
+        setForgotPasswordTimer(180);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to send reset instructions.');
@@ -133,6 +181,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setIsLoading(false);
     }
   };
+
 
   // Moved forgot password logic into a Modal below
 
@@ -391,7 +440,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             ) : (
               <>
                 <View style={{ marginBottom: 20 }}>
-                  <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8, fontWeight: '600' }}>ACCOUNT NUMBER</Text>
+                  <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 8, fontWeight: '600' }}>ACCOUNT NO / EMAIL / USERNAME</Text>
                   <TextInput
                     style={{
                       width: '100%',
@@ -405,7 +454,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     }}
                     value={forgotAccountNo}
                     onChangeText={setForgotAccountNo}
-                    placeholder="Enter account number"
+                    placeholder="Enter account no, email, or username"
                     placeholderTextColor="#9ca3af"
                     autoCapitalize="none"
                   />
@@ -419,9 +468,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                 <TouchableOpacity
                   onPress={handleForgotPassword}
-                  disabled={isLoading}
+                  disabled={isLoading || forgotPasswordTimer > 0}
                   style={{
-                    backgroundColor: isLoading ? '#9ca3af' : (colorPalette?.primary || '#6d28d9'),
+                    backgroundColor: (isLoading || forgotPasswordTimer > 0) ? '#9ca3af' : (colorPalette?.primary || '#6d28d9'),
                     padding: 16,
                     borderRadius: 30,
                     alignItems: 'center',
@@ -429,7 +478,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   }}
                 >
                   <Text style={{ color: '#ffffff', fontWeight: '700' }}>
-                    {isLoading ? 'SENDING...' : 'SEND ACCOUNT INFO'}
+                    {isLoading ? 'SENDING...' : forgotPasswordTimer > 0 ? `RESEND IN ${forgotPasswordTimer}s` : 'SEND ACCOUNT INFO'}
                   </Text>
                 </TouchableOpacity>
 

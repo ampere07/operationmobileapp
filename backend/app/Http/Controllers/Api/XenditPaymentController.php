@@ -94,9 +94,7 @@ class XenditPaymentController extends Controller
             $randomSuffix = bin2hex(random_bytes(10));
             $referenceNo = $accountNo . '-' . $randomSuffix;
 
-            // Create redirect URLs - success page will auto-close the tab via frontend
-            $redirectSuccess = $frontendRedirectUrl ? $frontendRedirectUrl : ($this->portalLink . '/?payment_success=1');
-            $redirectFail = $frontendRedirectUrl ? $frontendRedirectUrl : ($this->portalLink . '/?payment=failed&ref=' . $referenceNo);
+
 
             // Parse customer name
             $fullNameParts = explode(' ', trim($account->full_name ?? 'Customer'));
@@ -135,9 +133,7 @@ class XenditPaymentController extends Controller
                         'price' => $amount,
                         'category' => 'Internet Service'
                     ]
-                ],
-                'success_redirect_url' => $redirectSuccess,
-                'failure_redirect_url' => $redirectFail
+                ]
             ];
 
             // Call Xendit API
