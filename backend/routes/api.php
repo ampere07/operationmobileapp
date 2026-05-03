@@ -3196,6 +3196,12 @@ Route::prefix('system-config')->group(function () {
     Route::delete('/logo', [\App\Http\Controllers\SystemConfigController::class , 'deleteLogo']);
 });
 
+// App Version Config routes
+Route::prefix('app-version')->group(function () {
+    Route::get('/config', [\App\Http\Controllers\SystemConfigController::class , 'getAppVersionConfig']);
+    Route::put('/config', [\App\Http\Controllers\SystemConfigController::class , 'updateAppVersionConfig']);
+});
+
 // Notification routes
 Route::prefix('notifications')->group(function () {
     Route::get('/recent-applications', [\App\Http\Controllers\NotificationController::class , 'getRecentApplications']);
