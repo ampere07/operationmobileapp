@@ -434,6 +434,22 @@ class GoogleDrivePdfGenerationService
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
             $dcDate = $dueDate ? $dueDate->copy()->addDays($disconnectionDay) : null;
 
+            // Calculate Period Start and End based on SOA history
+            $periodEnd = $soa->statement_date;
+            
+            // Find the SOA immediately preceding the current one for this account
+            $previousSoa = StatementOfAccount::where('account_no', $account->account_no)
+                ->where('id', '<', $soa->id)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($previousSoa) {
+                $periodStart = $previousSoa->statement_date;
+            } else {
+                // If this is the only/first SOA, use the customer's installation date
+                $periodStart = $account->date_installed;
+            }
+
             $data = array_merge($data, [
                 'SOA_No' => $soa->id,
                 'Prev_Balance' => number_format((float)($soa->balance_from_previous_bill ?? 0), 2),
@@ -444,8 +460,8 @@ class GoogleDrivePdfGenerationService
                 'Amount_Due' => number_format((float)($soa->amount_due ?? 0), 2),
                 'Total_Due' => number_format((float)($soa->total_amount_due ?? 0), 2),
                 'Due_Date' => $dueDate ? $dueDate->format('F d, Y') : '-',
-                'Period_Start' => $soa->statement_date ? $soa->statement_date->format('m/d/Y') : '-',
-                'Period_End' => $dueDate ? $dueDate->format('m/d/Y') : '-',
+                'Period_Start' => $periodStart ? $periodStart->format('m/d/Y') : '-',
+                'Period_End' => $periodEnd ? $periodEnd->format('m/d/Y') : '-',
                 'DC_Date' => $dcDate ? $dcDate->format('F d, Y') : '-',
                 // Others and Basic Charges - Individual amounts (show only if > 0)
                 'Amount_Discounts' => $soa->discounts > 0 ? number_format($soa->discounts, 2) : '',

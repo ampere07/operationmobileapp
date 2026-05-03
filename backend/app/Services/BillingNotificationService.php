@@ -682,9 +682,24 @@ class BillingNotificationService
             $data['Prev_Balance'] = number_format($soa->balance_from_previous_bill ?? 0, 2);
             $data['Prev_Payment'] = number_format($soa->payment_received_previous ?? 0, 2);
             $data['Rem_Balance'] = number_format($soa->remaining_balance_previous ?? 0, 2);
-            // SOA usually covers a billing period; simplified here as start/end might be logic-dependent
-            $data['Period_Start'] = ''; 
-            $data['Period_End'] = ''; 
+            // Calculate Period Start and End based on SOA history
+            $periodEnd = $soa->statement_date;
+            
+            // Find the SOA immediately preceding the current one for this account
+            $previousSoa = StatementOfAccount::where('account_no', $account->account_no)
+                ->where('id', '<', $soa->id)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($previousSoa) {
+                $periodStart = $previousSoa->statement_date;
+            } else {
+                // If this is the only/first SOA, use the customer's installation date
+                $periodStart = $account->date_installed;
+            }
+
+            $data['Period_Start'] = $periodStart ? $periodStart->format('m/d/Y') : '-'; 
+            $data['Period_End'] = $periodEnd ? $periodEnd->format('m/d/Y') : '-'; 
         } elseif ($invoice) {
              // Invoice specific data
             $data['SOA_No'] = $invoice->id ?? ''; // Or N/A
@@ -692,8 +707,23 @@ class BillingNotificationService
             $data['Prev_Balance'] = '0.00';
             $data['Prev_Payment'] = number_format($invoice->received_payment ?? 0, 2);
             $data['Rem_Balance'] = number_format($invoice->invoice_balance ?? 0, 2);
-            $data['Period_Start'] = '';
-            $data['Period_End'] = '';
+            
+            // For invoice, we can try to find the latest SOA to get a period
+            $latestSoa = StatementOfAccount::where('account_no', $account->account_no)
+                ->orderBy('id', 'desc')
+                ->first();
+                
+            if ($latestSoa) {
+                $data['Period_End'] = $latestSoa->statement_date->format('m/d/Y');
+                $prevSoa = StatementOfAccount::where('account_no', $account->account_no)
+                    ->where('id', '<', $latestSoa->id)
+                    ->orderBy('id', 'desc')
+                    ->first();
+                $data['Period_Start'] = $prevSoa ? $prevSoa->statement_date->format('m/d/Y') : ($account->date_installed ? $account->date_installed->format('m/d/Y') : '-');
+            } else {
+                $data['Period_Start'] = '-';
+                $data['Period_End'] = '-';
+            }
         }
 
         $data['soa_date'] = $data['Statement_Date'] ?? '';

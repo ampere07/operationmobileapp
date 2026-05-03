@@ -1348,7 +1348,7 @@ class TransactionController extends Controller
 
             // Remove associated invoices' transaction_id if any (just in case)
             DB::table('invoices')
-                ->where('transaction_id', $transaction->id)
+                ->where('transaction_id', (string)$transaction->id)
                 ->update([
                 'transaction_id' => null,
                 'updated_at' => now()

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\EmailQueueService;
+use App\Services\SmsQueueService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -13,11 +14,13 @@ class ProcessEmailQueueCron extends Command
     protected $description = 'Cron job to process pending emails from the email queue';
 
     protected EmailQueueService $emailQueueService;
+    protected SmsQueueService $smsQueueService;
 
-    public function __construct(EmailQueueService $emailQueueService)
+    public function __construct(EmailQueueService $emailQueueService, SmsQueueService $smsQueueService)
     {
         parent::__construct();
         $this->emailQueueService = $emailQueueService;
+        $this->smsQueueService = $smsQueueService;
     }
 
     public function handle(): int
@@ -27,44 +30,32 @@ class ProcessEmailQueueCron extends Command
             mkdir($logPath, 0755, true);
         }
 
-        Log::build([
+        $logger = Log::build([
             'driver' => 'single',
             'path' => $logPath . '/emailqueue.log',
-        ])->info('Email queue cron job started', ['timestamp' => now()->toDateTimeString()]);
+        ]);
+
+        $logger->info('Queue processing cron job started', ['timestamp' => now()->toDateTimeString()]);
 
         try {
-            $stats = $this->emailQueueService->processPendingEmails(50);
+            // Process Emails
+            $emailStats = $this->emailQueueService->processPendingEmails(50);
+            
+            // Process SMS
+            $smsStats = $this->smsQueueService->processPendingSms(50);
 
-            Log::build([
-                'driver' => 'single',
-                'path' => $logPath . '/emailqueue.log',
-            ])->info('Email queue cron job completed', [
+            $logger->info('Queue processing cron job completed', [
                 'timestamp' => now()->toDateTimeString(),
-                'processed' => $stats['processed'],
-                'sent' => $stats['sent'],
-                'failed' => $stats['failed']
+                'emails' => $emailStats,
+                'sms' => $smsStats
             ]);
-
-            if ($stats['failed'] > 0) {
-                Log::build([
-                    'driver' => 'single',
-                    'path' => $logPath . '/emailqueue.log',
-                ])->warning('Email queue had failures', [
-                    'timestamp' => now()->toDateTimeString(),
-                    'failed_count' => $stats['failed']
-                ]);
-            }
 
             return Command::SUCCESS;
 
         } catch (\Exception $e) {
-            Log::build([
-                'driver' => 'single',
-                'path' => $logPath . '/emailqueue.log',
-            ])->error('Email queue cron job failed', [
+            $logger->error('Queue processing cron job failed', [
                 'timestamp' => now()->toDateTimeString(),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             return Command::FAILURE;
