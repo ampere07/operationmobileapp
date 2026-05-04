@@ -69,7 +69,7 @@ class CustomerController extends Controller
                 ->get()
                 ->pluck('total', 'account_id');
 
-            $customers = Customer::with(['group', 'billingAccounts'])
+            $customers = Customer::with(['group', 'billingAccounts.onlineStatus'])
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($customer) use ($transactions, $portalLogs) {
@@ -106,6 +106,7 @@ class CustomerController extends Controller
                         'updated_by' => $customer->updated_by,
                         'created_at' => $customer->created_at?->format('Y-m-d H:i:s'),
                         'updated_at' => $customer->updated_at?->format('Y-m-d H:i:s'),
+                        'session_group' => $customer->billingAccounts->first()?->onlineStatus?->session_group,
                     ];
                 });
 
@@ -128,7 +129,7 @@ class CustomerController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $customer = Customer::with(['group', 'billingAccounts'])->findOrFail($id);
+            $customer = Customer::with(['group', 'billingAccounts.onlineStatus'])->findOrFail($id);
             
             $data = [
                 'id' => $customer->id,
@@ -162,6 +163,7 @@ class CustomerController extends Controller
                         'account_no' => $account->account_no,
                         'billing_status_id' => $account->billing_status_id,
                         'account_balance' => $account->account_balance,
+                        'session_group' => $account->onlineStatus?->session_group,
                     ];
                 }),
             ];
@@ -392,4 +394,5 @@ class CustomerController extends Controller
         }
     }
 }
+
 

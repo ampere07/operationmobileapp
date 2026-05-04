@@ -74,8 +74,8 @@ class RadiusReconnectionService
 
             // Clean plan name (strip price suffix but preserve multi-word plan names and names with numbers like "FLASH 1999")
             // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
-            $cleanPlan = preg_replace('/\s*-\s*.*/', '', $rawPlan);
-            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $cleanPlan);
+            $cleanPlan = preg_replace('/\s*-\s*(?:P|₱)?\d+.*/i', '', $rawPlan);
+            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d+.*/i', '', $cleanPlan);
             $cleanPlan = trim($cleanPlan);
             $this->writeLog("Raw Plan: '$rawPlan' -> Clean Plan: '$cleanPlan'");
 
@@ -322,5 +322,6 @@ class RadiusReconnectionService
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }
 }
+
 
 

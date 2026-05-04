@@ -146,6 +146,8 @@ class BillingController extends Controller
                     'Total_Paid' => $totalPaid,
                     'LCPNAPPORT' => $technicalDetail ? (trim(($technicalDetail->lcpnap ?? '') . ' ' . ($technicalDetail->port ?? ''))) : null,
                     'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
+                    'session_group' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_group : null,
+                    'session_ip' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->ip_address : null,
                 ];
             });
 
@@ -280,6 +282,8 @@ class BillingController extends Controller
                 'Total_Paid' => $totalPaid,
                 'LCPNAPPORT' => $technicalDetail ? (trim(($technicalDetail->lcpnap ?? '') . ' ' . ($technicalDetail->port ?? ''))) : null,
                 'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
+                'session_group' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_group : null,
+                'session_ip' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->ip_address : null,
             ];
 
             return response()->json([
@@ -340,4 +344,5 @@ class BillingController extends Controller
         }
     }
 }
+
 

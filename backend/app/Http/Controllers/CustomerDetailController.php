@@ -135,6 +135,8 @@ class CustomerDetailController extends Controller
                 'updatedAt' => $customer->updated_at?->format('Y-m-d H:i:s'),
                 
                 'onlineSessionStatus' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
+                'session_group' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_group : null,
+                'session_ip' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->ip_address : null,
                 'onlineStatusData' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->toArray() : null,
             ];
             
@@ -160,4 +162,5 @@ class CustomerDetailController extends Controller
         }
     }
 }
+
 

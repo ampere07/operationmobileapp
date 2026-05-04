@@ -1713,8 +1713,8 @@ class JobOrderController extends Controller
             if ($desiredPlan) {
                 // Remove price suffix (e.g., "SWIFT 1000", "STARTER - P799.00", "FLASH 1999")
                 // Strips everything after a hyphen, or space followed by digits/currency
-                $plan = preg_replace('/\s*-\s*.*/', '', $desiredPlan);
-                $plan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $plan);
+                $plan = preg_replace('/\s*-\s*(?:P|₱)?\d+.*/i', '', $desiredPlan);
+                $plan = preg_replace('/\s+(?:P|₱)?\d+.*/i', '', $plan);
                 $plan = trim($plan);
             }
             

@@ -20,7 +20,8 @@ class HandleCorsManually
         // Define allowed origins
         $allowedOrigins = [
             'https://sync.atssfiber.ph',
-            'https://backend.atssfiber.ph'
+            'https://backend.atssfiber.ph',
+            'http://localhost:3000/'
         ];
 
         // Handle preflight OPTIONS request

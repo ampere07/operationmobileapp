@@ -73,6 +73,9 @@ class BillingRecordsController extends Controller
             }
 
             
+            // Calculate total count based on filtered query
+            $totalCount = (clone $query)->count();
+
             // Fetch one extra record to check if there are more pages (more efficient than COUNT)
             $statements = $query
                 ->orderBy('statement_of_accounts.statement_date', 'desc')
@@ -104,7 +107,7 @@ class BillingRecordsController extends Controller
                     'success' => true,
                     'data' => $statementsData->values(),
                     'count' => $statementsData->count(),
-                    'total' => StatementOfAccount::count(), // Added total count for pagination
+                    'total' => $totalCount, // Use filtered count
                     'pagination' => [
                         'current_page' => (int)$page,
                         'per_page' => (int)$perPage,
@@ -162,7 +165,7 @@ class BillingRecordsController extends Controller
                 'success' => true,
                 'data' => $statementsData->values(), // Reset array keys
                 'count' => $statementsData->count(),
-                'total' => StatementOfAccount::count(), // Added total count for pagination
+                'total' => $totalCount, // Use filtered count
                 'pagination' => [
                     'current_page' => (int)$page,
                     'per_page' => (int)$perPage,
@@ -232,6 +235,9 @@ class BillingRecordsController extends Controller
                 ]);
             }
             
+            // Calculate total count based on filtered query
+            $totalCount = (clone $query)->count();
+
             // Fetch one extra record to check if there are more pages (more efficient than COUNT)
             $invoices = $query
                 ->orderBy('invoice_date', 'desc')
@@ -263,7 +269,7 @@ class BillingRecordsController extends Controller
                     'success' => true,
                     'data' => $invoicesData->values(),
                     'count' => $invoicesData->count(),
-                    'total' => Invoice::count(), // Added total count for pagination
+                    'total' => $totalCount, // Use filtered count
                     'pagination' => [
                         'current_page' => (int)$page,
                         'per_page' => (int)$perPage,
@@ -321,7 +327,7 @@ class BillingRecordsController extends Controller
                 'success' => true,
                 'data' => $invoicesData->values(), // Reset array keys
                 'count' => $invoicesData->count(),
-                'total' => Invoice::count(), // Added total count for pagination
+                'total' => $totalCount, // Use filtered count
                 'pagination' => [
                     'current_page' => (int)$page,
                     'per_page' => (int)$perPage,
@@ -342,4 +348,5 @@ class BillingRecordsController extends Controller
         }
     }
 }
+
 

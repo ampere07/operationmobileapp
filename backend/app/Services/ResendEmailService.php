@@ -14,9 +14,9 @@ class ResendEmailService
 
     public function __construct()
     {
-        $this->apiKey = config('services.resend.api_key');
-        $this->fromEmail = config('mail.from.address');
-        $this->fromName = config('mail.from.name');
+        $this->apiKey = config('services.resend.api_key') ?? '';
+        $this->fromEmail = config('mail.from.address') ?? '';
+        $this->fromName = config('mail.from.name') ?? '';
     }
 
     public function send(array $data): array
@@ -107,4 +107,5 @@ class ResendEmailService
         ];
     }
 }
+
 

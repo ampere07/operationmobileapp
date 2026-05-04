@@ -804,6 +804,72 @@ class TransactionController extends Controller
         }
     }
 
+    public function update(Request $request, string $id): JsonResponse
+    {
+        try {
+            $authUser = auth()->user();
+            $organizationId = $authUser ? $authUser->organization_id : null;
+            $roleId = $authUser ? $authUser->role_id : null;
+            $isSuperAdmin = !$authUser || $roleId == 7 || !$organizationId;
+
+            $validated = $request->validate([
+                'transaction_type' => 'nullable|in:Installation Fee,Recurring Fee,Security Deposit',
+                'received_payment' => 'nullable|numeric|min:0',
+                'payment_date' => 'nullable|date',
+                'payment_method' => 'nullable|string|max:255',
+                'reference_no' => 'nullable|string|max:255',
+                'or_no' => 'nullable|string|max:255',
+                'remarks' => 'nullable|string',
+                'image_url' => 'nullable|string|max:255',
+            ]);
+
+            DB::beginTransaction();
+
+            $transaction = Transaction::findOrFail($id);
+
+            if (!$isSuperAdmin && $organizationId && $transaction->organization_id !== $organizationId) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to transaction'
+                ], 403);
+            }
+
+            if ($transaction->status !== 'Pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending transactions can be edited'
+                ], 400);
+            }
+
+            if (isset($validated['payment_date'])) {
+                $validated['payment_date'] = \Carbon\Carbon::parse($validated['payment_date'])->format('Y-m-d H:i:s');
+            }
+
+            $validated['updated_by_user'] = Auth::check() ? Auth::user()->email_address : 'unknown';
+
+            $transaction->update($validated);
+
+            DB::commit();
+
+            event(new TransactionUpdated(['action' => 'updated', 'transaction_id' => $transaction->id, 'account_no' => $transaction->account_no]));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaction updated successfully',
+                'data' => $transaction->load(['account.customer', 'account.technicalDetails', 'processor', 'paymentMethodInfo'])
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error updating transaction: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update transaction',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function batchApprove(Request $request): JsonResponse
     {
         try {
@@ -1392,3 +1458,4 @@ class TransactionController extends Controller
     }
 
 }
+

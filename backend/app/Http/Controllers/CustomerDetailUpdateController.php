@@ -497,6 +497,26 @@ class CustomerDetailUpdateController extends Controller
             
             $technicalDetail->save();
 
+            // Sync username to online_status table if it changed
+            $oldUsername = $oldTechnicalDetails['username'] ?? null;
+            $newUsername = $technicalDetail->username;
+            if ($newUsername && $newUsername !== $oldUsername) {
+                $updatedRows = DB::table('online_status')
+                    ->where('account_id', $billingAccount->id)
+                    ->update([
+                        'username' => $newUsername,
+                        'updated_at' => now(),
+                    ]);
+
+                Log::info('Online status username synced', [
+                    'account_no' => $accountNo,
+                    'account_id' => $billingAccount->id,
+                    'old_username' => $oldUsername,
+                    'new_username' => $newUsername,
+                    'rows_updated' => $updatedRows,
+                ]);
+            }
+
             // Capture new technical details after save
             $newTechnicalDetails = [
                 'username' => $technicalDetail->username,
@@ -632,5 +652,6 @@ class CustomerDetailUpdateController extends Controller
         return 'https://drive.google.com/file/d/placeholder';
     }
 }
+
 
 

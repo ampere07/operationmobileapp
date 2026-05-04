@@ -680,73 +680,6 @@ class RelatedDataController extends Controller
             ], 500);
         }
     }
-
-    /**
-     * Generate PDF for a specific Statement of Account
-     */
-    public function generateSoaPdf($id): JsonResponse
-    {
-        try {
-            $soa = \App\Models\StatementOfAccount::with(['billingAccount.customer'])->find($id);
-
-            if (!$soa) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Statement of Account not found'
-                ], 404);
-            }
-
-            // If PDF already exists, just return it
-            if (!empty($soa->print_link)) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'PDF already exists',
-                    'pdf_url' => $soa->print_link
-                ]);
-            }
-
-            $account = $soa->billingAccount;
-            if (!$account) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Billing account not found for this SOA'
-                ], 404);
-            }
-
-            // Generate PDF using GoogleDrivePdfGenerationService
-            $pdfService = app(\App\Services\GoogleDrivePdfGenerationService::class);
-            $pdfResult = $pdfService->generateBillingPdf($account, null, $soa);
-
-            if (isset($pdfResult['success']) && $pdfResult['success'] && !empty($pdfResult['url'])) {
-                // Update SOA record with the new link
-                $soa->print_link = $pdfResult['url'];
-                $soa->save();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'PDF generated successfully',
-                    'pdf_url' => $pdfResult['url']
-                ]);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to generate PDF',
-                    'error' => $pdfResult['error'] ?? 'Unknown error'
-                ], 500);
-            }
-        } catch (\Exception $e) {
-            Log::error('Error generating SOA PDF for ID: ' . $id, [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to generate PDF',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
     /**
      * Get invoice by ID
      */
@@ -1376,12 +1309,20 @@ class RelatedDataController extends Controller
                 ->sort()
                 ->values();
 
-            // Fetch session_status from online_status table
+            // Fetch session_status and session_group from online_status table
             $sessionStatuses = DB::table('online_status')
                 ->whereNotNull('session_status')
                 ->where('session_status', '!=', '')
                 ->distinct()
                 ->pluck('session_status')
+                ->sort()
+                ->values();
+
+            $sessionGroups = DB::table('online_status')
+                ->whereNotNull('session_group')
+                ->where('session_group', '!=', '')
+                ->distinct()
+                ->pluck('session_group')
                 ->sort()
                 ->values();
 
@@ -1407,6 +1348,7 @@ class RelatedDataController extends Controller
                     'username_statuses' => $usernameStatuses,
                     'group_names' => $groupNames,
                     'session_statuses' => $sessionStatuses,
+                    'session_groups' => $sessionGroups,
                     'billing_statuses' => $billingStatuses
                 ]
             ]);
@@ -1598,4 +1540,5 @@ class RelatedDataController extends Controller
         }
     }
 }
+
 

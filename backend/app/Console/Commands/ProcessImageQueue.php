@@ -6,11 +6,11 @@ use Illuminate\Console\Command;
 use App\Services\ImageProcessingService;
 use Illuminate\Support\Facades\Log;
 
-class ProcessJobOrderImageQueue extends Command
+class ProcessImageQueue extends Command
 {
-    protected $signature = 'joborderimages:process {--limit=10 : Maximum number of job order images to process}';
+    protected $signature = 'images:process {--limit=10 : Maximum number of images to process}';
     
-    protected $description = 'Process pending job order images in the queue - resize and upload to Google Drive';
+    protected $description = 'Process pending images in the queue - resize and upload to Google Drive';
 
     private $imageProcessingService;
 
@@ -24,20 +24,20 @@ class ProcessJobOrderImageQueue extends Command
     {
         $startTime = now();
         $this->logToFile("\n" . str_repeat('=', 80));
-        $this->logToFile("[" . $startTime->format('Y-m-d H:i:s') . "] Job Order Image Queue Processing Started");
+        $this->logToFile("[" . $startTime->format('Y-m-d H:i:s') . "] Image Queue Processing Started");
         $this->logToFile(str_repeat('=', 80));
         
-        $this->info('Starting job order image queue processing...');
-        Log::info('Job Order Image Queue Processing: Started');
+        $this->info('Starting image queue processing...');
+        Log::info('Image Queue Processing: Started');
 
         $limit = (int) $this->option('limit');
         $this->logToFile("Processing limit: {$limit} images");
 
         try {
-            $stats = $this->imageProcessingService->getJobOrderQueueStats();
+            $stats = $this->imageProcessingService->getQueueStats();
             
             $statsMessage = sprintf(
-                "Job Order Queue Stats - Pending: %d, Processing: %d, Completed: %d, Failed: %d, Total: %d",
+                "Queue Stats - Pending: %d, Processing: %d, Completed: %d, Failed: %d, Total: %d",
                 $stats['pending'],
                 $stats['processing'],
                 $stats['completed'],
@@ -47,12 +47,12 @@ class ProcessJobOrderImageQueue extends Command
             
             $this->info($statsMessage);
             $this->logToFile($statsMessage);
-            Log::info('Job Order Queue Stats', $stats);
+            Log::info('Queue Stats', $stats);
 
             if ($stats['pending'] === 0) {
-                $this->info('No pending job order images to process.');
-                $this->logToFile('No pending job order images to process.');
-                Log::info('Job Order Image Queue Processing: No pending images');
+                $this->info('No pending images to process.');
+                $this->logToFile('No pending images to process.');
+                Log::info('Image Queue Processing: No pending images');
                 
                 $endTime = now();
                 $duration = $endTime->diffInSeconds($startTime);
@@ -62,8 +62,8 @@ class ProcessJobOrderImageQueue extends Command
                 return Command::SUCCESS;
             }
 
-            $this->logToFile("Starting to process {$stats['pending']} pending job order image(s)...");
-            $result = $this->imageProcessingService->processPendingJobOrderImages($limit);
+            $this->logToFile("Starting to process {$stats['pending']} pending image(s)...");
+            $result = $this->imageProcessingService->processPendingImages($limit);
 
             $resultMessage = sprintf(
                 "Processing complete - Successfully processed: %d, Failed: %d, Skipped: %d",
@@ -78,11 +78,11 @@ class ProcessJobOrderImageQueue extends Command
             $this->info("  - Skipped: {$result['skipped']}");
             $this->logToFile($resultMessage);
 
-            Log::info('Job Order Image Queue Processing: Completed', $result);
+            Log::info('Image Queue Processing: Completed', $result);
 
             if ($result['failed'] > 0) {
-                $retryResult = $this->imageProcessingService->retryFailedJobOrderImages();
-                $retryMessage = "Marked {$retryResult['retried']} failed job order image(s) for retry";
+                $retryResult = $this->imageProcessingService->retryFailedImages();
+                $retryMessage = "Marked {$retryResult['retried']} failed image(s) for retry";
                 $this->info($retryMessage);
                 $this->logToFile($retryMessage);
             }
@@ -95,12 +95,12 @@ class ProcessJobOrderImageQueue extends Command
             return Command::SUCCESS;
 
         } catch (\Exception $e) {
-            $errorMessage = "Error processing job order image queue: " . $e->getMessage();
+            $errorMessage = "Error processing image queue: " . $e->getMessage();
             $this->error($errorMessage);
             $this->logToFile("ERROR: {$errorMessage}");
             $this->logToFile("Stack trace: " . $e->getTraceAsString());
             
-            Log::error('Job Order Image Queue Processing Error: ' . $e->getMessage(), [
+            Log::error('Image Queue Processing Error: ' . $e->getMessage(), [
                 'exception' => $e,
             ]);
             
@@ -115,24 +115,13 @@ class ProcessJobOrderImageQueue extends Command
 
     private function logToFile(string $message): void
     {
-        $logPath = storage_path('logs/joborderimagequeue.log');
+        $logPath = storage_path('logs/imagequeue.log');
         $timestamp = now()->format('Y-m-d H:i:s');
         
         if (!str_starts_with($message, '===') && !str_starts_with($message, "\n===")) {
             $message = "[{$timestamp}] {$message}";
         }
         
-        try {
-            if (file_exists($logPath)) {
-                if (is_writable($logPath)) {
-                    @file_put_contents($logPath, $message . "\n", FILE_APPEND);
-                }
-            } elseif (is_writable(dirname($logPath))) {
-                @file_put_contents($logPath, $message . "\n", FILE_APPEND);
-            }
-        } catch (\Throwable $e) {
-            // Silently ignore log write errors to prevent command failure
-        }
+        file_put_contents($logPath, $message . "\n", FILE_APPEND);
     }
 }
-

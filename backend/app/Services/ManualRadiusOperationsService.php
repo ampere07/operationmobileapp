@@ -252,8 +252,8 @@ class ManualRadiusOperationsService
             }
 
             // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
-            $cleanPlan = preg_replace('/\s*-\s*.*/', '', $rawPlan);
-            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d.*/i', '', $cleanPlan);
+            $cleanPlan = preg_replace('/\s*-\s*(?:P|₱)?\d+.*/i', '', $rawPlan);
+            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d+.*/i', '', $cleanPlan);
             $cleanPlan = trim($cleanPlan);
             $this->writeLog("Clean Plan: $cleanPlan");
 
@@ -1095,6 +1095,7 @@ class ManualRadiusOperationsService
         }
     }
 }
+
 
 
 
