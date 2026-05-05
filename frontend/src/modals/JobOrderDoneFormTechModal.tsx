@@ -1,12 +1,43 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Modal, Image, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, InteractionManager } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, TouchableOpacity, Modal, Image, Platform, DeviceEventEmitter, KeyboardAvoidingView, Alert, Keyboard, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import { ChevronLeft, X, ChevronDown, Camera, CheckCircle, AlertCircle, XCircle, Search, Check } from 'lucide-react-native';
+import { Settings, Camera, X, ChevronDown, Search, Check, ChevronLeft, MapPin, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as MediaLibrary from 'expo-media-library';
+
+// Global cache to persist data between form opens/re-renders
+// This makes re-opening the form instant.
+const DATA_CACHE: {
+  lcpnaps: any[] | null;
+  inventory: any[] | null;
+  technicians: any[] | null;
+  plans: any[] | null;
+  vlans: any[] | null;
+  usageTypes: any[] | null;
+  routerModels: any[] | null;
+  usernamePattern: any | null;
+  mostUsedLcpnaps: any[] | null;
+  lastFetch: number;
+} = {
+  lcpnaps: null,
+  inventory: null,
+  technicians: null,
+  plans: null,
+  vlans: null,
+  usageTypes: null,
+  routerModels: null,
+  usernamePattern: null,
+  mostUsedLcpnaps: null,
+  lastFetch: 0
+};
+
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes cache expiry
+
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
 import { userService } from '../services/userService';
@@ -126,8 +157,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   onSave,
   jobOrderData
 }) => {
+  const insets = useSafeAreaInsets();
   const isDarkMode = false;
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+
+  useEffect(() => {
+    DeviceEventEmitter.emit('techModalStateChange', isOpen);
+    return () => {
+      DeviceEventEmitter.emit('techModalStateChange', false);
+    };
+  }, [isOpen]);
 
 
 
@@ -165,7 +204,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     dateInstalled: getTodayDate(),
     usageType: '',
     choosePlan: '',
-    connectionType: '',
+    connectionType: 'Fiber',
     routerModel: '',
     modemSN: '',
 
@@ -282,6 +321,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isDoneRendering, setIsDoneRendering] = useState(false);
+  const [isValidatingSN, setIsValidatingSN] = useState(false);
+  const [isSNValidated, setIsSNValidated] = useState(false);
 
   // Shared mounted flag – set false on unmount so ALL async callbacks can bail out
   const isMountedRef = useRef(true);
@@ -293,46 +334,30 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   }, []);
 
   // Open-session counter – incremented each time the modal transitions to isOpen=true.
-  // Every async fetch captures this snapshot; if it changes (modal closed + reopened)
-  // the stale callback sees the mismatch and silently discards its results.
   const openCycleRef = useRef(0);
-
-  // Deferred rendering: prevent heavy form from rendering on the same frame modal opens
+  const initialDataLoadedRef = useRef(false);
   const [isContentReady, setIsContentReady] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // Use InteractionManager for better performance during modal transition,
-      // but add a safety fallback timeout in case InteractionManager is blocked.
-      const handle = InteractionManager.runAfterInteractions(() => {
-        if (isMountedRef.current) {
-          setIsContentReady(true);
-        }
+      const raf = requestAnimationFrame(() => {
+        if (isMountedRef.current) setIsContentReady(true);
       });
-
-      const safetyTimeout = setTimeout(() => {
-        if (isMountedRef.current) {
-          setIsContentReady(true);
-        }
-      }, 500); // 500ms safety fallback
-
-      return () => {
-        handle.cancel();
-        clearTimeout(safetyTimeout);
-      };
+      return () => cancelAnimationFrame(raf);
     } else {
       setIsContentReady(false);
+      initialDataLoadedRef.current = false;
     }
   }, [isOpen]);
 
-  // Deferred rendering for the "Done" form section to prevent crashes on state change
+  // Deferred rendering for the "Done" form section.
   useEffect(() => {
     if (formData.onsiteStatus === 'Done') {
       const timer = setTimeout(() => {
         if (isMountedRef.current) {
           setIsDoneRendering(true);
         }
-      }, 50);
+      }, 200);
       return () => clearTimeout(timer);
     } else {
       setIsDoneRendering(false);
@@ -374,20 +399,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
   // Consolidated data fetching - all independent API calls batched into one effect.
-  // Uses openCycleRef so rapid open/close cycles never cause stale state merges.
   useEffect(() => {
-    if (!isOpen) {
-      // Full cleanup when modal closes – reset EVERYTHING to prevent state leaks
-      setFormData({
+    const joId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
+    if (!isOpen || !joId) {
+      // Full cleanup when modal closes
+      setFormData(prev => ({
+        ...prev,
         dateInstalled: getTodayDate(),
         usageType: '',
         choosePlan: '',
-        connectionType: '',
+        connectionType: 'Fiber',
         routerModel: '',
         modemSN: '',
-        region: '',
-        city: '',
-        barangay: '',
         lcpnap: '',
         port: '',
         vlan: '',
@@ -399,12 +422,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         routerReadingImage: null,
         portLabelImage: null,
         clientSignatureImage: null,
-        modifiedBy: currentUserEmail,
-        modifiedDate: new Date().toLocaleString('en-US', {
-          month: '2-digit', day: '2-digit', year: 'numeric',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          hour12: true
-        }),
         itemName1: '',
         visit_by: '',
         visit_with: '',
@@ -413,255 +430,140 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         ip: '',
         addressCoordinates: '',
         proofImage: null
-      });
-      setImagePreviews({
-        signedContractImage: null,
-        setupImage: null,
-        boxReadingImage: null,
-        routerReadingImage: null,
-        portLabelImage: null,
-        clientSignatureImage: null,
-        proofImage: null
-      });
+      }));
       setErrors({});
       setOrderItems([{ itemId: '', quantity: '' }]);
       setTechInputValue('');
+      setIsSNValidated(false);
       return;
     }
 
-    // Bump the session counter every time we open
     openCycleRef.current += 1;
     const session = openCycleRef.current;
-
-    // Helper: returns true only if THIS fetch's session is still active
-    const isCurrentSession = () =>
-      isMountedRef.current && openCycleRef.current === session;
-
-    // AbortController lets us cancel in-flight axios requests when the
-    // modal closes before the requests complete.
+    const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
     const controller = new AbortController();
 
-    const fetchAllData = async () => {
-      // Fire all independent API calls in parallel with Promise.allSettled
-      // so one failure doesn't block the rest
-      const [
-        imageSizeResult,
-        usernamePatternResult,
-        lcpnapResult,
-        vlanResult,
-        usageTypeResult,
-        inventoryResult,
-        technicianResult,
-        planResult,
-      ] = await Promise.allSettled([
+    const fetchAllData = async (isDone: boolean) => {
+      const now = Date.now();
+      const isCacheValid = (now - DATA_CACHE.lastFetch) < CACHE_EXPIRY;
+
+      // Hydrate from cache immediately for perceived speed
+      if (isCacheValid) {
+        if (DATA_CACHE.technicians) setTechnicians(DATA_CACHE.technicians);
+        if (DATA_CACHE.usernamePattern) setUsernamePattern(DATA_CACHE.usernamePattern);
+        if (isDone) {
+          if (DATA_CACHE.lcpnaps) setLcpnaps(DATA_CACHE.lcpnaps);
+          if (DATA_CACHE.inventory) setInventoryItems(DATA_CACHE.inventory);
+          if (DATA_CACHE.plans) setPlans(DATA_CACHE.plans);
+          if (DATA_CACHE.vlans) setVlans(DATA_CACHE.vlans);
+          if (DATA_CACHE.usageTypes) setUsageTypes(DATA_CACHE.usageTypes);
+          if (DATA_CACHE.routerModels) setRouterModels(DATA_CACHE.routerModels);
+          if (DATA_CACHE.mostUsedLcpnaps) setMostUsedLcpnaps(DATA_CACHE.mostUsedLcpnaps);
+        }
+      }
+
+      const commonPromises = [
         getActiveImageSize(),
         pppoeService.getPatterns('username'),
+        technicianService.getAllTechnicians(),
+      ];
+
+      const donePromises = isDone ? [
         getAllLCPNAPs('', 1, 1000),
         getAllVLANs(),
         getAllUsageTypes(),
         getAllInventoryItems('', 1, 1000),
-        technicianService.getAllTechnicians(),
         planService.getAllPlans(),
-      ]);
+        getMostUsedLCPNAPs(),
+      ] : [];
 
-      // Bail if the modal was closed (or reopened) while we were waiting
+      const results = await Promise.allSettled([...commonPromises, ...donePromises]);
       if (!isCurrentSession()) return;
 
-      // Username Pattern
-      if (usernamePatternResult.status === 'fulfilled') {
-        const patterns = usernamePatternResult.value;
-        if (patterns && patterns.length > 0) {
-          const pattern = patterns[0];
-          setUsernamePattern(pattern);
-          const existingUsername = jobOrderData?.pppoe_username || jobOrderData?.PPPoE_Username || '';
-          if (existingUsername && pattern.sequence.some((item: any) => item.type === 'tech_input')) {
-            setTechInputValue(existingUsername);
-          }
-        }
-      } else {
-        console.error('Failed to fetch username pattern:', usernamePatternResult.reason);
-        setUsernamePattern(null);
-      }
+      let idx = 0;
+      const imageSizeRes = results[idx++] as any;
+      const userPatRes = results[idx++] as any;
+      const techRes = results[idx++] as any;
+      const lcpRes = (isDone ? results[idx++] : null) as any;
+      const vlanRes = (isDone ? results[idx++] : null) as any;
+      const usageRes = (isDone ? results[idx++] : null) as any;
+      const invRes = (isDone ? results[idx++] : null) as any;
+      const planRes = (isDone ? results[idx++] : null) as any;
+      const mostUsedLcpRes = (isDone ? results[idx++] : null) as any;
 
-      // LCPNAPs
-      if (lcpnapResult.status === 'fulfilled') {
-        const response = lcpnapResult.value;
-        if (response.success && Array.isArray(response.data)) {
-          setLcpnaps(response.data);
-        } else {
-          setLcpnaps([]);
-        }
-      } else {
-        setLcpnaps([]);
-      }
-
-      // VLANs
-      if (vlanResult.status === 'fulfilled') {
-        const response = vlanResult.value;
-        if (response.success && Array.isArray(response.data)) {
-          setVlans(response.data);
-        } else {
-          setVlans([]);
-        }
-      } else {
-        setVlans([]);
-      }
-
-      // Usage Types
-      if (usageTypeResult.status === 'fulfilled') {
-        const response = usageTypeResult.value;
-        if (response.success && Array.isArray(response.data)) {
-          const filtered = (response.data as any[]).filter(ut => {
-            const val = ut.usage_name || ut.Usage_Name || ut.usageName;
-            if (!val) return false;
-            const name = String(val).trim().toLowerCase();
-            return name !== 'undefined' && name !== 'null' && name !== '' && !name.includes('undefined');
-          });
-          setUsageTypes(filtered);
-        } else {
-          setUsageTypes([]);
-        }
-      } else {
-        setUsageTypes([]);
-      }
-
-      // Inventory Items & Router Models
-      if (inventoryResult.status === 'fulfilled') {
-        const response = inventoryResult.value;
-        if (response.success && Array.isArray(response.data)) {
-          // Normal Items (Category 1)
-          const filteredItems = response.data.filter(item => {
-            const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
-            return catId === 1 || String(catId) === '1';
-          });
-          setInventoryItems(filteredItems);
-
-          // Router Models (Category 11)
-          const combinedRouterModels = response.data
-            .filter(item => {
-              if (!item) return false;
-              const catId = item.category_id || (item as any).Category_ID || (item as any).categoryId || (item as any).category;
-              return (catId === 11 || String(catId) === '11') && item.item_name;
-            })
-            .map((item, index) => ({
-              model: item.item_name,
-              brand: 'Inventory',
-              description: item.item_description || '',
-              id: index
-            }));
-
-          setRouterModels(combinedRouterModels);
-        } else {
-          setInventoryItems([]);
-          setRouterModels([]);
-        }
-      } else {
-        setInventoryItems([]);
-        setRouterModels([]);
-      }
-
-      // Technicians
-      if (technicianResult.status === 'fulfilled') {
-        const response = technicianResult.value;
-        if (response.success && response.data) {
-          const technicianList = response.data
-            .filter((tech: any) => tech.first_name || tech.last_name)
-            .map((tech: any) => {
-              const firstName = (tech.first_name || '').trim();
-              const middleInitial = tech.middle_initial ? `${tech.middle_initial.trim()}. ` : '';
-              const lastName = (tech.last_name || '').trim();
-              const fullName = `${firstName} ${middleInitial}${lastName}`.trim();
-              return {
-                email: tech.id.toString(), // Using id as unique identifier
-                name: fullName || 'Unknown Technician'
-              };
-            })
-            .filter((tech: any) => tech.name);
-          setTechnicians(technicianList);
+      // Process Common
+      if (userPatRes.status === 'fulfilled' && userPatRes.value?.length) {
+        const pattern = userPatRes.value[0];
+        setUsernamePattern(pattern);
+        const existingUsername = jobOrderData?.pppoe_username || jobOrderData?.PPPoE_Username || '';
+        if (existingUsername && pattern.sequence.some((item: any) => item.type === 'tech_input')) {
+          setTechInputValue(existingUsername);
         }
       }
 
-      // Plans
-      if (planResult.status === 'fulfilled') {
-        setPlans(planResult.value);
+      if (techRes.status === 'fulfilled' && techRes.value?.success) {
+        const list = techRes.value.data.filter((t: any) => t.first_name || t.last_name).map((t: any) => ({
+          email: t.id.toString(),
+          name: `${t.first_name || ''} ${t.middle_initial ? t.middle_initial + '. ' : ''}${t.last_name || ''}`.trim()
+        }));
+        setTechnicians(list);
+        DATA_CACHE.technicians = list;
       }
 
-      // Check session again before the sequential most-used LCPNAPs fetch
-      if (!isCurrentSession()) return;
-
-      // Fetch most used LCPNAPs
-      try {
-        const resp = await getMostUsedLCPNAPs();
-        if (isCurrentSession() && resp.success) {
-          setMostUsedLcpnaps(resp.data);
-        }
-      } catch (err) {
-        console.error('Error fetching most used LCPNAPs:', err);
+      // Process Done
+      if (lcpRes && lcpRes.status === 'fulfilled' && lcpRes.value?.success) setLcpnaps(lcpRes.value.data);
+      if (vlanRes && vlanRes.status === 'fulfilled' && vlanRes.value?.success) setVlans(vlanRes.value.data);
+      if (usageRes && usageRes.status === 'fulfilled' && usageRes.value?.success) {
+        setUsageTypes(usageRes.value.data.filter((ut: any) => {
+          const val = String(ut.usage_name || ut.Usage_Name || '').toLowerCase();
+          return val && val !== 'undefined' && val !== 'null';
+        }));
       }
+      if (invRes && invRes.status === 'fulfilled' && invRes.value?.success) {
+        const items = invRes.value.data;
+        setInventoryItems(items.filter((i: any) => String(i.category_id) === '1'));
+        setRouterModels(items.filter((i: any) => String(i.category_id) === '11').map((i: any, index: number) => ({
+          model: i.item_name, brand: 'Inventory', description: i.item_description || '', id: index
+        })));
+      }
+      if (planRes && planRes.status === 'fulfilled') setPlans(planRes.value);
+      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled' && mostUsedLcpRes.value?.success) setMostUsedLcpnaps(mostUsedLcpRes.value.data);
+
+      // Cache Update
+      DATA_CACHE.lastFetch = Date.now();
+      if (lcpRes && lcpRes.status === 'fulfilled') DATA_CACHE.lcpnaps = lcpRes.value.data;
+      if (invRes && invRes.status === 'fulfilled') DATA_CACHE.inventory = invRes.value.data;
+      if (planRes && planRes.status === 'fulfilled') DATA_CACHE.plans = planRes.value;
+      if (vlanRes && vlanRes.status === 'fulfilled') DATA_CACHE.vlans = vlanRes.value.data;
+      if (usageRes && usageRes.status === 'fulfilled') DATA_CACHE.usageTypes = usageRes.value.data;
+      if (userPatRes.status === 'fulfilled') DATA_CACHE.usernamePattern = userPatRes.value[0];
+      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled') DATA_CACHE.mostUsedLcpnaps = mostUsedLcpRes.value.data;
     };
 
-    fetchAllData();
+    fetchAllData(formData.onsiteStatus === 'Done');
 
-    // Fetch job order items separately (depends on jobOrderData)
     const fetchJobOrderItems = async () => {
-      if (jobOrderData) {
-        const jobOrderId = jobOrderData.id || jobOrderData.JobOrder_ID;
-        if (jobOrderId) {
-          try {
-            const response = await apiClient.get(`/job-order-items?job_order_id=${jobOrderId}`, {
-              signal: controller.signal
+      try {
+        const response = await apiClient.get(`/job-order-items?job_order_id=${joId}`, { signal: controller.signal });
+        if (isCurrentSession() && response.data?.success) {
+          const items = response.data.data;
+          if (items.length > 0) {
+            const unique = new Map();
+            items.forEach((it: any) => {
+              const existing = unique.get(it.item_name) || { quantity: 0 };
+              unique.set(it.item_name, { itemId: it.item_name, quantity: (parseInt(existing.quantity) + parseInt(it.quantity || 0)).toString() });
             });
-            const data = response.data as { success: boolean; data: any[] };
-
-            if (!isCurrentSession()) return;
-
-            if (data.success && Array.isArray(data.data)) {
-              const items = data.data;
-
-              if (items.length > 0) {
-                const uniqueItems = new Map();
-
-                items.forEach((item: any) => {
-                  const key = item.item_name;
-                  if (uniqueItems.has(key)) {
-                    const existing = uniqueItems.get(key);
-                    uniqueItems.set(key, {
-                      itemId: item.item_name || '',
-                      quantity: (parseInt(existing.quantity) + parseInt(item.quantity || 0)).toString()
-                    });
-                  } else {
-                    uniqueItems.set(key, {
-                      itemId: item.item_name || '',
-                      quantity: item.quantity ? item.quantity.toString() : ''
-                    });
-                  }
-                });
-
-                const formattedItems = Array.from(uniqueItems.values());
-                formattedItems.push({ itemId: '', quantity: '' });
-
-                setOrderItems(formattedItems);
-              } else {
-                setOrderItems([{ itemId: '', quantity: '' }]);
-              }
-            }
-          } catch (error: any) {
-            // Ignore AbortError – it's an intentional cancellation
-            if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED' && isCurrentSession()) {
-              setOrderItems([{ itemId: '', quantity: '' }]);
-            }
+            const formatted = Array.from(unique.values());
+            formatted.push({ itemId: '', quantity: '' });
+            setOrderItems(formatted);
           }
         }
-      }
+      } catch (err) { }
     };
-
     fetchJobOrderItems();
 
-    return () => {
-      // Cancel in-flight HTTP requests immediately when this effect re-runs or unmounts
-      controller.abort();
-    };
-  }, [isOpen, jobOrderData]);
+    return () => controller.abort();
+  }, [isOpen, jobOrderData?.id, formData.onsiteStatus === 'Done']);
 
 
   // Fetch used ports for the selected LCPNAP
@@ -681,69 +583,56 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         const currentId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
         const currentAccountId = jobOrderData?.account_id || jobOrderData?.Account_ID;
 
-        // 1. Fetch from job-orders (pending/active)
-        const joResponse = await apiClient.get('/job-orders', {
-          params: {
-            lcpnap: formData.lcpnap,
-            limit: 2000
-          },
-          signal: controller.signal
-        });
+        // Parallelize both sources of used ports
+        const [joResponseResult, rcResponseResult] = await Promise.allSettled([
+          // 1. Fetch from job-orders (pending/active)
+          apiClient.get('/job-orders', {
+            params: { lcpnap: formData.lcpnap, limit: 500 },
+            signal: controller.signal
+          }),
+          // 2. Fetch from technical_details (already installed customers)
+          (async () => {
+            const selectedLcpnapObj = lcpnaps.find(ln => (ln.lcpnap_name || (ln as any).name) === formData.lcpnap);
+            if (selectedLcpnapObj?.id) {
+              return apiClient.get(`/lcpnap/${selectedLcpnapObj.id}/related-customers`, {
+                signal: controller.signal
+              });
+            }
+            return null;
+          })()
+        ]);
 
         if (!isCurrentSession()) return;
 
-        if (joResponse.data && joResponse.data.success && Array.isArray(joResponse.data.data)) {
-          joResponse.data.data.forEach((jo: any) => {
+        // Process Job Orders results
+        if (joResponseResult.status === 'fulfilled' && joResponseResult.value?.data?.success) {
+          joResponseResult.value.data.data.forEach((jo: any) => {
             const joLcpnap = jo.lcpnap || jo.LCPNAP;
-
             if (joLcpnap === formData.lcpnap) {
               const joPort = (jo.port || jo.PORT || '').toString().replace(/\s+/g, '');
               const joId = jo.id || jo.JobOrder_ID;
-
               if (joPort && String(joId) !== String(currentId)) {
-                // Normalize port name to match generator (e.g., P01)
                 let p = joPort.toUpperCase();
-                if (/^\d+$/.test(p)) {
-                  p = `P${p.padStart(2, '0')}`;
-                } else if (/^P\d+$/.test(p)) {
-                  const numStr = p.substring(1);
-                  p = `P${numStr.padStart(2, '0')}`;
-                }
+                if (/^\d+$/.test(p)) p = `P${p.padStart(2, '0')}`;
+                else if (/^P\d+$/.test(p)) p = `P${p.substring(1).padStart(2, '0')}`;
                 used.add(p);
               }
             }
           });
         }
 
-        // 2. Fetch from technical_details (already installed customers)
-        // We find the ID of the selected LCPNAP to call the related-customers endpoint
-        const selectedLcpnapObj = lcpnaps.find(ln => (ln.lcpnap_name || (ln as any).name) === formData.lcpnap);
-        if (selectedLcpnapObj?.id) {
-          try {
-            const rcResponse = await apiClient.get(`/lcpnap/${selectedLcpnapObj.id}/related-customers`, {
-              signal: controller.signal
-            });
-            
-            if (isCurrentSession() && rcResponse.data && rcResponse.data.success && Array.isArray(rcResponse.data.data)) {
-              rcResponse.data.data.forEach((rc: any) => {
-                const rcPort = (rc.port || '').toString().replace(/\s+/g, '');
-                const rcAccountId = rc.id || rc.account_id || rc.Account_ID;
-
-                if (rcPort && String(rcAccountId) !== String(currentAccountId)) {
-                  let p = rcPort.toUpperCase();
-                  if (/^\d+$/.test(p)) {
-                    p = `P${p.padStart(2, '0')}`;
-                  } else if (/^P\d+$/.test(p)) {
-                    const numStr = p.substring(1);
-                    p = `P${numStr.padStart(2, '0')}`;
-                  }
-                  used.add(p);
-                }
-              });
+        // Process Related Customers results
+        if (rcResponseResult.status === 'fulfilled' && rcResponseResult.value?.data?.success) {
+          rcResponseResult.value.data.data.forEach((rc: any) => {
+            const rcPort = (rc.port || '').toString().replace(/\s+/g, '');
+            const rcAccountId = rc.id || rc.account_id || rc.Account_ID;
+            if (rcPort && String(rcAccountId) !== String(currentAccountId)) {
+              let p = rcPort.toUpperCase();
+              if (/^\d+$/.test(p)) p = `P${p.padStart(2, '0')}`;
+              else if (/^P\d+$/.test(p)) p = `P${p.substring(1).padStart(2, '0')}`;
+              used.add(p);
             }
-          } catch (err) {
-            console.error('Failed to fetch related customers for used ports:', err);
-          }
+          });
         }
 
         if (isCurrentSession()) {
@@ -759,14 +648,22 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     fetchUsedPorts();
 
     return () => { controller.abort(); };
-  }, [isOpen, formData.lcpnap, jobOrderData, lcpnaps]);
+  }, [isOpen, formData.lcpnap, jobOrderData?.id, jobOrderData?.JobOrder_ID]);
 
   useEffect(() => {
-    if (!jobOrderData || !isOpen) return;
+    if (!jobOrderData || !isOpen || initialDataLoadedRef.current) return;
+    initialDataLoadedRef.current = true;
 
     const session = openCycleRef.current;
     const isCurrentSession = () => isMountedRef.current && openCycleRef.current === session;
     const controller = new AbortController();
+
+    const initialSN = jobOrderData.Modem_SN || jobOrderData.modem_sn || '';
+    if (initialSN && initialSN.trim() !== '') {
+      setIsSNValidated(true);
+    } else {
+      setIsSNValidated(false);
+    }
 
     const loadedOnsiteStatus = jobOrderData.Onsite_Status || jobOrderData.onsite_status || 'In Progress';
 
@@ -819,7 +716,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
       usageType: sanitize(jobOrderData.Usage_Type || jobOrderData.usage_type),
       choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan),
-      connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type),
+      connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type) || 'Fiber',
       routerModel: sanitize(jobOrderData.Router_Model || jobOrderData.router_model),
       modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn),
       lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap),
@@ -895,7 +792,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     return () => {
       controller.abort();
     };
-  }, [jobOrderData, isOpen]);
+  }, [isOpen, jobOrderData?.id, jobOrderData?.JobOrder_ID]);
 
   const handleInputChange = useCallback((field: keyof JobOrderDoneFormData, value: string | File | null) => {
     let finalValue = value;
@@ -909,6 +806,10 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (field === 'city') newData.barangay = '';
       return newData;
     });
+
+    if (field === 'modemSN' || field === 'connectionType') {
+      setIsSNValidated(false);
+    }
     setErrors(prev => {
       if (prev[field]) {
         return { ...prev, [field]: '' };
@@ -1066,12 +967,72 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.visit_with.trim()) newErrors.visit_with = 'Visit With is required';
       if (!formData.visit_with_other.trim()) newErrors.visit_with_other = 'Visit With(Other) is required';
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
-      if (!formData.statusRemarks.trim()) newErrors.statusRemarks = 'Status Remarks is required';
-      if (!formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) newErrors.proofImage = 'Proof Image is required';
+    }
+    
+    // Proof Image is mandatory for all statuses
+    if (!formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) {
+      newErrors.proofImage = 'Proof Image is required';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleValidateSN = async () => {
+    const sn = formData.modemSN?.trim();
+    if (!sn) {
+      Alert.alert('Validation Error', 'Please enter a Modem Serial Number first.');
+      return;
+    }
+
+    if (isValidatingSN) return;
+
+    if (formData.connectionType !== 'Fiber') {
+      Alert.alert('Validation Info', 'SN validation is only available for Fiber connections.');
+      return;
+    }
+
+    setIsValidatingSN(true);
+    try {
+      const response = await apiClient.get('/smart-olt/validate-sn', {
+        params: { sn },
+        timeout: 15000
+      });
+
+      const result = response?.data;
+
+      if (!result || !result.success) {
+        const msg = result?.message || 'Serial Number not found in SmartOLT system.';
+        Alert.alert('Validation Error', msg);
+        setErrors(prev => ({ ...prev, modemSN: msg }));
+        setIsSNValidated(false);
+        return;
+      }
+
+      // Success logic
+      setIsSNValidated(true);
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.modemSN;
+        return newErrors;
+      });
+
+      // Auto-populate router model safely
+      const onuType = result.data?.onu_type_name || result.onus?.[0]?.onu_type_name;
+      if (onuType) {
+        setFormData(prev => ({ ...prev, routerModel: onuType }));
+      }
+
+      Alert.alert('Success', 'Modem Serial Number is valid and verified in SmartOLT.');
+    } catch (error: any) {
+      console.error('[Validation Error]', error);
+      const errorMsg = error.response?.data?.message || error.message || 'System communication error. Please check your internet.';
+      Alert.alert('Validation Error', errorMsg);
+      setErrors(prev => ({ ...prev, modemSN: errorMsg }));
+      setIsSNValidated(false);
+    } finally {
+      setIsValidatingSN(false);
+    }
   };
 
   const handleSave = async () => {
@@ -1103,10 +1064,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    // Modem SN Duplicate Validation (Job Orders & Technical Details)
-    // Refactored to show specific validation steps in the loading modal
     const jobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
-    
+
     if (!jobOrderId) {
       showMessageModal('Error', [
         { type: 'error', text: 'Cannot update job order: Missing ID' }
@@ -1124,79 +1083,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     let progressInterval: NodeJS.Timeout | null = null;
 
     try {
-      // 1. SmartOLT Validation (Fiber only)
-      if (updatedFormData.onsiteStatus === 'Done' && updatedFormData.modemSN.trim() && updatedFormData.connectionType === 'Fiber') {
-        setLoadingMessage('Checking SN in SmartOLT...');
-        setLoadingPercentage(10);
-        try {
-          const smartOltResponse = await apiClient.get('/smart-olt/validate-sn', {
-            params: { sn: updatedFormData.modemSN }
-          });
-          if (!(smartOltResponse.data as any).success) {
-            throw new Error('sn not existing in smart olt');
-          }
-        } catch (error: any) {
-          throw new Error(error.response?.data?.message || 'sn not existing in smart olt');
-        }
-      }
-      
-      setCurrentStep(1);
-      setLoadingPercentage(20);
-      await new Promise(resolve => setTimeout(resolve, 600));
-
-      // 2 & 3. Duplicate SN Check (Job Orders & Technical Details)
-      if (updatedFormData.onsiteStatus === 'Done' && updatedFormData.modemSN.trim()) {
-        setLoadingMessage('Checking SN duplicate in Job Orders...');
-        setLoadingPercentage(35);
-        
-        try {
-          const duplicateResponse = await apiClient.get('/job-orders/validate-sn', {
-            params: {
-              sn: updatedFormData.modemSN,
-              exclude_id: jobOrderId
-            }
-          });
-
-          if (duplicateResponse.data && !duplicateResponse.data.success && (duplicateResponse.data as any).is_duplicate) {
-            const source = (duplicateResponse.data as any).source;
-            if (source === 'job_orders') {
-              throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Job Orders.');
-            }
-            
-            // Job Order pass, check Technical Details
-            setCurrentStep(2);
-            setLoadingPercentage(50);
-            setLoadingMessage('Checking SN duplicate in Technical Details...');
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            if (source === 'technical_details') {
-              throw new Error((duplicateResponse.data as any).message || 'SN Duplicate Detected in Technical Details.');
-            }
-          }
-          
-          // Passing both
-          setCurrentStep(2);
-          setLoadingPercentage(50);
-          setLoadingMessage('Checking SN duplicate in Technical Details...');
-          await new Promise(resolve => setTimeout(resolve, 800));
-        } catch (error: any) {
-          throw error;
-        }
-      } else {
-        // Skip duplicate checks if not 'Done'
-        setCurrentStep(1);
-        setLoadingPercentage(35);
-        await new Promise(resolve => setTimeout(resolve, 400));
-        setCurrentStep(2);
-        setLoadingPercentage(55);
-        await new Promise(resolve => setTimeout(resolve, 400));
-      }
-
-      // 4. Proceed to Saving
-      setCurrentStep(3);
-      setLoadingPercentage(65);
+      // Finalizing and Saving
+      setCurrentStep(0);
+      setLoadingPercentage(45);
       setLoadingMessage('Finalizing and saving changes...');
-      
+
       progressInterval = setInterval(() => {
         setLoadingPercentage(prev => {
           if (prev >= 98) return 98;
@@ -1207,51 +1098,66 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
       const now = new Date();
-      const currentDateTime = now.getFullYear() + '-' + 
-        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-        String(now.getDate()).padStart(2, '0') + ' ' + 
-        String(now.getHours()).padStart(2, '0') + ':' + 
-        String(now.getMinutes()).padStart(2, '0') + ':' + 
-        String(now.getSeconds()).padStart(2, '0');
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const gmt8 = new Date(utc + (3600000 * 8));
+      const currentDateTime = gmt8.getFullYear() + '-' +
+        String(gmt8.getMonth() + 1).padStart(2, '0') + '-' +
+        String(gmt8.getDate()).padStart(2, '0') + ' ' +
+        String(gmt8.getHours()).padStart(2, '0') + ':' +
+        String(gmt8.getMinutes()).padStart(2, '0') + ':' +
+        String(gmt8.getSeconds()).padStart(2, '0');
 
-      let jobOrderUpdateData: any = {};
+      let jobOrderUpdateData: any = {
+        updated_by_user_email: updatedFormData.modifiedBy,
+        desired_plan: updatedFormData.choosePlan,
+      };
 
       if (updatedFormData.onsiteStatus === 'In Progress') {
+        jobOrderUpdateData.onsite_status = 'In Progress';
+      } else if (updatedFormData.onsiteStatus === 'Done') {
         jobOrderUpdateData = {
-          onsite_status: 'In Progress',
-          updated_by_user_email: updatedFormData.modifiedBy,
-        };
-      } else {
-        jobOrderUpdateData = {
+          ...jobOrderUpdateData,
+          onsite_status: 'Done',
           date_installed: updatedFormData.dateInstalled,
           usage_type: updatedFormData.usageType,
           router_model: updatedFormData.routerModel,
           lcpnap: updatedFormData.lcpnap,
           port: updatedFormData.port,
           vlan: updatedFormData.vlan,
+          connection_type: updatedFormData.connectionType,
+          modem_router_sn: updatedFormData.modemSN,
+          ip_address: updatedFormData.ip,
+          onsite_remarks: updatedFormData.onsiteRemarks,
+          address_coordinates: updatedFormData.addressCoordinates || '',
           visit_by: updatedFormData.visit_by,
           visit_with: updatedFormData.visit_with,
           visit_with_other: updatedFormData.visit_with_other,
-          updated_by_user_email: updatedFormData.modifiedBy,
-          desired_plan: updatedFormData.choosePlan,
           end_time: currentDateTime
         };
-      }
 
-      if (updatedFormData.onsiteStatus === 'Done') {
-        jobOrderUpdateData.connection_type = updatedFormData.connectionType;
-        jobOrderUpdateData.modem_router_sn = updatedFormData.modemSN;
-        jobOrderUpdateData.ip_address = updatedFormData.ip;
-        jobOrderUpdateData.onsite_remarks = updatedFormData.onsiteRemarks;
-        jobOrderUpdateData.address_coordinates = updatedFormData.addressCoordinates || '';
-        jobOrderUpdateData.onsite_status = 'Done';
-        
         // Add tech input username if applicable
         const hasTechInput = usernamePattern && usernamePattern.sequence.some(item => (item as any).type === 'tech_input');
         if (hasTechInput && techInputValue.trim()) {
           jobOrderUpdateData.pppoe_username = techInputValue.trim();
         }
+      } else if (updatedFormData.onsiteStatus === 'Failed' || updatedFormData.onsiteStatus === 'Reschedule') {
+        jobOrderUpdateData = {
+          ...jobOrderUpdateData,
+          onsite_status: updatedFormData.onsiteStatus,
+          visit_by: updatedFormData.visit_by,
+          visit_with: updatedFormData.visit_with,
+          visit_with_other: updatedFormData.visit_with_other,
+          onsite_remarks: updatedFormData.onsiteRemarks,
+          status_remarks: updatedFormData.statusRemarks,
+          end_time: currentDateTime
+        };
+
+        if (updatedFormData.onsiteStatus === 'Reschedule') {
+          jobOrderUpdateData.start_time = null;
+          jobOrderUpdateData.end_time = null;
+        }
       }
+
 
       if (['Done', 'Failed', 'Reschedule'].includes(updatedFormData.onsiteStatus)) {
         const firstName = (jobOrderData?.First_Name || jobOrderData?.first_name || '').trim();
@@ -1270,81 +1176,108 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           hasImages = true;
         };
 
+        const saveImageToGallery = async (fileObj: any, fieldName: string) => {
+          if (!fileObj || !fileObj.uri) return;
+          try {
+            const { status } = await MediaLibrary.requestPermissionsAsync(true);
+            if (status === 'granted') {
+              const fullName = `${firstName} ${middleInitial} ${fullLastName}`.trim();
+              const cleanFullName = fullName.replace(/[^a-zA-Z0-9]/g, '_');
+              const timestamp = Date.now();
+              // Simplified field name for the filename
+              const shortField = fieldName.replace('_image', '').replace('signed_', '');
+              const newFileName = `joborder_${shortField}_${cleanFullName}_${timestamp}.jpg`;
+              
+              const tempUri = `${ExpoFileSystem.cacheDirectory}${newFileName}`;
+              await ExpoFileSystem.copyAsync({ from: fileObj.uri, to: tempUri });
+              await MediaLibrary.saveToLibraryAsync(tempUri);
+              console.log(`[MediaLibrary] ${fieldName} saved to gallery as: ${newFileName}`);
+            }
+          } catch (e) {
+            console.error(`[MediaLibrary] Error saving ${fieldName} to gallery:`, e);
+          }
+        };
+
         if (updatedFormData.onsiteStatus === 'Done') {
+          await saveImageToGallery(formData.signedContractImage, 'contract');
+          await saveImageToGallery(formData.setupImage, 'setup');
+          await saveImageToGallery(formData.boxReadingImage, 'box_reading');
+          await saveImageToGallery(formData.routerReadingImage, 'router_reading');
+          await saveImageToGallery(formData.portLabelImage, 'port_label');
+          await saveImageToGallery(formData.clientSignatureImage, 'signature');
+          await saveImageToGallery(formData.proofImage, 'proof');
+
           safeAppendImage('signed_contract_image', formData.signedContractImage);
           safeAppendImage('setup_image', formData.setupImage);
           safeAppendImage('box_reading_image', formData.boxReadingImage);
           safeAppendImage('router_reading_image', formData.routerReadingImage);
           safeAppendImage('port_label_image', formData.portLabelImage);
           safeAppendImage('client_signature_image', formData.clientSignatureImage);
+          safeAppendImage('proof_image', formData.proofImage);
         }
 
         if (updatedFormData.onsiteStatus === 'Failed' || updatedFormData.onsiteStatus === 'Reschedule') {
+          await saveImageToGallery(formData.proofImage, 'proof');
           safeAppendImage('proof_image', formData.proofImage);
         }
 
         if (hasImages) {
 
-        try {
-          const uploadResponse = await apiClient.post<{
-            success: boolean;
-            message: string;
-            data?: {
-              signed_contract_image_url?: string;
-              setup_image_url?: string;
-              box_reading_image_url?: string;
-              router_reading_image_url?: string;
-              port_label_image_url?: string;
-              client_signature_image_url?: string;
-              proof_image_url?: string;
-            };
-            folder_id?: string;
-          }>(`/job-orders/${jobOrderId}/upload-images`, imageFormData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          });
+          try {
+            const uploadResponse = await apiClient.post<{
+              success: boolean;
+              message: string;
+              data?: {
+                signed_contract_image_url?: string;
+                setup_image_url?: string;
+                box_reading_image_url?: string;
+                router_reading_image_url?: string;
+                port_label_image_url?: string;
+                client_signature_image_url?: string;
+                proof_image_url?: string;
+              };
+              folder_id?: string;
+            }>(`/job-orders/${jobOrderId}/upload-images`, imageFormData, {
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              }
+            });
 
-          if (uploadResponse.data.success && uploadResponse.data.data) {
-            const imageUrls = uploadResponse.data.data;
+            if (uploadResponse.data.success && uploadResponse.data.data) {
+              const imageUrls = uploadResponse.data.data;
 
-            if (imageUrls.signed_contract_image_url) {
-              jobOrderUpdateData.signed_contract_image_url = imageUrls.signed_contract_image_url;
+              if (imageUrls.signed_contract_image_url) {
+                jobOrderUpdateData.signed_contract_image_url = imageUrls.signed_contract_image_url;
+              }
+              if (imageUrls.setup_image_url) {
+                jobOrderUpdateData.setup_image_url = imageUrls.setup_image_url;
+              }
+              if (imageUrls.box_reading_image_url) {
+                jobOrderUpdateData.box_reading_image_url = imageUrls.box_reading_image_url;
+              }
+              if (imageUrls.router_reading_image_url) {
+                jobOrderUpdateData.router_reading_image_url = imageUrls.router_reading_image_url;
+              }
+              if (imageUrls.port_label_image_url) {
+                jobOrderUpdateData.port_label_image_url = imageUrls.port_label_image_url;
+              }
+              if (imageUrls.client_signature_image_url) {
+                jobOrderUpdateData.client_signature_url = imageUrls.client_signature_image_url;
+              }
+              if (imageUrls.proof_image_url) {
+                jobOrderUpdateData.proof_image_url = imageUrls.proof_image_url;
+              }
             }
-            if (imageUrls.setup_image_url) {
-              jobOrderUpdateData.setup_image_url = imageUrls.setup_image_url;
-            }
-            if (imageUrls.box_reading_image_url) {
-              jobOrderUpdateData.box_reading_image_url = imageUrls.box_reading_image_url;
-            }
-            if (imageUrls.router_reading_image_url) {
-              jobOrderUpdateData.router_reading_image_url = imageUrls.router_reading_image_url;
-            }
-            if (imageUrls.port_label_image_url) {
-              jobOrderUpdateData.port_label_image_url = imageUrls.port_label_image_url;
-            }
-            if (imageUrls.client_signature_image_url) {
-              jobOrderUpdateData.client_signature_url = imageUrls.client_signature_image_url;
-            }
-            if (imageUrls.proof_image_url) {
-              jobOrderUpdateData.proof_image_url = imageUrls.proof_image_url;
-            }
+          } catch (uploadError: any) {
+            const errorMsg = uploadError.response?.data?.message || uploadError.message || 'Unknown error';
+            saveMessages.push({
+              type: 'warning',
+              text: `Failed to upload images to Google Drive: ${errorMsg}`
+            });
           }
-        } catch (uploadError: any) {
-          const errorMsg = uploadError.response?.data?.message || uploadError.message || 'Unknown error';
-          saveMessages.push({
-            type: 'warning',
-            text: `Failed to upload images to Google Drive: ${errorMsg}`
-          });
-        }
         }
       }
 
-      if (updatedFormData.onsiteStatus === 'Failed' || updatedFormData.onsiteStatus === 'Reschedule') {
-        jobOrderUpdateData.onsite_remarks = updatedFormData.onsiteRemarks;
-        jobOrderUpdateData.status_remarks = updatedFormData.statusRemarks;
-        jobOrderUpdateData.onsite_status = updatedFormData.onsiteStatus;
-      }
 
 
 
@@ -1531,8 +1464,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       }
 
       // Special handling for RADIUS error to match user requirements exactly
-      const displayMessage = errorMessage === 'radius api error occured contact support' 
-        ? errorMessage 
+      const displayMessage = errorMessage === 'radius api error occured contact support'
+        ? errorMessage
         : `Failed to update records: ${errorMessage}`;
 
       showMessageModal('Error', [
@@ -1541,7 +1474,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
   };
 
-  const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData]);
+  const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData?.id, jobOrderData?.JobOrder_ID, jobOrderData?.First_Name, jobOrderData?.Last_Name]);
 
   const selectedLcpnap = useMemo(() => lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap), [lcpnaps, formData.lcpnap]);
   const portTotal = Number(selectedLcpnap?.port_total || 0) || 0;
@@ -1701,7 +1634,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     if (activeTechField === 'visit_by') list = visitByTechnicians;
     else if (activeTechField === 'visit_with') list = visitWithTechnicians;
     else if (activeTechField === 'visit_with_other') list = visitWithOtherTechnicians;
-    
+
     // Add "None" for Visit With and Visit With Other
     const finalList = (activeTechField === 'visit_with' || activeTechField === 'visit_with_other')
       ? [{ name: 'None', email: '' }, ...list]
@@ -1751,7 +1684,96 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         imageUrl={item.image_url ? convertGoogleDriveUrl(item.image_url) : null}
       />
     );
-  }, []); // assuming convertGoogleDriveUrl is available globally in the file scope
+  }, []);
+
+  const renderUsageTypeItem = useCallback(({ item, extraData }: any) => (
+    <MiniModalItem
+      label={item}
+      isSelected={extraData.selectedValue === item}
+      onPress={extraData.onPress}
+      isDarkMode={extraData.isDarkMode}
+      primaryColor={extraData.primaryColor}
+    />
+  ), []);
+
+  const renderPortItem = useCallback(({ item, extraData }: any) => (
+    <MiniModalItem
+      label={item}
+      isSelected={extraData.selectedValue === item}
+      onPress={extraData.onPress}
+      isDarkMode={extraData.isDarkMode}
+      primaryColor={extraData.primaryColor}
+    />
+  ), []);
+
+  const renderVlanItem = useCallback(({ item, extraData }: any) => (
+    <MiniModalItem
+      label={item}
+      isSelected={extraData.selectedValue === item}
+      onPress={extraData.onPress}
+      isDarkMode={extraData.isDarkMode}
+      primaryColor={extraData.primaryColor}
+    />
+  ), []);
+
+  const renderTechItem = useCallback(({ item, extraData }: any) => (
+    <MiniModalItem
+      label={item.name}
+      isSelected={extraData.selectedValue === item.name}
+      onPress={extraData.onPress}
+      isDarkMode={extraData.isDarkMode}
+      primaryColor={extraData.primaryColor}
+    />
+  ), []);
+
+  const lcpnapExtraData = useMemo(() => ({
+    selectedValue: formData.lcpnap,
+    onPress: handleLcpnapItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [formData.lcpnap, handleLcpnapItemPress, isDarkMode, colorPalette?.primary]);
+
+  const routerModelExtraData = useMemo(() => ({
+    selectedValue: formData.routerModel,
+    onPress: handleRouterModelItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [formData.routerModel, handleRouterModelItemPress, isDarkMode, colorPalette?.primary]);
+
+  const itemExtraData = useMemo(() => ({
+    selectedValue: activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '',
+    onPress: handleInventoryItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [activeItemIndex, orderItems, handleInventoryItemPress, isDarkMode, colorPalette?.primary]);
+
+  const usageTypeExtraData = useMemo(() => ({
+    selectedValue: formData.usageType,
+    onPress: handleUsageTypeItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [formData.usageType, handleUsageTypeItemPress, isDarkMode, colorPalette?.primary]);
+
+  const portExtraData = useMemo(() => ({
+    selectedValue: formData.port,
+    onPress: handlePortItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [formData.port, handlePortItemPress, isDarkMode, colorPalette?.primary]);
+
+  const vlanExtraData = useMemo(() => ({
+    selectedValue: formData.vlan,
+    onPress: handleVlanItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [formData.vlan, handleVlanItemPress, isDarkMode, colorPalette?.primary]);
+
+  const techExtraData = useMemo(() => ({
+    selectedValue: activeTechField ? formData[activeTechField] : '',
+    onPress: handleTechItemPress,
+    isDarkMode,
+    primaryColor: colorPalette?.primary || '#7c3aed'
+  }), [activeTechField, formData, handleTechItemPress, isDarkMode, colorPalette?.primary]);
 
   return (
     <>
@@ -1769,22 +1791,19 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             <Text style={[styles.loadingPercentage, { color: colorPalette?.primary || '#7c3aed', marginTop: 16 }]}>
               {Math.round(loadingPercentage)}%
             </Text>
-            <Text style={{ 
-              marginTop: 8, 
-              color: isDarkMode ? '#e5e7eb' : '#374151', 
-              fontSize: 16, 
+            <Text style={{
+              marginTop: 8,
+              color: isDarkMode ? '#e5e7eb' : '#374151',
+              fontSize: 16,
               fontWeight: '600',
-              textAlign: 'center' 
+              textAlign: 'center'
             }}>
               {loadingMessage || 'Processing...'}
             </Text>
-            
+
             {/* Steps indicator */}
             <View style={{ marginTop: 24, width: '100%' }}>
               {[
-                'SmartOLT Validation',
-                'Job Order duplicate check',
-                'Technical Details check',
                 'Saving changes'
               ].map((step, index) => (
                 <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
@@ -1792,8 +1811,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     width: 24,
                     height: 24,
                     borderRadius: 12,
-                    backgroundColor: currentStep > index 
-                      ? '#10b981' 
+                    backgroundColor: currentStep > index
+                      ? '#10b981'
                       : (currentStep === index ? (colorPalette?.primary || '#7c3aed') : (isDarkMode ? '#374151' : '#e5e7eb')),
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1805,9 +1824,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                       <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>{index + 1}</Text>
                     )}
                   </View>
-                  <Text style={{ 
-                    color: currentStep >= index 
-                      ? (isDarkMode ? '#ffffff' : '#111827') 
+                  <Text style={{
+                    color: currentStep >= index
+                      ? (isDarkMode ? '#ffffff' : '#111827')
                       : (isDarkMode ? '#9ca3af' : '#6b7280'),
                     fontSize: 14,
                     fontWeight: currentStep === index ? 'bold' : 'normal'
@@ -1900,462 +1919,440 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       </Modal>
 
       {/* ─── LCP-NAP Mini Modal ──────────────────────────────────────── */}
-      <Modal
-        visible={isLcpnapMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsLcpnapMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP-NAP</Text>
-              <Pressable onPress={() => setIsLcpnapMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search LCP-NAP..."
-                  value={lcpnapSearch}
-                  onChangeText={setLcpnapSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isLcpnapMiniModalVisible}
+      {isLcpnapMiniModalVisible && (
+        <Modal
+          visible={isLcpnapMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsLcpnapMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select LCP-NAP</Text>
+                <Pressable onPress={() => setIsLcpnapMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search LCP-NAP..."
+                    value={lcpnapSearch}
+                    onChangeText={setLcpnapSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isLcpnapMiniModalVisible}
+                  />
+                  {lcpnapSearch.length > 0 && (
+                    <Pressable onPress={() => setLcpnapSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredLcpnaps}
+                  extraData={lcpnapExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderLcpnapItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {lcpnapSearch.length > 0 && (
-                  <Pressable onPress={() => setLcpnapSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredLcpnaps}
-                extraData={{ selectedValue: formData.lcpnap, onPress: handleLcpnapItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={renderLcpnapItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Router Model Mini Modal ─────────────────────────────────── */}
-      <Modal
-        visible={isRouterModelMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsRouterModelMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Router Model</Text>
-              <Pressable onPress={() => setIsRouterModelMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search Router Model..."
-                  value={routerModelSearch}
-                  onChangeText={setRouterModelSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  autoFocus={isRouterModelMiniModalVisible}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+      {isRouterModelMiniModalVisible && (
+        <Modal
+          visible={isRouterModelMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsRouterModelMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Router Model</Text>
+                <Pressable onPress={() => setIsRouterModelMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search Router Model..."
+                    value={routerModelSearch}
+                    onChangeText={setRouterModelSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    autoFocus={isRouterModelMiniModalVisible}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                  />
+                  {routerModelSearch.length > 0 && (
+                    <Pressable onPress={() => setRouterModelSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredRouterModels}
+                  extraData={routerModelExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderRouterModelItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {routerModelSearch.length > 0 && (
-                  <Pressable onPress={() => setRouterModelSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredRouterModels}
-                extraData={{ selectedValue: formData.routerModel, onPress: handleRouterModelItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={renderRouterModelItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Item Selection Mini Modal ───────────────────────────────── */}
-      <Modal
-        visible={isItemMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsItemMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Item</Text>
-              <Pressable onPress={() => setIsItemMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search Item..."
-                  value={itemSearchModal}
-                  onChangeText={setItemSearchModal}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isItemMiniModalVisible}
+      {isItemMiniModalVisible && (
+        <Modal
+          visible={isItemMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsItemMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Item</Text>
+                <Pressable onPress={() => setIsItemMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search Item..."
+                    value={itemSearchModal}
+                    onChangeText={setItemSearchModal}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isItemMiniModalVisible}
+                  />
+                  {itemSearchModal.length > 0 && (
+                    <Pressable onPress={() => setItemSearchModal('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={[
+                    ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
+                    ...filteredInventoryItems
+                  ]}
+                  extraData={itemExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderItemItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {itemSearchModal.length > 0 && (
-                  <Pressable onPress={() => setItemSearchModal('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={[
-                  ...("None".toLowerCase().includes(itemSearchModal.toLowerCase()) ? [{ id: -1, item_name: 'None', image_url: null } as any] : []),
-                  ...filteredInventoryItems
-                ]}
-                extraData={{ selectedValue: activeItemIndex !== null ? orderItems[activeItemIndex]?.itemId : '', onPress: handleInventoryItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={renderItemItem}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Usage Type Mini Modal ──────────────────────────────────── */}
-      <Modal
-        visible={isUsageTypeMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsUsageTypeMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Usage Type</Text>
-              <Pressable onPress={() => setIsUsageTypeMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search Usage Type..."
-                  value={usageTypeSearch}
-                  onChangeText={setUsageTypeSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isUsageTypeMiniModalVisible}
+      {isUsageTypeMiniModalVisible && (
+        <Modal
+          visible={isUsageTypeMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsUsageTypeMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select Usage Type</Text>
+                <Pressable onPress={() => setIsUsageTypeMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search Usage Type..."
+                    value={usageTypeSearch}
+                    onChangeText={setUsageTypeSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isUsageTypeMiniModalVisible}
+                  />
+                  {usageTypeSearch.length > 0 && (
+                    <Pressable onPress={() => setUsageTypeSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredUsageTypes}
+                  extraData={usageTypeExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderUsageTypeItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {usageTypeSearch.length > 0 && (
-                  <Pressable onPress={() => setUsageTypeSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredUsageTypes}
-                extraData={{ selectedValue: formData.usageType, onPress: handleUsageTypeItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={({ item, extraData }) => (
-                  <MiniModalItem
-                    label={item}
-                    isSelected={extraData.selectedValue === item}
-                    onPress={extraData.onPress}
-                    isDarkMode={extraData.isDarkMode}
-                    primaryColor={extraData.primaryColor}
-                  />
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Port Mini Modal ────────────────────────────────────────── */}
-      <Modal
-        visible={isPortMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsPortMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select PORT</Text>
-              <Pressable onPress={() => setIsPortMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search PORT..."
-                  value={portSearch}
-                  onChangeText={setPortSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isPortMiniModalVisible}
+      {isPortMiniModalVisible && (
+        <Modal
+          visible={isPortMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsPortMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select PORT</Text>
+                <Pressable onPress={() => setIsPortMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search PORT..."
+                    value={portSearch}
+                    onChangeText={setPortSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isPortMiniModalVisible}
+                  />
+                  {portSearch.length > 0 && (
+                    <Pressable onPress={() => setPortSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredPorts}
+                  extraData={portExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderPortItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {portSearch.length > 0 && (
-                  <Pressable onPress={() => setPortSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredPorts}
-                extraData={{ selectedValue: formData.port, onPress: handlePortItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={({ item, extraData }) => (
-                  <MiniModalItem
-                    label={item}
-                    isSelected={extraData.selectedValue === item}
-                    onPress={extraData.onPress}
-                    isDarkMode={extraData.isDarkMode}
-                    primaryColor={extraData.primaryColor}
-                  />
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Vlan Mini Modal ────────────────────────────────────────── */}
-      <Modal
-        visible={isVlanMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsVlanMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select VLAN</Text>
-              <Pressable onPress={() => setIsVlanMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search VLAN..."
-                  value={vlanSearch}
-                  onChangeText={setVlanSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isVlanMiniModalVisible}
+      {isVlanMiniModalVisible && (
+        <Modal
+          visible={isVlanMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsVlanMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Select VLAN</Text>
+                <Pressable onPress={() => setIsVlanMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search VLAN..."
+                    value={vlanSearch}
+                    onChangeText={setVlanSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isVlanMiniModalVisible}
+                  />
+                  {vlanSearch.length > 0 && (
+                    <Pressable onPress={() => setVlanSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredVlans}
+                  extraData={vlanExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderVlanItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {vlanSearch.length > 0 && (
-                  <Pressable onPress={() => setVlanSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredVlans}
-                extraData={{ selectedValue: formData.vlan, onPress: handleVlanItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={({ item, extraData }) => (
-                  <MiniModalItem
-                    label={item}
-                    isSelected={extraData.selectedValue === item}
-                    onPress={extraData.onPress}
-                    isDarkMode={extraData.isDarkMode}
-                    primaryColor={extraData.primaryColor}
-                  />
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* ─── Technician Mini Modal ──────────────────────────────────── */}
-      <Modal
-        visible={isTechMiniModalVisible}
-        transparent={true}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsTechMiniModalVisible(false)}
-      >
-        <View style={styles.miniModalOverlay}>
-          <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
-            <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
-              <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
-                {activeTechField === 'visit_by' ? 'Select Visit By' : activeTechField === 'visit_with' ? 'Select Visit With' : 'Select Visit With (Other)'}
-              </Text>
-              <Pressable onPress={() => setIsTechMiniModalVisible(false)} style={styles.miniModalClose}>
-                <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </Pressable>
-            </View>
-            <View style={styles.miniModalSearchContainer}>
-              <View style={[styles.searchContainer, {
-                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-                borderColor: isDarkMode ? '#374151' : '#e5e7eb'
-              }]}>
-                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                <TextInput
-                  placeholder="Search Technician..."
-                  value={techSearch}
-                  onChangeText={setTechSearch}
-                  placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                  style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
-                  autoFocus={isTechMiniModalVisible}
+      {isTechMiniModalVisible && (
+        <Modal
+          visible={isTechMiniModalVisible}
+          transparent={true}
+          animationType="fade"
+          statusBarTranslucent={true}
+          onRequestClose={() => setIsTechMiniModalVisible(false)}
+        >
+          <View style={styles.miniModalOverlay}>
+            <View style={[styles.miniModalContent, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }]}>
+              <View style={[styles.miniModalHeader, { borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+                <Text style={[styles.miniModalTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
+                  {activeTechField === 'visit_by' ? 'Select Visit By' : activeTechField === 'visit_with' ? 'Select Visit With' : 'Select Visit With (Other)'}
+                </Text>
+                <Pressable onPress={() => setIsTechMiniModalVisible(false)} style={styles.miniModalClose}>
+                  <X size={24} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </Pressable>
+              </View>
+              <View style={styles.miniModalSearchContainer}>
+                <View style={[styles.searchContainer, {
+                  backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+                  borderColor: isDarkMode ? '#374151' : '#e5e7eb'
+                }]}>
+                  <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                  <TextInput
+                    placeholder="Search Technician..."
+                    value={techSearch}
+                    onChangeText={setTechSearch}
+                    placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                    style={[styles.searchInput, { color: isDarkMode ? '#ffffff' : '#111827' }]}
+                    autoFocus={isTechMiniModalVisible}
+                  />
+                  {techSearch.length > 0 && (
+                    <Pressable onPress={() => setTechSearch('')}>
+                      <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+              <View style={{ height: 350, width: '100%' }}>
+                <FlashList
+                  data={filteredTechs}
+                  extraData={techExtraData}
+                  // @ts-ignore
+                  estimatedItemSize={60}
+                  keyExtractor={(item, index) => item.email || index.toString()}
+                  ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                  renderItem={renderTechItem}
+                  ListEmptyComponent={
+                    <View style={styles.miniModalEmpty}>
+                      <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
+                    </View>
+                  }
+                  contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
                 />
-                {techSearch.length > 0 && (
-                  <Pressable onPress={() => setTechSearch('')}>
-                    <X size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                  </Pressable>
-                )}
               </View>
             </View>
-            <View style={{ height: 350, width: '100%' }}>
-              <FlashList
-                data={filteredTechs}
-                extraData={{ selectedValue: activeTechField ? formData[activeTechField] : '', onPress: handleTechItemPress, isDarkMode, primaryColor: colorPalette?.primary || '#7c3aed' }}
-                // @ts-ignore
-                estimatedItemSize={60}
-                keyExtractor={(item, index) => item.email || index.toString()}
-                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                renderItem={({ item, extraData }) => (
-                  <MiniModalItem
-                    label={item.name}
-                    isSelected={extraData.selectedValue === item.name}
-                    onPress={extraData.onPress}
-                    isDarkMode={extraData.isDarkMode}
-                    primaryColor={extraData.primaryColor}
-                  />
-                )}
-                ListEmptyComponent={
-                  <View style={styles.miniModalEmpty}>
-                    <Text style={{ color: isDarkMode ? '#9CA3AF' : '#4B5563', fontSize: 16 }}>No results found</Text>
-                  </View>
-                }
-                contentContainerStyle={{ paddingHorizontal: 40, paddingBottom: 20 }}
-              />
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
-      {/* ─── Main Form Modal ─────────────────────────────────────────── */}
-      <Modal
-        visible={isOpen}
-        transparent={true}
-        animationType="slide"
-        statusBarTranslucent={true}
-        onRequestClose={onClose}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
+      {/* ─── Main Form Page Overlay ─────────────────────────────────────────── */}
+      {isOpen && (
+        <View style={[styles.pageOverlay, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View style={[styles.pageContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
+            <View style={{ height: insets?.top || 0, backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }} />
             <View style={[styles.header, {
               backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
               borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
@@ -2400,23 +2397,41 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 </Text>
               </View>
 
-              <View style={{
-                position: 'absolute',
-                right: 16,
-                zIndex: 10
-              }}>
-                <Pressable
-                  onPress={handleSave}
-                  disabled={loading}
-                  style={[styles.submitButton, {
-                    backgroundColor: loading ? (isDarkMode ? '#4b5563' : '#9ca3af') : (colorPalette?.primary || '#7c3aed'),
-                    paddingVertical: 8,
-                    paddingHorizontal: 16
-                  }]}
-                >
-                  <Text style={styles.submitButtonText}>{loading ? `Submitting${submittingDots}` : 'Submit'}</Text>
-                </Pressable>
-              </View>
+              {/* Submit Button Logic */}
+              {(() => {
+                const isFiberDone = formData.onsiteStatus === 'Done' && formData.connectionType === 'Fiber';
+                const needsValidation = isFiberDone && !isSNValidated;
+                const isSubmitDisabled = loading || needsValidation;
+                const submitButtonBgColor = isSubmitDisabled
+                  ? (isDarkMode ? '#4b5563' : '#9ca3af')
+                  : (colorPalette?.primary || '#7c3aed');
+
+                return (
+                  <View style={{
+                    position: 'absolute',
+                    right: 16,
+                    zIndex: 20
+                  }}>
+                    <TouchableOpacity
+                      onPress={handleSave}
+                      disabled={isSubmitDisabled}
+                      style={[styles.submitButton, {
+                        backgroundColor: submitButtonBgColor,
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
+                        opacity: isSubmitDisabled ? 0.6 : 1,
+                        minWidth: 80,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }]}
+                    >
+                      <Text style={[styles.submitButtonText, { color: '#ffffff', fontWeight: 'bold' }]}>
+                        {loading ? `Submitting...` : 'Submit'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
             </View>
 
             <View style={[styles.contentContainer, { flex: 1 }]}>
@@ -2684,26 +2699,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                             Router Model<Text style={styles.required}>*</Text>
                           </Text>
-                          <Pressable
-                            onPress={() => setIsRouterModelMiniModalVisible(true)}
+                          <View
                             style={[styles.searchContainer, {
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                              backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6', // Light grey background
                               borderColor: errors.routerModel ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
                               height: 50,
                               paddingHorizontal: 12,
+                              opacity: 0.8
                             }]}
                           >
-                            <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
                             <Text style={{
                               flex: 1,
-                              paddingHorizontal: 12,
+                              paddingHorizontal: 4,
                               color: formData.routerModel ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
-                              fontSize: 14
+                              fontSize: 14,
+                              fontWeight: '500'
                             }}>
-                              {formData.routerModel || "Select Router Model..."}
+                              {formData.routerModel || "Validated Modem SN to Get Router Model..."}
                             </Text>
-                            <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                          </Pressable>
+                          </View>
                           {errors.routerModel && (
                             <View style={styles.errorContainer}>
                               <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
@@ -2718,16 +2732,40 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                             Modem SN<Text style={styles.required}>*</Text>
                           </Text>
-                          <TextInput
-                            value={formData.modemSN}
-                            onChangeText={(text) => handleInputChange('modemSN', text)}
-                            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                            style={[styles.textInput, {
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                              color: isDarkMode ? '#ffffff' : '#111827',
-                              borderColor: errors.modemSN ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
-                            }]}
-                          />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <TouchableOpacity
+                              onPress={handleValidateSN}
+                              disabled={isValidatingSN}
+                              style={{
+                                paddingVertical: 14,
+                                paddingHorizontal: 16,
+                                backgroundColor: isValidatingSN ? '#9ca3af' : (colorPalette?.primary || '#7c3aed'),
+                                borderRadius: 12,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                minWidth: 90,
+                                height: 50 // Matching standard input height
+                              }}
+                            >
+                              {isValidatingSN ? (
+                                <ActivityIndicator size="small" color="#ffffff" />
+                              ) : (
+                                <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>VALIDATE</Text>
+                              )}
+                            </TouchableOpacity>
+                            <TextInput
+                              value={formData.modemSN}
+                              onChangeText={(text) => handleInputChange('modemSN', text)}
+                              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                              style={[styles.textInput, {
+                                flex: 1,
+                                height: 50,
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                color: isDarkMode ? '#ffffff' : '#111827',
+                                borderColor: errors.modemSN ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                              }]}
+                            />
+                          </View>
                           {errors.modemSN && (
                             <View style={styles.errorContainer}>
                               <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
@@ -3050,7 +3088,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.boxReadingImage}
-                          label="Box Reading Image *"
+                          label="Box Reading Image"
+                          required={true}
                           onUpload={(file) => handleImageUpload('boxReadingImage', file)}
                           error={errors.boxReadingImage}
                           colorPrimary={colorPalette?.primary || '#7c3aed'}
@@ -3058,7 +3097,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.routerReadingImage}
-                          label="Router Reading Image *"
+                          label="Router Reading Image"
+                          required={true}
                           onUpload={(file) => handleImageUpload('routerReadingImage', file)}
                           error={errors.routerReadingImage}
                           colorPrimary={colorPalette?.primary || '#7c3aed'}
@@ -3067,7 +3107,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
                           <ImagePreview
                             imageUrl={imagePreviews.portLabelImage}
-                            label="Port Label Image *"
+                            label="Port Label Image"
+                            required={true}
                             onUpload={(file) => handleImageUpload('portLabelImage', file)}
                             error={errors.portLabelImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
@@ -3076,7 +3117,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.setupImage}
-                          label="Setup Image *"
+                          label="Setup Image"
+                          required={true}
                           onUpload={(file) => handleImageUpload('setupImage', file)}
                           error={errors.setupImage}
                           colorPrimary={colorPalette?.primary || '#7c3aed'}
@@ -3084,7 +3126,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         <ImagePreview
                           imageUrl={imagePreviews.signedContractImage}
-                          label="Signed Contract Image *"
+                          label="Signed Contract Image"
+                          required={true}
                           onUpload={(file) => handleImageUpload('signedContractImage', file)}
                           error={errors.signedContractImage}
                           colorPrimary={colorPalette?.primary || '#7c3aed'}
@@ -3281,120 +3324,120 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                     ))}
 
                     {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
-                      <View style={styles.inputGroup}>
-                          <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                              Visit By<Text style={styles.required}>*</Text>
-                            </Text>
-                            <View>
-                              <Pressable
-                                onPress={() => {
-                                  setActiveTechField('visit_by');
-                                  setIsTechMiniModalVisible(true);
-                                }}
-                                style={[styles.searchContainer, {
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                  borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  paddingVertical: 12
-                                }]}
-                              >
-                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                <Text style={{
-                                  flex: 1,
-                                  paddingHorizontal: 12,
-                                  color: formData.visit_by ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
-                                  fontSize: 14
-                                }}>
-                                  {formData.visit_by || "Select Visit By..."}
-                                </Text>
-                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              </Pressable>
-                            </View>
-                            {errors.visit_by && (
-                              <View style={styles.errorContainer}>
-                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                  <Text style={styles.errorIconText}>!</Text>
-                                </View>
-                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
-                              </View>
-                            )}
+                      <>
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            Visit By<Text style={styles.required}>*</Text>
+                          </Text>
+                          <View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_by');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_by ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_by ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_by || "Select Visit By..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
+                          {errors.visit_by && (
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
+                              </View>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_by}</Text>
+                            </View>
+                          )}
+                        </View>
 
-                          <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                              Visit With<Text style={styles.required}>*</Text>
-                            </Text>
-                            <View>
-                              <Pressable
-                                onPress={() => {
-                                  setActiveTechField('visit_with');
-                                  setIsTechMiniModalVisible(true);
-                                }}
-                                style={[styles.searchContainer, {
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                  borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  paddingVertical: 12
-                                }]}
-                              >
-                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                <Text style={{
-                                  flex: 1,
-                                  paddingHorizontal: 12,
-                                  color: formData.visit_with ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
-                                  fontSize: 14
-                                }}>
-                                  {formData.visit_with || "Select Visit With..."}
-                                </Text>
-                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              </Pressable>
-                            </View>
-                            {errors.visit_with && (
-                              <View style={styles.errorContainer}>
-                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                  <Text style={styles.errorIconText}>!</Text>
-                                </View>
-                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
-                              </View>
-                            )}
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            Visit With<Text style={styles.required}>*</Text>
+                          </Text>
+                          <View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_with');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_with ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_with ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_with || "Select Visit With..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
+                          {errors.visit_with && (
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
+                              </View>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with}</Text>
+                            </View>
+                          )}
+                        </View>
 
-                          <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                              Visit With(Other)<Text style={styles.required}>*</Text>
-                            </Text>
-                            <View>
-                              <Pressable
-                                onPress={() => {
-                                  setActiveTechField('visit_with_other');
-                                  setIsTechMiniModalVisible(true);
-                                }}
-                                style={[styles.searchContainer, {
-                                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                  borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                                  paddingVertical: 12
-                                }]}
-                              >
-                                <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                                <Text style={{
-                                  flex: 1,
-                                  paddingHorizontal: 12,
-                                  color: formData.visit_with_other ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
-                                  fontSize: 14
-                                }}>
-                                  {formData.visit_with_other || "Visit With(Other)..."}
-                                </Text>
-                                <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-                              </Pressable>
-                            </View>
-                            {errors.visit_with_other && (
-                              <View style={styles.errorContainer}>
-                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                  <Text style={styles.errorIconText}>!</Text>
-                                </View>
-                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
-                              </View>
-                            )}
+                        <View style={styles.inputGroup}>
+                          <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                            Visit With(Other)<Text style={styles.required}>*</Text>
+                          </Text>
+                          <View>
+                            <Pressable
+                              onPress={() => {
+                                setActiveTechField('visit_with_other');
+                                setIsTechMiniModalVisible(true);
+                              }}
+                              style={[styles.searchContainer, {
+                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                borderColor: errors.visit_with_other ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                paddingVertical: 12
+                              }]}
+                            >
+                              <Search size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                              <Text style={{
+                                flex: 1,
+                                paddingHorizontal: 12,
+                                color: formData.visit_with_other ? (isDarkMode ? '#ffffff' : '#111827') : (isDarkMode ? '#9CA3AF' : '#4B5563'),
+                                fontSize: 14
+                              }}>
+                                {formData.visit_with_other || "Visit With(Other)..."}
+                              </Text>
+                              <ChevronDown size={18} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                            </Pressable>
                           </View>
+                          {errors.visit_with_other && (
+                            <View style={styles.errorContainer}>
+                              <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
+                                <Text style={styles.errorIconText}>!</Text>
+                              </View>
+                              <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.visit_with_other}</Text>
+                            </View>
+                          )}
+                        </View>
 
                         <View style={styles.inputGroup}>
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
@@ -3426,25 +3469,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                             Status Remarks<Text style={styles.required}>*</Text>
                           </Text>
-                          <View>
-                            <View style={[styles.pickerContainer, {
-                              borderColor: errors.statusRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                            }]}>
-                              <Picker
-                                selectedValue={formData.statusRemarks}
-                                onValueChange={(value) => handleInputChange('statusRemarks', value)}
-                                style={{ color: isDarkMode ? '#fff' : '#000' }}
-                                dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                              >
-                                <Picker.Item label="Select Status Remarks" value="" />
-                                <Picker.Item label="Customer Request" value="Customer Request" />
-                                <Picker.Item label="Bad Weather" value="Bad Weather" />
-                                <Picker.Item label="Technician Unavailable" value="Technician Unavailable" />
-                                <Picker.Item label="Equipment Issue" value="Equipment Issue" />
-                              </Picker>
-                            </View>
-                          </View>
+                          <TextInput
+                            value={formData.statusRemarks}
+                            onChangeText={(text) => handleInputChange('statusRemarks', text)}
+                            placeholder="Enter status remarks"
+                            placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
+                            style={[styles.textInput, {
+                              backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                              color: isDarkMode ? '#ffffff' : '#111827',
+                              borderColor: errors.statusRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
+                            }]}
+                          />
                           {errors.statusRemarks && (
                             <View style={styles.errorContainer}>
                               <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
@@ -3454,39 +3489,42 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             </View>
                           )}
                         </View>
-
+                      </>
+                    )}
+                    <View style={styles.inputGroup}>
                         <ImagePreview
                           imageUrl={imagePreviews.proofImage}
                           label="Proof Image"
+                          required={true}
                           onUpload={(file) => handleImageUpload('proofImage', file)}
                           error={errors.proofImage}
                           colorPrimary={colorPalette?.primary || '#7c3aed'}
                         />
-                      </View>
-                    )}
+                    </View>
                   </View>
                 </ScrollView>
               )}
             </View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </View>
+      )}
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  pageOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
   },
-  modalContainer: {
-    height: '90%',
+  pageContainer: {
+    flex: 1,
     width: '100%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
   },

@@ -12,6 +12,7 @@ import { PaymentSuccessProvider } from './src/contexts/PaymentSuccessContext';
 import IdleWarningModal from './src/modals/IdleWarningModal';
 
 import { View, AppState, PanResponder, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -95,7 +96,6 @@ function App() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync("hidden");
-      NavigationBar.setBehaviorAsync("overlay-swipe");
     }
   }, []);
 
@@ -248,7 +248,8 @@ function App() {
   }
 
   return (
-    <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+    <SafeAreaProvider>
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
       <StatusBar hidden={true} />
       {isLoggedIn ? (
         <PaymentSuccessProvider>
@@ -281,6 +282,7 @@ function App() {
         />
       )}
     </View>
+    </SafeAreaProvider>
   );
 }
 

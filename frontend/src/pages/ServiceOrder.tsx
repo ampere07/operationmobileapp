@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Dimensions, RefreshControl, StyleSheet } from 'react-native';
-import { FileText, Search, X, Menu, RefreshCw, ArrowLeft } from 'lucide-react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Dimensions, RefreshControl, StyleSheet, Modal } from 'react-native';
+import { FileText, Search, X, Menu, RefreshCw, ArrowLeft, Filter, Check } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderDetails from '../components/ServiceOrderDetails';
 import { useServiceOrderContext, type ServiceOrder } from '../contexts/ServiceOrderContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { Picker } from '@react-native-picker/picker';
 
 // Location grouping removed as per user request
 
@@ -188,12 +189,21 @@ const so = StyleSheet.create({
   // Detail panels
   mobileDetail: { flex: 1, flexDirection: 'column', overflow: 'hidden' },
   tabletDetail: { flexShrink: 0, overflow: 'hidden' },
+  // Status Modal
+  statusModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  statusModalContent: { width: '80%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' },
+  statusModalHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', alignItems: 'center' },
+  statusModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  statusItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusItemText: { fontSize: 14, color: '#374151' },
 });
 
 const ServiceOrderPage: React.FC = () => {
   const isDarkMode = false; // Forced light mode as per user request
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
   const [selectedServiceOrderRaw, setSelectedServiceOrderRaw] = useState<ServiceOrder | null>(null);
 
@@ -257,7 +267,7 @@ const ServiceOrderPage: React.FC = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, statusFilter]);
 
   useEffect(() => {
     silentRefresh();
@@ -309,6 +319,25 @@ const ServiceOrderPage: React.FC = () => {
           itemExtractorMap.concern(serviceOrder).toLowerCase().includes(lowerSearch);
 
         if (!matchesSearch) return false;
+        
+        // Status filtering
+        if (statusFilter !== 'all') {
+          const s = (userRole.toLowerCase() === 'technician' || userRoleId === 2) 
+            ? (serviceOrder.visitStatus || '').toLowerCase().trim() 
+            : (serviceOrder.supportStatus || '').toLowerCase().trim();
+          
+          if (statusFilter === 'pending') {
+            if (s !== 'pending') return false;
+          } else if (statusFilter === 'inprogress') {
+            if (s !== 'in-progress' && s !== 'in progress' && s !== 'inprogress' && s !== 'scheduled' && s !== 'reschedule') return false;
+          } else if (statusFilter === 'completed') {
+            if (s !== 'completed' && s !== 'done' && s !== 'resolved') return false;
+          } else if (statusFilter === 'cancelled') {
+            if (s !== 'cancelled' && s !== 'closed') return false;
+          } else if (statusFilter === 'failed') {
+            if (s !== 'failed') return false;
+          }
+        }
 
         // Role-based filtering: Agents (role_id 4) only see their own referrals
         if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
@@ -323,7 +352,7 @@ const ServiceOrderPage: React.FC = () => {
         return true;
       })
       .sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
-  }, [serviceOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail]);
+  }, [serviceOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail]);
 
   const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
 
@@ -438,6 +467,16 @@ const ServiceOrderPage: React.FC = () => {
               </View>
               <View style={so.actionsRow}>
                 <Pressable
+                  onPress={() => setShowStatusModal(true)}
+                  style={[so.actionBtn, { 
+                    backgroundColor: statusFilter !== 'all' ? (colorPalette?.primary || '#7c3aed') : '#f3f4f6',
+                    borderWidth: statusFilter !== 'all' ? 0 : 1,
+                    borderColor: '#d1d5db'
+                  }]}
+                >
+                  <Filter size={20} color={statusFilter !== 'all' ? 'white' : '#4b5563'} />
+                </Pressable>
+                <Pressable
                   onPress={handleRefresh}
                   disabled={isLoading}
                   style={[so.actionBtn, { backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#7c3aed') }]}
@@ -491,6 +530,7 @@ const ServiceOrderPage: React.FC = () => {
                       <Text style={{ color: '#4b5563' }}>No service orders found matching your filters</Text>
                     </View>
                   }
+                  contentContainerStyle={{ paddingBottom: !isTablet ? 100 : 0 }}
                   renderItem={({ item: serviceOrder }) => (
                     <ServiceOrderCard
                       serviceOrder={serviceOrder}
@@ -508,7 +548,8 @@ const ServiceOrderPage: React.FC = () => {
           {!isLoading && shouldPaginate && filteredServiceOrders.length > 0 && totalPages > 1 && (
             <View style={[so.paginationBar, {
               backgroundColor: '#ffffff',
-              borderColor: '#e5e7eb'
+              borderColor: '#e5e7eb',
+              paddingBottom: !isTablet ? 110 : 16
             }]}>
               <View>
                 <Text style={[so.paginationInfo, { color: '#4b5563' }]}>
@@ -585,6 +626,43 @@ const ServiceOrderPage: React.FC = () => {
           </View>
         )
       }
+
+      <Modal
+        visible={showStatusModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <Pressable style={so.statusModalOverlay} onPress={() => setShowStatusModal(false)}>
+          <View style={so.statusModalContent}>
+            <View style={so.statusModalHeader}>
+              <Text style={so.statusModalTitle}>Filter by Status</Text>
+            </View>
+            {[
+              { label: 'All Status', value: 'all' },
+              { label: 'Pending', value: 'pending' },
+              { label: 'In Progress', value: 'inprogress' },
+              { label: 'Completed', value: 'completed' },
+              { label: 'Cancelled', value: 'cancelled' },
+              { label: 'Failed', value: 'failed' }
+            ].map((item) => (
+              <Pressable
+                key={item.value}
+                style={so.statusItem}
+                onPress={() => {
+                  setStatusFilter(item.value);
+                  setShowStatusModal(false);
+                }}
+              >
+                <Text style={[so.statusItemText, statusFilter === item.value && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }]}>
+                  {item.label}
+                </Text>
+                {statusFilter === item.value && <Check size={18} color={colorPalette?.primary || '#7c3aed'} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
 
     </View >
   );

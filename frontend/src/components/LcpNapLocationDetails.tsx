@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Linking, useWindowDimensions, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { X, ExternalLink, MapPin, Navigation2, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { X, ExternalLink, MapPin, Navigation2, ChevronLeft, ChevronRight, Edit } from 'lucide-react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -35,12 +35,14 @@ interface LocationMarker {
 interface LcpNapLocationDetailsProps {
   location: LocationMarker;
   onClose: () => void;
+  onEdit?: () => void;
   isMobile?: boolean;
 }
 
 const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
   location,
   onClose,
+  onEdit,
   isMobile: propIsMobile = false
 }) => {
   const { width } = useWindowDimensions();
@@ -98,6 +100,36 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
   );
 
   const totalPages = Math.ceil(relatedCustomers.length / itemsPerPage);
+  
+  const availablePortsList = useMemo(() => {
+    if (!location.port_total) return [];
+    
+    const total = location.port_total;
+    const used = new Set<string>();
+    
+    relatedCustomers.forEach(customer => {
+      if (customer.port) {
+        // Normalize port name to "PXX" format
+        let norm = customer.port.toString().replace(/\s+/g, '').toUpperCase();
+        if (/^\d+$/.test(norm)) {
+          norm = `P${norm.padStart(2, '0')}`;
+        } else if (/^P\d+$/.test(norm)) {
+          const numStr = norm.substring(1).padStart(2, '0');
+          norm = `P${numStr}`;
+        }
+        used.add(norm);
+      }
+    });
+    
+    const available = [];
+    for (let i = 1; i <= total; i++) {
+      const portName = `P${i.toString().padStart(2, '0')}`;
+      if (!used.has(portName)) {
+        available.push(portName);
+      }
+    }
+    return available;
+  }, [location.port_total, relatedCustomers]);
 
   const formatDate = (dateStr: string | undefined): string => {
     if (!dateStr) return 'Not available';
@@ -205,9 +237,16 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
           </Text>
         </View>
 
-        <Pressable onPress={onClose}>
-          <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {onEdit && (
+            <Pressable onPress={onEdit} style={styles.headerButton}>
+              <Edit width={24} height={24} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+            </Pressable>
+          )}
+          <Pressable onPress={onClose} style={styles.headerButton}>
+            <X width={28} height={28} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView style={styles.flex1} showsVerticalScrollIndicator={false}>
@@ -219,6 +258,16 @@ const LcpNapLocationDetails: React.FC<LcpNapLocationDetailsProps> = ({
           {location.city && renderField('City', location.city)}
           {location.region && renderField('Region', location.region)}
           {location.port_total !== undefined && renderField('Port Usage', `${location.total_technical_details || 0} / ${location.port_total}`)}
+          
+          {availablePortsList.length > 0 && renderField('Port Available', (
+            <View style={styles.availablePortsContainer}>
+              {availablePortsList.map((port, idx) => (
+                <View key={idx} style={[styles.portChip, { backgroundColor: isDarkMode ? '#064e3b' : '#d1fae5' }]}>
+                  <Text style={[styles.portChipText, { color: isDarkMode ? '#6ee7b7' : '#065f46' }]}>{port}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
 
           {renderField('Related Customers', (
             <View style={styles.relatedCustomersContainer}>
@@ -443,6 +492,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerButton: {
+    padding: 4,
   },
   headerTitleContainer: {
     flexDirection: 'row',
@@ -670,6 +727,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  availablePortsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  portChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  portChipText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 

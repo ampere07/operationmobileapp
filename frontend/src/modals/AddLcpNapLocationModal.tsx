@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, Pressable, TextInput, ScrollView, Modal, Alert,
-  Image, Platform, KeyboardAvoidingView, StyleSheet, Keyboard, InteractionManager, ActivityIndicator
+  Image, Platform, KeyboardAvoidingView, StyleSheet, Keyboard, InteractionManager, ActivityIndicator, SafeAreaView, useWindowDimensions, DeviceEventEmitter
 } from 'react-native';
 import { Camera, CheckCircle, AlertCircle, Loader2, Search, Check, X, ChevronDown } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -23,7 +23,8 @@ import { SearchablePicker, SearchablePickerTrigger } from '../components/Searcha
 interface AddLcpNapLocationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave?: () => void;
+  editData?: any;
 }
 
 interface Region { id: number; name: string; }
@@ -66,6 +67,17 @@ const INITIAL_FORM: FormDataState = {
 };
 
 const INITIAL_PREVIEWS = { reading_image: null as string | null, image: null as string | null, image_2: null as string | null };
+
+const getImageUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  if (url.includes('drive.google.com')) {
+    const match = url.match(/\/d\/(.+?)(?:\/|$)/) || url.match(/id=(.+?)(?:&|$)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return url;
+};
 
 const LEAFLET_HTML = `<!DOCTYPE html>
 <html>
@@ -111,6 +123,7 @@ const ImageUploadField = React.memo<ImageUploadFieldProps>(
     <View style={styles.fieldContainer}>
       <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
         {label}
+        {required && <Text style={{ color: '#ef4444' }}> *</Text>}
       </Text>
       <Pressable
         onPress={() => onPress(field)}
@@ -222,7 +235,7 @@ const MapSection = React.memo<MapSectionProps>(
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen, onClose, onSave }) => {
+const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen, onClose, onSave, editData }) => {
 
   const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [formData, setFormData] = useState<FormDataState>(INITIAL_FORM);
@@ -254,6 +267,8 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
   const primaryColor = colorPalette?.primary || '#7c3aed';
   const [isContentReady, setIsContentReady] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
 
   // Region Picker State
   const [isRegionPickerOpen, setIsRegionPickerOpen] = useState(false);
@@ -268,13 +283,24 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
   const [barangaySearch, setBarangaySearch] = useState('');
 
   useEffect(() => {
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setIsContentReady(true);
+    });
+    return () => {
+      handle.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
     if (isOpen) {
-      const handle = InteractionManager.runAfterInteractions(() => {
-        setIsContentReady(true);
-      });
-      return () => handle.cancel();
-    } else {
-      setIsContentReady(false);
+      // Small delay to prevent React 19 "static flag" error when mounting
+      const timer = setTimeout(() => {
+        DeviceEventEmitter.emit('techModalStateChange', true);
+      }, 0);
+      return () => {
+        clearTimeout(timer);
+        DeviceEventEmitter.emit('techModalStateChange', false);
+      };
     }
   }, [isOpen]);
 
@@ -326,16 +352,41 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
     loadDropdownData();
-    setFormData({ ...INITIAL_FORM, modified_by: currentUserEmail });
-    setImagePreviews(INITIAL_PREVIEWS);
+    if (editData) {
+      setFormData({
+        reading_image: null,
+        street: editData.street || '',
+        barangay: editData.barangay || '',
+        city: editData.city || '',
+        region: editData.region || '',
+        lcp_name: editData.lcp_name || editData.lcp || '',
+        nap_name: editData.nap_name || editData.nap || '',
+        port_total: String(editData.port_total || ''),
+        lcpnap_name: editData.lcpnap_name || '',
+        location: editData.location || '',
+        coordinates: editData.coordinates || `${editData.latitude}, ${editData.longitude}`,
+        image: null,
+        image_2: null,
+        modified_by: currentUserEmail,
+      });
+      setImagePreviews({
+        reading_image: getImageUrl(editData.reading_image_url),
+        image: getImageUrl(editData.image1_url),
+        image_2: getImageUrl(editData.image2_url),
+      });
+    } else {
+      setFormData({ ...INITIAL_FORM, modified_by: currentUserEmail });
+      setImagePreviews(INITIAL_PREVIEWS);
+    }
     setErrors({});
-  }, [isOpen, loadDropdownData, currentUserEmail]);
+  }, [loadDropdownData, currentUserEmail, editData]);
 
   useEffect(() => {
     if (formData.lcp_name && formData.nap_name) {
-      setFormData(prev => ({ ...prev, lcpnap_name: `${prev.lcp_name} ${prev.nap_name}`.trim() }));
+      const lcp = formData.lcp_name.trim();
+      const nap = formData.nap_name.trim();
+      setFormData(prev => ({ ...prev, lcpnap_name: `${lcp} ${nap}`.trim() }));
     }
   }, [formData.lcp_name, formData.nap_name]);
 
@@ -460,6 +511,8 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       submitData.append('region', formData.region);
       submitData.append('lcp_id', selectedLcp?.id.toString() || '');
       submitData.append('nap_id', selectedNap?.id.toString() || '');
+      submitData.append('lcp_name', formData.lcp_name);
+      submitData.append('nap_name', formData.nap_name);
       submitData.append('port_total', formData.port_total);
       submitData.append('lcpnap_name', formData.lcpnap_name);
       submitData.append('location', formData.location || formData.lcpnap_name);
@@ -468,7 +521,11 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       if (formData.image_2) submitData.append('image_2', formData.image_2 as any);
       submitData.append('modified_by', formData.modified_by);
 
-      const response = await apiClient.post<ApiResponse>('/lcpnap', submitData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const url = editData ? `/lcpnap/${editData.id}` : '/lcpnap';
+      const method = editData ? 'post' : 'post'; // Using POST with _method PUT for multipart compatibility if needed
+      if (editData) submitData.append('_method', 'PUT');
+
+      const response = await apiClient.post<ApiResponse>(url, submitData, { headers: { 'Content-Type': 'multipart/form-data' } });
 
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       if (!response.data.success) throw new Error(response.data.message || 'Failed to save');
@@ -477,12 +534,12 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
       await new Promise(r => setTimeout(r, 400));
       setShowLoadingModal(false);
       setResultType('success');
-      setResultMessage('LCP/NAP location created successfully');
+      setResultMessage(editData ? 'LCP/NAP location updated successfully' : 'LCP/NAP location created successfully');
       setShowResultModal(true);
 
       setTimeout(() => {
         setShowResultModal(false);
-        onSave();
+        if (onSave) onSave();
         onClose();
       }, 2000);
 
@@ -516,11 +573,17 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
   const cityOptions = useMemo(() => filteredCities.map(c => ({ label: c.name, value: c.name })), [filteredCities]);
   const barangayOptions = useMemo(() => filteredBarangays.map(b => ({ label: b.barangay, value: b.barangay })), [filteredBarangays]);
 
+  if (!isOpen) return null;
+
   return (
-    <Modal visible={isOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+    <SafeAreaView style={[styles.pageContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex1}>
         <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }]}>
-          <View style={[styles.header, { backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb' }]}>
+          <View style={[styles.header, { 
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+            borderBottomColor: isDarkMode ? '#374151' : '#e5e7eb',
+            paddingTop: isTablet ? 16 : 60
+          }]}>
             <Text style={[styles.headerTitle, { color: isDarkMode ? '#ffffff' : '#111827' }]}>LCPNAP Form</Text>
             <View style={styles.headerActions}>
               <Pressable onPress={onClose} disabled={loading} style={[styles.cancelButton, { borderColor: primaryColor, opacity: loading ? 0.6 : 1 }]}>
@@ -623,9 +686,9 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
                   <TextInput value={formData.coordinates} onChangeText={t => setFormData(p => ({ ...p, coordinates: t }))} style={[styles.input, { borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]} placeholder="14.466580, 121.201807" />
                   <MapSection onMapPress={handleMapPress} onGetMyLocation={handleGetMyLocation} isDarkMode={isDarkMode} colorPalette={colorPalette} webViewRef={webViewRef} loading={loading} onInteractionChange={setScrollEnabled} />
                 </View>
-                <ImageUploadField label={<Text>Reading Image<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.reading_image} />
-                <ImageUploadField label={<Text>Image<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image} />
-                <ImageUploadField label={<Text>Image 2<Text style={{ color: '#ef4444' }}>*</Text></Text>} field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image_2} />
+                <ImageUploadField label="Reading Image" field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.reading_image} />
+                <ImageUploadField label="Image" field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image} />
+                <ImageUploadField label="Image 2" field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image_2} />
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Modified By</Text>
                   <TextInput value={formData.modified_by} editable={false} style={[styles.input, { backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', color: '#9ca3af' }]} />
@@ -761,13 +824,14 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
           />
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContainer: { height: '92%', width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  pageContainer: { ...StyleSheet.absoluteFillObject, zIndex: 1000 },
+  flex1: { flex: 1 },
+  modalContainer: { flex: 1, width: '100%', overflow: 'hidden' },
   header: { paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
   headerTitle: { fontSize: 20, fontWeight: '600' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },

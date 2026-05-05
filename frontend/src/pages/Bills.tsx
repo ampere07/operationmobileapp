@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     payBtnTextCard: { color: '#ffffff', fontWeight: 'bold', textAlign: 'center', fontSize: 13 },
 });
 
-const BillCard = React.memo(({ record, type, primaryColor, onDownload, isGenerating }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (record: any) => void, isGenerating: boolean }) => {
+const BillCard = React.memo(({ record, type, primaryColor, onDownload, isGenerating, isAnyGenerating }: { record: any, type: 'soa' | 'invoice', primaryColor: string, onDownload: (record: any) => void, isGenerating: boolean, isAnyGenerating?: boolean }) => {
     const isSoa = type === 'soa';
     const date = isSoa ? record.statement_date : record.invoice_date;
     const amount = isSoa ? record.total_amount_due : record.invoice_balance;
@@ -204,8 +204,8 @@ const BillCard = React.memo(({ record, type, primaryColor, onDownload, isGenerat
                 {isSoa ? (
                     <Pressable
                         onPress={() => onDownload(record)}
-                        disabled={isGenerating}
-                        style={[styles.pdfBtnBase, { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' }, isGenerating && { opacity: 0.5 }]}
+                        disabled={isAnyGenerating}
+                        style={[styles.pdfBtnBase, { backgroundColor: primaryColor + '10', borderColor: primaryColor + '20' }, isAnyGenerating && { opacity: 0.5 }]}
                     >
                         {isGenerating ? (
                             <ActivityIndicator size="small" color={primaryColor} />
@@ -499,8 +499,9 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                 }
             });
             const result = await response.json();
-            if (result.success && result.pdf_url) {
-                Linking.openURL(result.pdf_url);
+            const pdfUrl = result.pdf_url || result.data?.url || result.data?.print_link;
+            if (result.success && pdfUrl) {
+                Linking.openURL(pdfUrl);
                 // Silently refresh to update the list with the new print_link
                 await silentRefresh();
             } else {
@@ -651,6 +652,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                             primaryColor={primaryColor} 
                             onDownload={handleDownloadPDF}
                             isGenerating={isGeneratingPDF === item.id}
+                            isAnyGenerating={isGeneratingPDF !== null}
                           />
                 )}
                 ListFooterComponent={renderPagination}
@@ -853,6 +855,23 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
                             <View style={styles.spacer} />
                         </ScrollView>
                     </Animated.View>
+                </View>
+            </Modal>
+
+            {/* Loading Modal for PDF Generation */}
+            <Modal
+                visible={isGeneratingPDF !== null}
+                transparent={true}
+                animationType="fade"
+                statusBarTranslucent={true}
+            >
+                <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+                    <View style={{ backgroundColor: 'white', padding: 32, borderRadius: 24, alignItems: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, width: '80%', maxWidth: 320 }}>
+                        <ActivityIndicator size="large" color={primaryColor} />
+                        <Text style={{ marginTop: 20, fontSize: 18, fontWeight: '800', color: '#111827' }}>Generating PDF</Text>
+                        <Text style={{ marginTop: 8, fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 20 }}>Please wait a moment while we prepare your document...</Text>
+                    </View>
                 </View>
             </Modal>
         </View>

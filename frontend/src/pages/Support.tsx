@@ -303,8 +303,8 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         concern_remarks: details,
         created_by_user: userEmail,
         requested_by: userEmail,
-        support_status: 'Pending',
-        visit_status: 'Pending'
+        support_status: 'Open',
+        visit_status: 'In Progress'
       };
 
       console.log('[Support] Submitting service order:', newServiceOrder);
@@ -486,7 +486,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   return (
     <View style={s.container}>
       <View style={[s.header, { paddingTop: isMobile ? (isShort ? 20 : 60) : 20, gap: isShort ? 12 : 24, paddingHorizontal: isMobile ? 16 : 24 }]}>
-        
+
 
         <View style={s.titleContainer}>
           <Text style={s.title}>Support Center</Text>
@@ -572,55 +572,40 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         animationType="slide"
         onRequestClose={() => setShowNewRequestModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          style={{
-            flex: 1,
-            backgroundColor: 'transparent',
-            justifyContent: 'flex-end'
-          }}
-        >
+        <View style={{ flex: 1, backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }}>
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: isDarkMode ? '#111827' : '#f9fafb' }} />
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={{ flex: 1 }}
+          >
           <Animated.View
             style={{
-              backgroundColor: '#ffffff',
-              borderTopLeftRadius: 32,
-              borderTopRightRadius: 32,
-              maxHeight: '90%',
+              backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
+              flex: 1,
               padding: 24,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: -10 },
-              shadowOpacity: 0.1,
-              shadowRadius: 15,
-              elevation: 20,
               transform: [{ translateY: pan.y }]
             }}
           >
-            <View
-              {...panResponder.panHandlers}
-              style={{
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginBottom: 24,
-                paddingTop: 12,
-                marginTop: -12,
-                backgroundColor: 'transparent' // Ensure touch area is clear
-              }}
-            >
-              {/* Handle Indicator */}
-              <View style={{
-                width: '30%',
-                height: 3,
-                backgroundColor: isDarkMode ? '#374151' : '#e5e7eb',
-                borderRadius: 1.5,
-                marginBottom: 20,
-                marginTop: -8
-              }} />
-
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 24,
+              paddingTop: Platform.OS === 'ios' ? 40 : 10, // Account for notch
+            }}>
+              <Pressable
+                onPress={() => setShowNewRequestModal(false)}
+                style={{ padding: 8 }}
+              >
+                <Text style={{ color: colorPalette?.primary || '#ef4444', fontWeight: '600' }}>Cancel</Text>
+              </Pressable>
               <Text style={{
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: '600',
                 color: isDarkMode ? '#ffffff' : '#111827',
-                textAlign: 'center'
+                flex: 1,
+                textAlign: 'center',
+                marginRight: 60 // Offset for the cancel button to center the title
               }}>
                 New Request
               </Text>
@@ -772,6 +757,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             </ScrollView>
           </Animated.View>
         </KeyboardAvoidingView>
+      </View>
       </Modal>
 
       {/* Confirm Modal */}

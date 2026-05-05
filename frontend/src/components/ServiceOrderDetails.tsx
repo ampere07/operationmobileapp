@@ -420,12 +420,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
   const formatMySQLDate = () => {
     const now = new Date();
-    return now.getFullYear() + '-' + 
-      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(now.getDate()).padStart(2, '0') + ' ' + 
-      String(now.getHours()).padStart(2, '0') + ':' + 
-      String(now.getMinutes()).padStart(2, '0') + ':' + 
-      String(now.getSeconds()).padStart(2, '0');
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const gmt8 = new Date(utc + (3600000 * 8));
+    return gmt8.getFullYear() + '-' + 
+      String(gmt8.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(gmt8.getDate()).padStart(2, '0') + ' ' + 
+      String(gmt8.getHours()).padStart(2, '0') + ':' + 
+      String(gmt8.getMinutes()).padStart(2, '0') + ':' + 
+      String(gmt8.getSeconds()).padStart(2, '0');
   };
 
   const handleStartTimer = async () => {

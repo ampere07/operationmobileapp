@@ -269,6 +269,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     keyboardType="default"
                     autoComplete="password"
                     textContentType="password"
+                    secureTextEntry={!showPassword}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}

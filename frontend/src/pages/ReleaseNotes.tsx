@@ -28,6 +28,30 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.23',
+            date: 'May 5, 2026',
+            title: 'Proof Persistence & LCP/NAP Management',
+            updates: [
+                { text: 'Mandatory Proof Images: Standardized mandatory proof image submission for all Job Order outcomes (Done, Failed, Rescheduled) to ensure accountability.', visibility: 'technician' },
+                { text: 'Local Gallery Backup: Implemented robust local persistence for technical photos. Images are now saved to the phone gallery first, ensuring no data is lost during slow uploads.', visibility: 'technician' },
+                { text: 'LCP/NAP Editing: Technicians can now edit existing LCP/NAP locations directly from the map details view.', visibility: 'technician' },
+                { text: 'LCP/NAP Naming Fix: Resolved an issue where LCP and NAP names were being truncated; they now save correctly in full format (e.g., LP 013 NP 06).', visibility: 'technician' },
+                { text: 'Required Field Indicators: Added red asterisk indicators to all mandatory form fields for clearer guidance during submission.', visibility: 'technician' },
+                { text: 'Enhanced Dashboard Responsiveness: Optimized the customer dashboard layout for better performance and readability on a wider range of mobile devices.', visibility: 'customer' },
+                { text: 'Support Center Refinements: Improved the support ticket interface and interaction flow for a smoother customer support experience.', visibility: 'customer' }
+            ]
+        },
+        {
+            version: '2.5.22',
+            date: 'May 5, 2026',
+            title: 'Optimized Technician Workflow & Field Visibility',
+            updates: [
+                { text: 'LCP-NAP Available Ports: Technicians can now view a list of available ports directly in the LCP-NAP location details, making port assignment much faster.', visibility: 'technician' },
+                { text: 'Simplified Completion Form: Removed mandatory SmartOLT validation and duplicate SN checks during submission for both Job Orders and Service Orders.', visibility: 'technician' },
+                { text: 'UI Refinement: The Router Model field in the Job Order completion form is now read-only to ensure data consistency.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.21',
             date: 'May 4, 2026',
             title: 'Modern Dashboard & Interactive UI',

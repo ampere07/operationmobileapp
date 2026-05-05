@@ -528,6 +528,16 @@ Route::prefix('installments')->group(function () {
         }
         );    });
 
+// Service Order Items Routes
+Route::prefix('service-order-items')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'store']);
+    Route::get('/{serviceOrderId}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'getByServiceOrderId']);
+    Route::put('/{serviceOrderId}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'updateByServiceOrderId']);
+    // Note: The frontend uses /service-order-items/{id} for deletion. If it expects to delete all items by SO ID, it would need a custom method. We map destroy for now.
+    Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderItemApiController::class, 'destroy']);
+});
+
 // Scheduled Billing Generation Job Route
 Route::get('/billing-generation/trigger-scheduled', function () {
     try {

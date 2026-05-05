@@ -3,10 +3,12 @@
     "name": "ATSS",
     "slug": "atss",
     "scheme": "atss-app",
-    "version": "2.5.21",
+    "version": "2.5.23",
     "orientation": "portrait",
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
+
+    
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {

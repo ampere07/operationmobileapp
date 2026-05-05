@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Alert, Dimensions, DeviceEventEmitter, RefreshControl, StyleSheet, Modal } from 'react-native';
-import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw, LogOut } from 'lucide-react-native';
+import { Search, ListFilter, Menu, X, ArrowLeft, RefreshCw, LogOut, Filter, Check } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import JobOrderDetails from '../components/JobOrderDetails';
@@ -136,6 +136,13 @@ const jo = StyleSheet.create({
   modalMessage: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginBottom: 32, lineHeight: 24 },
   reloginButton: { paddingVertical: 16, paddingHorizontal: 32, borderRadius: 16, width: '100%', alignItems: 'center', shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   reloginButtonText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  // Status Modal
+  statusModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  statusModalContent: { width: '80%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' },
+  statusModalHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', alignItems: 'center' },
+  statusModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  statusItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusItemText: { fontSize: 14, color: '#374151' },
 });
 
 // Move utility functions outside components to avoid recreation
@@ -281,6 +288,8 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showStatusModal, setShowStatusModal] = useState<boolean>(false);
   const [selectedJobOrder, setSelectedJobOrder] = useState<JobOrder | null>(null);
   const { jobOrders, isLoading, error, refreshJobOrders, silentRefresh } = useJobOrderContext();
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>([]);
@@ -412,7 +421,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, statusFilter, filterValues]);
 
   const handleMobileRowClick = useCallback((jobOrder: JobOrder) => {
     setSelectedJobOrder(jobOrder);
@@ -470,6 +479,22 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         }
       }
 
+      // Status filtering
+      if (statusFilter !== 'all') {
+        const s = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
+        if (statusFilter === 'pending') {
+          if (s !== 'pending') return false;
+        } else if (statusFilter === 'inprogress') {
+          if (s !== 'inprogress' && s !== 'in progress' && s !== 'in-progress') return false;
+        } else if (statusFilter === 'done') {
+          if (s !== 'done' && s !== 'completed') return false;
+        } else if (statusFilter === 'cancelled') {
+          if (s !== 'cancelled') return false;
+        } else if (statusFilter === 'failed') {
+          if (s !== 'failed') return false;
+        }
+      }
+
       // Apply funnel filters
       for (const key in filterValues) {
         const filter = filterValues[key];
@@ -495,7 +520,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       return true;
     });
-  }, [jobOrders, debouncedSearch, userRole, userRoleId, userFullName, userEmail, filterValues, getClientFullName, getClientFullAddress]);
+  }, [jobOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail, filterValues, getClientFullName, getClientFullAddress]);
 
   const sortedJobOrders = useMemo(() => {
     return [...filteredJobOrders].sort((a, b) => {
@@ -604,7 +629,16 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
                 </View>
               </View>
               <View style={jo.actionsRow}>
-
+                <Pressable
+                  onPress={() => setShowStatusModal(true)}
+                  style={[jo.actionBtn, { 
+                    backgroundColor: statusFilter !== 'all' ? (colorPalette?.primary || '#7c3aed') : '#f3f4f6',
+                    borderWidth: statusFilter !== 'all' ? 0 : 1,
+                    borderColor: '#d1d5db'
+                  }]}
+                >
+                  <Filter size={20} color={statusFilter !== 'all' ? 'white' : '#4b5563'} />
+                </Pressable>
                 <Pressable
                   onPress={handleRefresh}
                   disabled={isRefreshing}
@@ -677,6 +711,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
                       <Text style={{ color: '#4b5563' }}>No job orders found matching your filters</Text>
                     </View>
                   }
+                  contentContainerStyle={{ paddingBottom: !isTablet ? 100 : 0 }}
                   renderItem={({ item: jobOrder }) => (
                     <JobOrderCard
                       jobOrder={jobOrder}
@@ -694,7 +729,8 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
           {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && totalPages > 1 && (
             <View style={[jo.paginationBar, {
               backgroundColor: '#ffffff',
-              borderColor: '#e5e7eb'
+              borderColor: '#e5e7eb',
+              paddingBottom: !isTablet ? 110 : 16
             }]}>
               <View>
                 <Text style={[jo.paginationInfo, { color: '#4b5563' }]}>
@@ -820,6 +856,44 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         colorPalette={colorPalette}
         isMandatory={true}
       />
+
+      <Modal
+        visible={showStatusModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <Pressable style={jo.statusModalOverlay} onPress={() => setShowStatusModal(false)}>
+          <View style={jo.statusModalContent}>
+            <View style={jo.statusModalHeader}>
+              <Text style={jo.statusModalTitle}>Filter by Status</Text>
+            </View>
+            {[
+              { label: 'All Status', value: 'all' },
+              { label: 'Pending', value: 'pending' },
+              { label: 'In Progress', value: 'inprogress' },
+              { label: 'Done', value: 'done' },
+              { label: 'Cancelled', value: 'cancelled' },
+              { label: 'Failed', value: 'failed' }
+            ].map((item) => (
+              <Pressable
+                key={item.value}
+                style={jo.statusItem}
+                onPress={() => {
+                  setStatusFilter(item.value);
+                  setShowStatusModal(false);
+                }}
+              >
+                <Text style={[jo.statusItemText, statusFilter === item.value && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }]}>
+                  {item.label}
+                </Text>
+                {statusFilter === item.value && <Check size={18} color={colorPalette?.primary || '#7c3aed'} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
     </View >
 
   );

@@ -124,8 +124,7 @@ class SmartOltController extends Controller
             $token = $config->token;
 
             // Construct URL
-            // https://{{subdomain}}.smartolt.com/api/onu/get_onus_details_by_sn/{{onu_sn}}
-                $url = "https://{$subDomain}.smartolt.com/api/onu/get_all_onus_details";
+            $url = "https://{$subDomain}.smartolt.com/api/onu/get_onus_details_by_sn/{$sn}";
 
             Log::info("Calling SmartOLT API: $url");
 
@@ -139,17 +138,10 @@ class SmartOltController extends Controller
             if ($response->successful()) {
                 $data = $response->json();
                 
-                if (isset($data['onus']) && is_array($data['onus'])) {
-                    $found = false;
-                    $onuDetails = null;
-
-                    foreach ($data['onus'] as $onu) {
-                        if (isset($onu['sn']) && $onu['sn'] === $sn) {
-                            $found = true;
-                            $onuDetails = $onu;
-                            break;
-                        }
-                    }
+                if (isset($data['onus']) && is_array($data['onus']) && !empty($data['onus'])) {
+                    // With get_onus_details_by_sn, it should return the specific ONU
+                    $onuDetails = $data['onus'][0];
+                    $found = true;
 
                     if ($found) {
                         // Check if SN is already in use in technical_details

@@ -680,6 +680,57 @@ class RelatedDataController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Generate PDF for a Statement of Account and upload to Google Drive
+     */
+    public function generateSoaPdf($id): JsonResponse
+    {
+        try {
+            $soa = \App\Models\StatementOfAccount::with(['billingAccount.customer'])->find($id);
+
+            if (!$soa) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Statement of Account not found'
+                ], 404);
+            }
+
+            $pdfService = app(\App\Services\GoogleDrivePdfGenerationService::class);
+            $result = $pdfService->generateBillingPdf($soa->billingAccount, null, $soa);
+
+            if ($result['success']) {
+                $soa->print_link = $result['url'];
+                $soa->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'PDF generated successfully',
+                    'pdf_url' => $result['url'],
+                    'data' => [
+                        'url' => $result['url'],
+                        'print_link' => $result['url']
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to generate PDF',
+                    'error' => $result['error'] ?? 'Unknown error'
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error generating SOA PDF: ' . $id, [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate PDF',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
     /**
      * Get invoice by ID
      */

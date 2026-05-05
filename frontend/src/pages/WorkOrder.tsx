@@ -14,7 +14,7 @@ import {
   StyleSheet,
   useWindowDimensions
 } from 'react-native';
-import { Search, Plus, RefreshCw } from 'lucide-react-native';
+import { Search, Plus, RefreshCw, Filter, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -88,6 +88,8 @@ const WorkOrderPage: React.FC = () => {
 
   const { workOrders, isLoading, fetchWorkOrders, error } = useWorkOrderStore();
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showStatusModal, setShowStatusModal] = useState<boolean>(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
 
@@ -168,6 +170,25 @@ const WorkOrderPage: React.FC = () => {
         return true;
       });
     }
+    
+    // Status filtering
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((wo: WorkOrder) => {
+        const s = (wo.work_status || '').toLowerCase().trim();
+        if (statusFilter === 'pending') {
+          return s === 'pending';
+        } else if (statusFilter === 'inprogress') {
+          return s === 'inprogress' || s === 'in progress' || s === 'in-progress';
+        } else if (statusFilter === 'done') {
+          return s === 'done' || s === 'completed';
+        } else if (statusFilter === 'cancelled') {
+          return s === 'cancelled';
+        } else if (statusFilter === 'failed') {
+          return s === 'failed';
+        }
+        return true;
+      });
+    }
 
     if (!searchQuery) return filtered;
 
@@ -178,7 +199,7 @@ const WorkOrderPage: React.FC = () => {
       (wo.assign_to || '').toLowerCase().includes(query) ||
       (wo.requested_by || '').toLowerCase().includes(query)
     );
-  }, [workOrders, searchQuery, userRole, userEmail, userName]);
+  }, [workOrders, searchQuery, statusFilter, userRole, userEmail, userName]);
 
   const totalPages = useMemo(() => Math.ceil(filteredWorkOrders.length / ITEMS_PER_PAGE), [filteredWorkOrders.length]);
 
@@ -235,7 +256,7 @@ const WorkOrderPage: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, statusFilter]);
 
   const PaginationControls = () => {
     if (totalPages <= 1) return null;
@@ -315,6 +336,20 @@ const WorkOrderPage: React.FC = () => {
 
           <View style={st.actionsRow}>
             <TouchableOpacity
+              onPress={() => setShowStatusModal(true)}
+              style={[st.actionIconBtn, { 
+                backgroundColor: statusFilter !== 'all' ? (colorPalette?.primary || '#7c3aed') : '#f3f4f6',
+                borderWidth: statusFilter !== 'all' ? 0 : 1,
+                borderColor: '#d1d5db',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 4
+              }]}
+            >
+              <Filter size={20} color={statusFilter !== 'all' ? 'white' : '#4b5563'} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={() => fetchWorkOrders(1, 1000, '', '')}
               disabled={isLoading}
               style={[st.actionIconBtn, { backgroundColor: isLoading ? '#d1d5db' : (colorPalette?.primary || '#7c3aed') }]}
@@ -365,7 +400,7 @@ const WorkOrderPage: React.FC = () => {
               ))}
             </View>
             <PaginationControls />
-            <View style={{ height: 40 }} />
+            <View style={{ height: !isTablet ? 120 : 40 }} />
           </>
         ) : (
           <View style={st.emptyState}>
@@ -406,6 +441,48 @@ const WorkOrderPage: React.FC = () => {
           workOrder={selectedWorkOrder || undefined}
         />
       )}
+
+      <Modal
+        visible={showStatusModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <TouchableOpacity 
+          activeOpacity={1} 
+          style={st.statusModalOverlay} 
+          onPress={() => setShowStatusModal(false)}
+        >
+          <View style={st.statusModalContent}>
+            <View style={st.statusModalHeader}>
+              <Text style={st.statusModalTitle}>Filter by Status</Text>
+            </View>
+            {[
+              { label: 'All Status', value: 'all' },
+              { label: 'Pending', value: 'pending' },
+              { label: 'In Progress', value: 'inprogress' },
+              { label: 'Done', value: 'done' },
+              { label: 'Cancelled', value: 'cancelled' },
+              { label: 'Failed', value: 'failed' }
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={st.statusItem}
+                onPress={() => {
+                  setStatusFilter(item.value);
+                  setShowStatusModal(false);
+                }}
+              >
+                <Text style={[st.statusItemText, statusFilter === item.value && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }]}>
+                  {item.label}
+                </Text>
+                {statusFilter === item.value && <Check size={18} color={colorPalette?.primary || '#7c3aed'} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -441,7 +518,14 @@ const st = StyleSheet.create({
   pageBtnText: { fontSize: 12 },
   pageCountText: { paddingHorizontal: 4, fontSize: 12 },
   emptyState: { paddingVertical: 80 },
-  emptyText: { textAlign: 'center' }
+  emptyText: { textAlign: 'center' },
+  // Status Modal
+  statusModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  statusModalContent: { width: '80%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' },
+  statusModalHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb', alignItems: 'center' },
+  statusModalTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  statusItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusItemText: { fontSize: 14, color: '#374151' },
 });
 
 export default WorkOrderPage;

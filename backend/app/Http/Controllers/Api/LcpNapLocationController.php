@@ -208,7 +208,9 @@ class LcpNapLocationController extends Controller
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'modified_by' => 'required|string|max:255',
-                'organization_id' => 'nullable|integer'
+                'organization_id' => 'nullable|integer',
+                'lcp_name' => 'nullable|string|max:255',
+                'nap_name' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
@@ -275,8 +277,8 @@ class LcpNapLocationController extends Controller
             $lcpnap->region = $request->region;
             $lcpnap->city = $request->city;
             $lcpnap->barangay = $request->barangay;
-            $lcpnap->lcp = $request->lcp_id;
-            $lcpnap->nap = $request->nap_id;
+            $lcpnap->lcp = $request->lcp_name ?? $request->lcp_id;
+            $lcpnap->nap = $request->nap_name ?? $request->nap_id;
             $lcpnap->port_total = $request->port_total;
             $lcpnap->image1_url = $image1Url;
             $lcpnap->image2_url = $image2Url;
@@ -365,7 +367,9 @@ class LcpNapLocationController extends Controller
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'modified_by' => 'required|string|max:255',
-                'organization_id' => 'nullable|integer'
+                'organization_id' => 'nullable|integer',
+                'lcp_name' => 'nullable|string|max:255',
+                'nap_name' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
@@ -445,8 +449,8 @@ class LcpNapLocationController extends Controller
             $lcpnap->region = $request->region;
             $lcpnap->city = $request->city;
             $lcpnap->barangay = $request->barangay;
-            $lcpnap->lcp = $request->lcp_id;
-            $lcpnap->nap = $request->nap_id;
+            $lcpnap->lcp = $request->lcp_name ?? $request->lcp_id;
+            $lcpnap->nap = $request->nap_name ?? $request->nap_id;
             $lcpnap->port_total = $request->port_total;
             $lcpnap->modified_by = $request->modified_by;
             $lcpnap->modified_date = now();

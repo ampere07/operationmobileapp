@@ -172,6 +172,7 @@ const LcpNapLocation: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationMarker | null>(null);
+  const [editLocation, setEditLocation] = useState<LocationMarker | null>(null);
   const [userRole, setUserRole] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentDelta, setCurrentDelta] = useState(12);
@@ -445,6 +446,12 @@ const LcpNapLocation: React.FC = () => {
     setSelectedLocation(loc);
   }, []);
 
+  const handleEdit = useCallback((loc: LocationMarker) => {
+    setEditLocation(loc);
+    setShowAddModal(true);
+    setSelectedLocation(null);
+  }, []);
+
   const handleGetMyLocation = useCallback(async () => {
     try {
       const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
@@ -686,13 +693,23 @@ const LcpNapLocation: React.FC = () => {
         </View>
       </View>
 
-      <AddLcpNapLocationModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={() => loadLocations()} />
+      <AddLcpNapLocationModal 
+        isOpen={showAddModal} 
+        onClose={() => { setShowAddModal(false); setEditLocation(null); }} 
+        onSave={() => loadLocations()} 
+        editData={editLocation}
+      />
 
       {selectedLocation && (
         <Modal visible={!!selectedLocation} animationType="slide" transparent onRequestClose={() => setSelectedLocation(null)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.mobileDetailsContainer, isTablet && { width: 500, alignSelf: 'center', marginBottom: 40, borderRadius: 20 }]}>
-              <LcpNapLocationDetails location={selectedLocation!} onClose={() => setSelectedLocation(null)} isMobile={!isTablet} />
+              <LcpNapLocationDetails 
+                location={selectedLocation!} 
+                onClose={() => setSelectedLocation(null)} 
+                onEdit={() => handleEdit(selectedLocation!)}
+                isMobile={!isTablet} 
+              />
             </View>
           </View>
         </Modal>

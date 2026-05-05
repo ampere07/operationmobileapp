@@ -10,6 +10,7 @@ interface ImagePreviewProps {
     error?: string;
     isDarkMode?: boolean;
     colorPrimary?: string;
+    required?: boolean;
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({
@@ -18,7 +19,8 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     onUpload,
     error,
     isDarkMode = false,
-    colorPrimary = '#7c3aed'
+    colorPrimary = '#7c3aed',
+    required = false
 }) => {
     const [modalVisible, setModalVisible] = useState(false);
 
@@ -77,6 +79,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
         <View className="mb-4">
             <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                 {label}
+                {required && <Text style={{ color: '#ef4444' }}> *</Text>}
             </Text>
 
             <View className="flex-row items-center space-x-4 gap-4">

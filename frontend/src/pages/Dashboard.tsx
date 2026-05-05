@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Dimensions, useWindowDimensions, ActivityIndicator, Linking, Pressable } from 'react-native';
+import { View, Dimensions, useWindowDimensions, ActivityIndicator, Linking, Pressable, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -85,11 +85,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { width } = useWindowDimensions();
     const [searchQuery, setSearchQuery] = useState('');
+    const [isTechModalOpen, setIsTechModalOpen] = useState(false);
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
     const [billsInitialTab, setBillsInitialTab] = useState<'soa' | 'invoices' | 'payments'>('soa');
     // const [customerInitialSearch, setCustomerInitialSearch] = useState('');
     // const [customerAutoOpenAccountNo, setCustomerAutoOpenAccountNo] = useState('');
     const isDarkMode = false; // Forced light mode as per user request
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('techModalStateChange', (isOpen) => {
+            console.log('[Dashboard] techModalStateChange:', isOpen);
+            setIsTechModalOpen(isOpen);
+        });
+        return () => sub.remove();
+    }, []);
 
     useEffect(() => {
         const initializeUserData = async () => {
@@ -234,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
 
     // Helper to determine if we should show sidebar
-    const showSidebar = userData !== null && activeSection !== 'release-notes';
+    const showSidebar = userData !== null && activeSection !== 'release-notes' && !isTechModalOpen;
 
     if (isLoading) {
         return (

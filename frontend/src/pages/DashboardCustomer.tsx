@@ -253,7 +253,8 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
     const formatCurrency = useCallback((amount: number) => {
         const isNegative = amount < 0;
-        const formatted = Math.abs(amount).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+        // Use toFixed(0) to remove decimals or replace .00 with empty string
+        const formatted = Math.abs(amount).toFixed(0).replace(/\d(?=(\d{3})+$)/g, '$&,');
         return `₱${isNegative ? '-' : ''}${formatted}`;
     }, []);
 
@@ -417,18 +418,23 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                             colors={isCardFlipped ? ['#000000', colorPalette?.primary || '#ef4444'] : [colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={[styles.gradientInner, { paddingVertical: isShort ? 24 : 32, height: isShort ? 200 : 230 }]}
+                            style={[styles.gradientInner, { paddingVertical: isShort ? 24 : 32, minHeight: isShort ? 200 : 230 }]}
                         >
                             <View style={[styles.profileRow, { marginBottom: isShort ? 16 : 32, justifyContent: 'space-between' }]}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                    <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
-                                        <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
-                                    </View>
-                                    <View>
-                                        <Text style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}>{displayName}</Text>
-                                        <Text style={styles.customerAccountText}>Account No: {accountNo}</Text>
-                                        {isCardFlipped && <Text style={styles.customerAccountText}>{emailAddress}</Text>}
-                                    </View>
+                                <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
+                                    <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+                                </View>
+                                <View style={{ flex: 1, marginHorizontal: 12 }}>
+                                    <Text 
+                                        allowFontScaling={false} 
+                                        numberOfLines={1} 
+                                        adjustsFontSizeToFit
+                                        style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}
+                                    >
+                                        {displayName}
+                                    </Text>
+                                    <Text allowFontScaling={false} style={styles.customerAccountText}>Account No: {accountNo}</Text>
+                                    {isCardFlipped && <Text allowFontScaling={false} numberOfLines={1} style={styles.customerAccountText}>{emailAddress}</Text>}
                                 </View>
                                 <Pressable 
                                     onPress={handleFlipCard}
@@ -445,15 +451,21 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 <View style={{ minHeight: isShort ? 80 : 90 }}>
                                 <View style={styles.billingRow}>
                                     <View style={styles.billingLeft}>
-                                        <Text style={styles.balanceLabel}>Total Amount</Text>
-                                        <Text style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}>
+                                        <Text allowFontScaling={false} style={styles.balanceLabel}>Total Amount</Text>
+                                        <Text 
+                                            numberOfLines={1} 
+                                            adjustsFontSizeToFit
+                                            minimumFontScale={0.5}
+                                            allowFontScaling={false}
+                                            style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 28 : 32) : 44) : (isMobile ? (isShort ? 36 : 40) : 56) }]}
+                                        >
                                             {formatCurrency(balance)}
                                         </Text>
                                     </View>
 
                                     <View style={styles.billingRightCol}>
                                         <View style={styles.dueDateContainer}>
-                                            <Text style={styles.infoText}>Due Date: <Text style={styles.infoValue}>{dueDateString}</Text></Text>
+                                            <Text allowFontScaling={false} style={styles.infoText}>Due Date: <Text allowFontScaling={false} style={styles.infoValue}>{dueDateString}</Text></Text>
                                         </View>
 
                                         <Pressable
@@ -636,7 +648,15 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                             <View style={styles.verifyBox}>
                                 <View style={styles.verifyRowMb}>
                                     <Text style={styles.verifyLabel}>Account Name</Text>
-                                    <Text style={styles.verifyValue}>{displayName}</Text>
+                                    <View style={{ flex: 1, alignItems: 'flex-end', marginLeft: 16 }}>
+                                        <Text 
+                                            numberOfLines={1} 
+                                            adjustsFontSizeToFit
+                                            style={styles.verifyValue}
+                                        >
+                                            {displayName}
+                                        </Text>
+                                    </View>
                                 </View>
                                 <View style={styles.verifyRow}>
                                     <Text style={styles.verifyLabel}>Current Balance</Text>
@@ -846,9 +866,9 @@ const styles = StyleSheet.create({
     initialsText: { color: '#ffffff', fontWeight: 'bold' },
     customerNameText: { color: '#ffffff', fontWeight: 'bold', textTransform: 'capitalize' },
     customerAccountText: { color: '#e5e7eb', fontSize: 11, opacity: 0.9 },
-    billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-    billingLeft: { flex: 1 },
-    billingRightCol: { alignItems: 'flex-end', gap: 12 },
+    billingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 },
+    billingLeft: { flex: 1, minWidth: 120 },
+    billingRightCol: { alignItems: 'flex-end', gap: 12, flexShrink: 0 },
     dueDateContainer: { alignItems: 'flex-end' },
     balanceLabel: { color: '#e5e7eb', fontSize: 12, marginBottom: 4 },
     balanceAmountText: { fontWeight: 'bold', color: '#ffffff' },
