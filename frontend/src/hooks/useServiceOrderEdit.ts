@@ -3,7 +3,7 @@ import { Alert, Keyboard } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
+
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
 import { createServiceOrderItems, ServiceOrderItem } from '../services/serviceOrderItemService';
@@ -522,32 +522,32 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       await AsyncStorage.removeItem(`serviceOrderItemsDraft_${serviceOrderId}`);
 
       // Save to Mobile Gallery first
-      const saveImageToGallery = async (fileObj: any, fieldName: string) => {
-        if (!fileObj || !fileObj.uri) return;
-        try {
-          const { status } = await MediaLibrary.requestPermissionsAsync(true);
-          if (status === 'granted') {
-            const fullName = (formData.fullName || 'ServiceOrder').trim();
-            const cleanFullName = fullName.replace(/[^a-zA-Z0-9]/g, '_');
-            const timestamp = Date.now();
-            const shortField = fieldName.replace('File', '').replace('Image', '');
-            const newFileName = `serviceorder_${shortField}_${cleanFullName}_${timestamp}.jpg`;
-            
-            const tempUri = `${(ExpoFileSystem as any).cacheDirectory}${newFileName}`;
-            await (ExpoFileSystem as any).copyAsync({ from: fileObj.uri, to: tempUri });
-            await MediaLibrary.saveToLibraryAsync(tempUri);
-            console.log(`[MediaLibrary] ${fieldName} saved to gallery as: ${newFileName}`);
-          }
-        } catch (e) {
-          console.error(`[MediaLibrary] Error saving ${fieldName} to gallery:`, e);
-        }
-      };
+      // const saveImageToGallery = async (fileObj: any, fieldName: string) => {
+      //   if (!fileObj || !fileObj.uri) return;
+      //   try {
+      //     const { status } = await MediaLibrary.requestPermissionsAsync(true);
+      //     if (status === 'granted') {
+      //       const fullName = (formData.fullName || 'ServiceOrder').trim();
+      //       const cleanFullName = fullName.replace(/[^a-zA-Z0-9]/g, '_');
+      //       const timestamp = Date.now();
+      //       const shortField = fieldName.replace('File', '').replace('Image', '');
+      //       const newFileName = `serviceorder_${shortField}_${cleanFullName}_${timestamp}.jpg`;
+      //       
+      //       const tempUri = `${(ExpoFileSystem as any).cacheDirectory}${newFileName}`;
+      //       await (ExpoFileSystem as any).copyAsync({ from: fileObj.uri, to: tempUri });
+      //       await MediaLibrary.saveToLibraryAsync(tempUri);
+      //       console.log(`[MediaLibrary] ${fieldName} saved to gallery as: ${newFileName}`);
+      //     }
+      //   } catch (e) {
+      //     console.error(`[MediaLibrary] Error saving ${fieldName} to gallery:`, e);
+      //   }
+      // };
 
-      await saveImageToGallery(imageFiles.timeInFile, 'timeIn');
-      await saveImageToGallery(imageFiles.modemSetupFile, 'setup');
-      await saveImageToGallery(imageFiles.timeOutFile, 'timeOut');
-      await saveImageToGallery(imageFiles.clientSignatureFile, 'signature');
-      await saveImageToGallery(imageFiles.proofImageFile, 'proof');
+      // await saveImageToGallery(imageFiles.timeInFile, 'timeIn');
+      // await saveImageToGallery(imageFiles.modemSetupFile, 'setup');
+      // await saveImageToGallery(imageFiles.timeOutFile, 'timeOut');
+      // await saveImageToGallery(imageFiles.clientSignatureFile, 'signature');
+      // await saveImageToGallery(imageFiles.proofImageFile, 'proof');
 
       // Upload Images
       const uploaded: any = {};
