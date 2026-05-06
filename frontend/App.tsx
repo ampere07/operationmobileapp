@@ -170,15 +170,13 @@ function App() {
         setVersionConfig(config);
         
         const compareMin = compareVersions(currentVersion, config.min_version);
-        const compareLatest = compareVersions(currentVersion, config.latest_version);
 
         if (compareMin < 0) {
+          // Current version is BELOW minimum required → Force update
           setIsForceUpdate(true);
           setShowUpdateModal(true);
-        } else if (compareLatest < 0) {
-          setIsForceUpdate(false);
-          setShowUpdateModal(true);
         }
+        // No modal shown if current version meets or exceeds min_version
       } catch (error) {
         console.error('Failed to check app version:', error);
       }

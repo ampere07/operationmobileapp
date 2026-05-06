@@ -156,20 +156,32 @@ const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => {
 
 export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ children }) => {
     const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
+    const ordersRef = React.useRef<ServiceOrder[]>([]);
+    const fetchingRef = React.useRef<boolean>(false);
+    const queryRef = React.useRef<string>('');
+    const paginationRef = React.useRef<{ page: number, hasMore: boolean }>({ page: 1, hasMore: true });
+
+    // Sync ref with state
+    useEffect(() => {
+        ordersRef.current = serviceOrders;
+    }, [serviceOrders]);
+
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [currentPage, setCurrentPage] = useState<number>(1);
-    const [hasMore, setHasMore] = useState<boolean>(true);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [isFetchingNextPage, setIsFetchingNextPage] = useState<boolean>(false);
 
-    const fetchServiceOrders = useCallback(async (page = 1, force = false, silent = false, query = searchQuery) => {
+    const fetchServiceOrders = useCallback(async (page = 1, force = false, silent = false, query = queryRef.current) => {
+        // Strict guard against overlapping requests
+        if (fetchingRef.current && !force) return;
+        
         // If we have data and not forced and it's first page, skip fetching
-        if (page === 1 && !force && serviceOrders.length > 0 && query === searchQuery) {
+        if (page === 1 && !force && ordersRef.current.length > 0 && query === queryRef.current) {
             return;
         }
 
+        fetchingRef.current = true;
         if (page === 1 && !silent) {
             setIsLoading(true);
         } else if (page > 1) {
@@ -188,17 +200,11 @@ export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ chil
                     if (isTechnician && userData.email) {
                         assignedEmail = userData.email;
                     }
-                } catch (err) {
-                    console.error('Error parsing auth data:', err);
-                }
+                } catch (err) { }
             }
 
             // Fetch service orders with pagination
             const response = (await getServiceOrders(assignedEmail, page, 50, query)) as any;
-
-            if (!response.success) {
-                throw new Error(response.message || 'Failed to fetch service orders');
-            }
 
             if (response.success && Array.isArray(response.data)) {
                 const orders = response.data.map(transformServiceOrder);
@@ -209,36 +215,25 @@ export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ chil
                     setServiceOrders(prev => [...prev, ...orders]);
                 }
 
-                if (response.pagination) {
-                    setHasMore(response.pagination.has_more);
-                    setCurrentPage(response.pagination.current_page);
-                } else {
-                    // Fallback for older API versions if any
-                    setHasMore(false);
-                }
-
+                const hasMoreVal = response.pagination ? response.pagination.has_more : false;
+                paginationRef.current = { page, hasMore: hasMoreVal };
+                
                 setLastUpdated(new Date());
                 setError(null);
             } else {
-                if (page === 1) {
-                    setServiceOrders([]);
-                }
-                setHasMore(false);
-                setError(null);
+                if (page === 1) setServiceOrders([]);
+                paginationRef.current.hasMore = false;
             }
         } catch (err: any) {
-            console.error('Failed to fetch service orders:', err);
-            if (!silent) {
-                setError(err.message || 'Failed to load service orders. Please try again.');
-            }
+            if (!silent) setError(err.message || 'Failed to load data.');
         } finally {
             setIsLoading(false);
             setIsFetchingNextPage(false);
+            fetchingRef.current = false;
         }
-    }, [serviceOrders.length, searchQuery]);
+    }, []); // Totally stable
 
     const refreshServiceOrders = useCallback(async () => {
-        setCurrentPage(1);
         await fetchServiceOrders(1, true, false);
     }, [fetchServiceOrders]);
 
@@ -247,36 +242,38 @@ export const ServiceOrderProvider: React.FC<ServiceOrderProviderProps> = ({ chil
     }, [fetchServiceOrders]);
 
     const fetchNextPage = useCallback(async () => {
-        if (!hasMore || isLoading || isFetchingNextPage) return;
-        await fetchServiceOrders(currentPage + 1, true, false);
-    }, [currentPage, hasMore, isLoading, isFetchingNextPage, fetchServiceOrders]);
+        if (!paginationRef.current.hasMore || fetchingRef.current) return;
+        await fetchServiceOrders(paginationRef.current.page + 1, true, false);
+    }, [fetchServiceOrders]);
 
     const handleSearch = useCallback((query: string) => {
+        queryRef.current = query;
         setSearchQuery(query);
-        setCurrentPage(1);
         fetchServiceOrders(1, true, false, query);
     }, [fetchServiceOrders]);
 
     // Initial fetch effect
     useEffect(() => {
-        if (serviceOrders.length === 0) {
+        if (ordersRef.current.length === 0 && !fetchingRef.current) {
             fetchServiceOrders(1, false, false);
         }
-    }, [fetchServiceOrders, serviceOrders.length]);
+    }, [fetchServiceOrders]);
 
     return (
         <ServiceOrderContext.Provider
             value={{
                 serviceOrders,
-                isLoading: isLoading || isFetchingNextPage,
+                isLoading: isLoading && serviceOrders.length === 0, // Only true for first load
+                isRefreshing: isLoading && serviceOrders.length > 0, // True for manual refreshes
+                isFetchingNextPage,
                 error,
                 refreshServiceOrders,
                 silentRefresh,
                 fetchNextPage,
                 setSearchQuery: handleSearch,
                 searchQuery,
-                hasMore,
-                currentPage,
+                hasMore: paginationRef.current.hasMore,
+                currentPage: paginationRef.current.page,
                 lastUpdated
             }}
         >

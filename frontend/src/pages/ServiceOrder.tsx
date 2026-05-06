@@ -204,7 +204,18 @@ const ServiceOrderPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const { serviceOrders, isLoading, error, refreshServiceOrders, silentRefresh } = useServiceOrderContext();
+  const { 
+    serviceOrders, 
+    isLoading, 
+    isRefreshing,
+    isFetchingNextPage,
+    error, 
+    refreshServiceOrders, 
+    silentRefresh, 
+    setSearchQuery: setContextSearch, 
+    fetchNextPage, 
+    hasMore 
+  } = useServiceOrderContext();
   const [selectedServiceOrderRaw, setSelectedServiceOrderRaw] = useState<ServiceOrder | null>(null);
 
   const selectedServiceOrder = useMemo(() => {
@@ -222,13 +233,15 @@ const ServiceOrderPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 15;
 
-  // Debounce search input
+  // Debounce search input and trigger server-side search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
-    }, 300);
+      setContextSearch(searchQuery);
+    }, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]); // Only trigger when local search text changes
 
   // Batch all mount-time async loads into a single effect
   useEffect(() => {
@@ -269,10 +282,6 @@ const ServiceOrderPage: React.FC = () => {
     setCurrentPage(1);
   }, [debouncedSearch, statusFilter]);
 
-  useEffect(() => {
-    silentRefresh();
-  }, [silentRefresh]);
-
   const handleRefresh = useCallback(async () => {
     await refreshServiceOrders();
   }, [refreshServiceOrders]);
@@ -295,7 +304,8 @@ const ServiceOrderPage: React.FC = () => {
     return serviceOrders
       .filter(serviceOrder => {
         // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
-        if (userRoleId === 2) {
+        // LIFTED if search is active so they can find old records
+        if (userRoleId === 2 && isSearchEmpty) {
           const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
           const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
 
@@ -351,7 +361,11 @@ const ServiceOrderPage: React.FC = () => {
 
         return true;
       })
-      .sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
+      .sort((a, b) => {
+        const timeA = a.rawUpdatedAt ? new Date(a.rawUpdatedAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+        const timeB = b.rawUpdatedAt ? new Date(b.rawUpdatedAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+        return timeB - timeA;
+      });
   }, [serviceOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail]);
 
   const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
@@ -367,12 +381,16 @@ const ServiceOrderPage: React.FC = () => {
     return Math.ceil(filteredServiceOrders.length / itemsPerPage);
   }, [filteredServiceOrders.length, shouldPaginate]);
 
-  const handlePageChange = useCallback((newPage: number) => {
+  const handlePageChange = useCallback(async (newPage: number) => {
+    if (newPage > totalPages && hasMore) {
+      await fetchNextPage();
+      return;
+    }
     setCurrentPage(prev => {
       if (newPage >= 1 && newPage <= totalPages) return newPage;
       return prev;
     });
-  }, [totalPages]);
+  }, [totalPages, hasMore, fetchNextPage]);
 
   const { width } = Dimensions.get('window');
   const isTablet = width >= 768;
@@ -523,7 +541,7 @@ const ServiceOrderPage: React.FC = () => {
                   data={paginatedServiceOrders}
                   keyExtractor={(item) => String(item.id)}
                   refreshControl={
-                    <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
+                    <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colorPalette?.primary || '#7c3aed'} colors={[colorPalette?.primary || '#7c3aed']} />
                   }
                   ListEmptyComponent={
                     <View style={so.emptyWrap}>
@@ -540,6 +558,19 @@ const ServiceOrderPage: React.FC = () => {
                       userRoleId={userRoleId}
                     />
                   )}
+                  onEndReached={() => {
+                    if (hasMore && !isFetchingNextPage) {
+                      fetchNextPage();
+                    }
+                  }}
+                  onEndReachedThreshold={0.5}
+                  ListFooterComponent={
+                    isFetchingNextPage ? (
+                      <View style={{ padding: 20, alignItems: 'center' }}>
+                        <Text style={{ color: '#6b7280' }}>Loading more...</Text>
+                      </View>
+                    ) : null
+                  }
                 />
               </View>
             )}

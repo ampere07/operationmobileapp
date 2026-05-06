@@ -4,6 +4,7 @@ import {
   Image, Platform, KeyboardAvoidingView, StyleSheet, Keyboard, InteractionManager, ActivityIndicator, SafeAreaView, useWindowDimensions, DeviceEventEmitter
 } from 'react-native';
 import { Camera, CheckCircle, AlertCircle, Loader2, Search, Check, X, ChevronDown } from 'lucide-react-native';
+import ImagePreview from '../components/ImagePreview';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +17,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import apiClient from '../config/api';
 import { getAllLCPs, LCP } from '../services/lcpService';
 import { getAllNAPs, NAP } from '../services/napService';
+import { getAllLCPNAPs } from '../services/lcpnapService';
 import { SearchablePicker, SearchablePickerTrigger } from '../components/SearchablePicker';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
@@ -107,50 +109,6 @@ const LEAFLET_HTML = `<!DOCTYPE html>
 </html>`;
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-
-interface ImageUploadFieldProps {
-  label: React.ReactNode;
-  field: 'reading_image' | 'image' | 'image_2';
-  required?: boolean;
-  error?: string;
-  previewUri: string | null;
-  isDarkMode: boolean;
-  onPress: (field: 'reading_image' | 'image' | 'image_2') => void;
-}
-
-const ImageUploadField = React.memo<ImageUploadFieldProps>(
-  ({ label, field, required, error, previewUri, isDarkMode, onPress }) => (
-    <View style={styles.fieldContainer}>
-      <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>
-        {label}
-        {required && <Text style={{ color: '#ef4444' }}> *</Text>}
-      </Text>
-      <Pressable
-        onPress={() => onPress(field)}
-        style={[styles.imageUploadBox, {
-          backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6',
-          borderColor: isDarkMode ? '#374151' : '#d1d5db',
-        }]}
-      >
-        {previewUri ? (
-          <View style={styles.fullSize}>
-            <Image source={{ uri: previewUri }} style={styles.fullSize} resizeMode="contain" />
-            <View style={styles.uploadedBadge}>
-              <Camera width={14} height={14} color="#ffffff" />
-              <Text style={styles.uploadedText}>Uploaded</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={[styles.fullSize, styles.center]}>
-            <Camera width={32} height={32} color={isDarkMode ? '#9ca3af' : '#4b5563'} />
-            <Text style={[styles.uploadPlaceholder, { color: isDarkMode ? '#9ca3af' : '#4b5563' }]}>Tap to upload</Text>
-          </View>
-        )}
-      </Pressable>
-      {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  ),
-);
 
 interface MiniModalItemProps {
   label: string;
@@ -384,9 +342,7 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
 
   useEffect(() => {
     if (formData.lcp_name && formData.nap_name) {
-      const lcp = formData.lcp_name.trim();
-      const nap = formData.nap_name.trim();
-      setFormData(prev => ({ ...prev, lcpnap_name: `${lcp} ${nap}`.trim() }));
+      setFormData(prev => ({ ...prev, lcpnap_name: `${formData.lcp_name} ${formData.nap_name}` }));
     }
   }, [formData.lcp_name, formData.nap_name]);
 
@@ -454,20 +410,10 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
     }
   }, []);
 
-  const handleImageUpload = useCallback(async (field: 'reading_image' | 'image' | 'image_2') => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.8 });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setFormData(prev => ({ ...prev, [field]: { uri: asset.uri, type: 'image/jpeg', name: `${field}_${Date.now()}.jpg` } }));
-        setImagePreviews(prev => ({ ...prev, [field]: asset.uri }));
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
-    } catch (e) {
-      console.error('Image picking error:', e);
-    }
+  const handleImageUpload = useCallback((field: 'reading_image' | 'image' | 'image_2', file: any) => {
+    setFormData(prev => ({ ...prev, [field]: file }));
+    setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
+    setErrors(prev => prev[field] ? { ...prev, [field]: '' } : prev);
   }, []);
 
   const handleSubmit = async () => {
@@ -499,6 +445,30 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
     }, 200);
 
     try {
+      // Check for duplicate lcpnap_name before submitting (skip if editing the same record)
+      if (!editData || editData.lcpnap_name !== formData.lcpnap_name) {
+        try {
+          const existingRes = await getAllLCPNAPs(formData.lcpnap_name, 1, 10);
+          if (existingRes.success && Array.isArray(existingRes.data)) {
+            const duplicate = existingRes.data.find(
+              (item: any) => (item.lcpnap_name || '').toLowerCase() === formData.lcpnap_name.toLowerCase()
+            );
+            if (duplicate) {
+              if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+              setShowLoadingModal(false);
+              setLoading(false);
+              setResultType('error');
+              setResultMessage(`LCPNAP Name "${formData.lcpnap_name}" already exists.`);
+              setShowResultModal(true);
+              return;
+            }
+          }
+        } catch (checkErr) {
+          // If the check fails, proceed with submission and let the server validate
+          console.error('Duplicate check failed, proceeding:', checkErr);
+        }
+      }
+
       const submitData = new FormData();
       // Resolve IDs from names
       const selectedLcp = lcpList.find(l => l.lcp_name === formData.lcp_name);
@@ -686,9 +656,33 @@ const AddLcpNapLocationModal: React.FC<AddLcpNapLocationModalProps> = ({ isOpen,
                   <TextInput value={formData.coordinates} onChangeText={t => setFormData(p => ({ ...p, coordinates: t }))} style={[styles.input, { borderColor: errors.coordinates ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'), backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', color: isDarkMode ? '#ffffff' : '#111827' }]} placeholder="14.466580, 121.201807" />
                   <MapSection onMapPress={handleMapPress} onGetMyLocation={handleGetMyLocation} isDarkMode={isDarkMode} colorPalette={colorPalette} webViewRef={webViewRef} loading={loading} onInteractionChange={setScrollEnabled} />
                 </View>
-                <ImageUploadField label="Reading Image" field="reading_image" previewUri={imagePreviews.reading_image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.reading_image} />
-                <ImageUploadField label="Image" field="image" previewUri={imagePreviews.image} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image} />
-                <ImageUploadField label="Image 2" field="image_2" previewUri={imagePreviews.image_2} isDarkMode={isDarkMode} onPress={handleImageUpload} required error={errors.image_2} />
+                <ImagePreview
+                  label="Reading Image"
+                  imageUrl={imagePreviews.reading_image}
+                  required={true}
+                  onUpload={(file) => handleImageUpload('reading_image', file)}
+                  error={errors.reading_image}
+                  isDarkMode={isDarkMode}
+                  colorPrimary={primaryColor}
+                />
+                <ImagePreview
+                  label="Image"
+                  imageUrl={imagePreviews.image}
+                  required={true}
+                  onUpload={(file) => handleImageUpload('image', file)}
+                  error={errors.image}
+                  isDarkMode={isDarkMode}
+                  colorPrimary={primaryColor}
+                />
+                <ImagePreview
+                  label="Image 2"
+                  imageUrl={imagePreviews.image_2}
+                  required={true}
+                  onUpload={(file) => handleImageUpload('image_2', file)}
+                  error={errors.image_2}
+                  isDarkMode={isDarkMode}
+                  colorPrimary={primaryColor}
+                />
                 <View>
                   <Text style={[styles.fieldLabel, { color: isDarkMode ? '#ffffff' : '#111827' }]}>Modified By</Text>
                   <TextInput value={formData.modified_by} editable={false} style={[styles.input, { backgroundColor: isDarkMode ? '#111827' : '#f3f4f6', color: '#9ca3af' }]} />
