@@ -673,6 +673,21 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
   const normPort = (p: any) => { if (!p) return ''; const n = String(p).replace(/[^\d]/g, ''); return n ? `P${n.padStart(2, '0')}` : ''; };
   const formatDate = (s: string) => { if (!s) return ''; try { const d = new Date(s); return d.toISOString().split('T')[0]; } catch(e) { return s.split(' ')[0]; } };
   
+  const repairCatList = ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'];
+  const supportStatusList = ['Resolved', 'Failed', 'In Progress', 'For Visit'];
+  const visitStatusList = ['Done', 'In Progress', 'Failed', 'Reschedule'];
+
+  const rawRepairCat = (d.repairCategory || d.repair_category || '').toLowerCase();
+  const repairCategory = repairCatList.find(c => c.toLowerCase() === rawRepairCat) || d.repairCategory || d.repair_category || '';
+
+  const rawSupportStatus = (d.supportStatus || d.support_status || '').toLowerCase();
+  let supportStatus = supportStatusList.find(s => s.toLowerCase() === rawSupportStatus) || d.supportStatus || d.support_status || 'In Progress';
+  if (supportStatus === 'Pending') supportStatus = 'In Progress';
+
+  const rawVisitStatus = (d.visitStatus || d.visit_status || '').toLowerCase();
+  let visitStatus = visitStatusList.find(v => v.toLowerCase() === rawVisitStatus) || d.visitStatus || d.visit_status || 'In Progress';
+  if (visitStatus === 'Pending') visitStatus = 'In Progress';
+
   return {
     accountNo: d.accountNumber || d.account_no || '',
     dateInstalled: formatDate(d.dateInstalled || d.date_installed),
@@ -681,12 +696,18 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
     emailAddress: d.emailAddress || d.email_address || '',
     plan: d.plan || '',
     username: d.username || '',
-    connectionType: d.connectionType || d.connection_type || 'Fiber',
+    connectionType: (() => {
+      const t = (d.connectionType || d.connection_type || 'Fiber').toLowerCase();
+      if (t === 'antenna') return 'Antenna';
+      if (t === 'fiber') return 'Fiber';
+      if (t === 'local') return 'Local';
+      return 'Fiber';
+    })(),
     routerModemSN: d.routerModemSN || d.router_modem_sn || '',
     lcp: d.lcp || '', nap: d.nap || '', port: normPort(d.port || d.PORT), vlan: d.vlan || '',
-    supportStatus: (d.supportStatus || d.support_status) === 'Pending' ? 'In Progress' : (d.supportStatus || d.support_status || 'In Progress'),
-    visitStatus: (d.visitStatus || d.visit_status) === 'Pending' ? 'In Progress' : (d.visitStatus || d.visit_status || 'In Progress'),
-    repairCategory: d.repairCategory || d.repair_category || '',
+    supportStatus,
+    visitStatus,
+    repairCategory,
     visitBy: d.visitBy || d.visit_by || '', visitWith: d.visitWith || d.visit_with || '', visitWithOther: d.visitWithOther || d.visit_with_other || '',
     visitRemarks: d.visitRemarks || d.visit_remarks || '', clientSignature: d.clientSignature || d.client_signature_url || d.client_signature || '',
     timeIn: d.timeIn || d.image1_url || d.time_in || '', modemSetupImage: d.modemSetupImage || d.image2_url || d.modem_setup_image || '',

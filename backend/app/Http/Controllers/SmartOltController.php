@@ -138,20 +138,27 @@ class SmartOltController extends Controller
             if ($response->successful()) {
                 $data = $response->json();
                 
-                if (isset($data['onus']) && is_array($data['onus']) && !empty($data['onus'])) {
-                    // With get_onus_details_by_sn, it should return the specific ONU
-                    $onuDetails = $data['onus'][0];
-                    $found = true;
+                // Check if SmartOLT returned an error status
+                if (isset($data['status']) && $data['status'] === false) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'SmartOLT API: ' . ($data['error'] ?? 'Unknown error')
+                    ], 200);
+                }
 
-                    if ($found) {
+                if (isset($data['onus']) && is_array($data['onus'])) {
+                    if (!empty($data['onus'])) {
+                        // With get_onus_details_by_sn, it should return the specific ONU
+                        $onuDetails = $data['onus'][0];
+
                         // Check if SN is already in use in technical_details
                         $exists = TechnicalDetail::where('router_modem_sn', $sn)->exists();
 
                         if ($exists) {
                             return response()->json([
                                 'success' => false,
-                                'message' => 'already exist'
-                            ]);
+                                'message' => 'Serial Number already exists in our system'
+                            ], 200);
                         }
 
                         return response()->json([
@@ -160,23 +167,33 @@ class SmartOltController extends Controller
                             'message' => 'Valid router model sn'
                         ]);
                     } else {
-                         return response()->json([
+                        return response()->json([
                             'success' => false,
-                            'message' => 'Invalid router model sn: SN not found in SmartOLT system'
+                            'message' => 'Serial Number not found in SmartOLT system'
                         ], 200);
                     }
                 } else {
-                     return response()->json([
+                    Log::error('SmartOLT Invalid Response Structure:', ['response' => $data]);
+                    return response()->json([
                         'success' => false,
                         'message' => 'Invalid response structure from SmartOLT'
-                    ], 500);
+                    ], 200);
                 }
 
             } else {
-                // Return 400 if not found or error
+                $errorMessage = 'Error communicating with SmartOLT: ' . $response->status();
+                try {
+                    $errorData = $response->json();
+                    if (isset($errorData['message'])) {
+                        $errorMessage = $errorData['message'];
+                    } elseif (isset($errorData['error'])) {
+                        $errorMessage = $errorData['error'];
+                    }
+                } catch (\Exception $e) {}
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'Error communicating with SmartOLT: ' . $response->status()
+                    'message' => $errorMessage
                 ], 400);
             }
 

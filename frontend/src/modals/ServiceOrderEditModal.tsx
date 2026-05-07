@@ -158,32 +158,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                   {renderInput('fullAddress', 'Full Address', false, 'default', true)}
 
                   {/* Connection Type */}
-                  <View style={styles.inputGroup}>
-                    <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Connection Type</Text>
-                    <View style={styles.connectionTypeContainer}>
-                      {['Antenna', 'Fiber', 'Local']
-                        .filter(type => {
-                          const existingType = serviceOrderData?.connectionType || serviceOrderData?.connection_type;
-                          if (!existingType) return true;
-                          return existingType.toLowerCase() === type.toLowerCase();
-                        })
-                        .map((type) => (
-                          <Pressable
-                            key={type}
-                            onPress={() => handleInputChange('connectionType', type)}
-                            style={[styles.connectionTypeButton, {
-                              backgroundColor: formData.connectionType === type ? activeColor : (isDarkMode ? '#1f2937' : '#ffffff'),
-                              borderColor: formData.connectionType === type ? activeColor : (isDarkMode ? '#374151' : '#d1d5db')
-                            }]}
-                          >
-                            <Text style={{ 
-                              color: formData.connectionType === type ? '#ffffff' : (isDarkMode ? '#ffffff' : '#000000'), 
-                              fontWeight: '500' 
-                            }}>{type}</Text>
-                          </Pressable>
-                        ))}
-                    </View>
-                  </View>
+                  {renderInput('connectionType', 'Connection Type', false)}
 
                   {/* READ ONLY TECH INFO */}
                   {renderInput('routerModemSN', 'Router/Modem SN', false)}
@@ -233,14 +208,36 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                         <>
                           {renderPickerTrigger('repairCategory', 'Repair Category', formData.repairCategory, 'Select Repair Category', true)}
 
-                          {['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'].includes(formData.repairCategory) && (
+                          {['migrate', 'relocate', 'transfer lcp/nap/port'].includes(formData.repairCategory?.toLowerCase()) && (
                             <>
-                              {formData.repairCategory === 'Migrate' && (
+                              {formData.repairCategory?.toLowerCase() === 'migrate' && (
                                 <View style={styles.inputGroup}>
                                   <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
                                     New Router SN <Text style={styles.required}>*</Text>
                                   </Text>
-                                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                    {(formData.connectionType?.toLowerCase() === 'fiber' || 
+                                      serviceOrderData?.connection_type?.toLowerCase() === 'fiber' || 
+                                      serviceOrderData?.connectionType?.toLowerCase() === 'fiber' ||
+                                      !formData.connectionType) && (
+                                      <Pressable
+                                        onPress={handleValidateSN}
+                                        disabled={isValidatingSN || !formData.newRouterModemSN}
+                                        style={[styles.validateButton, {
+                                          backgroundColor: (isValidatingSN || !formData.newRouterModemSN) ? '#9ca3af' : activeColor,
+                                          opacity: (isValidatingSN || !formData.newRouterModemSN) ? 0.7 : 1,
+                                          height: 50
+                                        }]}
+                                      >
+                                        {isValidatingSN ? (
+                                          <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                          <Text style={styles.validateButtonText}>
+                                            {isSNValidated ? 'VALIDATED' : 'VALIDATE'}
+                                          </Text>
+                                        )}
+                                      </Pressable>
+                                    )}
                                     <TextInput
                                       style={[styles.textInput, {
                                         flex: 1,
@@ -254,24 +251,6 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                       placeholder="Enter New Router SN"
                                       placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
                                     />
-                                    {formData.connectionType === 'Fiber' && (
-                                      <Pressable
-                                        onPress={handleValidateSN}
-                                        disabled={isValidatingSN || !formData.newRouterModemSN}
-                                        style={[styles.validateButton, {
-                                          backgroundColor: (isValidatingSN || !formData.newRouterModemSN) ? '#9ca3af' : activeColor,
-                                          opacity: (isValidatingSN || !formData.newRouterModemSN) ? 0.7 : 1
-                                        }]}
-                                      >
-                                        {isValidatingSN ? (
-                                          <ActivityIndicator size="small" color="#fff" />
-                                        ) : (
-                                          <Text style={styles.validateButtonText}>
-                                            {isSNValidated ? 'VALIDATED' : 'VALIDATE'}
-                                          </Text>
-                                        )}
-                                      </Pressable>
-                                    )}
                                   </View>
                                   {errors.newRouterModemSN ? <Text style={styles.errorText}>{errors.newRouterModemSN}</Text> : null}
                                 </View>
@@ -280,55 +259,57 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                               {renderPickerTrigger('port', 'New Port', formData.newPort, 'Select Port', true)}
                               {renderPickerTrigger('vlan', 'New VLAN', formData.newVlan, 'Select VLAN', true)}
                               
-                              {formData.repairCategory === 'Migrate' && renderPickerTrigger('routerModels', 'Router Model', formData.routerModel, 'Select Router Model', true)}
+                              {formData.repairCategory?.toLowerCase() === 'migrate' && renderPickerTrigger('routerModels', 'Router Model', formData.routerModel, 'Select Router Model', true)}
                             </>
                           )}
 
-                          {(formData.repairCategory === 'Replace Router' || formData.repairCategory === 'Relocate Router') && (
-                            formData.repairCategory === 'Replace Router' && (
-                              <View style={styles.inputGroup}>
-                                <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                                  New Router SN <Text style={styles.required}>*</Text>
-                                </Text>
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                  <TextInput
-                                    style={[styles.textInput, {
-                                      flex: 1,
-                                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                      color: isDarkMode ? '#ffffff' : '#111827',
-                                      borderColor: errors.newRouterModemSN ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                          {formData.repairCategory?.toLowerCase() === 'replace router' && (
+                            <View style={styles.inputGroup}>
+                              <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
+                                New Router SN <Text style={styles.required}>*</Text>
+                              </Text>
+                              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                {(formData.connectionType?.toLowerCase().includes('fiber') || 
+                                  serviceOrderData?.connection_type?.toLowerCase().includes('fiber') || 
+                                  serviceOrderData?.connectionType?.toLowerCase().includes('fiber') ||
+                                  !formData.connectionType) && (
+                                  <Pressable
+                                    onPress={handleValidateSN}
+                                    disabled={isValidatingSN || !formData.newRouterModemSN}
+                                    style={[styles.validateButton, {
+                                      backgroundColor: (isValidatingSN || !formData.newRouterModemSN) ? '#9ca3af' : activeColor,
+                                      opacity: (isValidatingSN || !formData.newRouterModemSN) ? 0.7 : 1,
                                       height: 50
                                     }]}
-                                    value={formData.newRouterModemSN}
-                                    onChangeText={(text) => handleInputChange('newRouterModemSN', text)}
-                                    placeholder="Enter New Router SN"
-                                    placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
-                                  />
-                                  {formData.connectionType === 'Fiber' && (
-                                    <Pressable
-                                      onPress={handleValidateSN}
-                                      disabled={isValidatingSN || !formData.newRouterModemSN}
-                                      style={[styles.validateButton, {
-                                        backgroundColor: (isValidatingSN || !formData.newRouterModemSN) ? '#9ca3af' : activeColor,
-                                        opacity: (isValidatingSN || !formData.newRouterModemSN) ? 0.7 : 1
-                                      }]}
-                                    >
-                                      {isValidatingSN ? (
-                                        <ActivityIndicator size="small" color="#fff" />
-                                      ) : (
-                                        <Text style={styles.validateButtonText}>
-                                          {isSNValidated ? 'VALIDATED' : 'VALIDATE'}
-                                        </Text>
-                                      )}
-                                    </Pressable>
-                                  )}
-                                </View>
-                                {errors.newRouterModemSN ? <Text style={styles.errorText}>{errors.newRouterModemSN}</Text> : null}
+                                  >
+                                    {isValidatingSN ? (
+                                      <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                      <Text style={styles.validateButtonText}>
+                                        {isSNValidated ? 'VALIDATED' : 'VALIDATE'}
+                                      </Text>
+                                    )}
+                                  </Pressable>
+                                )}
+                                <TextInput
+                                  style={[styles.textInput, {
+                                    flex: 1,
+                                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                                    color: isDarkMode ? '#ffffff' : '#111827',
+                                    borderColor: errors.newRouterModemSN ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
+                                    height: 50
+                                  }]}
+                                  value={formData.newRouterModemSN}
+                                  onChangeText={(text) => handleInputChange('newRouterModemSN', text)}
+                                  placeholder="Enter New Router SN"
+                                  placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                                />
                               </View>
-                            )
+                              {errors.newRouterModemSN ? <Text style={styles.errorText}>{errors.newRouterModemSN}</Text> : null}
+                            </View>
                           )}
 
-                          {formData.repairCategory === 'Update Vlan' && renderPickerTrigger('vlan', 'New VLAN', formData.newVlan, 'Select VLAN', true)}
+                          {formData.repairCategory?.toLowerCase() === 'update vlan' && renderPickerTrigger('vlan', 'New VLAN', formData.newVlan, 'Select VLAN', true)}
 
                           {/* VISIT BY / WITH */}
                           <SearchablePickerTrigger label="Visit By" value={formData.visitBy} onPress={() => { setActiveTechField('visitBy'); setActivePicker('technician'); }} error={errors.visitBy} isDarkMode={isDarkMode} required />

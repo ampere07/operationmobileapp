@@ -715,7 +715,13 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       dateInstalled: formatDateForInput(jobOrderData.Date_Installed || jobOrderData.date_installed),
       usageType: sanitize(jobOrderData.Usage_Type || jobOrderData.usage_type),
       choosePlan: getValue(jobOrderData.Desired_Plan || jobOrderData.desired_plan || jobOrderData.Choose_Plan || jobOrderData.choose_plan || jobOrderData.plan),
-      connectionType: getValue(jobOrderData.Connection_Type || jobOrderData.connection_type) || 'Fiber',
+      connectionType: (() => {
+        const t = (getValue(jobOrderData.Connection_Type || jobOrderData.connection_type) || 'Fiber').toLowerCase();
+        if (t === 'antenna') return 'Antenna';
+        if (t === 'fiber') return 'Fiber';
+        if (t === 'local') return 'Local';
+        return 'Fiber';
+      })(),
       routerModel: sanitize(jobOrderData.Router_Model || jobOrderData.router_model),
       modemSN: getValue(jobOrderData.Modem_SN || jobOrderData.modem_sn),
       lcpnap: getValue(jobOrderData.LCPNAP || jobOrderData.lcpnap),
