@@ -776,6 +776,52 @@ class ServiceOrderController extends Controller
                 
                 DB::update($query, $params);
                 Log::info('Updated service_orders table');
+
+                // --- START CHANGE LOGGING ---
+                try {
+                    $newOrder = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
+                    $billingAccount = DB::selectOne("SELECT id FROM billing_accounts WHERE account_no = ?", [$order->account_no]);
+                    
+                    if ($newOrder && $billingAccount) {
+                        $changedOld = [];
+                        $changedNew = [];
+                        
+                        // We only log fields that were actually in the updateData and changed
+                        foreach ($updateData as $key => $newValue) {
+                            if ($key === 'updated_at') continue;
+                            
+                            $oldValue = $order->$key ?? null;
+                            
+                            // Compare values
+                            if ((string)$oldValue !== (string)$newValue) {
+                                $changedOld[$key] = $oldValue;
+                                $changedNew[$key] = $newValue;
+                            }
+                        }
+                        
+                        if (!empty($changedOld) || !empty($changedNew)) {
+                            $logUserId = auth()->id();
+                            if (!$logUserId) {
+                                // Try to resolve from updated_by_user
+                                $user = DB::selectOne("SELECT id FROM users WHERE email = ? OR username = ?", [$updatedByUser, $updatedByUser]);
+                                if ($user) $logUserId = $user->id;
+                            }
+
+                            DB::table('details_update_logs')->insert([
+                                'account_id' => $billingAccount->id,
+                                'old_details' => json_encode(['type' => 'service_order_details', 'data' => $changedOld]),
+                                'new_details' => json_encode(['type' => 'service_order_details', 'data' => $changedNew]),
+                                'created_at' => now(),
+                                'created_by_user_id' => $logUserId,
+                                'updated_at' => now(),
+                                'updated_by_user_id' => $logUserId,
+                            ]);
+                        }
+                    }
+                } catch (\Exception $logEx) {
+                    Log::warning('Failed to log service order changes in ServiceOrderController: ' . $logEx->getMessage());
+                }
+                // --- END CHANGE LOGGING ---
             }
 
             if (!empty($billingUpdateData)) {

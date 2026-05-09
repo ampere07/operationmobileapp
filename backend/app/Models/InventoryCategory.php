@@ -26,5 +26,14 @@ class InventoryCategory extends Model
         'organization_id' => 'integer'
     ];
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id', 'id');
+    }
 
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by_user_id', 'id');
+    }
 }
+

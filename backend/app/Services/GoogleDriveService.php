@@ -124,6 +124,11 @@ class GoogleDriveService
             @mkdir($tempDir, 0775, true);
         }
         
+        // Fallback to system temp directory if storage/app/temp is not writable
+        if (!is_writable($tempDir)) {
+            $tempDir = sys_get_temp_dir();
+        }
+        
         // Use config() instead of env() to ensure values are found even if config is cached
         $rawKey = config('services.google.drive.private_key') ?? env('GOOGLE_DRIVE_PRIVATE_KEY');
         $clientEmail = config('services.google.drive.client_email') ?? env('GOOGLE_DRIVE_CLIENT_EMAIL');
@@ -163,8 +168,16 @@ class GoogleDriveService
 
         // Ensure the temporary file exists and has the current credentials
         try {
-            file_put_contents($tempKeyFile, json_encode($credentials));
-            chmod($tempKeyFile, 0600);
+            $success = @file_put_contents($tempKeyFile, json_encode($credentials));
+            
+            if ($success === false) {
+                // If primary file fails, try a unique one in system temp as absolute fallback
+                $tempKeyFile = tempnam(sys_get_temp_dir(), 'google_drive_keys_');
+                file_put_contents($tempKeyFile, json_encode($credentials));
+                Log::info('Used fallback temporary Google credentials file', ['path' => $tempKeyFile]);
+            }
+            
+            @chmod($tempKeyFile, 0600);
         } catch (\Exception $e) {
             Log::error('Failed to create temporary Google credentials file', [
                 'path' => $tempKeyFile,
@@ -464,4 +477,5 @@ class GoogleDriveService
         }
     }
 }
+
 

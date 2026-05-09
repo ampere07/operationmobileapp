@@ -3,7 +3,7 @@
     "name": "ATSS",
     "slug": "atss",
     "scheme": "atss-app",
-    "version": "2.5.25",
+    "version": "2.5.26",
     "orientation": "portrait",
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.atss.sync",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "name": "ATSS",

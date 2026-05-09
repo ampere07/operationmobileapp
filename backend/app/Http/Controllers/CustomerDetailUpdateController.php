@@ -590,10 +590,33 @@ class CustomerDetailUpdateController extends Controller
 
             $this->broadcastCustomerUpdated($accountNo, 'technical_details');
 
+            // Execute RADIUS update as the absolute last step after database saving is complete
+            $radiusMessage = null;
+            $oldUsername = $oldTechnicalDetails['username'] ?? null;
+            $newUsername = $technicalDetail->username;
+
+            if ($oldUsername && $newUsername && $oldUsername !== $newUsername) {
+                try {
+                    $radiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                    $radiusResult = $radiusService->updateCredentials([
+                        'accountNumber' => $accountNo,
+                        'username' => $oldUsername,
+                        'newUsername' => $newUsername,
+                        // newPassword is NOT passed, so it will only update the username
+                        'updatedBy' => $request->input('updatedBy') ?: 'System'
+                    ]);
+                    $radiusMessage = $radiusResult['message'] ?? 'Radius updated successfully';
+                } catch (\Exception $e) {
+                    Log::error('Radius username update failed', ['error' => $e->getMessage()]);
+                    $radiusMessage = 'Radius update failed: ' . $e->getMessage();
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Technical details updated successfully',
-                'data' => $technicalDetail->fresh()
+                'data' => $technicalDetail->fresh(),
+                'radius_message' => $radiusMessage
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -652,6 +675,7 @@ class CustomerDetailUpdateController extends Controller
         return 'https://drive.google.com/file/d/placeholder';
     }
 }
+
 
 
 

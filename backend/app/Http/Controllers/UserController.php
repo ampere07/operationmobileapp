@@ -216,6 +216,7 @@ class UserController extends Controller
             'organization_id' => 'sometimes|nullable|integer',
             'role_id' => 'sometimes|nullable|integer|exists:roles,id',
             'agent_id' => 'sometimes|nullable|integer|exists:agents,id',
+            'active' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -253,42 +254,33 @@ class UserController extends Controller
             }
 
             $oldData = $user->toArray();
-            $updateData = $request->only(['salutation', 'first_name', 'middle_initial','last_name','username', 'email_address', 'contact_number', 'organization_id', 'role_id', 'agent_id']);
+            $updateData = [];
+            
+            // Only include fields that are actually in the request
+            $fields = ['salutation', 'first_name', 'middle_initial', 'last_name', 'username', 'email_address', 'contact_number', 'active'];
+            foreach ($fields as $field) {
+                if ($request->has($field)) {
+                    $updateData[$field] = $request->input($field);
+                }
+            }
             
             if ($request->has('password')) {
                 $updateData['password_hash'] = $request->password;
             }
             
-            // Handle organization_id properly - ensure it is null if not provided or 0
-            if (array_key_exists('organization_id', $updateData)) {
-                // Only superadmin can change organization_id
-                if (!$isSuperAdmin) {
-                    unset($updateData['organization_id']);
-                } else {
-                    $updateData['organization_id'] = $updateData['organization_id'] && $updateData['organization_id'] > 0 ? $updateData['organization_id'] : null;
+            // Handle organization_id - only if present in request
+            if ($request->has('organization_id')) {
+                if ($isGlobalAdmin) {
+                    $updateData['organization_id'] = $request->organization_id && $request->organization_id > 0 ? $request->organization_id : null;
                 }
             }
             
-            // Handle role_id properly - ensure it is null if not provided or 0
-            if (array_key_exists('role_id', $updateData)) {
-                $updateData['role_id'] = $updateData['role_id'] && $updateData['role_id'] > 0 ? $updateData['role_id'] : null;
-            }
-            
-            // Remove empty values to avoid unnecessary updates
-            $updateData = array_filter($updateData, function($value, $key) {
-                return $value !== null && $value !== '' && $key !== 'organization_id' && $key !== 'role_id' && $key !== 'agent_id';
-            }, ARRAY_FILTER_USE_BOTH);
-            
-            // Add organization_id back if it was in the request (even if null) AND is superadmin
-            if ($request->has('organization_id') && $isSuperAdmin) {
-                $updateData['organization_id'] = $request->organization_id && $request->organization_id > 0 ? $request->organization_id : null;
-            }
-            
-            // Add role_id back if it was in the request (even if null)
+            // Handle role_id - only if present in request
             if ($request->has('role_id')) {
                 $updateData['role_id'] = $request->role_id && $request->role_id > 0 ? $request->role_id : null;
             }
 
+            // Handle agent_id - only if present in request
             if ($request->has('agent_id')) {
                 $updateData['agent_id'] = $request->agent_id && $request->agent_id > 0 ? $request->agent_id : null;
             }

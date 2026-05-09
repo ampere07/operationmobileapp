@@ -1158,9 +1158,13 @@ class EnhancedBillingGenerationServiceWithNotifications
                 
                 $pdfUrl = $notificationResult['pdf_url'] ?? null;
 
+                // Resolve account_id from billing_accounts using account_no
+                $billingAccount = \App\Models\BillingAccount::where('account_no', $inv->account_no)->first();
+                $accountId = $billingAccount ? $billingAccount->id : $inv->account_id;
+
                 // Insert into Overdue table
                 Overdue::create([
-                    'account_id' => $inv->account_id,
+                    'account_id' => $accountId,
                     'account_no' => $inv->account_no,
                     'invoice_id' => $inv->id, 
                     'overdue_date' => now(),
@@ -1235,9 +1239,13 @@ class EnhancedBillingGenerationServiceWithNotifications
                      throw new \Exception("Invoice {$inv->id} has no account_no");
                 }
 
+                // Resolve account_id from billing_accounts using account_no
+                $billingAccount = \App\Models\BillingAccount::where('account_no', $inv->account_no)->first();
+                $accountId = $billingAccount ? $billingAccount->id : $inv->account_id;
+
                 // Insert into DC Notice table
                 DCNotice::create([
-                    'account_id' => $inv->account_id,
+                    'account_id' => $accountId,
                     'account_no' => $inv->account_no,
                     'invoice_id' => $inv->id,
                     'dc_notice_date' => now(),
@@ -1259,6 +1267,7 @@ class EnhancedBillingGenerationServiceWithNotifications
         return $results;
     }
 }
+
 
 
 

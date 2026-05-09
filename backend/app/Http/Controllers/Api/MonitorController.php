@@ -787,7 +787,7 @@ class MonitorController extends Controller
                               ->orWhere('end_time', '>=', $viewStartStr)
                               ->orWhereNull('end_time');
                         })
-                        ->select('id', 'start_time', 'end_time', 'onsite_status as status', DB::raw("'jo' as task_type"))
+                        ->select('id', 'start_time', 'end_time', 'onsite_status as status', 'technicians', DB::raw("'jo' as task_type"))
                         ->get();
 
                     $dailySOs = DB::table('service_orders')
@@ -798,7 +798,7 @@ class MonitorController extends Controller
                               ->orWhere('end_time', '>=', $viewStartStr)
                               ->orWhereNull('end_time');
                         })
-                        ->select('id', 'start_time', 'end_time', 'visit_status as status', DB::raw("'so' as task_type"), 'concern')
+                        ->select('id', 'start_time', 'end_time', 'visit_status as status', 'technicians', DB::raw("'so' as task_type"), 'concern')
                         ->get();
 
                     $allTasks = $dailyJOs->concat($dailySOs)->sortBy('start_time');
@@ -892,8 +892,8 @@ class MonitorController extends Controller
                         }
                         
                         $since = $workingTask->start_time;
-                        // Set primaryTimeDisp to NULL so the frontend uses the 'since' timer (starts at 0 for current job)
-                        $primaryTimeDisp = null; 
+                        // Set primaryTimeDisp to total working time today
+                        $primaryTimeDisp = $workingTimeStr; 
                     } else {
                         $status = 'Available';
                         $lastFinished = $allTasks->filter(function($t) { return !empty($t->start_time) && !empty($t->end_time); })->sortBy('end_time')->last();
@@ -918,13 +918,30 @@ class MonitorController extends Controller
                         $status = 'Offline';
                         $details = 'Technician is offline';
                         $since = clone $timeBound;
+                        $primaryTimeDisp = $workingTimeStr;
                     }
 
 
                     if ($since) {
                         try {
-                            $since = \Carbon\Carbon::parse($since)->setTimezone('Asia/Manila')->toIso8601String();
+                            $sinceCarbon = \Carbon\Carbon::parse($since, 'Asia/Manila');
+                            if ($sinceCarbon->lt($viewStart)) {
+                                $sinceCarbon = $viewStart->copy();
+                            }
+                            $since = $sinceCarbon->toIso8601String();
                         } catch (\Exception $e) {}
+                    }
+
+                    // 4. Extract Technicians List
+                    $techList = [];
+                    $relevantTask = $workingTask ?: $lastFinished;
+                    if ($relevantTask && !empty($relevantTask->technicians)) {
+                        $decoded = json_decode($relevantTask->technicians, true);
+                        if (is_array($decoded)) {
+                            $techList = array_values(array_filter($decoded, function($t) {
+                                return !empty($t) && strtolower($t) !== 'none';
+                            }));
+                        }
                     }
 
                     $data[] = [
@@ -941,7 +958,8 @@ class MonitorController extends Controller
                             'total_available_str' => $availableTimeStr,
                             'is_pullout' => $isPullout,
                             'time_in' => $tech->time_in,
-                            'time_out' => $tech->time_out
+                            'time_out' => $tech->time_out,
+                            'technicians' => $techList
                         ]
                     ];
                 }
@@ -971,7 +989,8 @@ class MonitorController extends Controller
                         ) as address"),
                         DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
                         DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
-                        'job_orders.onsite_status as status'
+                        'job_orders.onsite_status as status',
+                        'job_orders.technicians'
                     )
                     ->where('job_orders.onsite_status', '!=', 'Done')
                     ->whereNotNull('job_orders.assigned_email')
@@ -998,7 +1017,8 @@ class MonitorController extends Controller
                         ) as address"),
                         DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
                         DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
-                        'service_orders.visit_status as status'
+                        'service_orders.visit_status as status',
+                        'service_orders.technicians'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
                     ->where('service_orders.visit_status', '!=', 'Done')
@@ -1022,6 +1042,15 @@ class MonitorController extends Controller
                             'type' => $item->type,
                             'customer' => $item->customer,
                             'address' => trim($item->address),
+                            'status' => $item->status,
+                            'technicians' => (function() use ($item) {
+                                if (empty($item->technicians)) return [];
+                                $decoded = json_decode($item->technicians, true);
+                                if (!is_array($decoded)) return [];
+                                return array_values(array_filter($decoded, function($t) {
+                                    return !empty($t) && strtolower(trim($t)) !== 'none';
+                                }));
+                            })(),
                             'start' => '-',
                             'duration' => '-'
                         ];
@@ -1039,11 +1068,24 @@ class MonitorController extends Controller
                     $duration .= $diff->i . "m ";
                     $duration .= $diff->s . "s";
 
+                    // Parse and filter technicians
+                    $techs = [];
+                    if (!empty($item->technicians)) {
+                        $decoded = json_decode($item->technicians, true);
+                        if (is_array($decoded)) {
+                            $techs = array_values(array_filter($decoded, function($t) {
+                                return !empty($t) && strtolower(trim($t)) !== 'none';
+                            }));
+                        }
+                    }
+
                     return [
                         'team_name' => $item->team_name,
                         'type' => $item->type,
                         'customer' => $item->customer,
                         'address' => trim($item->address),
+                        'status' => $item->status,
+                        'technicians' => $techs,
                         'start' => $start->format('M d, Y h:i A'),
                         'duration' => $duration
                     ];
@@ -1072,7 +1114,8 @@ class MonitorController extends Controller
                         ) as address"),
                         DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
                         DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
-                        'job_orders.onsite_status as status'
+                        'job_orders.onsite_status as status',
+                        'job_orders.technicians'
                     )
                     ->where('job_orders.onsite_status', '!=', 'Done')
                     ->whereNotNull('applications.referred_by')
@@ -1098,7 +1141,8 @@ class MonitorController extends Controller
                         ) as address"),
                         DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
                         DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
-                        'service_orders.visit_status as status'
+                        'service_orders.visit_status as status',
+                        'service_orders.technicians'
                     )
                     ->where('service_orders.visit_status', '!=', 'Resolved')
                     ->where('service_orders.visit_status', '!=', 'Done')
@@ -1121,6 +1165,15 @@ class MonitorController extends Controller
                             'type' => $item->type,
                             'customer' => $item->customer,
                             'address' => trim($item->address),
+                            'status' => $item->status,
+                            'technicians' => (function() use ($item) {
+                                if (empty($item->technicians)) return [];
+                                $decoded = json_decode($item->technicians, true);
+                                if (!is_array($decoded)) return [];
+                                return array_values(array_filter($decoded, function($t) {
+                                    return !empty($t) && strtolower(trim($t)) !== 'none';
+                                }));
+                            })(),
                             'start' => '-',
                             'duration' => '-'
                         ];
@@ -1141,6 +1194,15 @@ class MonitorController extends Controller
                         'type' => $item->type,
                         'customer' => $item->customer,
                         'address' => trim($item->address),
+                        'status' => $item->status,
+                        'technicians' => (function() use ($item) {
+                            if (empty($item->technicians)) return [];
+                            $decoded = json_decode($item->technicians, true);
+                            if (!is_array($decoded)) return [];
+                            return array_values(array_filter($decoded, function($t) {
+                                return !empty($t) && strtolower(trim($t)) !== 'none';
+                            }));
+                        })(),
                         'start' => $start->format('M d, Y h:i A'),
                         'duration' => $duration
                     ];
@@ -1163,5 +1225,6 @@ class MonitorController extends Controller
         }
     }
 }
+
 
 

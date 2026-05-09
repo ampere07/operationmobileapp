@@ -54,7 +54,6 @@ class JobOrder extends Model
         'start_time',
         'end_time',
         'proof_image_url',
-        'client_tagging_url',
         'organization_id',
         'technicians',
     ];
@@ -90,3 +89,4 @@ class JobOrder extends Model
         return $this->belongsTo(LCPNAPLocation::class , 'lcpnap', 'lcpnap_name');
     }
 }
+

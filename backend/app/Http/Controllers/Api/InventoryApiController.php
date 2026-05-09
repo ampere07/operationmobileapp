@@ -18,7 +18,7 @@ class InventoryApiController extends Controller
     /**
      * Get current user email
      */
-    private function getCurrentUser(Request $request)
+    private function getCurrentUser(Request $request, $required = true)
     {
         if (auth()->check()) {
             return auth()->user()->email_address;
@@ -32,7 +32,12 @@ class InventoryApiController extends Controller
         if ($request->has('modifiedBy')) {
             return $request->modifiedBy;
         }
-        throw new \Exception('Unauthenticated: User email is required for this operation.');
+        
+        if ($required) {
+            throw new \Exception('Unauthenticated: User email is required for this operation.');
+        }
+        
+        return 'System';
     }
 
     private function resolveUserId(Request $request)
@@ -62,9 +67,9 @@ class InventoryApiController extends Controller
                 $query->where('organization_id', $currentUser->organization_id);
             }
             
-            $items = $query->orderBy('item_name')->get();
+            $items = $query->with(['category', 'updater'])->orderBy('item_name')->get();
             
-            $formattedItems = $items->map(function ($item) use ($request) {
+            $formattedItems = $items->map(function ($item) {
                 return [
                     'item_name' => $item->item_name,
                     'item_description' => $item->item_description,
@@ -74,9 +79,9 @@ class InventoryApiController extends Controller
                     'category' => $item->category ? $item->category->category_name : null,
                     'category_id' => $item->category_id,
                     'item_id' => $item->id,
-                    'modified_by' => $this->getCurrentUser($request),
+                    'modified_by' => $item->updater->email_address ?? 'System',
                     'modified_date' => $item->updated_at,
-                    'user_email' => $this->getCurrentUser($request),
+                    'user_email' => $item->updater->email_address ?? 'System',
                     'total_quantity' => $item->total_quantity,
                     'organization_id' => $item->organization_id
                 ];
@@ -574,3 +579,4 @@ class InventoryApiController extends Controller
         }
     }
 }
+

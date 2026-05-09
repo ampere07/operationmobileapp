@@ -47,5 +47,16 @@ class Inventory extends Model
     {
         return $this->belongsTo(InventoryCategory::class, 'category_id');
     }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id', 'id');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by_user_id', 'id');
+    }
 }
+
 

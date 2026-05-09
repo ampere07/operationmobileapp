@@ -18,7 +18,15 @@ class CustomerDetailController extends Controller
             
             $billingAccount = BillingAccount::where('account_no', $accountNo)
                 ->with(['customer', 'technicalDetails', 'onlineStatus', 'billingStatus'])
-                ->firstOrFail();
+                ->first();
+            
+            if (!$billingAccount) {
+                \Log::warning('CustomerDetailController - Billing account not found:', ['account_no' => $accountNo]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Billing account not found'
+                ], 404);
+            }
             
             $customer = $billingAccount->customer;
             $technicalDetail = $billingAccount->technicalDetails->first();
@@ -149,18 +157,20 @@ class CustomerDetailController extends Controller
                 'data' => $data
             ]);
         } catch (\Exception $e) {
-            \Log::error('CustomerDetailController - Error:', [
+            \Log::error('CustomerDetailController - Unexpected Error:', [
+                'account_no' => $accountNo,
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
             
             return response()->json([
                 'success' => false,
-                'message' => 'Customer details not found',
+                'message' => 'An error occurred while fetching customer details',
                 'error' => $e->getMessage()
-            ], 404);
+            ], 500);
         }
     }
 }
+
 
 

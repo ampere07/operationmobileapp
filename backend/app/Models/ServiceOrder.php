@@ -99,3 +99,4 @@ class ServiceOrder extends Model
         return $this->belongsTo(Application::class , 'Account_Number', 'id');
     }
 }
+

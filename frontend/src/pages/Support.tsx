@@ -309,8 +309,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         concern_remarks: details,
         created_by_user: userEmail,
         requested_by: userEmail,
-        support_status: 'Open',
-        visit_status: 'In Progress'
+        support_status: 'Open'
       };
 
       console.log('[Support] Submitting service order:', newServiceOrder);
@@ -584,186 +583,186 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
             behavior="padding"
             style={{ flex: 1 }}
           >
-          <Animated.View
-            style={{
-              backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
-              flex: 1,
-              padding: 24,
-              transform: [{ translateY: pan.y }]
-            }}
-          >
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 24,
-              paddingTop: Platform.OS === 'ios' ? 40 : 10, // Account for notch
-            }}>
-              <Pressable
-                onPress={() => setShowNewRequestModal(false)}
-                style={{ padding: 8 }}
-              >
-                <Text style={{ color: colorPalette?.primary || '#ef4444', fontWeight: '600' }}>Cancel</Text>
-              </Pressable>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: isDarkMode ? '#ffffff' : '#111827',
+            <Animated.View
+              style={{
+                backgroundColor: isDarkMode ? '#111827' : '#f9fafb',
                 flex: 1,
-                textAlign: 'center',
-                marginRight: 60 // Offset for the cancel button to center the title
+                padding: 24,
+                transform: [{ translateY: pan.y }]
+              }}
+            >
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 24,
+                paddingTop: Platform.OS === 'ios' ? 40 : 10, // Account for notch
               }}>
-                New Request
-              </Text>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ marginBottom: 16 }}>
+                <Pressable
+                  onPress={() => setShowNewRequestModal(false)}
+                  style={{ padding: 8 }}
+                >
+                  <Text style={{ color: colorPalette?.primary || '#ef4444', fontWeight: '600' }}>Cancel</Text>
+                </Pressable>
                 <Text style={{
-                  fontSize: 14,
-                  fontWeight: '500',
-                  marginBottom: 8,
-                  color: isDarkMode ? '#d1d5db' : '#374151'
+                  fontSize: 18,
+                  fontWeight: '600',
+                  color: isDarkMode ? '#ffffff' : '#111827',
+                  flex: 1,
+                  textAlign: 'center',
+                  marginRight: 60 // Offset for the cancel button to center the title
                 }}>
-                  Concern
+                  New Request
                 </Text>
-                <View style={{
-                  backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                  borderWidth: 1,
-                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                  borderRadius: 4
-                }}>
-                  <Picker
-                    selectedValue={selectedConcern}
-                    onValueChange={(value) => setSelectedConcern(value)}
-                    style={{
-                      color: isDarkMode ? '#ffffff' : '#111827'
-                    }}
-                  >
-                    {concernOptions.map((option) => (
-                      <Picker.Item key={option} label={option} value={option} />
-                    ))}
-                  </Picker>
-                </View>
               </View>
 
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: '500',
-                  marginBottom: 8,
-                  color: isDarkMode ? '#d1d5db' : '#374151'
-                }}>
-                  Details
-                </Text>
-                <TextInput
-                  value={details}
-                  onChangeText={setDetails}
-                  placeholder="Describe your issue..."
-                  placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                  multiline
-                  numberOfLines={5}
-                  textAlignVertical="top"
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    marginBottom: 8,
+                    color: isDarkMode ? '#d1d5db' : '#374151'
+                  }}>
+                    Concern
+                  </Text>
+                  <View style={{
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    borderWidth: 1,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    borderRadius: 4
+                  }}>
+                    <Picker
+                      selectedValue={selectedConcern}
+                      onValueChange={(value) => setSelectedConcern(value)}
+                      style={{
+                        color: isDarkMode ? '#ffffff' : '#111827'
+                      }}
+                    >
+                      {concernOptions.map((option) => (
+                        <Picker.Item key={option} label={option} value={option} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+
+                <View style={{ marginBottom: 24 }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '500',
+                    marginBottom: 8,
+                    color: isDarkMode ? '#d1d5db' : '#374151'
+                  }}>
+                    Details
+                  </Text>
+                  <TextInput
+                    value={details}
+                    onChangeText={setDetails}
+                    placeholder="Describe your issue..."
+                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    multiline
+                    numberOfLines={5}
+                    textAlignVertical="top"
+                    style={{
+                      width: '100%',
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 4,
+                      borderWidth: 1,
+                      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                      color: isDarkMode ? '#ffffff' : '#111827',
+                      borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                      minHeight: 120
+                    }}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={handleSubmit}
+                  disabled={isSubmitting || remainingRequests <= 0}
                   style={{
                     width: '100%',
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
+                    paddingVertical: 12,
                     borderRadius: 4,
-                    borderWidth: 1,
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    color: isDarkMode ? '#ffffff' : '#111827',
-                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                    minHeight: 120
+                    alignItems: 'center',
+                    backgroundColor: (isSubmitting || remainingRequests <= 0) ? '#6b7280' : (colorPalette?.primary || '#1e40af'),
+                    opacity: (isSubmitting || remainingRequests <= 0) ? 0.5 : 1
                   }}
-                />
-              </View>
-
-              <Pressable
-                onPress={handleSubmit}
-                disabled={isSubmitting || remainingRequests <= 0}
-                style={{
-                  width: '100%',
-                  paddingVertical: 12,
-                  borderRadius: 4,
-                  alignItems: 'center',
-                  backgroundColor: (isSubmitting || remainingRequests <= 0) ? '#6b7280' : (colorPalette?.primary || '#1e40af'),
-                  opacity: (isSubmitting || remainingRequests <= 0) ? 0.5 : 1
-                }}
-              >
-                <Text style={{
-                  color: 'white',
-                  fontWeight: '500'
-                }}>
-                  SUBMIT TICKET
-                </Text>
-              </Pressable>
-
-              <View style={{
-                marginTop: 12,
-                alignItems: 'center'
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Clock size={14} color={isDarkMode ? '#9ca3af' : '#4b5563'} style={{ marginRight: 4 }} />
+                >
                   <Text style={{
-                    fontSize: 14,
-                    color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    color: 'white',
+                    fontWeight: '500'
                   }}>
-                    {hasReachedDailyLimit
-                      ? `Daily limit reached (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY}).`
-                      : isInCooldown
-                        ? `Next ticket available in ${Math.floor(cooldownRemaining / 60000)}m ${Math.floor((cooldownRemaining % 60000) / 1000)}s`
-                        : `Limit: ${MAX_TICKETS_PER_DAY} requests/day. (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY} used)`}
+                    SUBMIT TICKET
                   </Text>
-                </View>
-              </View>
+                </Pressable>
 
-              {submitMessage && (
                 <View style={{
                   marginTop: 12,
-                  padding: 12,
-                  borderRadius: 4,
-                  backgroundColor: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
-                    ? (colorPalette?.primary || '#ef4444') + '15'
-                    : '#10b98115'
+                  alignItems: 'center'
                 }}>
-                  <Text style={{
-                    fontSize: 14,
-                    textAlign: 'center',
-                    color: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
-                      ? colorPalette?.primary || '#ef4444'
-                      : '#10b981'
-                  }}>
-                    {submitMessage}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Clock size={14} color={isDarkMode ? '#9ca3af' : '#4b5563'} style={{ marginRight: 4 }} />
+                    <Text style={{
+                      fontSize: 14,
+                      color: isDarkMode ? '#9ca3af' : '#4b5563'
+                    }}>
+                      {hasReachedDailyLimit
+                        ? `Daily limit reached (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY}).`
+                        : isInCooldown
+                          ? `Next ticket available in ${Math.floor(cooldownRemaining / 60000)}m ${Math.floor((cooldownRemaining % 60000) / 1000)}s`
+                          : `Limit: ${MAX_TICKETS_PER_DAY} requests/day. (${todayTicketInfo.count}/${MAX_TICKETS_PER_DAY} used)`}
+                    </Text>
+                  </View>
                 </View>
-              )}
 
-              <Pressable
-                onPress={handleRequestPlanUpdate}
-                style={{
-                  width: '100%',
-                  marginTop: 16,
-                  paddingVertical: 12,
-                  borderRadius: 4,
-                  borderWidth: 2,
-                  borderColor: isDarkMode ? '#374151' : '#d1d5db',
-                  alignItems: 'center',
-                  flexDirection: 'row',
-                  justifyContent: 'center'
-                }}
-              >
-                <Upload size={16} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 8 }} />
-                <Text style={{
-                  fontWeight: '500',
-                  color: isDarkMode ? '#d1d5db' : '#374151'
-                }}>
-                  Request Plan Update
-                </Text>
-              </Pressable>
-            </ScrollView>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </View>
+                {submitMessage && (
+                  <View style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 4,
+                    backgroundColor: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
+                      ? (colorPalette?.primary || '#ef4444') + '15'
+                      : '#10b98115'
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      textAlign: 'center',
+                      color: submitMessage.includes('Failed') || submitMessage.includes('limit') || submitMessage.includes('not found')
+                        ? colorPalette?.primary || '#ef4444'
+                        : '#10b981'
+                    }}>
+                      {submitMessage}
+                    </Text>
+                  </View>
+                )}
+
+                <Pressable
+                  onPress={handleRequestPlanUpdate}
+                  style={{
+                    width: '100%',
+                    marginTop: 16,
+                    paddingVertical: 12,
+                    borderRadius: 4,
+                    borderWidth: 2,
+                    borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Upload size={16} color={isDarkMode ? '#d1d5db' : '#374151'} style={{ marginRight: 8 }} />
+                  <Text style={{
+                    fontWeight: '500',
+                    color: isDarkMode ? '#d1d5db' : '#374151'
+                  }}>
+                    Request Plan Update
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Confirm Modal */}

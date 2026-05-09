@@ -29,7 +29,8 @@ class User extends Authenticatable
         'group_id',
         'status',
         'darkmode',
-        'last_login'
+        'last_login',
+        'active'
     ];
 
     protected $hidden = [
@@ -39,6 +40,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'active' => 'boolean'
     ];
 
     protected $appends = [
@@ -88,3 +90,4 @@ class User extends Authenticatable
         return $this->id;
     }
 }
+

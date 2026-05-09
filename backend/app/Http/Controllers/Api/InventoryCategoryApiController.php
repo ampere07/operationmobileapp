@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Auth;
 
 class InventoryCategoryApiController extends Controller
 {
-    private function getCurrentUser(Request $request)
+    private function getCurrentUser(Request $request, $required = true)
     {
         if (auth()->check()) {
             return auth()->user()->email_address;
@@ -26,7 +26,12 @@ class InventoryCategoryApiController extends Controller
         if ($request->has('modifiedBy')) {
             return $request->modifiedBy;
         }
-        throw new \Exception('Unauthenticated: User email is required for this operation.');
+        
+        if ($required) {
+            throw new \Exception('Unauthenticated: User email is required for this operation.');
+        }
+        
+        return 'System';
     }
 
     private function resolveUserId(Request $request)
@@ -56,15 +61,15 @@ class InventoryCategoryApiController extends Controller
                 });
             }
             
-            $categories = $query->orderBy('id', 'desc')->get();
-            $formattedCategories = $categories->map(function ($category) use ($request) {
+            $categories = $query->with(['updater'])->orderBy('id', 'desc')->get();
+            $formattedCategories = $categories->map(function ($category) {
                 return [
                     'id' => $category->id,
                     'name' => $category->category_name,
                     'created_at' => $category->created_at,
                     'updated_at' => $category->updated_at,
                     'modified_date' => $category->updated_at,
-                    'modified_by' => $this->getCurrentUser($request),
+                    'modified_by' => $category->updater->email_address ?? 'System',
                     'organization_id' => $category->organization_id
                 ];
             });
@@ -297,3 +302,4 @@ class InventoryCategoryApiController extends Controller
         }
     }
 }
+

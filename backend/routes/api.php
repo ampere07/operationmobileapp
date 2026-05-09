@@ -1124,6 +1124,20 @@ Route::post('/login', function (Request $request) {
             ], 401);
         }
 
+        // Check if account is suspended
+        if ($user->active === false) {
+            \Log::warning('Login attempt from suspended account', [
+                'identifier' => $identifier,
+                'user_id' => $user->id,
+                'ip' => $request->ip()
+            ]);
+
+            return response()->json([
+                'status' => 'suspended',
+                'message' => 'Account suspended. Please contact support.'
+            ], 403);
+        }
+
         // CRITICAL: Actually log the user in to create an authenticated session
         \Auth::login($user);
 

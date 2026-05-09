@@ -724,6 +724,57 @@ class ServiceOrderApiController extends Controller
                 }
             }
 
+            // --- START CHANGE LOGGING ---
+            try {
+                $newServiceOrder = DB::table('service_orders')->where('id', $id)->first();
+                $billingAccount = DB::table('billing_accounts')->where('account_no', $serviceOrder->account_no)->first();
+                
+                if ($newServiceOrder && $billingAccount) {
+                    $changedOld = [];
+                    $changedNew = [];
+                    
+                    // We only log fields that were actually in the request and changed
+                    foreach ($data as $key => $newValue) {
+                        if ($key === 'updated_at') continue;
+                        
+                        $oldValue = $serviceOrder->$key ?? null;
+                        
+                        // Compare values (handling potential type differences)
+                        if ((string)$oldValue !== (string)$newValue) {
+                            $changedOld[$key] = $oldValue;
+                            $changedNew[$key] = $newValue;
+                        }
+                    }
+                    
+                    if (!empty($changedOld) || !empty($changedNew)) {
+                        $logUserId = null;
+                        if ($authUser) {
+                            $logUserId = $authUser->id;
+                        } else {
+                            // Fallback: try to find user by email/name if provided in updated_by_user
+                            $user = DB::table('users')
+                                ->where('email_address', $updatedByUser)
+                                ->orWhere('username', $updatedByUser)
+                                ->first();
+                            if ($user) $logUserId = $user->id;
+                        }
+
+                        DB::table('details_update_logs')->insert([
+                            'account_id' => $billingAccount->id,
+                            'old_details' => json_encode(['type' => 'service_order_details', 'data' => $changedOld]),
+                            'new_details' => json_encode(['type' => 'service_order_details', 'data' => $changedNew]),
+                            'created_at' => now(),
+                            'created_by_user_id' => $logUserId,
+                            'updated_at' => now(),
+                            'updated_by_user_id' => $logUserId,
+                        ]);
+                    }
+                }
+            } catch (\Exception $logEx) {
+                Log::warning('Failed to log service order changes: ' . $logEx->getMessage());
+            }
+            // --- END CHANGE LOGGING ---
+
             $updatedByUser = $request->input('updated_by_user') ?: ($request->input('updated_by') ?: (Auth::user()->name ?? 'System'));
 
             // Trigger Reconnection if concern is 'Reconnect'
