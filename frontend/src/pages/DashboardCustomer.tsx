@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Linking, useWindowDimensions, Modal, PanResponder, Animated, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
 import { User, Activity, Clock, Users, FileText, CheckCircle, HelpCircle, RefreshCcw } from 'lucide-react-native';
@@ -49,7 +49,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
-    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
     const [currentAdPos, setCurrentAdPos] = useState(1);
     const [refreshing, setRefreshing] = useState(false);
     const [isCardFlipped, setIsCardFlipped] = useState(false);
@@ -211,8 +211,13 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                 console.error('Failed to fetch color palette:', err);
             }
         };
-
         fetchColorPalette();
+
+        const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+            setColorPalette(newPalette);
+        });
+
+        return () => paletteSub.remove();
     }, []);
 
     const onRefresh = React.useCallback(async () => {

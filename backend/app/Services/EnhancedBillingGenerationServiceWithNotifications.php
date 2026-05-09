@@ -1160,6 +1160,7 @@ class EnhancedBillingGenerationServiceWithNotifications
 
                 // Insert into Overdue table
                 Overdue::create([
+                    'account_id' => $inv->account_id,
                     'account_no' => $inv->account_no,
                     'invoice_id' => $inv->id, 
                     'overdue_date' => now(),
@@ -1236,9 +1237,10 @@ class EnhancedBillingGenerationServiceWithNotifications
 
                 // Insert into DC Notice table
                 DCNotice::create([
+                    'account_id' => $inv->account_id,
                     'account_no' => $inv->account_no,
                     'invoice_id' => $inv->id,
-                    'overdue_date' => now(),
+                    'dc_notice_date' => now(),
                     'print_link' => $pdfUrl,
                     'created_by_user_id' => $systemUserId,
                     'updated_by_user_id' => $systemUserId
@@ -1257,5 +1259,6 @@ class EnhancedBillingGenerationServiceWithNotifications
         return $results;
     }
 }
+
 
 

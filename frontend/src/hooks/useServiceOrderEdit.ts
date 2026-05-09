@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Alert, Keyboard } from 'react-native';
+import { Alert, Keyboard, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
@@ -88,7 +88,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
   const signatureRef = useRef<any>(null);
   const initialDataLoadedRef = useRef(false);
 
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [isContentReady, setIsContentReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -172,7 +172,15 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       if (paletteResult.status === 'fulfilled') setColorPalette(paletteResult.value);
     };
     loadSettings();
-    return () => { cancelled = true; };
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => {
+      cancelled = true;
+      paletteSub.remove();
+    };
   }, []);
   // Sync Form Data
   useEffect(() => {

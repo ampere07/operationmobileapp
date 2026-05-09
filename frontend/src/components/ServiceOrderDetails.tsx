@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
 import ConfirmationModal from '../modals/MoveToJoModal';
+import StartTimerModal from '../modals/StartTimerModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
+import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { techInOutService } from '../services/techInOutService';
@@ -265,9 +267,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 }) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
-  const { silentRefresh } = useServiceOrderContext();
+  const { silentRefresh, serviceOrders } = useServiceOrderContext();
+  const { jobOrders } = useJobOrderContext();
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
@@ -384,6 +388,20 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       if (savedOrder) setFieldOrder(JSON.parse(savedOrder));
     };
     loadSettings();
+
+    const fetchPalette = async () => {
+      try {
+        const palette = await settingsColorPaletteService.getActive();
+        setColorPalette(palette);
+      } catch (err) {}
+    };
+    fetchPalette();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, [userRoleProp, userRoleIdProp]);
 
   useEffect(() => {
@@ -433,21 +451,54 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const handleStartTimer = async () => {
     try {
       const isTechnician = userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2';
-      if (isTechnician && techStatus === 'offline') {
-        setShowTimeInWarning(true);
-        return;
+      if (isTechnician) {
+        if (techStatus === 'offline') {
+          setShowTimeInWarning(true);
+          return;
+        }
+
+        // Check for other active service orders
+        const activeServiceOrder = serviceOrders.find(so => 
+          so.id !== serviceOrder.id && 
+          so.start_time && !so.end_time
+        );
+
+        // Check for active job orders
+        const activeJobOrder = jobOrders.find(jo => 
+          (jo as any).start_time && !(jo as any).end_time
+        );
+
+        if (activeServiceOrder || activeJobOrder) {
+          Alert.alert(
+            'Cannot Start',
+            'You already have another job in progress. Please finish it before starting a new one.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
       }
 
+      setIsStartTimerModalOpen(true);
+    } catch (err: any) {
+      setError(`Failed to prepare timer: ${err.message}`);
+    }
+  };
+
+  const handleConfirmStartTimer = async (selectedTechnicians: string[]) => {
+    try {
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
       const currentTime = formatMySQLDate();
       await updateServiceOrder(serviceOrder.id, {
         start_time: currentTime,
+        technicians: selectedTechnicians,
       } as any);
 
       (serviceOrder as any).start_time = currentTime;
+      (serviceOrder as any).technicians = selectedTechnicians;
       setIsStarted(true);
+      setIsStartTimerModalOpen(false);
       setSuccessMessage('Timer started successfully!');
       setShowSuccessModal(true);
       silentRefresh();
@@ -765,6 +816,14 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         cancelText="Close"
         onConfirm={() => setShowTimeInWarning(false)}
         onCancel={() => setShowTimeInWarning(false)}
+      />
+
+      <StartTimerModal
+        isOpen={isStartTimerModalOpen}
+        onClose={() => setIsStartTimerModalOpen(false)}
+        onConfirm={handleConfirmStartTimer}
+        loading={loading}
+        colorPalette={colorPalette}
       />
     </View>
   );

@@ -69,6 +69,7 @@ class ServiceOrder extends Model
         'end_time',
         'proof_image_url',
         'organization_id',
+        'technicians',
     ];
 
     protected $dates = [
@@ -77,6 +78,10 @@ class ServiceOrder extends Model
         'Modified_Date',
         'created_at',
         'updated_at',
+    ];
+    
+    protected $casts = [
+        'technicians' => 'array',
     ];
 
     /**

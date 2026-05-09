@@ -28,6 +28,19 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.25',
+            date: 'May 9, 2026',
+            title: 'UI Stability & Performance Optimization',
+            updates: [
+                { text: 'Persistent Theme Branding: Fixed an issue where the color palette would intermittently default to purple. Your selected branding now persists reliably across app restarts.', visibility: 'all' },
+                { text: 'Real-time UI Sync: Implemented real-time theme synchronization. Changing your dashboard colors now updates all active pages instantly for a seamless experience.', visibility: 'all' },
+                { text: 'Improved App Stability: General performance optimizations and bug fixes across the Dashboard, Bills, and Support sections for a smoother user experience.', visibility: 'customer' },
+                { text: 'Simplified Completion Form: Removed the redundant "Status Remarks" field from the Job Order completion form to streamline the technician workflow.', visibility: 'technician' },
+                { text: 'Enhanced Assignment Sync: Resolved an issue where technician assignments were not correctly saving to the database in certain Service Order scenarios.', visibility: 'technician' },
+                { text: 'Advanced Error Diagnostics: Improved backend logging for SmartOLT and Radius-related operations to facilitate faster troubleshooting of connection issues.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.23',
             date: 'May 5, 2026',
             title: 'Proof Persistence & LCP/NAP Management',

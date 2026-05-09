@@ -86,13 +86,13 @@ interface JobOrderDoneFormData {
   routerReadingImage: File | null;
   portLabelImage: File | null;
   clientSignatureImage: File | null;
+  clientTaggingImage: File | null;
   modifiedBy: string;
   modifiedDate: string;
   itemName1: string;
   visit_by: string;
   visit_with: string;
   visit_with_other: string;
-  statusRemarks: string;
   ip: string;
   addressCoordinates: string;
   proofImage: File | null;
@@ -158,7 +158,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const isDarkMode = false;
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   useEffect(() => {
     DeviceEventEmitter.emit('techModalStateChange', isOpen);
@@ -179,6 +179,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       }
     };
     fetchColorPalette();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, []);
 
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
@@ -221,6 +227,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
+    clientTaggingImage: null,
     modifiedBy: currentUserEmail,
     modifiedDate: new Date().toLocaleString('en-US', {
       month: '2-digit',
@@ -235,7 +242,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     visit_by: '',
     visit_with: '',
     visit_with_other: '',
-    statusRemarks: '',
     ip: '',
     addressCoordinates: '',
     proofImage: null
@@ -275,6 +281,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: string | null;
     portLabelImage: string | null;
     clientSignatureImage: string | null;
+    clientTaggingImage: string | null;
     proofImage: string | null;
   }>({
     signedContractImage: null,
@@ -283,6 +290,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     routerReadingImage: null,
     portLabelImage: null,
     clientSignatureImage: null,
+    clientTaggingImage: null,
     proofImage: null
   });
 
@@ -421,11 +429,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         routerReadingImage: null,
         portLabelImage: null,
         clientSignatureImage: null,
+        clientTaggingImage: null,
         itemName1: '',
         visit_by: '',
         visit_with: '',
         visit_with_other: '',
-        statusRemarks: '',
         ip: '',
         addressCoordinates: '',
         proofImage: null
@@ -736,7 +744,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       visit_by: getValue(jobOrderData.Visit_By || jobOrderData.visit_by),
       visit_with: getValue(jobOrderData.Visit_With || jobOrderData.visit_with),
       visit_with_other: getValue(jobOrderData.Visit_With_Other || jobOrderData.visit_with_other),
-      statusRemarks: getValue(jobOrderData.Status_Remarks || jobOrderData.status_remarks),
       ip: getValue(jobOrderData.IP || jobOrderData.ip),
       addressCoordinates: getValue((appData?.long_lat) || jobOrderData.Address_Coordinates || jobOrderData.address_coordinates)
     });
@@ -748,6 +755,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       routerReadingImage: safeConvert(jobOrderData.router_reading_image_url || jobOrderData.Router_Reading_Image_URL),
       portLabelImage: safeConvert(jobOrderData.port_label_image_url || jobOrderData.Port_Label_Image_URL),
       clientSignatureImage: safeConvert(jobOrderData.client_signature_url || jobOrderData.Client_Signature_URL),
+      clientTaggingImage: safeConvert(jobOrderData.client_tagging_url || jobOrderData.Client_Tagging_URL),
       proofImage: safeConvert(jobOrderData.proof_image_url || jobOrderData.Proof_Image_URL)
     });
 
@@ -823,7 +831,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     });
   }, []);
 
-  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'proofImage', file: any) => {
+  const handleImageUpload = useCallback((field: 'signedContractImage' | 'setupImage' | 'boxReadingImage' | 'routerReadingImage' | 'portLabelImage' | 'clientSignatureImage' | 'clientTaggingImage' | 'proofImage', file: any) => {
     setFormData(prev => ({ ...prev, [field]: file }));
     setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
     setErrors(prev => prev[field] ? { ...prev, [field]: '' } : prev);
@@ -961,6 +969,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
       if (!formData.signedContractImage && !jobOrderData?.signed_contract_image_url && !jobOrderData?.Signed_Contract_Image_URL)
         newErrors.signedContractImage = 'Signed Contract Image is required';
+
+      if (!formData.clientTaggingImage && !jobOrderData?.client_tagging_image_url && !jobOrderData?.Client_Tagging_Image_URL)
+        newErrors.clientTaggingImage = 'Client Tagging Image is required';
 
 
 
@@ -1153,7 +1164,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           visit_with: updatedFormData.visit_with,
           visit_with_other: updatedFormData.visit_with_other,
           onsite_remarks: updatedFormData.onsiteRemarks,
-          status_remarks: updatedFormData.statusRemarks,
           end_time: currentDateTime
         };
 
@@ -1189,6 +1199,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           safeAppendImage('router_reading_image', formData.routerReadingImage);
           safeAppendImage('port_label_image', formData.portLabelImage);
           safeAppendImage('client_signature_image', formData.clientSignatureImage);
+          safeAppendImage('client_tagging_image', formData.clientTaggingImage);
           safeAppendImage('proof_image', formData.proofImage);
         }
 
@@ -1209,6 +1220,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                 router_reading_image_url?: string;
                 port_label_image_url?: string;
                 client_signature_image_url?: string;
+                client_tagging_url?: string;
                 proof_image_url?: string;
               };
               folder_id?: string;
@@ -1238,6 +1250,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
               }
               if (imageUrls.client_signature_image_url) {
                 jobOrderUpdateData.client_signature_url = imageUrls.client_signature_image_url;
+              }
+              if (imageUrls.client_tagging_url) {
+                jobOrderUpdateData.client_tagging_url = imageUrls.client_tagging_url;
               }
               if (imageUrls.proof_image_url) {
                 jobOrderUpdateData.proof_image_url = imageUrls.proof_image_url;
@@ -3091,6 +3106,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                           )}
 
                           <ImagePreview
+                            imageUrl={imagePreviews.clientTaggingImage}
+                            label="Client Tagging"
+                            required={true}
+                            onUpload={(file) => handleImageUpload('clientTaggingImage', file)}
+                            error={errors.clientTaggingImage}
+                            colorPrimary={colorPalette?.primary || '#7c3aed'}
+                          />
+
+                          <ImagePreview
                             imageUrl={imagePreviews.setupImage}
                             label="Setup Image"
                             required={true}
@@ -3440,30 +3464,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             )}
                           </View>
 
-                          <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                              Status Remarks<Text style={styles.required}>*</Text>
-                            </Text>
-                            <TextInput
-                              value={formData.statusRemarks}
-                              onChangeText={(text) => handleInputChange('statusRemarks', text)}
-                              placeholder="Enter status remarks"
-                              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#4B5563'}
-                              style={[styles.textInput, {
-                                backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                                color: isDarkMode ? '#ffffff' : '#111827',
-                                borderColor: errors.statusRemarks ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db')
-                              }]}
-                            />
-                            {errors.statusRemarks && (
-                              <View style={styles.errorContainer}>
-                                <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                                  <Text style={styles.errorIconText}>!</Text>
-                                </View>
-                                <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.statusRemarks}</Text>
-                              </View>
-                            )}
-                          </View>
+
                         </>
                       )}
                       <View style={styles.inputGroup}>

@@ -115,6 +115,9 @@ export interface JobOrder {
   document_attachment_url?: string | null;
   other_isp_bill_url?: string | null;
 
+  // Technicians
+  technicians?: string[];
+
   // Items
   job_order_items?: JobOrderItem[];
 

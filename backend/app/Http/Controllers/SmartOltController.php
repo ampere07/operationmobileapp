@@ -95,10 +95,9 @@ class SmartOltController extends Controller
     }
 
     public function validateOnuSn(Request $request)
-
     {
         try {
-            Log::info('Validating ONU SN Request:', $request->all());
+            Log::channel('smartoltrelated')->info('Validating ONU SN Request:', $request->all());
 
             $sn = $request->input('sn');
 
@@ -113,7 +112,7 @@ class SmartOltController extends Controller
             $config = SmartOlt::first();
 
             if (!$config) {
-                Log::error('SmartOLT configuration not found in database');
+                Log::channel('smartoltrelated')->error('SmartOLT configuration not found in database');
                 return response()->json([
                     'success' => false,
                     'message' => 'SmartOLT configuration not found'
@@ -126,14 +125,14 @@ class SmartOltController extends Controller
             // Construct URL
             $url = "https://{$subDomain}.smartolt.com/api/onu/get_onus_details_by_sn/{$sn}";
 
-            Log::info("Calling SmartOLT API: $url");
+            Log::channel('smartoltrelated')->info("Calling SmartOLT API: $url");
 
             // Make request
             $response = Http::withHeaders([
                 'X-Token' => $token
             ])->get($url);
 
-            Log::info('SmartOLT API Response Status: ' . $response->status());
+            Log::channel('smartoltrelated')->info('SmartOLT API Response Status: ' . $response->status());
             
             if ($response->successful()) {
                 $data = $response->json();
@@ -173,7 +172,7 @@ class SmartOltController extends Controller
                         ], 200);
                     }
                 } else {
-                    Log::error('SmartOLT Invalid Response Structure:', ['response' => $data]);
+                    Log::channel('smartoltrelated')->error('SmartOLT Invalid Response Structure:', ['response' => $data]);
                     return response()->json([
                         'success' => false,
                         'message' => 'Invalid response structure from SmartOLT'
@@ -198,7 +197,9 @@ class SmartOltController extends Controller
             }
 
         } catch (\Exception $e) {
-            Log::error('SmartOLT Validation Exception: ' . $e->getMessage());
+            Log::channel('smartoltrelated')->error('SmartOLT Validation Exception: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Error validating router model sn: ' . $e->getMessage()
@@ -206,5 +207,6 @@ class SmartOltController extends Controller
         }
     }
 }
+
 
 

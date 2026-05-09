@@ -12,7 +12,8 @@ import {
   Modal,
   Platform,
   StyleSheet,
-  useWindowDimensions
+  useWindowDimensions,
+  DeviceEventEmitter
 } from 'react-native';
 import { Search, Plus, RefreshCw, Filter, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -128,6 +129,12 @@ const WorkOrderPage: React.FC = () => {
       }
     };
     fetchColorPalette();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, []);
 
   // Dark mode loading removed as per user request

@@ -117,6 +117,7 @@ class ServiceOrderController extends Controller
                         'assigned_email' => $order->assigned_email,
                         'visit_status' => $order->visit_status,
                         'updated_at' => $order->updated_at,
+                        'technicians' => isset($order->technicians) ? json_decode($order->technicians) : null,
                     ];
                 }
 
@@ -203,6 +204,7 @@ class ServiceOrderController extends Controller
                     'status' => $order->status ?? 'unused',
                     'start_time' => $order->start_time ?? null,
                     'end_time' => $order->end_time ?? null,
+                    'technicians' => isset($order->technicians) ? json_decode($order->technicians) : null,
                     'created_at' => $order->created_at,
                     'created_by_user' => $createdUser->name ?? null,
                     'updated_at' => $order->updated_at,
@@ -360,6 +362,8 @@ class ServiceOrderController extends Controller
         }
     }
 
+    public function show($id)
+    {
         try {
             Log::info("Fetching service order with ID: {$id}");
 
@@ -453,6 +457,7 @@ class ServiceOrderController extends Controller
                 'status' => $order->status ?? 'unused',
                 'start_time' => $order->start_time ?? null,
                 'end_time' => $order->end_time ?? null,
+                'technicians' => isset($order->technicians) ? json_decode($order->technicians) : null,
                 'created_at' => $order->created_at,
                 'created_by_user' => $createdUser->name ?? null,
                 'updated_at' => $order->updated_at,
@@ -475,7 +480,8 @@ class ServiceOrderController extends Controller
             ], 404);
         }
     }
-
+    public function update(Request $request, $id)
+    {
         try {
             Log::info("Updating service order with ID: {$id}");
             Log::info('Update data:', $request->all());
@@ -664,6 +670,10 @@ class ServiceOrderController extends Controller
             if ($request->has('end_time')) {
                 $updateData['end_time'] = $request->end_time;
             }
+            
+            if ($request->has('technicians')) {
+                $updateData['technicians'] = is_array($request->technicians) ? json_encode($request->technicians) : $request->technicians;
+            }
 
             if ($request->has('visit_by')) {
                 $updateData['visit_by'] = $request->visit_by;
@@ -757,6 +767,13 @@ class ServiceOrderController extends Controller
                 }
                 $params[] = $id;
                 $query = "UPDATE service_orders SET " . implode(', ', $sets) . " WHERE id = ?";
+                
+                Log::info('Executing update on service_orders', [
+                    'id' => $id,
+                    'query' => $query,
+                    'params' => $params
+                ]);
+                
                 DB::update($query, $params);
                 Log::info('Updated service_orders table');
             }
@@ -1108,10 +1125,10 @@ class ServiceOrderController extends Controller
                     'updatedBy' => $updatedBy
                 ];
                 $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
-                \Log::info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
             }
             catch (\Exception $radEx) {
-                \Log::error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
             }
 
             // Step 3: Get account details (PPPoE Username and Plan)
@@ -1252,9 +1269,9 @@ class ServiceOrderController extends Controller
                     'remarks' => 'Restricted via Service Order',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[SERVICE ORDER RESTRICT RADIUS] restrictedUser called for: ' . $username);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER RESTRICT RADIUS] restrictedUser called for: ' . $username);
             } catch (\Exception $radEx) {
-                \Log::error('[SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             // Update billing_status_id to 6 (Restricted) - Assuming 6 is Restricted
@@ -1375,10 +1392,10 @@ class ServiceOrderController extends Controller
                     'remarks' => 'Disconnected via Service Order',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
             }
             catch (\Exception $radEx) {
-                \Log::error('[SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             // Step 3: Update local database status
@@ -1501,10 +1518,10 @@ class ServiceOrderController extends Controller
                     'remarks' => 'Pullout',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
             }
             catch (\Exception $radEx) {
-                \Log::error('[SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             \Log::info('[SERVICE ORDER PULLOUT SUCCESS] Disconnection (Local Status) completed successfully');
@@ -1723,7 +1740,7 @@ class ServiceOrderController extends Controller
             $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
-                \Log::info('[SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
 
                 // STEP 1: DELETE THE OLD ACCOUNT
                 try {
@@ -1732,7 +1749,7 @@ class ServiceOrderController extends Controller
                     $radiusOps->deleteAccount($oldUsername);
                 }
                 catch (\Exception $delEx) {
-                    \Log::error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
+                    \Log::channel('radiusrelated')->error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
                 // We continue anyway so the new account can be created
                 }
 
@@ -1801,12 +1818,12 @@ class ServiceOrderController extends Controller
                         }
                     }
                     catch (\Exception $radiusEx) {
-                        \Log::error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
+                        \Log::channel('radiusrelated')->error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
                         return 'exception';
                     }
                 }
                 else {
-                    \Log::error('Radius config not found');
+                    \Log::channel('radiusrelated')->error('Radius config not found');
                     return 'radius_config_missing';
                 }
             }

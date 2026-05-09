@@ -76,6 +76,7 @@ export interface ServiceOrderData {
   second_government_valid_id_url?: string;
   document_attachment_url?: string;
   other_isp_bill_url?: string;
+  technicians?: string[];
 }
 
 export const createServiceOrder = async (serviceOrderData: Partial<ServiceOrderData>) => {

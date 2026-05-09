@@ -782,14 +782,22 @@ class MonitorController extends Controller
                     $dailyJOs = DB::table('job_orders')
                         ->where('organization_id', $organizationId)
                         ->where('assigned_email', $email)
-                        ->where('start_time', '>=', $viewStartStr)
+                        ->where(function($q) use ($viewStartStr) {
+                            $q->where('start_time', '>=', $viewStartStr)
+                              ->orWhere('end_time', '>=', $viewStartStr)
+                              ->orWhereNull('end_time');
+                        })
                         ->select('id', 'start_time', 'end_time', 'onsite_status as status', DB::raw("'jo' as task_type"))
                         ->get();
 
                     $dailySOs = DB::table('service_orders')
                         ->where('organization_id', $organizationId)
                         ->where('assigned_email', $email)
-                        ->where('start_time', '>=', $viewStartStr)
+                        ->where(function($q) use ($viewStartStr) {
+                            $q->where('start_time', '>=', $viewStartStr)
+                              ->orWhere('end_time', '>=', $viewStartStr)
+                              ->orWhereNull('end_time');
+                        })
                         ->select('id', 'start_time', 'end_time', 'visit_status as status', DB::raw("'so' as task_type"), 'concern')
                         ->get();
 
@@ -798,10 +806,7 @@ class MonitorController extends Controller
                     // 2. Timeline Calculation: Flattened to avoid double-counting overlapping tasks
                     $totalWorkingSeconds = 0;
                     $totalAvailableSeconds = 0;
-                    $currentTime = \Carbon\Carbon::parse($viewStartStr, 'Asia/Manila');
-
-                    $sortedTasks = $allTasks->sortBy('start_time');
-
+                    
                     $isOffline = (strtolower($tech->tech_status ?? '') === 'offline');
                     $timeBound = $now->copy();
 
@@ -813,14 +818,37 @@ class MonitorController extends Controller
                         }
                     }
 
+                    // Define effective start for availability (either view start or time_in)
+                    $effectiveStart = $viewStart->copy();
+                    if (!empty($tech->time_in)) {
+                        $tIn = \Carbon\Carbon::parse($tech->time_in, 'Asia/Manila');
+                        // Only bound by time_in if it was today; if it was from a previous day, use viewStart
+                        if ($tIn->isToday() && $tIn->gt($effectiveStart)) {
+                            $effectiveStart = $tIn->copy();
+                        }
+                    } else if (!$isOffline && strtolower($tech->tech_status ?? '') !== 'online') {
+                        // If they haven't timed in yet and aren't online, their availability hasn't started
+                        $effectiveStart = $timeBound->copy();
+                    }
+
+                    $currentTime = $effectiveStart->copy();
+                    $sortedTasks = $allTasks->sortBy('start_time');
+
                     foreach ($sortedTasks as $task) {
+                        if (empty($task->start_time)) continue; // Skip pending for time calculation
+                        
                         $tStart = \Carbon\Carbon::parse($task->start_time, 'Asia/Manila');
                         $tEnd = $task->end_time ? \Carbon\Carbon::parse($task->end_time, 'Asia/Manila') : $timeBound->copy();
 
+                        // Bound tasks by our current view window
                         if ($tStart->gt($timeBound)) $tStart = $timeBound->copy();
                         if ($tEnd->gt($timeBound)) $tEnd = $timeBound->copy();
+                        
+                        // Ensure tStart is at least at currentTime to prevent counting time before effectiveStart
+                        if ($tStart->lt($currentTime)) $tStart = $currentTime->copy();
+                        if ($tEnd->lt($currentTime)) $tEnd = $currentTime->copy();
 
-                        // Add idle time before this task
+                        // Add idle time before this task (only if task starts after effectiveStart)
                         if ($tStart->gt($currentTime)) {
                             $totalAvailableSeconds += $currentTime->diffInSeconds($tStart);
                             $currentTime = $tStart->copy();
@@ -848,7 +876,7 @@ class MonitorController extends Controller
                     $availableTimeStr = "{$aHours}h {$aMins}m";
 
                     // 3. Status Logic
-                    $workingTask = $allTasks->filter(function($t) { return !$t->end_time; })->last();
+                    $workingTask = $allTasks->filter(function($t) { return !empty($t->start_time) && empty($t->end_time); })->last();
                     $isPullout = false;
                     if ($workingTask) {
                         $status = 'Working';
@@ -864,17 +892,25 @@ class MonitorController extends Controller
                         }
                         
                         $since = $workingTask->start_time;
-                        $primaryTimeDisp = $workingTimeStr;
+                        // Set primaryTimeDisp to NULL so the frontend uses the 'since' timer (starts at 0 for current job)
+                        $primaryTimeDisp = null; 
                     } else {
                         $status = 'Available';
-                        $lastFinished = $allTasks->filter(function($t) { return $t->end_time; })->last();
+                        $lastFinished = $allTasks->filter(function($t) { return !empty($t->start_time) && !empty($t->end_time); })->sortBy('end_time')->last();
+                        
                         if ($lastFinished) {
                             $details = ($lastFinished->task_type === 'jo' ? 'Job Order' : 'Service Order') . ' (' . ($lastFinished->status ?? 'Done') . ')';
                             $since = $lastFinished->end_time;
                         } else {
-                            $details = 'Ready to Accept';
+                            $pendingCount = $allTasks->filter(function($t) { return empty($t->start_time) && empty($t->end_time); })->count();
+                            if ($pendingCount > 0) {
+                                $details = "Assigned: {$pendingCount} Pending Task(s)";
+                            } else {
+                                $details = 'Ready to Accept';
+                            }
                             $since = $viewStartStr;
                         }
+                        // Set primaryTimeDisp to the accumulated total (it continues the count)
                         $primaryTimeDisp = $availableTimeStr;
                     }
 
@@ -1127,4 +1163,5 @@ class MonitorController extends Controller
         }
     }
 }
+
 

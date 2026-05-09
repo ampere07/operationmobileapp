@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, Animated, PanResponder, RefreshControl, KeyboardAvoidingView, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
 import { FileText, Upload, Clock, CheckCircle, Plus, X, ChevronLeft, ChevronRight, MessageSquare, AlertCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as LinkingExpo from 'expo-linking';
@@ -96,7 +96,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const balance = Number(customerDetail?.billingAccount?.accountBalance || 0);
   const displayName = customerDetail?.fullName || 'Customer';
   const isDarkMode = false;
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const primaryColor = colorPalette?.primary || '#ef4444';
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
   const [details, setDetails] = useState<string>('');
@@ -249,6 +249,12 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
       }
     };
     initPage();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, []);
 
   const onRefresh = React.useCallback(async () => {

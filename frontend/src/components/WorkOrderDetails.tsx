@@ -6,7 +6,8 @@ import {
   ScrollView,
   Linking,
   useWindowDimensions,
-  StyleSheet
+  StyleSheet,
+  DeviceEventEmitter
 } from 'react-native';
 import { X, ExternalLink, Play, Square } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -119,6 +120,12 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       }
     };
     loadSettings();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, []);
 
   useEffect(() => {

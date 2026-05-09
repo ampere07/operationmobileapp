@@ -322,6 +322,7 @@ class ImageProcessingService
             'router_reading_image' => 'router_reading_image_url',
             'port_label_image' => 'port_label_image_url',
             'client_signature_image' => 'client_signature_url',
+            'client_tagging_image' => 'client_tagging_url',
             'speed_test_image' => 'speedtest_image_url',
             'proof_image' => 'proof_image_url',
             'house_front_image' => 'house_front_picture_url',

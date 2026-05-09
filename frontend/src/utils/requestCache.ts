@@ -38,6 +38,10 @@ class RequestCache {
     return request;
   }
 
+  set<T>(key: string, data: T) {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
   invalidate(key: string) {
     this.cache.delete(key);
     this.pendingRequests.delete(key);

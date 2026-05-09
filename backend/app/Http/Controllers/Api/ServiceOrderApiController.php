@@ -151,6 +151,7 @@ class ServiceOrderApiController extends Controller
                 $so->nap = $td ? $td->nap : null;
                 $so->port = $td ? $td->port : null;
                 $so->vlan = $td ? $td->vlan : null;
+                $so->technicians = isset($so->technicians) ? json_decode($so->technicians) : null;
 
                 return $so;
             });
@@ -407,6 +408,10 @@ class ServiceOrderApiController extends Controller
                 ], 404);
             }
 
+            if ($serviceOrder) {
+                $serviceOrder->technicians = isset($serviceOrder->technicians) ? json_decode($serviceOrder->technicians) : null;
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $serviceOrder
@@ -500,13 +505,18 @@ class ServiceOrderApiController extends Controller
                 'status',
                 'start_time',
                 'end_time',
+                'technicians',
                 'updated_by_user'
             ];
 
             $data = [];
             foreach ($allowedFields as $field) {
                 if ($request->has($field)) {
-                    $data[$field] = $request->input($field);
+                    $value = $request->input($field);
+                    if ($field === 'technicians' && is_array($value)) {
+                        $value = json_encode($value);
+                    }
+                    $data[$field] = $value;
                 }
             }
 
@@ -1002,10 +1012,10 @@ class ServiceOrderApiController extends Controller
                     'updatedBy' => $updatedByUser
                 ];
                 $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
-                \Log::info('[API SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
+                \Log::channel('radiusrelated')->info('[API SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
             }
             catch (\Exception $radEx) {
-                \Log::error('[API SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[API SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
                 // We might want to handle failures differently, but keeping current flow of proceeding to DB update
             }
 
@@ -1126,9 +1136,9 @@ class ServiceOrderApiController extends Controller
                     'remarks' => 'Restricted via Service Order API',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[API SERVICE ORDER RESTRICT RADIUS] restrictedUser called for: ' . $username);
+                \Log::channel('radiusrelated')->info('[API SERVICE ORDER RESTRICT RADIUS] restrictedUser called for: ' . $username);
             } catch (\Exception $radEx) {
-                \Log::error('[API SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[API SERVICE ORDER RESTRICT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             // Update billing_status_id to 4 (Inactive)
@@ -1254,10 +1264,10 @@ class ServiceOrderApiController extends Controller
                     'remarks' => 'Disconnected via Service Order API',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[API SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
+                \Log::channel('radiusrelated')->info('[API SERVICE ORDER DISCONNECT RADIUS] disconnectUser called for: ' . $username . ' by ' . $updatedByUser);
             }
             catch (\Exception $radEx) {
-                \Log::error('[API SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[API SERVICE ORDER DISCONNECT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             // Step 3: Update local database status (ID 4 = Disconnected)
@@ -1380,10 +1390,10 @@ class ServiceOrderApiController extends Controller
                     'remarks' => 'Pullout',
                     'updatedBy' => $updatedByUser
                 ]);
-                \Log::info('[API SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
+                \Log::channel('radiusrelated')->info('[API SERVICE ORDER PULLOUT RADIUS] disconnectUser (Pullout) called for: ' . $username . ' by ' . $updatedByUser);
             }
             catch (\Exception $radEx) {
-                \Log::error('[API SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
+                \Log::channel('radiusrelated')->error('[API SERVICE ORDER PULLOUT RADIUS ERROR] ' . $radEx->getMessage());
             }
 
             \Log::info('[API SERVICE ORDER PULLOUT SUCCESS] Disconnection (Local Status) completed successfully');
@@ -1603,7 +1613,7 @@ class ServiceOrderApiController extends Controller
             $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
-                \Log::info('[API SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
+                \Log::channel('radiusrelated')->info('[API SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
 
                 // STEP 1: DELETE THE OLD ACCOUNT
                 try {
@@ -1612,7 +1622,7 @@ class ServiceOrderApiController extends Controller
                     $radiusOps->deleteAccount($oldUsername);
                 }
                 catch (\Exception $delEx) {
-                    \Log::error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
+                    \Log::channel('radiusrelated')->error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
                 // We continue anyway so the new account can be created
                 }
 
@@ -1681,12 +1691,12 @@ class ServiceOrderApiController extends Controller
                         }
                     }
                     catch (\Exception $radiusEx) {
-                        \Log::error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
+                        \Log::channel('radiusrelated')->error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
                         return 'exception';
                     }
                 }
                 else {
-                    \Log::error('Radius config not found');
+                    \Log::channel('radiusrelated')->error('Radius config not found');
                     return 'radius_config_missing';
                 }
             }

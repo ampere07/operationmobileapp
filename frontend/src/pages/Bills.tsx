@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, Linking, useWindowDimensions, RefreshControl, Modal, PanResponder, Animated, StyleSheet, Platform, DeviceEventEmitter } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
@@ -293,7 +293,7 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
 
     const [user, setUser] = useState<any>(null);
     const [displayName, setDisplayName] = useState('');
-    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
     const primaryColor = colorPalette?.primary || '#ef4444';
     const [refreshing, setRefreshing] = useState(false);
     const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
@@ -358,7 +358,15 @@ const Bills: React.FC<BillsProps> = ({ initialTab = 'soa' }) => {
         };
         initLoad();
         silentRefresh();
-        return () => { cancelled = true; };
+
+        const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+            setColorPalette(newPalette);
+        });
+
+        return () => {
+            cancelled = true;
+            paletteSub.remove();
+        };
     }, []);
 
     useEffect(() => {

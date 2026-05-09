@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
@@ -10,11 +10,13 @@ import JobOrderDoneFormTechModal from '../modals/JobOrderDoneFormTechModal';
 import JobOrderEditFormModal from '../modals/JobOrderEditFormModal';
 import ApprovalConfirmationModal from '../modals/ApprovalConfirmationModal';
 import ConfirmationModal from '../modals/MoveToJoModal';
+import StartTimerModal from '../modals/StartTimerModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
 import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { techInOutService } from '../services/techInOutService';
 
 interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
@@ -31,7 +33,8 @@ interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
 const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onClose, onRefresh, isMobile: propIsMobile = false, userRoleProp, userRoleIdProp, billingStatusesProp }) => {
   const { width } = useWindowDimensions();
   const isMobile = propIsMobile || width < 768;
-  const { silentRefresh } = useJobOrderContext();
+  const { silentRefresh, jobOrders } = useJobOrderContext();
+  const { serviceOrders } = useServiceOrderContext();
 
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [loading, setLoading] = useState(false);
@@ -40,6 +43,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [isDoneTechModalOpen, setIsDoneTechModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+  const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>(billingStatusesProp || []);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
@@ -56,6 +60,13 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     setIsStarted(!!(jobOrder as any).start_time);
     setIsEnded(!!(jobOrder as any).end_time);
   }, [jobOrder]);
+
+  useEffect(() => {
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+    return () => paletteSub.remove();
+  }, []);
 
   const isAgent = userRole === 'agent' || userRoleId === 4 || String(userRoleId) === '4';
 
@@ -162,6 +173,12 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       }
     };
     fetchColorPalette();
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => paletteSub.remove();
   }, []);
 
   useEffect(() => {
@@ -579,21 +596,54 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const handleStartTimer = async () => {
     try {
       const isTechnician = userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2';
-      if (isTechnician && techStatus === 'offline') {
-        setShowTimeInWarning(true);
-        return;
+      if (isTechnician) {
+        if (techStatus === 'offline') {
+          setShowTimeInWarning(true);
+          return;
+        }
+
+        // Check for other active job orders
+        const activeJobOrder = jobOrders.find(jo => 
+          (jo.id || (jo as any).JobOrder_ID) !== (jobOrder.id || (jobOrder as any).JobOrder_ID) && 
+          (jo as any).start_time && !(jo as any).end_time
+        );
+
+        // Check for active service orders
+        const activeServiceOrder = serviceOrders.find(so => 
+          (so as any).start_time && !(so as any).end_time
+        );
+
+        if (activeJobOrder || activeServiceOrder) {
+          Alert.alert(
+            'Cannot Start',
+            'You already have another job in progress. Please finish it before starting a new one.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
       }
 
+      setIsStartTimerModalOpen(true);
+    } catch (err: any) {
+      setError(`Failed to prepare timer: ${err.message}`);
+    }
+  };
+
+  const handleConfirmStartTimer = async (selectedTechnicians: string[]) => {
+    try {
       setLoading(true);
       if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
 
       const currentTime = formatMySQLDate();
       await updateJobOrder(jobOrder.id, {
         start_time: currentTime,
+        technicians: selectedTechnicians,
       } as any);
 
       (jobOrder as any).start_time = currentTime;
+      (jobOrder as any).technicians = selectedTechnicians;
       setIsStarted(true);
+      setIsStartTimerModalOpen(false);
       setSuccessMessage('Timer started successfully!');
       setShowSuccessModal(true);
       silentRefresh();
@@ -998,6 +1048,14 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         cancelText="Close"
         onConfirm={() => setShowTimeInWarning(false)}
         onCancel={() => setShowTimeInWarning(false)}
+      />
+
+      <StartTimerModal
+        isOpen={isStartTimerModalOpen}
+        onClose={() => setIsStartTimerModalOpen(false)}
+        onConfirm={handleConfirmStartTimer}
+        loading={loading}
+        colorPalette={colorPalette}
       />
     </View>
   );

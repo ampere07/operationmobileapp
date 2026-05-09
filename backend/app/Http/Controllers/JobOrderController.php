@@ -133,6 +133,7 @@ class JobOrderController extends Controller
                         'updated_at' => $jobOrder->updated_at ? $jobOrder->updated_at->format('Y-m-d H:i:s') : null,
                         'start_time' => $jobOrder->start_time,
                         'end_time' => $jobOrder->end_time,
+                        'technicians' => $jobOrder->technicians,
                     ];
                 });
 
@@ -177,6 +178,7 @@ class JobOrderController extends Controller
                     'date_installed' => $jobOrder->date_installed,
                     'start_time' => $jobOrder->start_time,
                     'end_time' => $jobOrder->end_time,
+                    'technicians' => $jobOrder->technicians,
                     'usage_type' => $jobOrder->usage_type,
                     'connection_type' => $jobOrder->connection_type,
                     'router_model' => $jobOrder->router_model,
@@ -274,6 +276,7 @@ class JobOrderController extends Controller
                 'created_by_user_email' => 'nullable|email|max:255',
                 'updated_by_user_email' => 'nullable|email|max:255',
                 'contract_link' => 'nullable|string|max:500',
+                'client_tagging_url' => 'nullable|string|max:500',
                 'organization_id' => 'nullable|integer',
             ]);
 
@@ -628,6 +631,8 @@ class JobOrderController extends Controller
                 'port_label_image_url' => 'nullable|string|max:500',
                 'house_front_picture_url' => 'nullable|string|max:500',
                 'proof_image_url' => 'nullable|string|max:500',
+                'client_tagging_url' => 'nullable|string|max:500',
+                'technicians' => 'nullable|array',
             ]);
 
             if ($validator->fails()) {
@@ -719,7 +724,7 @@ class JobOrderController extends Controller
                 $radiusResult = $this->createRadiusAccountInternal($jobOrder);
                 if (!$radiusResult['success']) {
                     $detailedError = $radiusResult['error'] ?? $radiusResult['message'] ?? 'radius api error occured contact support';
-                    \Log::error('RADIUS Account Creation Failed during JobOrder Done', [
+                    \Log::channel('radiusrelated')->error('RADIUS Account Creation Failed during JobOrder Done', [
                         'job_order_id' => $id,
                         'radius_error' => $detailedError
                     ]);
@@ -1523,6 +1528,7 @@ class JobOrderController extends Controller
                 'has_router_reading' => $request->hasFile('router_reading_image'),
                 'has_port_label' => $request->hasFile('port_label_image'),
                 'has_client_signature' => $request->hasFile('client_signature_image'),
+                'has_client_tagging' => $request->hasFile('client_tagging_image'),
                 'has_speed_test' => $request->hasFile('speed_test_image'),
                 'has_proof_image' => $request->hasFile('proof_image'),
             ]);
@@ -1535,6 +1541,7 @@ class JobOrderController extends Controller
                 'router_reading_image' => 'nullable|image|max:10240',
                 'port_label_image' => 'nullable|image|max:10240',
                 'client_signature_image' => 'nullable|image|max:10240',
+                'client_tagging_image' => 'nullable|image|max:10240',
                 'speed_test_image' => 'nullable|image|max:10240',
                 'proof_image' => 'nullable|image|max:10240',
                 'house_front_image' => 'nullable|image|max:10240',
@@ -1565,6 +1572,7 @@ class JobOrderController extends Controller
                 'router_reading_image',
                 'port_label_image',
                 'client_signature_image',
+                'client_tagging_image',
                 'speed_test_image',
                 'proof_image',
                 'house_front_image'
@@ -1638,14 +1646,14 @@ class JobOrderController extends Controller
     {
         $id = $jobOrder->id;
         try {
-            \Log::info('=== CREATE RADIUS ACCOUNT INTERNAL ===', [
+            \Log::channel('radiusrelated')->info('=== CREATE RADIUS ACCOUNT INTERNAL ===', [
                 'job_order_id' => $id
             ]);
 
             $radiusConfig = RadiusConfig::first();
             
             if (!$radiusConfig) {
-                \Log::error('RADIUS configuration not found in database');
+                \Log::channel('radiusrelated')->error('RADIUS configuration not found in database for JobOrder: ' . $id);
                 return [
                     'success' => false,
                     'message' => 'RADIUS configuration not found. Please configure RADIUS settings first.',
@@ -1737,6 +1745,11 @@ class JobOrderController extends Controller
                     $radiusSubmitted = true;
                 } else {
                     $radiusError = 'HTTP ' . $statusCode . ': ' . $response->body();
+                    \Log::channel('radiusrelated')->error('RADIUS API Error for JobOrder: ' . $id, [
+                        'status' => $statusCode,
+                        'response' => $response->body(),
+                        'payload' => $payload
+                    ]);
                     if (!$credentialsExist) {
                         return [
                             'success' => false,
@@ -1747,6 +1760,10 @@ class JobOrderController extends Controller
                 }
             } catch (\Exception $mikrotikException) {
                 $radiusError = $mikrotikException->getMessage();
+                \Log::channel('radiusrelated')->error('RADIUS Connection Exception for JobOrder: ' . $id, [
+                    'error' => $radiusError,
+                    'trace' => $mikrotikException->getTraceAsString()
+                ]);
                 if (!$credentialsExist) {
                     return [
                         'success' => false,
@@ -1774,9 +1791,10 @@ class JobOrderController extends Controller
             ];
 
         } catch (\Exception $e) {
-            \Log::error('=== RADIUS ACCOUNT CREATION INTERNAL FAILED ===', [
+            \Log::channel('radiusrelated')->error('=== RADIUS ACCOUNT CREATION INTERNAL FAILED ===', [
                 'job_order_id' => $id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             
             return [

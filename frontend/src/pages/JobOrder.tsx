@@ -414,8 +414,13 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
       refreshJobOrders();
     });
 
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+    
     return () => {
       subscription.remove();
+      paletteSub.remove();
     };
   }, [refreshJobOrders]);
 

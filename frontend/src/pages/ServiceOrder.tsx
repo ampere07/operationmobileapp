@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Dimensions, RefreshControl, StyleSheet, Modal } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Dimensions, RefreshControl, StyleSheet, Modal, DeviceEventEmitter } from 'react-native';
 import { FileText, Search, X, Menu, RefreshCw, ArrowLeft, Filter, Check } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -274,7 +274,15 @@ const ServiceOrderPage: React.FC = () => {
       }
     };
     initLoad();
-    return () => { cancelled = true; };
+
+    const paletteSub = DeviceEventEmitter.addListener('colorPaletteChanged', (newPalette) => {
+      setColorPalette(newPalette);
+    });
+
+    return () => {
+      cancelled = true;
+      paletteSub.remove();
+    };
   }, []);
 
   // Reset page when filters change

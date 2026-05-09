@@ -54,7 +54,9 @@ class JobOrder extends Model
         'start_time',
         'end_time',
         'proof_image_url',
+        'client_tagging_url',
         'organization_id',
+        'technicians',
     ];
 
     protected $dates = [
@@ -70,6 +72,7 @@ class JobOrder extends Model
         'timestamp' => 'datetime',
         'date_installed' => 'date',
         'organization_id' => 'integer',
+        'technicians' => 'array',
     ];
 
     public function application()
