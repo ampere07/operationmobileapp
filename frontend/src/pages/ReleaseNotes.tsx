@@ -28,6 +28,17 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.27',
+            date: 'May 9, 2026',
+            title: 'Account Management & Speedtest Integration',
+            updates: [
+                { text: 'Automated Account Deactivation: Service Orders with a "Pullout" category now automatically deactivate the customer\'s account upon completion, ensuring accurate billing and service status.', visibility: 'technician' },
+                { text: 'Independent Speedtest Upload: Technicians can now upload speedtest images directly from the Job Order details page using the new attachment button, even after the initial form is submitted.', visibility: 'technician' },
+                { text: 'Account Suspension Enforcement: Implemented a security check during login. Suspended accounts (active = 0) are now blocked from accessing the mobile application with a clear contact support notification.', visibility: 'all' },
+                { text: 'Enhanced Image Queuing: Attachment uploads now utilize the same robust background queuing system as primary forms to ensure reliability in low-bandwidth areas.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.25',
             date: 'May 9, 2026',
             title: 'UI Stability & Performance Optimization',

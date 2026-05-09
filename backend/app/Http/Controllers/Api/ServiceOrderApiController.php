@@ -1476,6 +1476,16 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
 
+            // Deactivate customer user account
+            DB::table('users')
+                ->where('username', $accountNo)
+                ->update([
+                    'active' => 0,
+                    'updated_at' => now()
+                ]);
+
+            \Log::info('[API SERVICE ORDER PULLOUT DB] Deactivated user account for Account: ' . $accountNo);
+
             // Clear port in job_orders table using account_id (referencing billing_accounts id)
             DB::table('job_orders')
                 ->where('account_id', $billingAccount->id)

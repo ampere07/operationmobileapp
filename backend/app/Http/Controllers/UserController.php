@@ -85,6 +85,7 @@ class UserController extends Controller
             'organization_id' => 'nullable|integer',
             'role_id' => 'nullable|integer|exists:roles,id',
             'agent_id' => 'nullable|integer|exists:agents,id',
+            'active' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -116,6 +117,7 @@ class UserController extends Controller
                     'organization_id' => $isGlobalAdmin ? ($request->organization_id && $request->organization_id > 0 ? $request->organization_id : null) : $organizationId,
                     'role_id' => $request->role_id && $request->role_id > 0 ? $request->role_id : null,
                     'agent_id' => $request->agent_id && $request->agent_id > 0 ? $request->agent_id : null,
+                    'active' => $request->has('active') ? $request->active : 1,
                 ];
             
             $user = User::create($userData);

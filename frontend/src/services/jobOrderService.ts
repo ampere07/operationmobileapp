@@ -133,3 +133,18 @@ export const approveJobOrder = async (id: string | number) => {
     throw error;
   }
 };
+
+export const uploadJobOrderImages = async (id: string | number, formData: FormData) => {
+  try {
+    const idStr = id.toString();
+    const response = await apiClient.post<ApiResponse<any>>(`/job-orders/${idStr}/upload-images`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error uploading job order images:', error);
+    throw error;
+  }
+};

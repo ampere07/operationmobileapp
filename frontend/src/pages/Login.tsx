@@ -41,6 +41,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [showPassword, setShowPassword] = useState(false);
   const [forgotPasswordTimer, setForgotPasswordTimer] = useState(0);
+  const [showSuspendedModal, setShowSuspendedModal] = useState(false);
 
 
 
@@ -142,13 +143,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           await AsyncStorage.setItem('authToken', response.data.token);
         }
         onLogin(userData);
+      } else if (response.status === 'suspended') {
+        setShowSuspendedModal(true);
       } else {
         setError('Login failed. Please try again.');
       }
 
 
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
+      if (err.response?.data?.status === 'suspended') {
+        setShowSuspendedModal(true);
+      } else {
+        setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -494,6 +501,80 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </TouchableOpacity>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Account Suspended Modal */}
+      <Modal
+        visible={showSuspendedModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSuspendedModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: '#ffffff',
+            padding: 30,
+            borderRadius: 24,
+            width: '100%',
+            maxWidth: 400,
+            elevation: 10,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            alignItems: 'center'
+          }}>
+            <View style={{
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              backgroundColor: '#fee2e2',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 20
+            }}>
+              <Text style={{ fontSize: 30 }}>⚠️</Text>
+            </View>
+            
+            <Text style={{
+              fontSize: 22,
+              fontWeight: '700',
+              color: '#111827',
+              marginBottom: 12,
+              textAlign: 'center'
+            }}>Account Suspended</Text>
+            
+            <Text style={{
+              fontSize: 16,
+              color: '#4b5563',
+              marginBottom: 24,
+              textAlign: 'center',
+              lineHeight: 24
+            }}>
+              your account is suspended contact a support
+            </Text>
+
+            <TouchableOpacity
+              onPress={() => setShowSuspendedModal(false)}
+              style={{
+                backgroundColor: colorPalette?.primary || '#6d28d9',
+                paddingVertical: 14,
+                paddingHorizontal: 40,
+                borderRadius: 30,
+                width: '100%',
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 16 }}>Confirm</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
-import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
+import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin, Paperclip } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
@@ -11,6 +11,7 @@ import JobOrderEditFormModal from '../modals/JobOrderEditFormModal';
 import ApprovalConfirmationModal from '../modals/ApprovalConfirmationModal';
 import ConfirmationModal from '../modals/MoveToJoModal';
 import StartTimerModal from '../modals/StartTimerModal';
+import SpeedtestUploadModal from '../modals/SpeedtestUploadModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getApplication } from '../services/applicationService';
 import { Application } from '../types/application';
@@ -44,6 +45,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
+  const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>(billingStatusesProp || []);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
@@ -921,6 +923,19 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
+          <Pressable
+            style={[st.iconBtn, { backgroundColor: '#f3f4f6' }]}
+            onPress={() => {
+              const isDone = jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' || jobOrder.onsite_status?.toLowerCase().trim() === 'done';
+              if (isDone) {
+                setIsAttachmentModalOpen(true);
+              } else {
+                Alert.alert('Notice', 'You need to done first the visit status');
+              }
+            }}
+          >
+            <Paperclip width={20} height={20} color={colorPalette?.primary || '#7c3aed'} />
+          </Pressable>
           {!isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <>
               {!isStarted && (
@@ -1055,6 +1070,16 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         onClose={() => setIsStartTimerModalOpen(false)}
         onConfirm={handleConfirmStartTimer}
         loading={loading}
+        colorPalette={colorPalette}
+      />
+
+      <SpeedtestUploadModal
+        isOpen={isAttachmentModalOpen}
+        onClose={() => setIsAttachmentModalOpen(false)}
+        jobOrder={jobOrder}
+        onSuccess={() => {
+          if (onRefresh) onRefresh();
+        }}
         colorPalette={colorPalette}
       />
     </View>

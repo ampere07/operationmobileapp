@@ -1178,6 +1178,7 @@ class JobOrderController extends Controller
                     'contact_number' => $customer->contact_number_primary,
                     'role_id' => $customerRoleId,
                     'status' => 'active',
+                    'active' => 1,
                     'created_by_user_id' => $actionUserId,
                     'updated_by_user_id' => $actionUserId,
                 ];
