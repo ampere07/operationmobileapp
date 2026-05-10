@@ -201,6 +201,10 @@ class ServiceOrderController extends Controller
                     'time_in_image_url' => $order->time_in_image_url ?? null,
                     'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                     'time_out_image_url' => $order->time_out_image_url ?? null,
+                    'speedtest_image_url' => $order->speedtest_image_url ?? null,
+                    'setup_image_url' => $order->setup_image_url ?? null,
+                    'box_reading_image_url' => $order->box_reading_image_url ?? null,
+                    'router_reading_image_url' => $order->router_reading_image_url ?? null,
                     'status' => $order->status ?? 'unused',
                     'start_time' => $order->start_time ?? null,
                     'end_time' => $order->end_time ?? null,
@@ -262,7 +266,11 @@ class ServiceOrderController extends Controller
                 'organization_id' => $organizationId,
                 'created_by_user_id' => null,
                 'created_at' => now(),
-                'updated_at' => now()
+                'updated_at' => now(),
+                'setup_image_url' => $request->setup_image_url,
+                'router_reading_image_url' => $request->router_reading_image_url,
+                'box_reading_image_url' => $request->box_reading_image_url,
+                'speedtest_image_url' => $request->speedtest_image_url,
             ];
 
             Log::info('Insert data before concern lookup:', $insertData);
@@ -454,6 +462,10 @@ class ServiceOrderController extends Controller
                 'time_in_image_url' => $order->time_in_image_url ?? null,
                 'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                 'time_out_image_url' => $order->time_out_image_url ?? null,
+                'speedtest_image_url' => $order->speedtest_image_url ?? null,
+                'setup_image_url' => $order->setup_image_url ?? null,
+                'box_reading_image_url' => $order->box_reading_image_url ?? null,
+                'router_reading_image_url' => $order->router_reading_image_url ?? null,
                 'status' => $order->status ?? 'unused',
                 'start_time' => $order->start_time ?? null,
                 'end_time' => $order->end_time ?? null,
@@ -717,6 +729,22 @@ class ServiceOrderController extends Controller
 
             if ($request->has('client_signature_url')) {
                 $updateData['client_signature_url'] = $request->client_signature_url;
+            }
+            
+            if ($request->has('speedtest_image_url')) {
+                $updateData['speedtest_image_url'] = $request->speedtest_image_url;
+            }
+            
+            if ($request->has('setup_image_url')) {
+                $updateData['setup_image_url'] = $request->setup_image_url;
+            }
+            
+            if ($request->has('box_reading_image_url')) {
+                $updateData['box_reading_image_url'] = $request->box_reading_image_url;
+            }
+            
+            if ($request->has('router_reading_image_url')) {
+                $updateData['router_reading_image_url'] = $request->router_reading_image_url;
             }
 
             $shouldAddServiceCharge = false;
@@ -1599,16 +1627,6 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
 
-            // Deactivate customer user account
-            DB::table('users')
-                ->where('username', $accountNo)
-                ->update([
-                    'active' => 0,
-                    'updated_at' => now()
-                ]);
-
-            \Log::info('[SERVICE ORDER PULLOUT DB] Deactivated user account for Account: ' . $accountNo);
-
             // Clear port in job_orders table using account_id (referencing billing_accounts id)
             DB::table('job_orders')
                 ->where('account_id', $billingAccount->id)
@@ -1730,10 +1748,10 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER MIGRATION] Found old username: ' . $oldUsername);
 
-            // SPECIAL CASE: Transfer LCP/NAP/PORT
+            // SPECIAL CASE: Transfer LCP/NAP/PORT & Migrate
             $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
-            if ($normalizedCategory === 'transfer lcp/nap/port') {
-                \Log::info('[SERVICE ORDER] Handling Transfer LCP/NAP/PORT via Disable/Update/Enable sequence');
+            if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
+                \Log::info("[SERVICE ORDER] Handling {$repairCategory} via Disable/Update/Enable sequence");
                 $radiusOps = app(ManualRadiusOperationsService::class);
 
                 // 1. Disable Old User

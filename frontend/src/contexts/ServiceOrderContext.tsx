@@ -61,6 +61,10 @@ interface ServiceOrder {
     referredBy?: string;
     start_time?: string | null;
     end_time?: string | null;
+    setupImageUrl?: string;
+    routerReadingImageUrl?: string;
+    boxReadingImageUrl?: string;
+    speedtestImageUrl?: string;
 }
 
 interface ServiceOrderContextType {
@@ -150,7 +154,11 @@ const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => {
         barangay: order.barangay || '',
         referredBy: order.referred_by || '',
         start_time: order.start_time || null,
-        end_time: order.end_time || null
+        end_time: order.end_time || null,
+        setupImageUrl: order.setup_image_url || '',
+        routerReadingImageUrl: order.router_reading_image_url || '',
+        boxReadingImageUrl: order.box_reading_image_url || '',
+        speedtestImageUrl: order.speedtest_image_url || ''
     };
 };
 

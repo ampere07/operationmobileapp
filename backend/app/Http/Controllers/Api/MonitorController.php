@@ -1056,7 +1056,7 @@ class MonitorController extends Controller
                         ];
                     }
 
-                    $endTime = $end ?: \Carbon\Carbon::now();
+                    $endTime = $end ?: \Carbon\Carbon::now('Asia/Manila');
 
                     // Duration string
                     $diff = $start->diff($endTime);
@@ -1087,6 +1087,7 @@ class MonitorController extends Controller
                         'status' => $item->status,
                         'technicians' => $techs,
                         'start' => $start->format('M d, Y h:i A'),
+                        'end' => $end ? $end->format('M d, Y h:i A') : '',
                         'duration' => $duration
                     ];
                 });
@@ -1179,7 +1180,7 @@ class MonitorController extends Controller
                         ];
                     }
 
-                    $endTime = $end ?: \Carbon\Carbon::now();
+                    $endTime = $end ?: \Carbon\Carbon::now('Asia/Manila');
                     $diff = $start->diff($endTime);
                     $duration = "";
                     if ($diff->d > 0)
@@ -1204,6 +1205,7 @@ class MonitorController extends Controller
                             }));
                         })(),
                         'start' => $start->format('M d, Y h:i A'),
+                        'end' => $end ? $end->format('M d, Y h:i A') : '',
                         'duration' => $duration
                     ];
                 });
@@ -1225,6 +1227,5 @@ class MonitorController extends Controller
         }
     }
 }
-
 
 

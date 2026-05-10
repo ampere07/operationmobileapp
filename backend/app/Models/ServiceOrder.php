@@ -70,6 +70,10 @@ class ServiceOrder extends Model
         'proof_image_url',
         'organization_id',
         'technicians',
+        'speedtest_image_url',
+        'setup_image_url',
+        'box_reading_image_url',
+        'router_reading_image_url',
     ];
 
     protected $dates = [

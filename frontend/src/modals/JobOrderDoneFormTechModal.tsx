@@ -985,8 +985,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
     }
 
-    // Proof Image is mandatory for all statuses
-    if (!formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) {
+    // Proof Image is mandatory for all statuses except In Progress
+    if (formData.onsiteStatus !== 'In Progress' && !formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) {
       newErrors.proofImage = 'Proof Image is required';
     }
 
@@ -3467,16 +3467,18 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         </>
                       )}
-                      <View style={styles.inputGroup}>
-                        <ImagePreview
-                          imageUrl={imagePreviews.proofImage}
-                          label="Proof Image"
-                          required={true}
-                          onUpload={(file) => handleImageUpload('proofImage', file)}
-                          error={errors.proofImage}
-                          colorPrimary={colorPalette?.primary || '#7c3aed'}
-                        />
-                      </View>
+                      {formData.onsiteStatus !== 'In Progress' && (
+                        <View style={styles.inputGroup}>
+                          <ImagePreview
+                            imageUrl={imagePreviews.proofImage}
+                            label="Proof Image"
+                            required={true}
+                            onUpload={(file) => handleImageUpload('proofImage', file)}
+                            error={errors.proofImage}
+                            colorPrimary={colorPalette?.primary || '#7c3aed'}
+                          />
+                        </View>
+                      )}
                     </View>
                   </ScrollView>
                 )}

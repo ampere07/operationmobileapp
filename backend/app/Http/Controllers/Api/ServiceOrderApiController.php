@@ -54,6 +54,10 @@ class ServiceOrderApiController extends Controller
                 $query->where('so.support_status', $request->input('support_status'));
             }
 
+            if ($request->has('has_charge')) {
+                $query->where('so.service_charge', '>', 0);
+            }
+
             if ($request->has('updated_since')) {
                 $query->where('so.updated_at', '>', $request->input('updated_since'));
                 // When fetching only updates, we typically want everything since the last sync
@@ -506,7 +510,11 @@ class ServiceOrderApiController extends Controller
                 'start_time',
                 'end_time',
                 'technicians',
-                'updated_by_user'
+                'updated_by_user',
+                'speedtest_image_url',
+                'setup_image_url',
+                'box_reading_image_url',
+                'router_reading_image_url'
             ];
 
             $data = [];
@@ -575,6 +583,9 @@ class ServiceOrderApiController extends Controller
                     if (!$newNap)
                         $newNap = $technicalDetails->nap;
 
+                    $repairCategory = $request->input('repair_category') ?: ($serviceOrder->repair_category ?? '');
+                    $isMigration = in_array(strtolower(trim($repairCategory)), ['migrate', 'reactivation']);
+
                     $newPort = $request->filled('new_port') ? $request->input('new_port') : $technicalDetails->port;
                     $newVlan = $request->filled('new_vlan') ? $request->input('new_vlan') : $technicalDetails->vlan;
                     $newSN = $request->filled('new_router_modem_sn') ? $request->input('new_router_modem_sn') : $technicalDetails->router_modem_sn;
@@ -590,10 +601,8 @@ class ServiceOrderApiController extends Controller
                     $data['new_router_modem_sn'] = $newSN;
                     $data['new_lcpnap'] = $newLcpNap;
 
-                    // Update technical_details table
-                    DB::table('technical_details')
-                        ->where('account_no', $serviceOrder->account_no)
-                        ->update([
+                    // Prepare update array for technical_details
+                    $techUpdateData = [
                         'lcp' => $newLcp,
                         'nap' => $newNap,
                         'port' => $newPort,
@@ -602,7 +611,17 @@ class ServiceOrderApiController extends Controller
                         'lcpnap' => $newLcpNap,
                         'updated_at' => now(),
                         'updated_by' => $updatedByUser
-                    ]);
+                    ];
+
+                    // If it's a migration, ensure connection_type is set to Fiber
+                    if ($isMigration) {
+                        $techUpdateData['connection_type'] = 'Fiber';
+                    }
+
+                    // Update technical_details table
+                    DB::table('technical_details')
+                        ->where('account_no', $serviceOrder->account_no)
+                        ->update($techUpdateData);
 
                     // Also update job_orders table to keep lcpnap/port/vlan in sync
                     $billingAccountForJobOrder = DB::table('billing_accounts')
@@ -878,7 +897,7 @@ class ServiceOrderApiController extends Controller
 
             // Trigger Migration if repair category is 'Migrate', 'Relocate', or 'Transfer LCP/NAP/PORT' and visit status is 'Done'
             $migrationStatus = null;
-            $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port'];
+            $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port', 'reactivation'];
             if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done') {
                 $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
                 if ($billingAccount) {
@@ -1476,16 +1495,6 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER PULLOUT DB] Cleared technical details for Account: ' . $accountNo);
 
-            // Deactivate customer user account
-            DB::table('users')
-                ->where('username', $accountNo)
-                ->update([
-                    'active' => 0,
-                    'updated_at' => now()
-                ]);
-
-            \Log::info('[API SERVICE ORDER PULLOUT DB] Deactivated user account for Account: ' . $accountNo);
-
             // Clear port in job_orders table using account_id (referencing billing_accounts id)
             DB::table('job_orders')
                 ->where('account_id', $billingAccount->id)
@@ -1607,11 +1616,10 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER MIGRATION] Found old username: ' . $oldUsername);
 
-            // SPECIAL CASE: Transfer LCP/NAP/PORT
-            // The user wants to first call disabledUser, and if success, skip username update and call enabledUser
+            // SPECIAL CASE: Transfer LCP/NAP/PORT & Migrate
             $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
-            if ($normalizedCategory === 'transfer lcp/nap/port') {
-                \Log::info('[API SERVICE ORDER] Handling Transfer LCP/NAP/PORT via Disable/Update/Enable sequence');
+            if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate' || $normalizedCategory === 'reactivation') {
+                \Log::info("[API SERVICE ORDER] Handling {$repairCategory} via Disable/Update/Enable sequence");
                 $radiusOps = app(ManualRadiusOperationsService::class);
 
                 // 1. Disable Old User

@@ -64,6 +64,10 @@ interface ServiceOrderDetailsProps {
     image1Url?: string;
     image2Url?: string;
     image3Url?: string;
+    setupImageUrl?: string;
+    routerReadingImageUrl?: string;
+    boxReadingImageUrl?: string;
+    speedtestImageUrl?: string;
     region?: string;
     city?: string;
     barangay?: string;
@@ -133,6 +137,10 @@ const defaultFields = [
   'image1Url',
   'image2Url',
   'image3Url',
+  'setupImageUrl',
+  'routerReadingImageUrl',
+  'boxReadingImageUrl',
+  'speedtestImageUrl',
   'clientSignatureUrl',
   'proofImageUrl',
   'serviceCharge',
@@ -240,6 +248,10 @@ const getFieldLabel = (fieldKey: string): string => {
     image1Url: 'Time In Image',
     image2Url: 'Modem Setup Image',
     image3Url: 'Time Out Image',
+    setupImageUrl: 'Setup Image',
+    routerReadingImageUrl: 'Router Reading Image',
+    boxReadingImageUrl: 'Box Reading Image',
+    speedtestImageUrl: 'Port Label Image',
     clientSignatureUrl: 'Client Signature',
     proofImageUrl: 'Proof Image',
     serviceCharge: 'Service Charge',
@@ -568,7 +580,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     if (val === '-' || val === 'None' || val === 'Not assigned' || val === 'No remarks' || val === 'Not set') return true;
 
     // Special check for images
-    if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'clientSignatureUrl', 'proof_of_billing_url', 'government_valid_id_url', 'second_government_valid_id_url', 'document_attachment_url', 'other_isp_bill_url'].includes(fieldKey)) {
+    if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'setupImageUrl', 'routerReadingImageUrl', 'boxReadingImageUrl', 'speedtestImageUrl', 'clientSignatureUrl', 'proof_of_billing_url', 'government_valid_id_url', 'second_government_valid_id_url', 'document_attachment_url', 'other_isp_bill_url'].includes(fieldKey)) {
       if (fieldKey === 'proof_of_billing_url') return !customerDetail?.proof_of_billing_url;
       if (fieldKey === 'government_valid_id_url') return !customerDetail?.government_valid_id_url;
       if (fieldKey === 'second_government_valid_id_url') return !customerDetail?.second_government_valid_id_url;
@@ -689,6 +701,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     image1Url: () => renderImageLinkContent(serviceOrder.image1Url),
     image2Url: () => renderImageLinkContent(serviceOrder.image2Url),
     image3Url: () => renderImageLinkContent(serviceOrder.image3Url),
+    setupImageUrl: () => renderImageLinkContent(serviceOrder.setupImageUrl),
+    routerReadingImageUrl: () => renderImageLinkContent(serviceOrder.routerReadingImageUrl),
+    boxReadingImageUrl: () => renderImageLinkContent(serviceOrder.boxReadingImageUrl),
+    speedtestImageUrl: () => renderImageLinkContent(serviceOrder.speedtestImageUrl),
     clientSignatureUrl: () => renderImageLinkContent(serviceOrder.clientSignatureUrl),
     proofImageUrl: () => renderImageLinkContent(serviceOrder.proofImageUrl),
     serviceCharge: () => <Text style={valStyle} selectable={true}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,

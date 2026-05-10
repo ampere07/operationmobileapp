@@ -71,6 +71,10 @@ export interface ServiceOrderEditFormData {
   newLcpnap: string;
   fullAddress: string;
   proofImage: string;
+  setupImage: string;
+  routerReadingImage: string;
+  boxReadingImage: string;
+  portLabelImage: string;
 }
 
 export interface ImageFiles {
@@ -79,6 +83,10 @@ export interface ImageFiles {
   timeOutFile: ImagePicker.ImagePickerAsset | null;
   clientSignatureFile: ImagePicker.ImagePickerAsset | null;
   proofImageFile: ImagePicker.ImagePickerAsset | null;
+  setupImageFile: ImagePicker.ImagePickerAsset | null;
+  routerReadingImageFile: ImagePicker.ImagePickerAsset | null;
+  boxReadingImageFile: ImagePicker.ImagePickerAsset | null;
+  portLabelImageFile: ImagePicker.ImagePickerAsset | null;
 }
 
 export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onClose: () => void, onSave: (data: any) => void) => {
@@ -120,7 +128,11 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     modemSetupFile: null,
     timeOutFile: null,
     clientSignatureFile: null,
-    proofImageFile: null
+    proofImageFile: null,
+    setupImageFile: null,
+    routerReadingImageFile: null,
+    boxReadingImageFile: null,
+    portLabelImageFile: null
   });
 
   // Active Picker State
@@ -366,14 +378,36 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
         const d = await AsyncStorage.getItem(`serviceOrderDraft_${serviceOrderId}`);
         const i = await AsyncStorage.getItem(`serviceOrderItemsDraft_${serviceOrderId}`);
         if (!isMountedRef.current || openCycleRef.current !== session) return;
-        if (d) setFormData(prev => ({ ...prev, ...JSON.parse(d) }));
+        if (d) {
+          const draftData = JSON.parse(d);
+          const freshData = mapApiToForm(serviceOrderData);
+          setFormData(prev => ({ 
+            ...prev, 
+            ...draftData,
+            // Restore read-only fields from fresh API data to avoid stale draft values
+            accountNo: freshData.accountNo,
+            connectionType: freshData.connectionType,
+            routerModemSN: freshData.routerModemSN,
+            lcp: freshData.lcp,
+            nap: freshData.nap,
+            port: freshData.port,
+            vlan: freshData.vlan,
+            username: freshData.username,
+            fullName: freshData.fullName,
+            plan: freshData.plan,
+            emailAddress: freshData.emailAddress,
+            contactNumber: freshData.contactNumber,
+            dateInstalled: freshData.dateInstalled,
+            fullAddress: freshData.fullAddress
+          }));
+        }
         if (i) setOrderItems(JSON.parse(i));
       } finally {
         if (isMountedRef.current && openCycleRef.current === session) initialDataLoadedRef.current = true;
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [isOpen, serviceOrderId]);
+  }, [isOpen, serviceOrderId, serviceOrderData]);
 
   // Handlers
   const handleInputChange = useCallback((field: keyof ServiceOrderEditFormData, value: string) => {
@@ -431,30 +465,33 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
 
     if (isValidatingSN) return;
 
+    if (formData.connectionType !== 'Fiber') {
+      Alert.alert('Validation Info', 'SN validation is only available for Fiber connections.');
+      return;
+    }
+
     setIsValidatingSN(true);
     try {
       // 1. SmartOLT Validation
-      if (formData.connectionType === 'Fiber') {
-        const response = await apiClient.get('/smart-olt/validate-sn', {
-          params: { sn: modemSN },
-          timeout: 15000
-        });
-        
-        const result = response?.data;
-        
-        if (!result || !result.success) {
-          const msg = result?.message || 'Serial Number not found in SmartOLT system.';
-          Alert.alert('Validation Error', msg);
-          setErrors(prev => ({ ...prev, newRouterModemSN: msg }));
-          setIsSNValidated(false);
-          return;
-        }
+      const response = await apiClient.get('/smart-olt/validate-sn', {
+        params: { sn: modemSN },
+        timeout: 15000
+      });
+      
+      const result = response?.data;
+      
+      if (!result || !result.success) {
+        const msg = result?.message || 'Serial Number not found in SmartOLT system.';
+        Alert.alert('Validation Error', msg);
+        setErrors(prev => ({ ...prev, newRouterModemSN: msg }));
+        setIsSNValidated(false);
+        return;
+      }
 
-        // Auto-fill router model if available
-        const onuType = result.data?.onu_type_name || result.onus?.[0]?.onu_type_name;
-        if (onuType) {
-          setFormData(prev => ({ ...prev, routerModel: onuType }));
-        }
+      // Auto-fill router model if available
+      const onuType = result.data?.onu_type_name || result.onus?.[0]?.onu_type_name;
+      if (onuType) {
+        setFormData(prev => ({ ...prev, routerModel: onuType }));
       }
 
       // Success
@@ -559,7 +596,17 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
 
       // Upload Images
       const uploaded: any = {};
-      const fileKeyMap = { timeInFile: 'image1_url', modemSetupFile: 'image2_url', timeOutFile: 'image3_url', clientSignatureFile: 'client_signature_url', proofImageFile: 'proof_image_url' };
+      const fileKeyMap = { 
+        timeInFile: 'image1_url', 
+        modemSetupFile: 'image2_url', 
+        timeOutFile: 'image3_url', 
+        clientSignatureFile: 'client_signature_url', 
+        proofImageFile: 'proof_image_url',
+        setupImageFile: 'setup_image_url',
+        routerReadingImageFile: 'router_reading_image_url',
+        boxReadingImageFile: 'box_reading_image_url',
+        portLabelImageFile: 'speedtest_image_url'
+      };
       for (const [fKey, aKey] of Object.entries(fileKeyMap)) {
         const asset = (imageFiles as any)[fKey];
         if (asset) {
@@ -638,7 +685,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     supportStatuses: ['Resolved', 'Failed', 'In Progress', 'For Visit'].filter(s => s.toLowerCase().includes((searchQueries.supportStatus || '').toLowerCase())),
     visitStatuses: ['Done', 'In Progress', 'Failed', 'Reschedule'].filter(s => s.toLowerCase().includes((searchQueries.visitStatus || '').toLowerCase())),
     assignedEmails: technicians.filter(t => t.name.toLowerCase().includes((searchQueries.assignedEmail || '').toLowerCase()) || t.email.toLowerCase().includes((searchQueries.assignedEmail || '').toLowerCase())),
-    repairCategories: ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'].filter(s => s.toLowerCase().includes((searchQueries.repairCategory || '').toLowerCase())),
+    repairCategories: ['Fiber Relaying', 'Migrate', 'Reactivation', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'].filter(s => s.toLowerCase().includes((searchQueries.repairCategory || '').toLowerCase())),
     ports: (() => {
       const ports = Array.from({ length: totalPorts }, (_, i) => `P${(i + 1).toString().padStart(2, '0')}`);
       const available = ports.filter(p => !usedPorts.some(up => up.toUpperCase() === p.toUpperCase()));
@@ -674,14 +721,15 @@ const initialFormState: ServiceOrderEditFormData = {
   repairCategory: '', visitBy: '', visitWith: '', visitWithOther: '', visitRemarks: '', clientSignature: '',
   itemName1: '', timeIn: '', modemSetupImage: '', timeOut: '', assignedEmail: '', concern: '', concernRemarks: '',
   modifiedBy: '', modifiedDate: '', serviceCharge: '0.00', status: 'unused',
-  newRouterModemSN: '', newLcp: '', newNap: '', newPort: '', newVlan: '', routerModel: '', newPlan: '', newLcpnap: '', fullAddress: '', proofImage: ''
+  newRouterModemSN: '', newLcp: '', newNap: '', newPort: '', newVlan: '', routerModel: '', newPlan: '', newLcpnap: '', fullAddress: '', proofImage: '',
+  setupImage: '', routerReadingImage: '', boxReadingImage: '', portLabelImage: ''
 };
 
 const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
   const normPort = (p: any) => { if (!p) return ''; const n = String(p).replace(/[^\d]/g, ''); return n ? `P${n.padStart(2, '0')}` : ''; };
   const formatDate = (s: string) => { if (!s) return ''; try { const d = new Date(s); return d.toISOString().split('T')[0]; } catch(e) { return s.split(' ')[0]; } };
   
-  const repairCatList = ['Fiber Relaying', 'Migrate', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'];
+  const repairCatList = ['Fiber Relaying', 'Migrate', 'Reactivation', 'others', 'Pullout', 'Reboot/Reconfig Router', 'Relocate Router', 'Relocate', 'Replace Patch Cord', 'Replace Router', 'Resplice', 'Transfer LCP/NAP/PORT', 'Update Vlan'];
   const supportStatusList = ['Resolved', 'Failed', 'In Progress', 'For Visit'];
   const visitStatusList = ['Done', 'In Progress', 'Failed', 'Reschedule'];
 
@@ -725,7 +773,9 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
     status: d.status || 'unused', newRouterModemSN: d.newRouterModemSN || d.new_router_modem_sn || '',
     newLcp: d.newLcp || d.new_lcp || '', newNap: d.newNap || d.new_nap || '', newPort: normPort(d.newPort || d.new_port),
     newVlan: d.newVlan || d.new_vlan || '', routerModel: d.routerModel || d.router_model || '',
-    newLcpnap: d.newLcpnap || d.new_lcpnap || '', fullAddress: d.fullAddress || d.full_address || '', proofImage: d.proofImage || d.proof_image_url || d.proof_image || ''
+    newLcpnap: d.newLcpnap || d.new_lcpnap || '', fullAddress: d.fullAddress || d.full_address || '', proofImage: d.proofImage || d.proof_image_url || d.proof_image || '',
+    setupImage: d.setupImage || d.setup_image_url || '', routerReadingImage: d.routerReadingImage || d.router_reading_image_url || '',
+    boxReadingImage: d.boxReadingImage || d.box_reading_image_url || '', portLabelImage: d.portLabelImage || d.speedtest_image_url || ''
   };
 };
 
@@ -778,7 +828,11 @@ const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, o
         new_port: f.newPort,
         new_vlan: f.newVlan,
         router_model: f.routerModel,
-        end_time: currentDateTime
+        end_time: currentDateTime,
+        setup_image_url: uploads.setup_image_url || f.setupImage || '',
+        router_reading_image_url: uploads.router_reading_image_url || f.routerReadingImage || '',
+        box_reading_image_url: uploads.box_reading_image_url || f.boxReadingImage || '',
+        speedtest_image_url: uploads.speedtest_image_url || f.portLabelImage || ''
       };
     } else if (f.visitStatus === 'Reschedule' || f.visitStatus === 'Failed') {
       payload = {
@@ -812,9 +866,9 @@ const validateForm = (f: ServiceOrderEditFormData, items: OrderItem[], images: I
     if (f.visitStatus === 'Done') {
       if (!items.some(i => i.itemId && i.quantity && i.itemId !== 'None') && !items.some(i => i.itemId === 'None')) e.items = 'Required item or "None"';
       if (!f.visitBy) e.visitBy = 'Required';
-      const reloc = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT'];
+      const reloc = ['Migrate', 'Relocate', 'Transfer LCP/NAP/PORT', 'Reactivation'];
       if (reloc.includes(f.repairCategory)) {
-        if (f.repairCategory === 'Migrate' && !f.newRouterModemSN) e.newRouterModemSN = 'Required';
+        if ((f.repairCategory === 'Migrate' || f.repairCategory === 'Reactivation') && !f.newRouterModemSN) e.newRouterModemSN = 'Required';
         if (!f.newLcpnap) e.newLcpnap = 'Required';
         if (!f.newPort) e.newPort = 'Required';
         else if (usedPorts.some(p => p.toUpperCase() === f.newPort.toUpperCase())) e.newPort = 'Port taken';
@@ -822,8 +876,16 @@ const validateForm = (f: ServiceOrderEditFormData, items: OrderItem[], images: I
       }
       if (f.repairCategory === 'Replace Router' && !f.newRouterModemSN) e.newRouterModemSN = 'Required';
       if (!f.timeIn && !images.timeInFile) e.timeInFile = 'Required';
-      if (!f.modemSetupImage && !images.modemSetupFile) e.modemSetupFile = 'Required';
+      if (f.repairCategory !== 'Reactivation' && !f.modemSetupImage && !images.modemSetupFile) e.modemSetupFile = 'Required';
       if (!f.clientSignature && !images.clientSignatureFile) e.clientSignatureFile = 'Required';
+      if (!f.timeOut && !images.timeOutFile) e.timeOutFile = 'Required';
+      
+      if (f.repairCategory === 'Reactivation') {
+        if (!f.setupImage && !images.setupImageFile) e.setupImageFile = 'Required';
+        if (!f.routerReadingImage && !images.routerReadingImageFile) e.routerReadingImageFile = 'Required';
+        if (!f.boxReadingImage && !images.boxReadingImageFile) e.boxReadingImageFile = 'Required';
+        if (!f.portLabelImage && !images.portLabelImageFile) e.portLabelImageFile = 'Required';
+      }
     } else if (['Reschedule', 'Failed'].includes(f.visitStatus)) {
       if (!f.visitBy) e.visitBy = 'Required';
       if (!f.visitWith) e.visitWith = 'Required';

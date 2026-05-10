@@ -115,8 +115,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     'visitWith',
     'visitWithOther',
     'onsiteStatus',
-    'modifiedBy',
+    'createdBy',
+    'created_at',
     'modifiedDate',
+    'updated_by_user_email',
+    'updated_at',
     'assignedEmail',
     ...(!isAgent ? [
       'setupImage',
@@ -719,8 +722,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       visitWith: 'Visit With',
       visitWithOther: 'Visit With Other',
       onsiteStatus: 'Onsite Status',
-      modifiedBy: 'Modified By',
+      createdBy: 'Created By',
+      created_at: 'Created At',
       modifiedDate: 'Modified Date',
+      updated_by_user_email: 'Updated By',
+      updated_at: 'Updated At',
       assignedEmail: 'Assigned Email',
       setupImage: 'Setup Image',
       speedtestImage: 'Speedtest Image',
@@ -829,8 +835,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
       </Text>
     ),
-    modifiedBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Modified_By || 'System'}</Text>,
+    createdBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Created_By || jobOrder.Modified_By || jobOrder.created_by_user_email || 'System'}</Text>,
+    created_at: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Created_At || jobOrder.created_at)}</Text>,
     modifiedDate: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,
+    updated_by_user_email: () => <Text style={valStyle} selectable={true}>{jobOrder.Updated_By || jobOrder.updated_by_user_email || 'System'}</Text>,
+    updated_at: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Updated_At || jobOrder.updated_at)}</Text>,
     assignedEmail: () => <Text style={valStyle} selectable={true}>{jobOrder.Assigned_Email || 'Not assigned'}</Text>,
     setupImage: () => renderImageLink(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url),
     speedtestImage: () => renderImageLink(jobOrder.speedtest_image_url || jobOrder.Setup_Image_URL || jobOrder.setup_image_url || jobOrder.Setup_Image_Url),
@@ -882,8 +891,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       case 'visitWith': return !(jobOrder.Visit_With || jobOrder.visit_with);
       case 'visitWithOther': return !(jobOrder.Visit_With_Other || jobOrder.visit_with_other);
       case 'onsiteStatus': return !jobOrder.Onsite_Status;
-      case 'modifiedBy': return !jobOrder.Modified_By;
+      case 'createdBy': return !jobOrder.Modified_By && !jobOrder.created_by_user_email;
+      case 'created_at': return !jobOrder.created_at;
       case 'modifiedDate': return !jobOrder.Modified_Date;
+      case 'updated_by_user_email': return !jobOrder.updated_by_user_email;
+      case 'updated_at': return !jobOrder.updated_at;
       case 'assignedEmail': return !jobOrder.Assigned_Email;
       case 'setupImage': return !(jobOrder.setup_image_url || jobOrder.Setup_Image_URL || jobOrder.Setup_Image_Url);
       case 'speedtestImage': return !(jobOrder.speedtest_image_url || jobOrder.Setup_Image_URL || jobOrder.setup_image_url || jobOrder.Setup_Image_Url);
