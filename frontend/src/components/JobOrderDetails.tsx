@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin, Paperclip } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { formatToGMT8MySQL } from '../utils/dateUtils';
 import { updateJobOrder, approveJobOrder } from '../services/jobOrderService';
 import { getBillingStatuses, BillingStatus } from '../services/lookupService';
 import { JobOrderDetailsProps } from '../types/jobOrder';
@@ -594,15 +595,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     }
   };
 
-  const formatMySQLDate = () => {
-    const now = new Date();
-    return now.getFullYear() + '-' + 
-      String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(now.getDate()).padStart(2, '0') + ' ' + 
-      String(now.getHours()).padStart(2, '0') + ':' + 
-      String(now.getMinutes()).padStart(2, '0') + ':' + 
-      String(now.getSeconds()).padStart(2, '0');
-  };
+  // formatMySQLDate removed in favor of utility
 
   const handleStartTimer = async () => {
     try {
@@ -652,7 +645,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       setLoading(true);
       if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
 
-      const currentTime = formatMySQLDate();
+      const currentTime = formatToGMT8MySQL();
       await updateJobOrder(jobOrder.id, {
         start_time: currentTime,
         technicians: selectedTechnicians,

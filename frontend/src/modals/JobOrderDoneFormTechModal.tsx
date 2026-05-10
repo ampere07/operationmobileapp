@@ -48,6 +48,7 @@ import { getAllUsageTypes, UsageType } from '../services/usageTypeService';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
 import { createJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { updateApplication } from '../services/applicationService';
+import { formatToGMT8MySQL, formatToGMT8Display, getGMT8DateOnly } from '../utils/dateUtils';
 import apiClient from '../config/api';
 import { getActiveImageSize } from '../services/imageSettingsService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -142,13 +143,7 @@ const MiniModalItem = React.memo<MiniModalItemProps>(
   )
 );
 
-const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+// Local helpers removed in favor of utility
 
 const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   isOpen,
@@ -206,7 +201,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const currentUserEmail = currentUser?.email || 'unknown@unknown.com';
 
   const [formData, setFormData] = useState<JobOrderDoneFormData>({
-    dateInstalled: getTodayDate(),
+    dateInstalled: getGMT8DateOnly(),
     usageType: '',
     choosePlan: '',
     connectionType: 'Fiber',
@@ -229,15 +224,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     clientSignatureImage: null,
     clientTaggingImage: null,
     modifiedBy: currentUserEmail,
-    modifiedDate: new Date().toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    }),
+    modifiedDate: formatToGMT8Display(),
     itemName1: '',
     visit_by: '',
     visit_with: '',
@@ -412,7 +399,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       // Full cleanup when modal closes
       setFormData(prev => ({
         ...prev,
-        dateInstalled: getTodayDate(),
+        dateInstalled: getGMT8DateOnly(),
         usageType: '',
         choosePlan: '',
         connectionType: 'Fiber',
@@ -686,7 +673,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     const getValue = (value: any): string => isEmptyValue(value) ? '' : value;
 
     const formatDateForInput = (dateValue: any): string => {
-      const today = getTodayDate();
+      const today = getGMT8DateOnly();
       const isEmpty = (val: any) => {
         if (!val) return true;
         if (typeof val === 'string') {
@@ -1060,15 +1047,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
-      modifiedDate: new Date().toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      })
+      modifiedDate: formatToGMT8Display()
     };
 
     setFormData(updatedFormData);
@@ -1116,12 +1095,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       const now = new Date();
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
       const gmt8 = new Date(utc + (3600000 * 8));
-      const currentDateTime = gmt8.getFullYear() + '-' +
-        String(gmt8.getMonth() + 1).padStart(2, '0') + '-' +
-        String(gmt8.getDate()).padStart(2, '0') + ' ' +
-        String(gmt8.getHours()).padStart(2, '0') + ':' +
-        String(gmt8.getMinutes()).padStart(2, '0') + ':' +
-        String(gmt8.getSeconds()).padStart(2, '0');
+      const currentDateTime = formatToGMT8MySQL();
 
       let jobOrderUpdateData: any = {
         updated_by_user_email: updatedFormData.modifiedBy,

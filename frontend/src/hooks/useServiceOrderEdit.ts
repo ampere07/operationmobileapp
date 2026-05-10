@@ -7,6 +7,7 @@ import * as ExpoFileSystem from 'expo-file-system/legacy';
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
 import { createServiceOrderItems, ServiceOrderItem } from '../services/serviceOrderItemService';
+import { formatToGMT8MySQL } from '../utils/dateUtils';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { concernService, Concern } from '../services/concernService';
 import { getAllLCPNAPs, LCPNAP } from '../services/lcpnapService';
@@ -533,7 +534,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
   const handleSaveInternal = async () => {
     if (isDrawingSignature) { Alert.alert('Wait', 'Save signature pad first.'); return; }
     
-    const finalData = { ...formData, modifiedBy: currentUserEmail, modifiedDate: new Date().toLocaleString() };
+    const finalData = { ...formData, modifiedBy: currentUserEmail, modifiedDate: formatToGMT8MySQL() };
     setFormData(finalData);
 
     if (!validateForm(finalData, orderItems, imageFiles, usedPorts, setErrors)) {
@@ -782,10 +783,7 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
 const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, original: any) => {
   const isReschedule = f.visitStatus === 'Reschedule';
 
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const gmt8 = new Date(utc + (3600000 * 8));
-  const currentDateTime = gmt8.toISOString().slice(0, 19).replace('T', ' ');
+  const currentDateTime = formatToGMT8MySQL();
 
   let payload: any = {
     account_no: f.accountNo,

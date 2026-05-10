@@ -8,6 +8,7 @@ import StartTimerModal from '../modals/StartTimerModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { formatToGMT8MySQL } from '../utils/dateUtils';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { techInOutService } from '../services/techInOutService';
@@ -448,17 +449,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     setFieldVisibility(prev => ({ ...prev, [field]: !prev[field] }));
   }, []);
 
-  const formatMySQLDate = () => {
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const gmt8 = new Date(utc + (3600000 * 8));
-    return gmt8.getFullYear() + '-' + 
-      String(gmt8.getMonth() + 1).padStart(2, '0') + '-' + 
-      String(gmt8.getDate()).padStart(2, '0') + ' ' + 
-      String(gmt8.getHours()).padStart(2, '0') + ':' + 
-      String(gmt8.getMinutes()).padStart(2, '0') + ':' + 
-      String(gmt8.getSeconds()).padStart(2, '0');
-  };
+  // formatMySQLDate removed in favor of utility
 
   const handleStartTimer = async () => {
     try {
@@ -508,7 +499,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = formatMySQLDate();
+      const currentTime = formatToGMT8MySQL();
       await updateServiceOrder(serviceOrder.id, {
         start_time: currentTime,
         technicians: selectedTechnicians,
@@ -534,7 +525,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = formatMySQLDate();
+      const currentTime = formatToGMT8MySQL();
       await updateServiceOrder(serviceOrder.id, {
         end_time: currentTime,
       } as any);
