@@ -28,6 +28,17 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.28',
+            date: 'May 10, 2026',
+            title: 'Timer Reliability & UI Workflow Updates',
+            updates: [
+                { text: 'Optimized Timer Logic: Refined the "Job in progress" detection to prevent technicians from being blocked by inactive or completed historical records.', visibility: 'technician' },
+                { text: 'Smart Button Visibility: The "Start Time" and "Edit" buttons are now context-aware, appearing only when a job is in an "In Progress" or "Reschedule" state to reduce UI clutter.', visibility: 'technician' },
+                { text: 'Contextual Attachment Access: The Speedtest attachment button now automatically hides for "Failed" or "Reschedule" outcomes, ensuring images are only uploaded when relevant.', visibility: 'technician' },
+                { text: 'User-Specific Timer Binding: Active job checks are now strictly bound to individual technicians, ensuring one user\'s active session never interferes with another technician\'s workflow.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.27',
             date: 'May 9, 2026',
             title: 'Account Management & Speedtest Integration',

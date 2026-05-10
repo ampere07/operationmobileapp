@@ -53,8 +53,14 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [jobOrderItems, setJobOrderItems] = useState<JobOrderItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
-  const [isStarted, setIsStarted] = useState(!!(jobOrder as any).start_time);
-  const [isEnded, setIsEnded] = useState(!!(jobOrder as any).end_time);
+  const checkIsStarted = (time?: string | null) => {
+    if (!time) return false;
+    const lowerTime = String(time).toLowerCase().trim();
+    return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+  };
+
+  const [isStarted, setIsStarted] = useState(checkIsStarted((jobOrder as any).start_time));
+  const [isEnded, setIsEnded] = useState(checkIsStarted((jobOrder as any).end_time));
   const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
   const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
@@ -604,15 +610,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
           return;
         }
 
+        const isJobInProgress = (item: any) => {
+          const hasStarted = checkIsStarted(item.start_time);
+          const hasEnded = checkIsStarted(item.end_time);
+          const status = (item.Onsite_Status || item.onsite_status || '').toLowerCase().trim();
+          return hasStarted && !hasEnded && (status === 'in progress' || status === 'reschedule');
+        };
+
         // Check for other active job orders
         const activeJobOrder = jobOrders.find(jo => 
           (jo.id || (jo as any).JobOrder_ID) !== (jobOrder.id || (jobOrder as any).JobOrder_ID) && 
-          (jo as any).start_time && !(jo as any).end_time
+          isJobInProgress(jo)
         );
 
         // Check for active service orders
         const activeServiceOrder = serviceOrders.find(so => 
-          (so as any).start_time && !(so as any).end_time
+          isJobInProgress(so)
         );
 
         if (activeJobOrder || activeServiceOrder) {
@@ -923,20 +936,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
-          <Pressable
-            style={[st.iconBtn, { backgroundColor: '#f3f4f6' }]}
-            onPress={() => {
-              const isDone = jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' || jobOrder.onsite_status?.toLowerCase().trim() === 'done';
-              if (isDone) {
-                setIsAttachmentModalOpen(true);
-              } else {
-                Alert.alert('Notice', 'You need to done first the visit status');
-              }
-            }}
-          >
-            <Paperclip width={20} height={20} color={colorPalette?.primary || '#7c3aed'} />
-          </Pressable>
-          {!isEnded && !['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {!['failed', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
+            <Pressable
+              style={[st.iconBtn, { backgroundColor: '#f3f4f6' }]}
+              onPress={() => {
+                const isDone = jobOrder.Onsite_Status?.toLowerCase().trim() === 'done' || jobOrder.onsite_status?.toLowerCase().trim() === 'done';
+                if (isDone) {
+                  setIsAttachmentModalOpen(true);
+                } else {
+                  Alert.alert('Notice', 'You need to done first the visit status');
+                }
+              }}
+            >
+              <Paperclip width={20} height={20} color={colorPalette?.primary || '#7c3aed'} />
+            </Pressable>
+          )}
+          {!isEnded && ['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <>
               {!isStarted && (
                 <Pressable
@@ -956,10 +971,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
             </Pressable>
           )}
 
-          {!(
-            ['done', 'completed'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') &&
-            (userRoleId === 2 || userRole === 'technician')
-          ) && userRole !== 'agent' && userRoleId !== 4 && (
+          {['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && userRole !== 'agent' && userRoleId !== 4 && (
               <Pressable
                 style={[st.actionBtn, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}
                 onPress={handleDoneClick}

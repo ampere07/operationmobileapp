@@ -457,15 +457,22 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
           return;
         }
 
+        const isJobInProgress = (item: any) => {
+          const hasStarted = checkIsStarted(item.start_time);
+          const hasEnded = checkIsStarted(item.end_time);
+          const status = (item.visit_status || item.visitStatus || item.onsite_status || item.Onsite_Status || '').toLowerCase().trim();
+          return hasStarted && !hasEnded && (status === 'in progress' || status === 'reschedule');
+        };
+
         // Check for other active service orders
         const activeServiceOrder = serviceOrders.find(so => 
           so.id !== serviceOrder.id && 
-          so.start_time && !so.end_time
+          isJobInProgress(so)
         );
 
         // Check for active job orders
         const activeJobOrder = jobOrders.find(jo => 
-          (jo as any).start_time && !(jo as any).end_time
+          isJobInProgress(jo)
         );
 
         if (activeServiceOrder || activeJobOrder) {
@@ -744,7 +751,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          {!isStarted && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {!isStarted && ['in progress', 'reschedule'].includes(serviceOrder.visitStatus?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
               onPress={handleStartTimer}
@@ -754,15 +761,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
             </Pressable>
           )}
 
-          {userRole !== 'agent' && userRoleId !== 4 && (
-            <>
-              {!(serviceOrder.visitStatus?.toLowerCase().trim() === 'done' && (userRoleId === 2 || userRole === 'technician')) && (
-                <Pressable style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]} onPress={handleEditClick}>
-                  <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />
-                  <Text style={styles.headerButtonText}>Edit</Text>
-                </Pressable>
-              )}
-            </>
+          {userRole !== 'agent' && userRoleId !== 4 && ['in progress', 'reschedule'].includes(serviceOrder.visitStatus?.toLowerCase().trim() || '') && (
+            <Pressable style={[styles.headerButton, { backgroundColor: colorPalette?.primary || '#7c3aed' }]} onPress={handleEditClick}>
+              <Edit width={16} height={16} color="#ffffff" style={styles.headerButtonIcon} />
+              <Text style={styles.headerButtonText}>Edit</Text>
+            </Pressable>
           )}
           {/* Symmetric placeholder if no actions are visible */}
           {(!userRole || userRole === 'agent' || userRoleId === 4) && (
