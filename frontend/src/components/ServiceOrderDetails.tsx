@@ -12,6 +12,12 @@ import { formatToGMT8MySQL } from '../utils/dateUtils';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { techInOutService } from '../services/techInOutService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import { getServiceOrderItems, ServiceOrderItem } from '../services/serviceOrderItemService';
 
 interface ServiceOrderDetailsProps {
@@ -79,6 +85,8 @@ interface ServiceOrderDetailsProps {
     second_government_valid_id_url?: string;
     document_attachment_url?: string;
     other_isp_bill_url?: string;
+    visit_status?: string;
+    referredBy?: string;
   };
   onClose: () => void;
   isMobile?: boolean;
@@ -162,11 +170,9 @@ const initialVisibility = defaultFields.reduce((acc: Record<string, boolean>, fi
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
   try {
-    const d = new Date(dateStr.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return dateStr;
-    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
-    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    return `${datePart} ${timePart}`;
+    const d = dayjs.tz(dateStr, 'Asia/Manila');
+    if (!d.isValid()) return dateStr;
+    return d.format('MM/DD/YYYY hh:mm A');
   } catch (e) {
     return dateStr || 'Not set';
   }
@@ -175,9 +181,9 @@ const formatDate = (dateStr?: string | null): string => {
 const formatDateOnly = (dateStr?: string | null): string => {
   if (!dateStr) return '-';
   try {
-    const d = new Date(dateStr.replace(' ', 'T'));
-    if (isNaN(d.getTime())) return dateStr;
-    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const d = dayjs.tz(dateStr, 'Asia/Manila');
+    if (!d.isValid()) return dateStr;
+    return d.format('MM/DD/YYYY');
   } catch (e) {
     return dateStr;
   }
@@ -313,7 +319,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
   const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
   const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
@@ -321,10 +327,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     let interval: NodeJS.Timeout;
     if (isStarted && !isEnded) {
       interval = setInterval(() => {
-        setNow(new Date());
+        setNow(dayjs().tz('Asia/Manila'));
       }, 1000);
     } else {
-      setNow(new Date());
+      setNow(dayjs().tz('Asia/Manila'));
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -499,7 +505,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = formatToGMT8MySQL();
+      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
       await updateServiceOrder(serviceOrder.id, {
         start_time: currentTime,
         end_time: null,
@@ -528,7 +534,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = formatToGMT8MySQL();
+      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
       await updateServiceOrder(serviceOrder.id, {
         end_time: currentTime,
       } as any);
@@ -595,8 +601,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const getDurationString = (start?: string | null, end?: string | null): string => {
     if (!start) return 'N/A';
     try {
-      const startTime = new Date(start.replace(' ', 'T')).getTime();
-      const endTime = end ? new Date(end.replace(' ', 'T')).getTime() : now.getTime();
+      const startTime = dayjs.tz(start, 'Asia/Manila').valueOf();
+      const endTime = end ? dayjs.tz(end, 'Asia/Manila').valueOf() : now.valueOf();
       
       if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
       
@@ -704,7 +710,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     serviceCharge: () => <Text style={valStyle} selectable={true}>₱{parseFloat(serviceOrder.serviceCharge || '0').toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>,
     priorityLevel: () => <Text style={valStyle} selectable={true}>{serviceOrder.priorityLevel || 'Normal'}</Text>,
     affiliate: () => <Text style={valStyle} selectable={true}>{serviceOrder.affiliate || 'None'}</Text>,
-    referredBy: () => <Text style={valStyle} selectable={true}>{serviceOrder.referredBy || 'None'}</Text>,
+    referredBy: () => <Text style={valStyle} selectable={true}>{(serviceOrder as any).referredBy || 'None'}</Text>,
     region: () => <Text style={valStyle} selectable={true}>{serviceOrder.region || 'None'}</Text>,
     city: () => <Text style={valStyle} selectable={true}>{serviceOrder.city || 'None'}</Text>,
     barangay: () => <Text style={valStyle} selectable={true}>{serviceOrder.barangay || 'None'}</Text>,
@@ -761,7 +767,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          {(!isStarted || serviceOrder.visitStatus?.toLowerCase().trim() === 'reschedule') && ['in progress', 'reschedule'].includes(serviceOrder.visitStatus?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {/* Start Timer Button */}
+          {((!isStarted || (['reschedule'].includes(((serviceOrder as any).visitStatus || '').toLowerCase().trim() || ((serviceOrder as any).visit_status || '').toLowerCase().trim() || '') && isStarted && isEnded))) && 
+           ['in progress', 'inprogress', 'reschedule'].includes(((serviceOrder as any).visitStatus || '').toLowerCase().trim() || ((serviceOrder as any).visit_status || '').toLowerCase().trim() || '') && 
+           (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
               onPress={handleStartTimer}

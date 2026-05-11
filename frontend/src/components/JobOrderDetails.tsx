@@ -20,6 +20,12 @@ import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService'
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { techInOutService } from '../services/techInOutService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface JobOrderDetailsPropsExtended extends JobOrderDetailsProps {
   userRoleProp?: string;
@@ -62,6 +68,21 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
   const [isStarted, setIsStarted] = useState(checkIsStarted((jobOrder as any).start_time));
   const [isEnded, setIsEnded] = useState(checkIsStarted((jobOrder as any).end_time));
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isStarted && !isEnded) {
+      interval = setInterval(() => {
+        setNow(dayjs().tz('Asia/Manila'));
+      }, 1000);
+    } else {
+      setNow(dayjs().tz('Asia/Manila'));
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isStarted, isEnded]);
   const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
   const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
@@ -282,24 +303,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const formatDate = (dateStr?: string | null): string => {
     if (!dateStr) return 'Not scheduled';
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
-      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      return `${datePart} ${timePart}`;
+      const d = dayjs.tz(dateStr, 'Asia/Manila');
+      if (!d.isValid()) return dateStr;
+      return d.format('MM/DD/YYYY hh:mm A');
     } catch (e) {
-      return dateStr;
+      return dateStr || 'Not scheduled';
     }
   };
 
   const formatDateOnly = (dateStr?: string | null): string => {
     if (!dateStr) return 'Not scheduled';
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+      const d = dayjs.tz(dateStr, 'Asia/Manila');
+      if (!d.isValid()) return dateStr;
+      return d.format('MM/DD/YYYY');
     } catch (e) {
-      return dateStr;
+      return dateStr || 'Not scheduled';
     }
   };
 
@@ -645,7 +664,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       setLoading(true);
       if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
 
-      const currentTime = formatToGMT8MySQL();
+      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
       await updateJobOrder(jobOrder.id, {
         start_time: currentTime,
         end_time: null,
@@ -669,17 +688,22 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   };
 
   const getDurationString = (start?: string | null, end?: string | null): string => {
-    if (!start || !end) return 'N/A';
-    const startTime = new Date(start.replace(' ', 'T')).getTime();
-    const endTime = new Date(end.replace(' ', 'T')).getTime();
-    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
-    
-    const diff = Math.max(0, endTime - startTime);
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
-    return `${hours}h ${minutes}m ${seconds}s`;
+    if (!start) return 'N/A';
+    try {
+      const startTime = dayjs.tz(start, 'Asia/Manila').valueOf();
+      const endTime = end ? dayjs.tz(end, 'Asia/Manila').valueOf() : now.valueOf();
+      
+      if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+      
+      const diff = Math.max(0, endTime - startTime);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      return `${hours}h ${minutes}m ${seconds}s`;
+    } catch (e) {
+      return 'N/A';
+    }
   };
 
   const getFieldLabel = (fieldKey: string): string => {
@@ -959,9 +983,11 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
               <Paperclip width={20} height={20} color={colorPalette?.primary || '#7c3aed'} />
             </Pressable>
           )}
-          {(!isEnded || jobOrder.Onsite_Status?.toLowerCase().trim() === 'reschedule') && ['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {/* Start Timer Button Container */}
+          {['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || jobOrder.onsite_status?.toLowerCase().trim() || '') && 
+           (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <>
-              {(!isStarted || jobOrder.Onsite_Status?.toLowerCase().trim() === 'reschedule') && (
+              {(!isStarted || (['reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || jobOrder.onsite_status?.toLowerCase().trim() || '') && isStarted && isEnded)) && (
                 <Pressable
                   style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
                   onPress={handleStartTimer}

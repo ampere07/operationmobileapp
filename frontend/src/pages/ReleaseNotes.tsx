@@ -28,6 +28,17 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.31',
+            date: 'May 11, 2026',
+            title: 'Technical Infrastructure & Inventory Refinement',
+            updates: [
+                { text: 'Global Timezone Standardization: Enforced Asia/Manila (GMT+8) precision across all system timers, audit logs, and inventory records, eliminating calculation drift during technician shifts.', visibility: 'technician' },
+                { text: 'Dynamic User Identification: The "Modified By" and "User Email" fields in inventory forms now automatically populate with the logged-in technician\'s email, ensuring accurate accountability for stock movements.', visibility: 'technician' },
+                { text: 'Service & Work Order Detail Fixes: Resolved critical TypeScript errors and variable hoisting issues in detail screens, improving application stability and UI performance.', visibility: 'technician' },
+                { text: 'Refined Timer Visibility: Standardized the visibility of the "Start Timer" button for "Reschedule" status orders across Service, Job, and Work Orders to prevent overlapping sessions.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.30',
             date: 'May 11, 2026',
             title: 'Timer Precision & Workflow Updates',

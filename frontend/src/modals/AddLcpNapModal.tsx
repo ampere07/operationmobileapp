@@ -3,6 +3,12 @@ import { X, Camera, MapPin } from 'lucide-react';
 import { API_BASE_URL } from '../config/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface AddLcpNapModalProps {
   isOpen: boolean;
@@ -52,7 +58,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
     coordinates: '',
     related_billing_details: '',
     modified_by: '',
-    modified_date: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' pm'
+    modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -135,7 +141,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
           coordinates: '',
           related_billing_details: editingItem.related_billing_details || '',
           modified_by: userEmail,
-          modified_date: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' pm'
+          modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
         });
       } else {
         resetForm();
@@ -383,7 +389,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
       coordinates: '',
       related_billing_details: '',
       modified_by: userEmail,
-      modified_date: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' pm'
+      modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
     });
     
     setCities([]);

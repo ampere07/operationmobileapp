@@ -3,6 +3,12 @@ import { Alert, Keyboard, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 import apiClient from '../config/api';
 import { getAllInventoryItems, InventoryItem } from '../services/inventoryItemService';
@@ -783,7 +789,8 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
 const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, original: any) => {
   const isReschedule = f.visitStatus === 'Reschedule';
 
-  const currentDateTime = formatToGMT8MySQL();
+  const manilaNow = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+  const existingEndTime = original?.end_time || original?.End_Time;
 
   let payload: any = {
     account_no: f.accountNo,
@@ -826,12 +833,15 @@ const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, o
         new_port: f.newPort,
         new_vlan: f.newVlan,
         router_model: f.routerModel,
-        end_time: currentDateTime,
         setup_image_url: uploads.setup_image_url || f.setupImage || '',
         router_reading_image_url: uploads.router_reading_image_url || f.routerReadingImage || '',
         box_reading_image_url: uploads.box_reading_image_url || f.boxReadingImage || '',
         speedtest_image_url: uploads.speedtest_image_url || f.portLabelImage || ''
       };
+
+      if (!existingEndTime) {
+        payload.end_time = manilaNow;
+      }
     } else if (f.visitStatus === 'Reschedule' || f.visitStatus === 'Failed') {
       payload = {
         ...payload,
@@ -840,14 +850,21 @@ const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, o
         visit_with_other: f.visitWithOther,
         visit_remarks: f.visitRemarks,
         proof_image_url: uploads.proof_image_url || f.proofImage || '',
-        end_time: currentDateTime
       };
+
+      if (!existingEndTime) {
+        payload.end_time = manilaNow;
+      }
     }
   } else if (f.supportStatus === 'Failed') {
     payload.proof_image_url = uploads.proof_image_url || f.proofImage || '';
-    payload.end_time = currentDateTime;
+    if (!existingEndTime) {
+      payload.end_time = manilaNow;
+    }
   } else if (f.supportStatus === 'Resolved') {
-    payload.end_time = currentDateTime;
+    if (!existingEndTime) {
+      payload.end_time = manilaNow;
+    }
   }
 
   return payload;

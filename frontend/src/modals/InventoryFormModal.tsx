@@ -16,6 +16,12 @@ import { Minus, Plus, Camera, Calendar } from 'lucide-react-native';
 import { API_BASE_URL } from '../config/api';
 import { getActiveImageSize, resizeImage, ImageSizeSetting } from '../services/imageSettingsService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface InventoryFormModalProps {
   isOpen: boolean;
@@ -53,9 +59,9 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
     supplier: '',
     quantityAlert: 0,
     image: null,
-    modifiedBy: 'ravenampere0123@gmail.com',
-    modifiedDate: new Date().toISOString().slice(0, 16),
-    userEmail: 'ravenampere0123@gmail.com',
+    modifiedBy: '',
+    modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+    userEmail: '',
     category: '',
     totalStockAvailable: 0,
     totalStockIn: 0,
@@ -116,38 +122,51 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (editData) {
-      setFormData({
-        itemName: editData.itemName || '',
-        itemDescription: editData.itemDescription || '',
-        supplier: editData.supplier || '',
-        quantityAlert: editData.quantityAlert || 0,
-        image: editData.image || null,
-        modifiedBy: editData.modifiedBy || 'ravenampere0123@gmail.com',
-        modifiedDate: editData.modifiedDate || new Date().toISOString().slice(0, 16),
-        userEmail: editData.userEmail || 'ravenampere0123@gmail.com',
-        category: editData.category || '',
-        totalStockAvailable: editData.totalStockAvailable || 0,
-        totalStockIn: editData.totalStockIn || 0,
-      });
-    } else {
-      setFormData({
-        itemName: '',
-        itemDescription: '',
-        supplier: '',
-        quantityAlert: 0,
-        image: null,
-        modifiedBy: 'ravenampere0123@gmail.com',
-        modifiedDate: new Date().toISOString().slice(0, 16),
-        userEmail: 'ravenampere0123@gmail.com',
-        category: initialCategory,
-        totalStockAvailable: 0,
-        totalStockIn: 0,
-      });
+    const initForm = async () => {
+      const authData = await AsyncStorage.getItem('authData');
+      let currentEmail = '';
+      if (authData) {
+        const userData = JSON.parse(authData);
+        currentEmail = userData.email || userData.email_address || '';
+      }
+
+      if (editData) {
+        setFormData({
+          itemName: editData.itemName || '',
+          itemDescription: editData.itemDescription || '',
+          supplier: editData.supplier || '',
+          quantityAlert: editData.quantityAlert || 0,
+          image: editData.image || null,
+          modifiedBy: editData.modifiedBy || currentEmail,
+          modifiedDate: editData.modifiedDate || dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+          userEmail: editData.userEmail || currentEmail,
+          category: editData.category || '',
+          totalStockAvailable: editData.totalStockAvailable || 0,
+          totalStockIn: editData.totalStockIn || 0,
+        });
+      } else {
+        setFormData({
+          itemName: '',
+          itemDescription: '',
+          supplier: '',
+          quantityAlert: 0,
+          image: null,
+          modifiedBy: currentEmail,
+          modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+          userEmail: currentEmail,
+          category: initialCategory,
+          totalStockAvailable: 0,
+          totalStockIn: 0,
+        });
+      }
+      setErrors({});
+      setSelectedImageName(null);
+    };
+
+    if (isOpen) {
+      initForm();
     }
-    setErrors({});
-    setSelectedImageName(null);
-  }, [editData, initialCategory]);
+  }, [isOpen, editData, initialCategory]);
 
   const handleInputChange = (
     field: keyof InventoryFormData,

@@ -26,6 +26,12 @@ import { userService } from '../services/userService';
 import apiClient, { API_BASE_URL } from '../config/api';
 import ImagePreview from '../components/ImagePreview';
 import { formatToGMT8MySQL } from '../utils/dateUtils';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // Removed global Dimensions usage
 
@@ -308,11 +314,13 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
       formDataToSend.work_status = finalStatus;
 
-      const currentDateTime = formatToGMT8MySQL();
+      const manilaNow = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
       if (finalStatus === 'In Progress' && !workOrder?.start_time) {
-        formDataToSend.start_time = currentDateTime;
+        formDataToSend.start_time = manilaNow;
       } else if (['Completed', 'Cancelled', 'Failed'].includes(finalStatus)) {
-        formDataToSend.end_time = currentDateTime;
+        if (!workOrder?.end_time) {
+          formDataToSend.end_time = manilaNow;
+        }
       }
 
       if (isEditMode && workOrder?.id) {

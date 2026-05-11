@@ -7,25 +7,51 @@ import {
   Linking,
   useWindowDimensions,
   StyleSheet,
-  DeviceEventEmitter
+  DeviceEventEmitter,
+  Alert
 } from 'react-native';
-import { X, ExternalLink, Play, Square } from 'lucide-react-native';
+import { X, ExternalLink, Play, Square, Paperclip } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 import { WorkOrderDetailsProps } from '../types/workOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { updateWorkOrder } from '../services/workOrderService';
 import ConfirmationModal from '../modals/MoveToJoModal';
+import StartTimerModal from '../modals/StartTimerModal';
 
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
-    const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    return `${datePart} ${timePart}`;
+    const d = dayjs.tz(dateStr, 'Asia/Manila');
+    if (!d.isValid()) return dateStr;
+    return d.format('MM/DD/YYYY hh:mm A');
   } catch (e) {
-    return dateStr || 'Not set';
+    return 'Not set';
+  }
+};
+
+const getDurationString = (start?: string | null, end?: string | null, now?: any): string => {
+  if (!start) return 'N/A';
+  try {
+    const startTime = dayjs.tz(start, 'Asia/Manila').valueOf();
+    const endTime = end ? dayjs.tz(end, 'Asia/Manila').valueOf() : now.valueOf();
+    
+    if (isNaN(startTime) || isNaN(endTime)) return 'N/A';
+    
+    const diff = Math.max(0, endTime - startTime);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    return `${hours}h ${minutes}m ${seconds}s`;
+  } catch (e) {
+    return 'N/A';
   }
 };
 
@@ -65,6 +91,7 @@ const getFieldLabel = (fieldKey: string): string => {
     updatedDate: 'Updated Date',
     startTime: 'Start Time',
     endTime: 'End Time',
+    duration: 'Duration',
     image1: 'Image 1',
     image2: 'Image 2',
     image3: 'Image 3',
@@ -86,6 +113,7 @@ const defaultFields = [
   'updatedDate',
   'startTime',
   'endTime',
+  'duration',
   'image1',
   'image2',
   'image3',
@@ -109,6 +137,82 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   const [error, setError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
+  const [isStarted, setIsStarted] = useState(!!workOrder?.start_time);
+  const [isEnded, setIsEnded] = useState(!!workOrder?.end_time);
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isStarted && !isEnded) {
+      interval = setInterval(() => {
+        setNow(dayjs().tz('Asia/Manila'));
+      }, 1000);
+    } else {
+      setNow(dayjs().tz('Asia/Manila'));
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isStarted, isEnded]);
+
+  useEffect(() => {
+    setIsStarted(!!workOrder?.start_time);
+    setIsEnded(!!workOrder?.end_time);
+  }, [workOrder?.start_time, workOrder?.end_time]);
+
+  const handleStartTimer = () => {
+    setIsStartTimerModalOpen(true);
+  };
+
+  const handleConfirmStartTimer = async (selectedTechnicians: string[]) => {
+    try {
+      setLoading(true);
+      if (!workOrder?.id) throw new Error('Cannot update work order: Missing ID');
+
+      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      await updateWorkOrder(workOrder.id!, {
+        start_time: currentTime,
+        end_time: null,
+        // technicians: selectedTechnicians, // Work order might not have multiple techs field in same way, but let's assume it might or just set start_time
+      } as any);
+
+      (workOrder as any).start_time = currentTime;
+      (workOrder as any).end_time = null;
+      setIsStarted(true);
+      setIsEnded(false);
+      setIsStartTimerModalOpen(false);
+      setSuccessMessage('Timer started successfully!');
+      setShowSuccessModal(true);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setError(`Failed to start timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEndTimer = async () => {
+    try {
+      setLoading(true);
+      if (!workOrder?.id) throw new Error('Cannot update work order: Missing ID');
+
+      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      await updateWorkOrder(workOrder.id!, {
+        end_time: currentTime,
+      } as any);
+
+      (workOrder as any).end_time = currentTime;
+      setIsEnded(true);
+      setSuccessMessage('Timer ended successfully!');
+      setShowSuccessModal(true);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setError(`Failed to end timer: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
 
@@ -186,6 +290,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     updatedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.updated_date)}</Text>,
     startTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.start_time)}</Text>,
     endTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.end_time)}</Text>,
+    duration: () => <Text style={valStyle} selectable={true}>{getDurationString(workOrder.start_time, workOrder.end_time, now)}</Text>,
     image1: () => renderImageLink(workOrder.image_1),
     image2: () => renderImageLink(workOrder.image_2),
     image3: () => renderImageLink(workOrder.image_3),
@@ -206,6 +311,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       case 'updatedDate': return !workOrder.updated_date;
       case 'startTime': return !workOrder.start_time;
       case 'endTime': return !workOrder.end_time;
+      case 'duration': return !workOrder.start_time;
       case 'image1': return !workOrder.image_1;
       case 'image2': return !workOrder.image_2;
       case 'image3': return !workOrder.image_3;
@@ -262,6 +368,22 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
             </Pressable>
           )}
 
+          {(!isEnded || workOrder.work_status?.toLowerCase().trim() === 'reschedule') && 
+           ['in progress', 'inprogress', 'pending', 'reschedule'].includes(workOrder.work_status?.toLowerCase().trim() || '') && 
+           (userRoleId === 2 || userRole === 'technician') && (
+            <>
+              {(!isStarted || (['reschedule'].includes(workOrder.work_status?.toLowerCase().trim() || '') && isStarted && isEnded)) && (
+                <Pressable
+                  style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981', marginRight: 8 }]}
+                  onPress={handleStartTimer}
+                  disabled={loading}
+                >
+                  <Play width={18} height={18} color="#ffffff" />
+                </Pressable>
+              )}
+            </>
+          )}
+
 
 
           <Pressable onPress={onClose} style={{ padding: 4 }}>
@@ -293,6 +415,14 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         cancelText="Close"
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
+      />
+
+      <StartTimerModal
+        isOpen={isStartTimerModalOpen}
+        onClose={() => setIsStartTimerModalOpen(false)}
+        onConfirm={handleConfirmStartTimer}
+        loading={loading}
+        colorPalette={colorPalette}
       />
     </View>
   );

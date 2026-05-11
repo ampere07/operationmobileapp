@@ -8,6 +8,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { Settings, Camera, X, ChevronDown, Search, Check, ChevronLeft, MapPin, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // Global cache to persist data between form opens/re-renders
 // This makes re-opening the form instant.
@@ -1092,7 +1098,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
 
-      const currentDateTime = formatToGMT8MySQL();
+      const manilaNow = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
 
       let jobOrderUpdateData: any = {
         updated_by_user_email: updatedFormData.modifiedBy,
@@ -1119,8 +1125,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           visit_by: updatedFormData.visit_by,
           visit_with: updatedFormData.visit_with,
           visit_with_other: updatedFormData.visit_with_other,
-          end_time: currentDateTime
         };
+
+        // Only set end_time if it's not already set
+        if (!jobOrderData?.end_time && !jobOrderData?.End_Time) {
+          jobOrderUpdateData.end_time = manilaNow;
+        }
 
         // Add tech input username if applicable
         const hasTechInput = usernamePattern && usernamePattern.sequence.some(item => (item as any).type === 'tech_input');
@@ -1135,9 +1145,12 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           visit_with: updatedFormData.visit_with,
           visit_with_other: updatedFormData.visit_with_other,
           onsite_remarks: updatedFormData.onsiteRemarks,
-          end_time: currentDateTime
         };
 
+        // Only set end_time if it's not already set
+        if (!jobOrderData?.end_time && !jobOrderData?.End_Time) {
+          jobOrderUpdateData.end_time = manilaNow;
+        }
       }
 
 

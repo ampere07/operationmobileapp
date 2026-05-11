@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, ActivityIndicator, Image } from 'react-native';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import { Picker } from '@react-native-picker/picker';
 import { X, Calendar, ChevronDown, Minus, Plus, Camera, MapPin, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react-native';
 import { UserData } from '../types/api';
@@ -163,16 +169,8 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
     portLabelImage: null,
     clientSignatureImage: null,
     speedTestImage: null,
-    modifiedBy: currentUserEmail,
-    modifiedDate: new Date().toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    }),
+        modifiedBy: currentUserEmail,
+    modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
     contractLink: '',
     contractTemplate: '1',
     assignedEmail: '',
@@ -716,15 +714,7 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
         clientSignatureImage: null,
         speedTestImage: null,
         modifiedBy: currentUserEmail,
-        modifiedDate: new Date().toLocaleString('en-US', {
-          month: '2-digit',
-          day: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true
-        }),
+        modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
         contractLink: '',
         contractTemplate: '1',
         assignedEmail: '',
@@ -1033,15 +1023,7 @@ const JobOrderDoneFormModal: React.FC<JobOrderDoneFormModalProps> = ({
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
-      modifiedDate: new Date().toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      })
+      modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
     };
 
     setFormData(updatedFormData);

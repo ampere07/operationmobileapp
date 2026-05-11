@@ -28,6 +28,12 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { createInventoryLog } from '../services/inventoryLogService';
 import { InventoryItem } from '../contexts/InventoryContext';
 import { userService } from '../services/userService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // Adding classNames support manually if Nativewind is used
 interface InventoryLogsFormModalProps {
@@ -72,7 +78,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
 
     // Form State
     const [formData, setFormData] = useState({
-        date: new Date().toISOString().slice(0, 16),
+        date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
         item_id: selectedItem?.item_id?.toString() || '',
         item_name: selectedItem?.item_name || '',
         item_description: selectedItem?.item_description || '',
@@ -117,15 +123,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
                 item_id: selectedItem?.item_id?.toString() || '',
                 item_name: selectedItem?.item_name || '',
                 item_description: selectedItem?.item_description || '',
-                date: new Date().toLocaleString('en-US', {
-                    month: '2-digit',
-                    day: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true,
-                }),
+                date: dayjs().tz('Asia/Manila').format('MM/DD/YYYY hh:mm:ss A'),
             }));
         }
     }, [isOpen, selectedItem]);
@@ -169,7 +167,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
             const response = await createInventoryLog({
                 ...formData,
                 item_id: selectedItem?.item_id,
-                date: new Date().toISOString(),
+                date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
             });
 
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);

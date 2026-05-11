@@ -111,7 +111,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
               </View>
               <View style={styles.headerRightAction}>
                 {(() => {
-                  const isFiberSNRequired = (['migrate', 'replace router', 'reactivation'].includes(formData.repairCategory?.toLowerCase())) && formData.visitStatus === 'Done';
+                  const isFiberSNRequired = (['migrate', 'replace router', 'reactivation'].includes(formData.repairCategory?.toLowerCase() || '')) && formData.visitStatus === 'Done';
                   const needsValidation = isFiberSNRequired && (formData.connectionType?.toLowerCase() === 'fiber' || !formData.connectionType) && !isSNValidated;
                   const isSaveDisabled = loading || needsValidation;
                   const saveButtonBgColor = isSaveDisabled ? '#9ca3af' : activeColor;

@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import { X, Calendar, ChevronDown, Minus, Plus, Camera, MapPin, Loader2 } from 'lucide-react';
 import { UserData } from '../types/api';
 import { updateJobOrder } from '../services/jobOrderService';
@@ -185,15 +191,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     portLabelImage: null,
     clientSignatureImage: null,
     modifiedBy: '', // Initialize empty, will act as placeholder until useEffect updates it or user acts
-    modifiedDate: new Date().toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    }),
+    modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
     contractLink: '',
     contractTemplate: '1',
     assignedEmail: 'Office',
@@ -1056,15 +1054,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
-      modifiedDate: new Date().toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      })
+      modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
     };
 
     setFormData(updatedFormData);
