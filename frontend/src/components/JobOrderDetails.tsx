@@ -648,12 +648,15 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       const currentTime = formatToGMT8MySQL();
       await updateJobOrder(jobOrder.id, {
         start_time: currentTime,
+        end_time: null,
         technicians: selectedTechnicians,
       } as any);
 
       (jobOrder as any).start_time = currentTime;
+      (jobOrder as any).end_time = null;
       (jobOrder as any).technicians = selectedTechnicians;
       setIsStarted(true);
+      setIsEnded(false);
       setIsStartTimerModalOpen(false);
       setSuccessMessage('Timer started successfully!');
       setShowSuccessModal(true);
@@ -956,9 +959,9 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
               <Paperclip width={20} height={20} color={colorPalette?.primary || '#7c3aed'} />
             </Pressable>
           )}
-          {!isEnded && ['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {(!isEnded || jobOrder.Onsite_Status?.toLowerCase().trim() === 'reschedule') && ['in progress', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <>
-              {!isStarted && (
+              {(!isStarted || jobOrder.Onsite_Status?.toLowerCase().trim() === 'reschedule') && (
                 <Pressable
                   style={[st.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
                   onPress={handleStartTimer}
@@ -1124,7 +1127,7 @@ const st = StyleSheet.create({
   editLabel: { fontSize: 12, marginTop: 4 },
   errorBox: { padding: 12, margin: 12, borderRadius: 4, borderWidth: 1 },
   flex1: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 120 },
   fieldsContainer: { width: '100%', minHeight: '100%', paddingVertical: 8, paddingHorizontal: 0 },
   fieldRow: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 16, alignItems: 'flex-start', gap: 2 },
   fieldLabel: { fontSize: 14, fontWeight: '500' },

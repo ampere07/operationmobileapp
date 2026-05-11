@@ -840,8 +840,7 @@ const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, o
         visit_with_other: f.visitWithOther,
         visit_remarks: f.visitRemarks,
         proof_image_url: uploads.proof_image_url || f.proofImage || '',
-        start_time: isReschedule ? null : undefined,
-        end_time: isReschedule ? null : currentDateTime
+        end_time: currentDateTime
       };
     }
   } else if (f.supportStatus === 'Failed') {

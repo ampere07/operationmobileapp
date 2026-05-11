@@ -344,14 +344,12 @@ const ServiceOrderPage: React.FC = () => {
             ? (serviceOrder.visitStatus || '').toLowerCase().trim() 
             : (serviceOrder.supportStatus || '').toLowerCase().trim();
           
-          if (statusFilter === 'pending') {
-            if (s !== 'pending') return false;
-          } else if (statusFilter === 'inprogress') {
-            if (s !== 'in-progress' && s !== 'in progress' && s !== 'inprogress' && s !== 'scheduled' && s !== 'reschedule') return false;
-          } else if (statusFilter === 'completed') {
+          if (statusFilter === 'done') {
             if (s !== 'completed' && s !== 'done' && s !== 'resolved') return false;
-          } else if (statusFilter === 'cancelled') {
-            if (s !== 'cancelled' && s !== 'closed') return false;
+          } else if (statusFilter === 'inprogress') {
+            if (s !== 'in-progress' && s !== 'in progress' && s !== 'inprogress' && s !== 'scheduled') return false;
+          } else if (statusFilter === 'reschedule') {
+            if (s !== 'reschedule') return false;
           } else if (statusFilter === 'failed') {
             if (s !== 'failed') return false;
           }
@@ -679,10 +677,9 @@ const ServiceOrderPage: React.FC = () => {
             </View>
             {[
               { label: 'All Status', value: 'all' },
-              { label: 'Pending', value: 'pending' },
+              { label: 'Done', value: 'done' },
               { label: 'In Progress', value: 'inprogress' },
-              { label: 'Completed', value: 'completed' },
-              { label: 'Cancelled', value: 'cancelled' },
+              { label: 'Reschedule', value: 'reschedule' },
               { label: 'Failed', value: 'failed' }
             ].map((item) => (
               <Pressable

@@ -25,6 +25,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { userService } from '../services/userService';
 import apiClient, { API_BASE_URL } from '../config/api';
 import ImagePreview from '../components/ImagePreview';
+import { formatToGMT8MySQL } from '../utils/dateUtils';
 
 // Removed global Dimensions usage
 
@@ -301,10 +302,17 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
         updated_by: currentUserEmail,
       };
 
-      if ((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) {
-        formDataToSend.work_status = formData.work_status;
-      } else {
-        formDataToSend.work_status = 'Pending';
+      const finalStatus = ((userRole !== 1 && userRole !== 7) || isEditMode || (userEmail && formData.assign_to === userEmail)) 
+        ? formData.work_status 
+        : 'Pending';
+
+      formDataToSend.work_status = finalStatus;
+
+      const currentDateTime = formatToGMT8MySQL();
+      if (finalStatus === 'In Progress' && !workOrder?.start_time) {
+        formDataToSend.start_time = currentDateTime;
+      } else if (['Completed', 'Cancelled', 'Failed'].includes(finalStatus)) {
+        formDataToSend.end_time = currentDateTime;
       }
 
       if (isEditMode && workOrder?.id) {

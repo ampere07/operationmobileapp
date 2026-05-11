@@ -502,12 +502,15 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       const currentTime = formatToGMT8MySQL();
       await updateServiceOrder(serviceOrder.id, {
         start_time: currentTime,
+        end_time: null,
         technicians: selectedTechnicians,
       } as any);
 
       (serviceOrder as any).start_time = currentTime;
+      (serviceOrder as any).end_time = null;
       (serviceOrder as any).technicians = selectedTechnicians;
       setIsStarted(true);
+      setIsEnded(false);
       setIsStartTimerModalOpen(false);
       setSuccessMessage('Timer started successfully!');
       setShowSuccessModal(true);
@@ -758,7 +761,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          {!isStarted && ['in progress', 'reschedule'].includes(serviceOrder.visitStatus?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
+          {(!isStarted || serviceOrder.visitStatus?.toLowerCase().trim() === 'reschedule') && ['in progress', 'reschedule'].includes(serviceOrder.visitStatus?.toLowerCase().trim() || '') && (userRoleId === 2 || userRole?.toLowerCase() === 'technician') && (
             <Pressable
               style={[styles.iconBtn, { backgroundColor: colorPalette?.primary || '#10b981' }]}
               onPress={handleStartTimer}
@@ -853,7 +856,7 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 6, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
   settingsButton: { padding: 4 },
   flex1: { flex: 1 },
-  content: { width: '100%', paddingVertical: 8 },
+  content: { width: '100%', paddingTop: 8, paddingBottom: 120 },
   fieldContainer: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 8, paddingHorizontal: 16, gap: 2 },
   fieldLabel: { fontSize: 14, fontWeight: '500' },
   fieldValueContainer: { width: '100%' },

@@ -63,6 +63,8 @@ const getFieldLabel = (fieldKey: string): string => {
     requestedDate: 'Requested Date',
     updatedBy: 'Updated By',
     updatedDate: 'Updated Date',
+    startTime: 'Start Time',
+    endTime: 'End Time',
     image1: 'Image 1',
     image2: 'Image 2',
     image3: 'Image 3',
@@ -82,6 +84,8 @@ const defaultFields = [
   'requestedDate',
   'updatedBy',
   'updatedDate',
+  'startTime',
+  'endTime',
   'image1',
   'image2',
   'image3',
@@ -180,6 +184,8 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     requestedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.requested_date)}</Text>,
     updatedBy: () => <Text style={valStyle} selectable={true}>{workOrder.updated_by || 'Not updated'}</Text>,
     updatedDate: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.updated_date)}</Text>,
+    startTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.start_time)}</Text>,
+    endTime: () => <Text style={valStyle} selectable={true}>{formatDate(workOrder.end_time)}</Text>,
     image1: () => renderImageLink(workOrder.image_1),
     image2: () => renderImageLink(workOrder.image_2),
     image3: () => renderImageLink(workOrder.image_3),
@@ -198,6 +204,8 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       case 'requestedDate': return !workOrder.requested_date;
       case 'updatedBy': return !workOrder.updated_by || workOrder.updated_by === 'Not updated';
       case 'updatedDate': return !workOrder.updated_date;
+      case 'startTime': return !workOrder.start_time;
+      case 'endTime': return !workOrder.end_time;
       case 'image1': return !workOrder.image_1;
       case 'image2': return !workOrder.image_2;
       case 'image3': return !workOrder.image_3;
@@ -302,7 +310,7 @@ const st = StyleSheet.create({
   errorBox: { padding: 12, margin: 12, borderRadius: 4, borderWidth: 1 },
   statusText: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
   flex1: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 120 },
   fieldsContainer: { width: '100%', minHeight: '100%', paddingVertical: 8 },
   fieldRow: { flexDirection: 'column', borderBottomWidth: 1, paddingVertical: 4, paddingHorizontal: 16, alignItems: 'flex-start', gap: 2 },
   fieldLabel: { fontSize: 14, fontWeight: '500' },

@@ -28,6 +28,18 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.30',
+            date: 'May 11, 2026',
+            title: 'Timer Precision & Workflow Updates',
+            updates: [
+                { text: 'Reschedule Timer Fix: Submitting a Job Order or Service Order with a "Reschedule" status no longer deletes the original start and end times, ensuring accurate historical tracking.', visibility: 'technician' },
+                { text: 'Resume Timer Functionality: The "Start Timer" button will now reappear for tasks in the "Reschedule" state. Clicking it allows technicians to cleanly restart the timer and clear the previous end time.', visibility: 'technician' },
+                { text: 'Work Order Timers: Work Orders now automatically record a precise GMT+8 Start Time when set to "In Progress", and an End Time when "Completed", "Cancelled", or "Failed".', visibility: 'technician' },
+                { text: 'Enhanced Details UI: You can now clearly view the Start Time and End Time fields directly inside the Work Order details page, and all details screens can now be scrolled down fully without being blocked by the navigation bar.', visibility: 'technician' },
+                { text: 'Timezone Accuracy Fix: Resolved a bug where timer logs could record incorrect UTC times (e.g., 2 AM instead of 10 AM). All timers now strictly adhere to GMT+8 precision regardless of device settings.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.28',
             date: 'May 10, 2026',
             title: 'Timer Reliability & UI Workflow Updates',

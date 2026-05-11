@@ -1092,9 +1092,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
 
 
-      const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const gmt8 = new Date(utc + (3600000 * 8));
       const currentDateTime = formatToGMT8MySQL();
 
       let jobOrderUpdateData: any = {
@@ -1141,10 +1138,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
           end_time: currentDateTime
         };
 
-        if (updatedFormData.onsiteStatus === 'Reschedule') {
-          jobOrderUpdateData.start_time = null;
-          jobOrderUpdateData.end_time = null;
-        }
       }
 
 
