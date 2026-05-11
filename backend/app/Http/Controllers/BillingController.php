@@ -148,6 +148,7 @@ class BillingController extends Controller
                     'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
                     'session_group' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_group : null,
                     'session_ip' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->ip_address : null,
+                    'active_sessions' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->active_sessions : 0,
                 ];
             });
 
@@ -284,6 +285,7 @@ class BillingController extends Controller
                 'Online_Session_Status' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_status : null,
                 'session_group' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->session_group : null,
                 'session_ip' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->ip_address : null,
+                'active_sessions' => $billingAccount->onlineStatus ? $billingAccount->onlineStatus->active_sessions : 0,
             ];
 
             return response()->json([
@@ -344,5 +346,6 @@ class BillingController extends Controller
         }
     }
 }
+
 
 

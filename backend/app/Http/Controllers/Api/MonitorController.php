@@ -801,7 +801,18 @@ class MonitorController extends Controller
                         ->select('id', 'start_time', 'end_time', 'visit_status as status', 'technicians', DB::raw("'so' as task_type"), 'concern')
                         ->get();
 
-                    $allTasks = $dailyJOs->concat($dailySOs)->sortBy('start_time');
+                    $dailyWOs = DB::table('work_order')
+                        ->where('organization_id', $organizationId)
+                        ->where('assign_to', $email)
+                        ->where(function($q) use ($viewStartStr) {
+                            $q->where('start_time', '>=', $viewStartStr)
+                              ->orWhere('end_time', '>=', $viewStartStr)
+                              ->orWhereNull('end_time');
+                        })
+                        ->select('id', 'start_time', 'end_time', 'work_status as status', DB::raw("NULL as technicians"), DB::raw("'wo' as task_type"), 'work_category as concern')
+                        ->get();
+
+                    $allTasks = $dailyJOs->concat($dailySOs)->concat($dailyWOs)->sortBy('start_time');
 
                     // 2. Timeline Calculation: Flattened to avoid double-counting overlapping tasks
                     $totalWorkingSeconds = 0;
@@ -829,6 +840,17 @@ class MonitorController extends Controller
                     } else if (!$isOffline && strtolower($tech->tech_status ?? '') !== 'online') {
                         // If they haven't timed in yet and aren't online, their availability hasn't started
                         $effectiveStart = $timeBound->copy();
+                    }
+
+                    // Ensure working time is counted if they have tasks, even if they haven't timed in
+                    $firstTaskStart = $allTasks->whereNotNull('start_time')->min('start_time');
+                    if ($firstTaskStart) {
+                        $fTS = \Carbon\Carbon::parse($firstTaskStart, 'Asia/Manila');
+                        if ($fTS->lt($effectiveStart)) {
+                            // If they are working, they must have started their day at least when the task started
+                            // But we clamp it to viewStart to keep it "Daily" and avoid pulling from previous days
+                            $effectiveStart = $fTS->lt($viewStart) ? $viewStart->copy() : $fTS->copy();
+                        }
                     }
 
                     $currentTime = $effectiveStart->copy();
@@ -880,10 +902,10 @@ class MonitorController extends Controller
                     $isPullout = false;
                     if ($workingTask) {
                         $status = 'Working';
-                        $details = ($workingTask->task_type === 'jo' ? 'Job Order' : 'Service Order');
+                        $details = ($workingTask->task_type === 'jo' ? 'Job Order' : ($workingTask->task_type === 'so' ? 'Service Order' : 'Work Order'));
                         
-                        // Add concern for SO
-                        if ($workingTask->task_type === 'so' && !empty($workingTask->concern)) {
+                        // Add concern for SO or WO
+                        if (in_array($workingTask->task_type, ['so', 'wo']) && !empty($workingTask->concern)) {
                             if (stripos($workingTask->concern, 'Pullout') !== false) {
                                 $isPullout = true;
                             } else {
@@ -899,7 +921,7 @@ class MonitorController extends Controller
                         $lastFinished = $allTasks->filter(function($t) { return !empty($t->start_time) && !empty($t->end_time); })->sortBy('end_time')->last();
                         
                         if ($lastFinished) {
-                            $details = ($lastFinished->task_type === 'jo' ? 'Job Order' : 'Service Order') . ' (' . ($lastFinished->status ?? 'Done') . ')';
+                            $details = ($lastFinished->task_type === 'jo' ? 'Job Order' : ($lastFinished->task_type === 'so' ? 'Service Order' : 'Work Order')) . ' (' . ($lastFinished->status ?? 'Done') . ')';
                             $since = $lastFinished->end_time;
                         } else {
                             $pendingCount = $allTasks->filter(function($t) { return empty($t->start_time) && empty($t->end_time); })->count();
@@ -970,6 +992,8 @@ class MonitorController extends Controller
 
             // 14) TEAM DETAILED QUEUE (For Technicians)
             if ($action === 'team_detailed_queue') {
+                $twentyMinsAgo = \Carbon\Carbon::now('Asia/Manila')->subMinutes(20)->toDateTimeString();
+
                 // 1) Job Orders
                 $jobs = DB::table('job_orders')
                     ->where('job_orders.organization_id', $organizationId)
@@ -987,12 +1011,12 @@ class MonitorController extends Controller
                             COALESCE(applications.city, ''), ' ', 
                             COALESCE(applications.region, '')
                         ) as address"),
-                        DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(job_orders.start_time AS CHAR) as start_time_str"),
                         DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
                         'job_orders.onsite_status as status',
                         'job_orders.technicians'
                     )
-                    ->where('job_orders.onsite_status', '!=', 'Done')
+                    ->whereRaw("(job_orders.onsite_status != 'Done' OR job_orders.end_time >= ?)", [$twentyMinsAgo])
                     ->whereNotNull('job_orders.assigned_email')
                     ->where('job_orders.assigned_email', '!=', '');
 
@@ -1015,19 +1039,19 @@ class MonitorController extends Controller
                             COALESCE(customers.city, ''), ' ', 
                             COALESCE(customers.region, '')
                         ) as address"),
-                        DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(service_orders.start_time AS CHAR) as start_time_str"),
                         DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
                         'service_orders.visit_status as status',
                         'service_orders.technicians'
                     )
-                    ->where('service_orders.visit_status', '!=', 'Resolved')
-                    ->where('service_orders.visit_status', '!=', 'Done')
+                    ->whereRaw("(service_orders.visit_status NOT IN ('Resolved', 'Done') OR service_orders.end_time >= ?)", [$twentyMinsAgo])
                     ->whereNotNull('service_orders.assigned_email')
                     ->where('service_orders.assigned_email', '!=', '');
 
                 $services = $applyScope($services, 'service_orders.timestamp');
 
                 $all = $jobs->union($services)->get();
+
 
                 // Calculate duration in PHP
                 $data = $all->map(function ($item) {
@@ -1088,6 +1112,8 @@ class MonitorController extends Controller
                         'technicians' => $techs,
                         'start' => $start->format('M d, Y h:i A'),
                         'end' => $end ? $end->format('M d, Y h:i A') : '',
+                        'start_time' => $start->toIso8601String(),
+                        'end_time' => $end ? $end->toIso8601String() : null,
                         'duration' => $duration
                     ];
                 });
@@ -1113,7 +1139,7 @@ class MonitorController extends Controller
                             COALESCE(applications.city, ''), ' ', 
                             COALESCE(applications.region, '')
                         ) as address"),
-                        DB::raw("CAST(COALESCE(job_orders.start_time, job_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(job_orders.start_time AS CHAR) as start_time_str"),
                         DB::raw("CAST(job_orders.end_time AS CHAR) as end_time_str"),
                         'job_orders.onsite_status as status',
                         'job_orders.technicians'
@@ -1140,7 +1166,7 @@ class MonitorController extends Controller
                             COALESCE(customers.city, ''), ' ', 
                             COALESCE(customers.region, '')
                         ) as address"),
-                        DB::raw("CAST(COALESCE(service_orders.start_time, service_orders.updated_at) AS CHAR) as start_time_str"),
+                        DB::raw("CAST(service_orders.start_time AS CHAR) as start_time_str"),
                         DB::raw("CAST(service_orders.end_time AS CHAR) as end_time_str"),
                         'service_orders.visit_status as status',
                         'service_orders.technicians'
@@ -1206,6 +1232,8 @@ class MonitorController extends Controller
                         })(),
                         'start' => $start->format('M d, Y h:i A'),
                         'end' => $end ? $end->format('M d, Y h:i A') : '',
+                        'start_time' => $start->toIso8601String(),
+                        'end_time' => $end ? $end->toIso8601String() : null,
                         'duration' => $duration
                     ];
                 });
@@ -1227,5 +1255,6 @@ class MonitorController extends Controller
         }
     }
 }
+
 
 

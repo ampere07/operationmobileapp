@@ -17,21 +17,31 @@ class ApplicationController extends Controller
     public function index(Request $request)
     {
         try {
-            $page = $request->input('page', 1);
-            $limit = $request->input('limit', 50); // Default 50 for faster response
+            $page = (int) $request->input('page', 1);
+            $limit = (int) $request->input('limit', 50); 
             $search = $request->input('search', '');
-            $fastMode = $request->input('fast', false); // Fast mode: skip heavy processing
-            $since = $request->input('since'); // Filter by updated_at since this timestamp
+            $fastMode = $request->boolean('fast', false); 
+            $since = $request->input('since'); 
 
-            Log::info('ApplicationController: Starting to fetch applications', [
+            Log::info('ApplicationController: Fetching applications', [
                 'page' => $page,
                 'limit' => $limit,
-                'search' => $search,
                 'fast_mode' => $fastMode,
                 'since' => $since
             ]);
 
-            $query = Application::orderBy('id', 'desc');
+            // Define columns to select to reduce memory/bandwidth
+            $columns = [
+                'id', 'first_name', 'middle_initial', 'last_name', 
+                'timestamp', 'status', 'city', 'installation_address', 
+                'organization_id', 'created_at', 'updated_at'
+            ];
+
+            if (!$fastMode) {
+                $columns = ['*'];
+            }
+
+            $query = Application::select($columns)->orderBy('id', 'desc');
 
             // Apply organization filter
             $currentUser = auth()->user();
@@ -39,7 +49,6 @@ class ApplicationController extends Controller
                 if ($currentUser->organization_id) {
                     $query->where('organization_id', $currentUser->organization_id);
                 } else {
-                    // If user has no organization_id, only show applications that also have no organization_id
                     $query->whereNull('organization_id');
                 }
             }
@@ -64,97 +73,68 @@ class ApplicationController extends Controller
             // Fetch total count for pagination
             $totalCount = $query->count();
 
-            // Fetch one extra record to check if there are more pages (more efficient than COUNT)
+            // Fetch records for the current page
             $applications = $query->skip(($page - 1) * $limit)
-                ->take($limit + 1) // Fetch one extra
+                ->take($limit + 1)
                 ->get();
 
-            // Check if there are more pages
             $hasMore = $applications->count() > $limit;
 
-            // Remove the extra record if it exists
             if ($hasMore) {
                 $applications = $applications->slice(0, $limit);
             }
 
-            Log::info('ApplicationController: Fetched ' . $applications->count() . ' applications');
-
-            // Fast mode: Return minimal data immediately
-            if ($fastMode) {
-                $formattedApplications = $applications->map(function ($app) {
-                    return [
-                        'id' => (string)$app->id,
-                        'customer_name' => $this->getFullName($app),
-                        'timestamp' => $app->timestamp ? $app->timestamp->format('Y-m-d H:i:s') : null,
-                        'status' => $app->status ?? 'pending',
-                        'first_name' => $app->first_name,
-                        'last_name' => $app->last_name,
-                        'city' => $app->city,
-                        'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
-                        'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null,
-                        'organization_id' => $app->organization_id
-                    ];
-                });
-
-                return response()->json([
-                    'success' => true,
-                    'applications' => $formattedApplications->values(),
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $limit,
-                        'total_count' => (int) $totalCount,
-                        'has_more' => $hasMore
-                    ]
-                ]);
-            }
-
-            // Normal mode: Return full data
-            $formattedApplications = $applications->map(function ($app) {
-                return [
+            $formattedApplications = $applications->map(function ($app) use ($fastMode) {
+                $data = [
                     'id' => (string)$app->id,
                     'customer_name' => $this->getFullName($app),
                     'timestamp' => $app->timestamp ? $app->timestamp->format('Y-m-d H:i:s') : null,
-                    'address' => $app->installation_address ?? '',
-                    'address_line' => $app->installation_address ?? '',
                     'status' => $app->status ?? 'pending',
-                    'email_address' => $app->email_address,
                     'first_name' => $app->first_name,
-                    'middle_initial' => $app->middle_initial,
                     'last_name' => $app->last_name,
-                    'mobile_number' => $app->mobile_number,
-                    'secondary_mobile_number' => $app->secondary_mobile_number,
-                    'installation_address' => $app->installation_address,
-                    'landmark' => $app->landmark,
-                    'region' => $app->region,
                     'city' => $app->city,
-                    'barangay' => $app->barangay,
-                    'location' => $app->location,
-                    'desired_plan' => $app->desired_plan,
-                    'promo' => $app->promo,
-                    'referrer_account_id' => $app->referrer_account_id,
-                    'referred_by' => $app->referred_by,
-                    'proof_of_billing_url' => $app->proof_of_billing_url,
-                    'government_valid_id_url' => $app->government_valid_id_url,
-                    'secondary_government_valid_id_url' => $app->secondary_government_valid_id_url,
-                    'house_front_picture_url' => $app->house_front_picture_url,
-                    'promo_url' => $app->promo_url,
-                    'nearest_landmark1_url' => $app->nearest_landmark1_url,
-                    'nearest_landmark2_url' => $app->nearest_landmark2_url,
-                    'document_attachment_url' => $app->document_attachment_url,
-                    'other_isp_bill_url' => $app->other_isp_bill_url,
-                    'terms_agreed' => $app->terms_agreed,
-                    'created_at' => $app->created_at ? $app->created_at->format('Y-m-d H:i:s') : null,
-                    'updated_at' => $app->updated_at ? $app->updated_at->format('Y-m-d H:i:s') : null,
-                    'created_by_user_id' => $app->created_by_user_id,
-                    'updated_by' => $app->updated_by,
-                    'long_lat' => $app->long_lat,
-                    
+                    'installation_address' => $app->installation_address ?? '',
+                    'address' => $app->installation_address ?? '',
                     'create_date' => $app->timestamp ? $app->timestamp->format('Y-m-d') : null,
                     'create_time' => $app->timestamp ? $app->timestamp->format('H:i:s') : null,
-                    'organization_id' => $app->organization_id
+                    'organization_id' => $app->organization_id,
+                    'updated_at' => $app->updated_at ? $app->updated_at->format('Y-m-d H:i:s') : null,
                 ];
+
+                if (!$fastMode) {
+                    $data = array_merge($data, [
+                        'email_address' => $app->email_address,
+                        'middle_initial' => $app->middle_initial,
+                        'mobile_number' => $app->mobile_number,
+                        'secondary_mobile_number' => $app->secondary_mobile_number,
+                        'landmark' => $app->landmark,
+                        'region' => $app->region,
+                        'barangay' => $app->barangay,
+                        'location' => $app->location,
+                        'desired_plan' => $app->desired_plan,
+                        'promo' => $app->promo,
+                        'referrer_account_id' => $app->referrer_account_id,
+                        'referred_by' => $app->referred_by,
+                        'proof_of_billing_url' => $app->proof_of_billing_url,
+                        'government_valid_id_url' => $app->government_valid_id_url,
+                        'secondary_government_valid_id_url' => $app->secondary_government_valid_id_url,
+                        'house_front_picture_url' => $app->house_front_picture_url,
+                        'promo_url' => $app->promo_url,
+                        'nearest_landmark1_url' => $app->nearest_landmark1_url,
+                        'nearest_landmark2_url' => $app->nearest_landmark2_url,
+                        'document_attachment_url' => $app->document_attachment_url,
+                        'other_isp_bill_url' => $app->other_isp_bill_url,
+                        'terms_agreed' => $app->terms_agreed,
+                        'created_at' => $app->created_at ? $app->created_at->format('Y-m-d H:i:s') : null,
+                        'created_by_user_id' => $app->created_by_user_id,
+                        'updated_by' => $app->updated_by,
+                        'long_lat' => $app->long_lat,
+                    ]);
+                }
+
+                return $data;
             });
-            
+
             return response()->json([
                 'success' => true,
                 'applications' => $formattedApplications->values(),
@@ -166,12 +146,12 @@ class ApplicationController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
-            Log::error('ApplicationController error: ' . $e->getMessage());
+            Log::error('ApplicationController index error: ' . $e->getMessage());
             Log::error('ApplicationController trace: ' . $e->getTraceAsString());
             
             return response()->json([
                 'error' => $e->getMessage(),
-                'message' => 'Failed to fetch applications from database',
+                'message' => 'Failed to fetch applications',
                 'success' => false
             ], 500);
         }
@@ -708,3 +688,4 @@ class ApplicationController extends Controller
         }
     }
 }
+

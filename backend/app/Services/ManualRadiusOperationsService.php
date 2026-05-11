@@ -404,7 +404,15 @@ class ManualRadiusOperationsService
             // Get RADIUS configurations
             $radiusEndpoints = $this->getRadiusEndpoints();
 
-            // Step 1: Update RADIUS credentials
+            // Step 1: Update database first (as requested)
+            $this->updateDatabaseCredentials(
+                $accountNo,
+                $oldUsername,
+                $newUsername,
+                $updatedBy
+            );
+
+            // Step 2: Update RADIUS credentials
             $radiusSuccess = $this->updateRadiusCredentials(
                 $radiusEndpoints,
                 $oldUsername,
@@ -413,16 +421,9 @@ class ManualRadiusOperationsService
             );
 
             if (!$radiusSuccess) {
-                throw new Exception("Failed to update RADIUS credentials");
+                $this->writeLog("[WARNING] Database was updated, but RADIUS update failed. Manual intervention may be needed.");
+                // We don't throw exception here to keep DB change, or we could roll back if needed
             }
-
-            // Step 2: Update database (only username, not password)
-            $this->updateDatabaseCredentials(
-                $accountNo,
-                $oldUsername,
-                $newUsername,
-                $updatedBy
-            );
 
             $this->writeLog("[SUCCESS] Credentials updated successfully");
             $this->writeLog("=== UPDATE CREDENTIALS END ===");
@@ -593,72 +594,70 @@ class ManualRadiusOperationsService
     /**
      * Update RADIUS credentials (username and password)
      */
+    /**
+     * Update RADIUS credentials (username and password)
+     */
     public function updateRadiusCredentials(array $radiusEndpoints, string $oldUsername, string $newUsername, ?string $newPassword = null): bool
     {
-        $this->writeLog("[CREDENTIALS] Attempting to update from '$oldUsername' to '$newUsername'");
+        $this->writeLog("[CREDENTIALS] Attempting RADIUS update: '$oldUsername' -> '$newUsername'");
 
-        $radiusId = null;
-        $foundEndpoint = null;
+        $totalSuccessCount = 0;
 
-        // Step 1: Find the old user
-        $userPath = "/rest/user-manage/user/" . urlencode($oldUsername);
+        foreach ($radiusEndpoints as $index => $endpoint) {
+            $serverName = "Server #" . ($index + 1) . " ({$endpoint['url']})";
+            $this->writeLog("[CREDENTIALS] Processing $serverName");
 
-        foreach ($radiusEndpoints as $endpoint) {
-            $fullUrl = $endpoint['url'] . $userPath;
-            $result = $this->callApiWithRetry(
-                $fullUrl,
-                'GET',
-                null,
-                $endpoint['username'],
-                $endpoint['password']
-            );
+            // 1. Find the user on THIS specific server to get the correct ID
+            $userPath = "/rest/user-manage/user/" . urlencode($oldUsername);
+            $findResult = $this->callApiWithRetry($endpoint['url'] . $userPath, 'GET', null, $endpoint['username'], $endpoint['password']);
 
-            if ($result && isset($result['.id'])) {
-                $radiusId = $result['.id'];
-                $foundEndpoint = $endpoint;
-                $this->writeLog("[CREDENTIALS] Found user '$oldUsername' on RADIUS ID: $radiusId");
-                break;
+            if (!$findResult || !isset($findResult['.id'])) {
+                $this->writeLog("[CREDENTIALS] [SKIP] User '$oldUsername' not found on $serverName");
+                continue;
             }
-        }
 
-        if (!$radiusId) {
-            $this->writeLog("[ERROR] User '$oldUsername' not found in RADIUS");
-            return false;
-        }
-
-        // Step 2: Patch the user (rename & optionally new password)
-        $payload = [
-            'name' => $newUsername
-        ];
-
-        if (!empty($newPassword)) {
-            $payload['password'] = $newPassword;
-        }
-
-        $updateSuccess = false;
-        foreach ($radiusEndpoints as $endpoint) {
+            $radiusId = $findResult['.id'];
             $targetUrl = $endpoint['url'] . "/rest/user-manage/user/" . $radiusId;
-            $result = $this->callApiWithRetry(
-                $targetUrl,
-                'PATCH',
-                $payload,
-                $endpoint['username'],
-                $endpoint['password']
-            );
 
-            if ($result !== false) {
-                $this->writeLog("[CREDENTIALS] Updated RADIUS user at {$endpoint['url']}");
-                $updateSuccess = true;
+            // 2. DISABLE user temporarily to prevent instant auto-reconnect during rename
+            $this->writeLog("[CREDENTIALS] Temporarily disabling user to clear sessions...");
+            $this->callApiWithRetry($targetUrl, 'PATCH', ['disabled' => 'true'], $endpoint['username'], $endpoint['password']);
+
+            // 3. KILL active sessions for the OLD username
+            $sessPath = "/rest/user-manage/session?user=" . urlencode($oldUsername);
+            $sessions = $this->callApiWithRetry($endpoint['url'] . $sessPath, 'GET', null, $endpoint['username'], $endpoint['password']);
+            
+            if ($sessions && is_array($sessions)) {
+                foreach ($sessions as $session) {
+                    if (isset($session['.id'])) {
+                        $this->callApiWithRetry($endpoint['url'] . "/rest/user-manage/session/" . $session['.id'], 'DELETE', null, $endpoint['username'], $endpoint['password']);
+                    }
+                }
+            }
+            
+            // Small pause for RADIUS to stabilize
+            sleep(1);
+
+            // 4. UPDATE credentials (Rename)
+            $payload = ['name' => $newUsername];
+            if (!empty($newPassword)) {
+                $payload['password'] = $newPassword;
+            }
+
+            $this->writeLog("[CREDENTIALS] Applying rename in RADIUS...");
+            $patchResult = $this->callApiWithRetry($targetUrl, 'PATCH', $payload, $endpoint['username'], $endpoint['password']);
+
+            // 5. RE-ENABLE the user
+            $this->writeLog("[CREDENTIALS] Re-enabling user...");
+            $this->callApiWithRetry($targetUrl, 'PATCH', ['disabled' => 'false'], $endpoint['username'], $endpoint['password']);
+
+            if ($patchResult !== false) {
+                $this->writeLog("[CREDENTIALS] [SUCCESS] Updated credentials on $serverName");
+                $totalSuccessCount++;
             }
         }
 
-        // Step 3: Force kill old session
-        if ($updateSuccess) {
-            $this->killUserSession($radiusEndpoints, $oldUsername);
-            return true;
-        }
-
-        return false;
+        return $totalSuccessCount > 0;
     }
 
     /**
@@ -1004,7 +1003,7 @@ class ManualRadiusOperationsService
                     $data = $response->json();
                     return $data;
                 } else {
-                    $this->writeLog("[API] HTTP Error {$response->status()}");
+                    $this->writeLog("[API] HTTP Error {$response->status()}: " . $response->body());
                 }
 
             } catch (Exception $e) {
@@ -1095,6 +1094,7 @@ class ManualRadiusOperationsService
         }
     }
 }
+
 
 
 

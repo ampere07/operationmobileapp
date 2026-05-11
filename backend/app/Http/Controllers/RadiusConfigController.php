@@ -15,13 +15,20 @@ class RadiusConfigController extends Controller
         try {
             $configs = RadiusConfig::all();
             
-            // Add status check for each config
+            // Add status check and metrics for each config
             $configsWithStatus = $configs->map(function($config) {
                 $isOnline = false;
+                $latency = null;
+                $publicIp = $config->ip;
+                
                 try {
+                    $start = microtime(true);
                     $connection = @fsockopen($config->ip, $config->port, $errno, $errstr, 2);
+                    $end = microtime(true);
+                    
                     if ($connection) {
                         $isOnline = true;
+                        $latency = round(($end - $start) * 1000, 2);
                         fclose($connection);
                     }
                 } catch (\Exception $e) {
@@ -30,6 +37,12 @@ class RadiusConfigController extends Controller
                 
                 $configArray = $config->toArray();
                 $configArray['is_online'] = $isOnline;
+                $configArray['latency'] = $latency;
+                $configArray['public_ip'] = $publicIp;
+                $configArray['loss'] = $isOnline ? 0 : 100;
+                $configArray['anti_radi'] = 1;
+                $configArray['checked_at'] = now()->format('Y-m-d H:i:s.u'); // High-precision timestamp
+                
                 return $configArray;
             });
             
@@ -230,3 +243,4 @@ class RadiusConfigController extends Controller
         }
     }
 }
+

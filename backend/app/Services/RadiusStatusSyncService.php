@@ -140,7 +140,15 @@ class RadiusStatusSyncService
             foreach ($response as $session) {
                 $username = $session['user'] ?? null;
                 if ($username) {
-                    $sessions[$username] = [
+                    if (!isset($sessions[$username])) {
+                        $sessions[$username] = [
+                            'active_count' => 0,
+                            'last_session' => null
+                        ];
+                    }
+                    
+                    $sessions[$username]['active_count']++;
+                    $sessions[$username]['last_session'] = [
                         'session_id' => $session['.id'] ?? '',
                         'ip' => $session['user-address'] ?? '',
                         'mac' => $session['calling-station-id'] ?? '',
@@ -181,7 +189,10 @@ class RadiusStatusSyncService
                 $ip = null;
                 $mac = null;
                 $download = null;
+                $mac = null;
+                $download = null;
                 $upload = null;
+                $activeSessions = 0;
 
                 if (isset($radiusUsers[$username])) {
                     $user = $radiusUsers[$username];
@@ -209,7 +220,10 @@ class RadiusStatusSyncService
                     }
 
                     if ($hasSession) {
-                        $session = $radiusSessions[$username];
+                        $sessionInfo = $radiusSessions[$username];
+                        $activeSessions = $sessionInfo['active_count'];
+                        $session = $sessionInfo['last_session'];
+                        
                         $sessionId = $session['session_id'];
                         $ip = $session['ip'];
                         $mac = $session['mac'];
@@ -234,6 +248,7 @@ class RadiusStatusSyncService
                             'session_mac_address' => $mac,
                             'total_download' => $download,
                             'total_upload' => $upload,
+                            'active_sessions' => $activeSessions,
                             'updated_at' => now(),
                             'updated_by_user' => 'system'
                         ]
@@ -292,4 +307,5 @@ class RadiusStatusSyncService
         return null;
     }
 }
+
 

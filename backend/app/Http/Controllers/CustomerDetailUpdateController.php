@@ -479,7 +479,19 @@ class CustomerDetailUpdateController extends Controller
                 }
             }
 
-            $technicalDetail->username = (!empty($validated['username'])) ? $validated['username'] : $technicalDetail->username;
+            $oldUsername = $oldTechnicalDetails['username'] ?? null;
+            $newUsernameInput = $validated['username'] ?? $technicalDetail->username;
+            $usernameChanged = ($oldUsername && $newUsernameInput && $oldUsername !== $newUsernameInput);
+
+            // Defer the username update to the RADIUS service if it has changed
+            // This allows the service to handle the Database-First sequence correctly
+            if (!$usernameChanged) {
+                $technicalDetail->username = $newUsernameInput;
+            } else {
+                // Keep the old username for now so the RADIUS service can find the user to rename them
+                $technicalDetail->username = $oldUsername;
+            }
+
             $technicalDetail->connection_type = (!empty($validated['connection_type'])) ? $validated['connection_type'] : $technicalDetail->connection_type;
             $technicalDetail->router_model = (!empty($validated['router_model'])) ? $validated['router_model'] : $technicalDetail->router_model;
             $technicalDetail->router_modem_sn = $validated['router_modem_sn'] ?? $technicalDetail->router_modem_sn;
@@ -498,9 +510,7 @@ class CustomerDetailUpdateController extends Controller
             $technicalDetail->save();
 
             // Sync username to online_status table if it changed
-            $oldUsername = $oldTechnicalDetails['username'] ?? null;
-            $newUsername = $technicalDetail->username;
-            if ($newUsername && $newUsername !== $oldUsername) {
+            if ($technicalDetail->username && $technicalDetail->username !== $oldUsername) {
                 $updatedRows = DB::table('online_status')
                     ->where('account_id', $billingAccount->id)
                     ->update([
@@ -595,16 +605,18 @@ class CustomerDetailUpdateController extends Controller
             $oldUsername = $oldTechnicalDetails['username'] ?? null;
             $newUsername = $technicalDetail->username;
 
-            if ($oldUsername && $newUsername && $oldUsername !== $newUsername) {
+            if ($usernameChanged) {
                 try {
                     $radiusService = app(\App\Services\ManualRadiusOperationsService::class);
                     $radiusResult = $radiusService->updateCredentials([
                         'accountNumber' => $accountNo,
                         'username' => $oldUsername,
-                        'newUsername' => $newUsername,
+                        'newUsername' => $newUsernameInput,
                         // newPassword is NOT passed, so it will only update the username
                         'updatedBy' => $request->input('updatedBy') ?: 'System'
                     ]);
+                    $radiusMessage = $radiusResult['message'] ?? 'Radius and Database updated successfully';
+                } catch (\Exception $e) {
                     $radiusMessage = $radiusResult['message'] ?? 'Radius updated successfully';
                 } catch (\Exception $e) {
                     Log::error('Radius username update failed', ['error' => $e->getMessage()]);

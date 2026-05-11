@@ -25,13 +25,15 @@ class OnlineStatus extends Model
         'session_mac_address',
         'created_by_user',
         'updated_by_user',
+        'active_sessions',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'total_download' => 'decimal:2',
-        'total_upload' => 'decimal:2',
+        'total_download' => 'integer',
+        'total_upload' => 'integer',
+        'active_sessions' => 'integer',
     ];
 
     public function billingAccount()
@@ -39,4 +41,5 @@ class OnlineStatus extends Model
         return $this->belongsTo(BillingAccount::class, 'account_id');
     }
 }
+
 
