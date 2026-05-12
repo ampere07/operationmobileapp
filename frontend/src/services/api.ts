@@ -35,3 +35,25 @@ export const fetchApplications = async (): Promise<ApplicationsResponse> => {
     throw error;
   }
 };
+
+export const fetchAgentCommissionHistory = async (): Promise<any> => {
+  try {
+    const response = await apiClient.get('/commissions/history');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching agent commission history:', error);
+    throw error;
+  }
+};
+
+export const fetchAgentCommissionTrend = async (filter: string): Promise<any> => {
+  try {
+    const response = await apiClient.get('/commissions/trend', {
+      params: { filter }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching agent commission trend:', error);
+    throw error;
+  }
+};

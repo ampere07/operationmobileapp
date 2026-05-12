@@ -789,7 +789,7 @@ const mapApiToForm = (d: any): Partial<ServiceOrderEditFormData> => {
 const mapFormToApi = (f: ServiceOrderEditFormData, uploads: any, user: string, original: any) => {
   const isReschedule = f.visitStatus === 'Reschedule';
 
-  const manilaNow = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+  const manilaNow = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
   const existingEndTime = original?.end_time || original?.End_Time;
 
   let payload: any = {

@@ -319,7 +319,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila').add(8, 'hour'));
   const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
   const [showTimeInWarning, setShowTimeInWarning] = useState(false);
 
@@ -327,10 +327,10 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     let interval: NodeJS.Timeout;
     if (isStarted && !isEnded) {
       interval = setInterval(() => {
-        setNow(dayjs().tz('Asia/Manila'));
+        setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
       }, 1000);
     } else {
-      setNow(dayjs().tz('Asia/Manila'));
+      setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -505,7 +505,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const currentTime = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       await updateServiceOrder(serviceOrder.id, {
         start_time: currentTime,
         end_time: null,
@@ -534,7 +534,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
       setLoading(true);
       if (!serviceOrder.id) throw new Error('Cannot update service order: Missing ID');
 
-      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const currentTime = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       await updateServiceOrder(serviceOrder.id, {
         end_time: currentTime,
       } as any);

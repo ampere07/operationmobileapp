@@ -191,7 +191,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     portLabelImage: null,
     clientSignatureImage: null,
     modifiedBy: '', // Initialize empty, will act as placeholder until useEffect updates it or user acts
-    modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+    modifiedDate: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss'),
     contractLink: '',
     contractTemplate: '1',
     assignedEmail: 'Office',
@@ -1054,7 +1054,7 @@ const JobOrderEditFormModal: React.FC<JobOrderEditFormModalProps> = ({
     const updatedFormData = {
       ...formData,
       modifiedBy: currentUserEmail,
-      modifiedDate: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
+      modifiedDate: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss')
     };
 
     setFormData(updatedFormData);

@@ -55,6 +55,8 @@ Route::post('/tech-in-out/time-in', [TechInOutController::class, 'timeIn']);
 Route::post('/tech-in-out/time-out', [TechInOutController::class, 'timeOut']);
 Route::get('/reports', [ReportController::class , 'index']);
 Route::get('/commissions', [CommissionController::class, 'index']);
+Route::get('/commissions/history', [CommissionController::class, 'getHistory']);
+Route::get('/commissions/trend', [CommissionController::class, 'getTrend']);
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
     $reports = \App\Models\Report::all();

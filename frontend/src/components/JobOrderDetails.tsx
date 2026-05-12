@@ -68,16 +68,16 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
   const [isStarted, setIsStarted] = useState(checkIsStarted((jobOrder as any).start_time));
   const [isEnded, setIsEnded] = useState(checkIsStarted((jobOrder as any).end_time));
-  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila').add(8, 'hour'));
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isStarted && !isEnded) {
       interval = setInterval(() => {
-        setNow(dayjs().tz('Asia/Manila'));
+        setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
       }, 1000);
     } else {
-      setNow(dayjs().tz('Asia/Manila'));
+      setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -664,7 +664,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       setLoading(true);
       if (!jobOrder.id) throw new Error('Cannot update job order: Missing ID');
 
-      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const currentTime = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       await updateJobOrder(jobOrder.id, {
         start_time: currentTime,
         end_time: null,

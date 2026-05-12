@@ -14,7 +14,7 @@ interface ReleaseNote {
     version: string;
     date: string;
     title: string;
-    updates: { text: string; visibility: 'all' | 'customer' | 'technician' }[];
+    updates: { text: string; visibility: 'all' | 'customer' | 'technician' | 'agent' }[];
 }
 
 interface ReleaseNotesProps {
@@ -27,6 +27,17 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
 
     const allNotes: ReleaseNote[] = [
+        {
+            version: '2.5.32',
+            date: 'May 12, 2026',
+            title: 'Agent Dashboard & Performance Analytics',
+            updates: [
+                { text: 'New Agent Dashboard: Launched a dedicated portal for agents featuring real-time referral tracking and commission monitoring.', visibility: 'agent' },
+                { text: 'Commission Trend Graph: Integrated a dynamic line graph with 1M, 3M, 1Y, and 5Y filters for historical earnings analysis.', visibility: 'agent' },
+                { text: 'Referral Counters: Real-time tracking of "In Progress" vs "Onboarded" referrals directly on the main dashboard.', visibility: 'agent' },
+                { text: 'Premium UI Overhaul: Implemented a high-end Glassmorphism balance card with interactive flip animations for agent profiles.', visibility: 'agent' }
+            ]
+        },
         {
             version: '2.5.31',
             date: 'May 11, 2026',
@@ -208,8 +219,10 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
                 const filteredNotes = allNotes.map(note => {
                     const visibleUpdates = note.updates.filter(u => {
                         if (u.visibility === 'all') return true;
-                        if (isCustomer) return u.visibility === 'customer';
-                        return u.visibility === 'technician';
+                        if (role === 'customer') return u.visibility === 'customer';
+                        if (role === 'technician' || role === 'tech') return u.visibility === 'technician';
+                        if (role === 'agent') return u.visibility === 'agent';
+                        return false;
                     });
                     return { ...note, updates: visibleUpdates };
                 }).filter(note => note.updates.length > 0);

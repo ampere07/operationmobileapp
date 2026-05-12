@@ -78,7 +78,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
 
     // Form State
     const [formData, setFormData] = useState({
-        date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+        date: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss'),
         item_id: selectedItem?.item_id?.toString() || '',
         item_name: selectedItem?.item_name || '',
         item_description: selectedItem?.item_description || '',
@@ -123,7 +123,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
                 item_id: selectedItem?.item_id?.toString() || '',
                 item_name: selectedItem?.item_name || '',
                 item_description: selectedItem?.item_description || '',
-                date: dayjs().tz('Asia/Manila').format('MM/DD/YYYY hh:mm:ss A'),
+                date: dayjs().tz('Asia/Manila').add(8, 'hour').format('MM/DD/YYYY hh:mm:ss A'),
             }));
         }
     }, [isOpen, selectedItem]);
@@ -167,7 +167,7 @@ const InventoryLogsFormModal: React.FC<InventoryLogsFormModalProps> = ({
             const response = await createInventoryLog({
                 ...formData,
                 item_id: selectedItem?.item_id,
-                date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss'),
+                date: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss'),
             });
 
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);

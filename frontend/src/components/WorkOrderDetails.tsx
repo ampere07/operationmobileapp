@@ -140,16 +140,16 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
   const [isStarted, setIsStarted] = useState(!!workOrder?.start_time);
   const [isEnded, setIsEnded] = useState(!!workOrder?.end_time);
-  const [now, setNow] = useState(dayjs().tz('Asia/Manila'));
+  const [now, setNow] = useState(dayjs().tz('Asia/Manila').add(8, 'hour'));
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isStarted && !isEnded) {
       interval = setInterval(() => {
-        setNow(dayjs().tz('Asia/Manila'));
+        setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
       }, 1000);
     } else {
-      setNow(dayjs().tz('Asia/Manila'));
+      setNow(dayjs().tz('Asia/Manila').add(8, 'hour'));
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -170,7 +170,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       setLoading(true);
       if (!workOrder?.id) throw new Error('Cannot update work order: Missing ID');
 
-      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const currentTime = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       await updateWorkOrder(workOrder.id!, {
         start_time: currentTime,
         end_time: null,
@@ -197,7 +197,7 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       setLoading(true);
       if (!workOrder?.id) throw new Error('Cannot update work order: Missing ID');
 
-      const currentTime = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const currentTime = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       await updateWorkOrder(workOrder.id!, {
         end_time: currentTime,
       } as any);

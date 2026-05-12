@@ -67,6 +67,7 @@ import Support from './Support';
 // import LiveMonitor from './LiveMonitor';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
+import DashboardAgent from './DashboardAgent';
 import Bills from './Bills';
 import Menu from './Menu';
 import ReleaseNotes from './ReleaseNotes';
@@ -111,7 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     if (user.role === 'customer') {
                         setActiveSection('customer-dashboard');
                     } else if (user.role?.toLowerCase() === 'agent') {
-                        setActiveSection('job-order');
+                        setActiveSection('agent-dashboard');
                     } else if (String(user.role_id) === '6' || user.role?.toLowerCase() === 'osp') {
                         setActiveSection('work-order');
                     } else if (user.role === 'technician' || String(user.role_id) === '4') {
@@ -173,6 +174,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             // Customer Routes
             case 'customer-dashboard':
                 return <DashboardCustomer onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
+            case 'agent-dashboard':
+                return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
             case 'customer-bills':
                 return <Bills initialTab={billsInitialTab} />;
             case 'customer-support':
@@ -199,6 +202,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             default:
                 if (userData && String(userData.role_id) === '3') {
                     return <DashboardCustomer onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
+                }
+                if (userData && userData.role?.toLowerCase() === 'agent') {
+                    return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
                 }
                 if (userData && (userData.role?.toLowerCase() === 'inventorystaff' || String(userData.role_id) === '5')) {
                     return <Inventory />;

@@ -58,7 +58,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
     coordinates: '',
     related_billing_details: '',
     modified_by: '',
-    modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
+    modified_date: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss')
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -141,7 +141,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
           coordinates: '',
           related_billing_details: editingItem.related_billing_details || '',
           modified_by: userEmail,
-          modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
+          modified_date: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss')
         });
       } else {
         resetForm();
@@ -389,7 +389,7 @@ const AddLcpNapModal: React.FC<AddLcpNapModalProps> = ({
       coordinates: '',
       related_billing_details: '',
       modified_by: userEmail,
-      modified_date: dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss')
+      modified_date: dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss')
     });
     
     setCities([]);

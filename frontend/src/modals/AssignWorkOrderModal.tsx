@@ -314,7 +314,7 @@ const AssignWorkOrderModal: React.FC<AssignWorkOrderModalProps> = ({
 
       formDataToSend.work_status = finalStatus;
 
-      const manilaNow = dayjs().tz('Asia/Manila').format('YYYY-MM-DD HH:mm:ss');
+      const manilaNow = dayjs().tz('Asia/Manila').add(8, 'hour').format('YYYY-MM-DD HH:mm:ss');
       if (finalStatus === 'In Progress' && !workOrder?.start_time) {
         formDataToSend.start_time = manilaNow;
       } else if (['Completed', 'Cancelled', 'Failed'].includes(finalStatus)) {
