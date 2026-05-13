@@ -1004,7 +1004,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     setIsValidatingSN(true);
     try {
       const response = await apiClient.get('/smart-olt/validate-sn', {
-        params: { sn },
+        params: { 
+          sn,
+          jo_id: jobOrderData?.id || jobOrderData?.JobOrder_ID,
+          user_email: currentUserEmail
+        },
         timeout: 15000
       });
 
@@ -1433,10 +1437,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setErrors(prev => ({ ...prev, modemSN: errorMessage }));
       }
 
-      // Special handling for RADIUS error to match user requirements exactly
-      const displayMessage = errorMessage === 'radius api error occured contact support'
-        ? errorMessage
-        : `Failed to update records: ${errorMessage}`;
+      // Precise mapping as requested by user - show specific messages as-is
+      let displayMessage = `Failed to update records: ${errorMessage}`;
+
+      if (
+        lowerError === 'radius offline' || 
+        lowerError === 'radius duplicate' || 
+        lowerError === 'it has a duplicate on onboarded customer' ||
+        lowerError === 'radius api error occured contact support'
+      ) {
+        displayMessage = errorMessage;
+      }
 
       showMessageModal('Error', [
         { type: 'error', text: displayMessage }

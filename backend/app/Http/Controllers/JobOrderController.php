@@ -824,14 +824,44 @@ class JobOrderController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            $errorMessage = $e->getMessage();
+            
             \Log::error('JobOrder Update Failed', [
                 'id' => $id,
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
                 'trace' => $e->getTraceAsString()
             ]);
 
-            $errorMessage = $e->getMessage();
-            // Check if it's a RADIUS related error (either the generic one or a detailed one)
+            // Precise mapping as requested by user
+            if (str_contains($errorMessage, 'Failed to connect to RADIUS server') || 
+                str_contains($errorMessage, 'Connection refused') || 
+                str_contains($errorMessage, 'cURL error 7')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Radius Offline',
+                    'error' => $errorMessage
+                ], 400);
+            }
+
+            // Check for Radius duplicate (usually HTTP 400 with "already exists" or similar)
+            if (str_contains($errorMessage, 'HTTP 400') && (str_contains($errorMessage, 'already exists') || str_contains($errorMessage, 'Duplicate') || str_contains($errorMessage, 'exists'))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Radius Duplicate',
+                    'error' => $errorMessage
+                ], 400);
+            }
+
+            // Check for Technical Details duplicate
+            if (str_contains($errorMessage, 'Duplicate entry') && str_contains($errorMessage, 'technical_details')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'it has a duplicate on onboarded customer',
+                    'error' => $errorMessage
+                ], 409);
+            }
+
+            // Fallback for other RADIUS related errors
             if (str_contains($errorMessage, 'radius') || str_contains($errorMessage, 'RADIUS') || str_contains($errorMessage, 'HTTP')) {
                 return response()->json([
                     'success' => false,
@@ -842,7 +872,7 @@ class JobOrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update job order',
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
             ], 500);
         }
     }

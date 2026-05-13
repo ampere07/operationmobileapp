@@ -28,6 +28,16 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.33',
+            date: 'May 13, 2026',
+            title: 'Service Order Precision & Error Handling',
+            updates: [
+                { text: 'Standardized Error Feedback: Improved diagnostic messages for Service Order updates. Technicians now see clear, specific reasons for failures (e.g., RADIUS conflicts or duplicate records) instead of generic system errors.', visibility: 'technician' },
+                { text: 'Radius Conflict Awareness: Enhanced the backend-to-frontend error bridge to specifically identify and report configuration conflicts during Field Technician updates.', visibility: 'technician' },
+                { text: 'UI Stability Improvements: Refined state management in the Service Order edit flow to ensure real-time error reporting without UI flickering or stale data display.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.32',
             date: 'May 12, 2026',
             title: 'Agent Dashboard & Performance Analytics',

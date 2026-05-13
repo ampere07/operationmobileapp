@@ -481,7 +481,11 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     try {
       // 1. SmartOLT Validation
       const response = await apiClient.get('/smart-olt/validate-sn', {
-        params: { sn: modemSN },
+        params: { 
+          sn: modemSN,
+          so_id: serviceOrderId,
+          user_email: currentUserEmail
+        },
         timeout: 15000
       });
       
@@ -658,6 +662,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       // Detect SN-related validation errors and highlight the newRouterModemSN field
       const errorMessage = e.response?.data?.message || e.message || 'Unknown error';
       const lowerError = errorMessage.toLowerCase();
+
       if (
         lowerError.includes('smart olt') ||
         lowerError.includes('sn duplicate') ||
@@ -667,7 +672,17 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
         setErrors(prev => ({ ...prev, newRouterModemSN: errorMessage }));
       }
 
-      Alert.alert('Error', errorMessage);
+      // Precise mapping for RADIUS/Duplicate errors to avoid "Failed to update" prefix
+      if (
+        lowerError.includes('radius offline') || 
+        lowerError.includes('radius duplicate') || 
+        lowerError.includes('it has a duplicate on onboarded customer')
+      ) {
+        Alert.alert('Error', errorMessage);
+      } else {
+        // Use the generic prefix for other errors
+        Alert.alert('Error', `Failed to update records: ${errorMessage}`);
+      }
     }
   };
 

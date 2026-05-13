@@ -70,6 +70,8 @@ interface ServiceOrder {
 interface ServiceOrderContextType {
     serviceOrders: ServiceOrder[];
     isLoading: boolean;
+    isRefreshing: boolean;
+    isFetchingNextPage: boolean;
     error: string | null;
     refreshServiceOrders: () => Promise<void>;
     silentRefresh: () => Promise<void>;

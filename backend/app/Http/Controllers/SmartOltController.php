@@ -112,10 +112,14 @@ class SmartOltController extends Controller
             $config = SmartOlt::first();
 
             if (!$config) {
-                Log::channel('smartoltrelated')->error('SmartOLT configuration not found in database');
+                Log::channel('smartoltrelated')->error('SmartOLT Validation Failed (Config Missing):', [
+                    'jo_id' => $request->input('jo_id'),
+                    'so_id' => $request->input('so_id'),
+                    'user_email' => $request->input('user_email')
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'SmartOLT configuration not found'
+                    'message' => 'Cant Connect to SmartOLT. Please contact admin.'
                 ], 404);
             }
 
@@ -139,9 +143,17 @@ class SmartOltController extends Controller
                 
                 // Check if SmartOLT returned an error status
                 if (isset($data['status']) && $data['status'] === false) {
+                    $errorMsg = $data['error'] ?? 'Unknown error';
+                    Log::channel('smartoltrelated')->warning('SmartOLT Validation Failed (API Error):', [
+                        'sn' => $sn,
+                        'error' => $errorMsg,
+                        'jo_id' => $request->input('jo_id'),
+                        'so_id' => $request->input('so_id'),
+                        'user_email' => $request->input('user_email')
+                    ]);
                     return response()->json([
                         'success' => false,
-                        'message' => 'SmartOLT API: ' . ($data['error'] ?? 'Unknown error')
+                        'message' => 'SmartOLT API: ' . $errorMsg
                     ], 200);
                 }
 
@@ -154,6 +166,12 @@ class SmartOltController extends Controller
                         $exists = TechnicalDetail::where('router_modem_sn', $sn)->exists();
 
                         if ($exists) {
+                            Log::channel('smartoltrelated')->warning('SmartOLT Validation Failed (Duplicate in DB):', [
+                                'sn' => $sn,
+                                'jo_id' => $request->input('jo_id'),
+                                'so_id' => $request->input('so_id'),
+                                'user_email' => $request->input('user_email')
+                            ]);
                             return response()->json([
                                 'success' => false,
                                 'message' => 'Serial Number already exists in our system'
@@ -166,6 +184,12 @@ class SmartOltController extends Controller
                             'message' => 'Valid router model sn'
                         ]);
                     } else {
+                        Log::channel('smartoltrelated')->warning('SmartOLT Validation Failed (Not Found):', [
+                            'sn' => $sn,
+                            'jo_id' => $request->input('jo_id'),
+                            'so_id' => $request->input('so_id'),
+                            'user_email' => $request->input('user_email')
+                        ]);
                         return response()->json([
                             'success' => false,
                             'message' => 'Serial Number not found in SmartOLT system'
@@ -190,6 +214,15 @@ class SmartOltController extends Controller
                     }
                 } catch (\Exception $e) {}
 
+                Log::channel('smartoltrelated')->error('SmartOLT Validation Failed (HTTP Error):', [
+                    'sn' => $sn,
+                    'status' => $response->status(),
+                    'error' => $errorMessage,
+                    'jo_id' => $request->input('jo_id'),
+                    'so_id' => $request->input('so_id'),
+                    'user_email' => $request->input('user_email')
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => $errorMessage
@@ -197,12 +230,26 @@ class SmartOltController extends Controller
             }
 
         } catch (\Exception $e) {
-            Log::channel('smartoltrelated')->error('SmartOLT Validation Exception: ' . $e->getMessage(), [
+            $isConnectionError = str_contains(strtolower($e->getMessage()), 'resolve') || 
+                               str_contains(strtolower($e->getMessage()), 'timeout') || 
+                               str_contains(strtolower($e->getMessage()), 'connect');
+
+            $logMsg = $isConnectionError ? 'SmartOLT Validation Failed (Connection Error): ' : 'SmartOLT Validation Exception: ';
+            
+            Log::channel('smartoltrelated')->error($logMsg . $e->getMessage(), [
+                'jo_id' => $request->input('jo_id'),
+                'so_id' => $request->input('so_id'),
+                'user_email' => $request->input('user_email'),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            $userMessage = $isConnectionError 
+                ? 'Could not connect to SmartOLT API. Please check server internet connection.'
+                : 'Error validating router model sn: ' . $e->getMessage();
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error validating router model sn: ' . $e->getMessage()
+                'message' => $userMessage
             ], 500);
         }
     }

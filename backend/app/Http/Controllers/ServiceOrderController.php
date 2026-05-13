@@ -1134,10 +1134,41 @@ class ServiceOrderController extends Controller
             Log::error('Error updating service order: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
 
+            $errorMessage = $e->getMessage();
+
+            // Radius Connectivity Issues
+            if (str_contains($errorMessage, 'Failed to connect to RADIUS server') || 
+                str_contains($errorMessage, 'Connection refused') || 
+                str_contains($errorMessage, 'cURL error 7')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Radius Offline',
+                    'error' => $errorMessage
+                ], 400);
+            }
+
+            // Radius Duplicate Check
+            if (str_contains($errorMessage, 'HTTP 400') && (str_contains($errorMessage, 'already exists') || str_contains($errorMessage, 'Duplicate') || str_contains($errorMessage, 'exists'))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Radius Duplicate',
+                    'error' => $errorMessage
+                ], 400);
+            }
+
+            // Technical Details Duplicate (Onboarded Customer Duplicate)
+            if (str_contains($errorMessage, 'Duplicate entry') && str_contains($errorMessage, 'technical_details')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'it has a duplicate on onboarded customer',
+                    'error' => $errorMessage
+                ], 409);
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update service order',
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
             ], 500);
         }
     }

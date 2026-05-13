@@ -130,24 +130,17 @@ class AutoDisconnectService
                 $this->writeLog("");
                 $this->writeLog("[{$counter}/{$totalCount}] ══════════════════════════════════════════════");
                 
-                try {
-                    $result = $this->processDisconnection($invoice, $dcActualOffset);
-                    
-                    if ($result['success']) {
-                        $processedCount++;
-                        $this->writeLog("[{$counter}/{$totalCount}] ✓ SUCCESS - Transaction Committed");
-                    } else {
-                        $skippedCount++;
-                        $this->writeLog("[{$counter}/{$totalCount}] ⊘ SKIPPED: {$result['reason']}");
-                        if (isset($result['reason'])) {
-                            $errors[] = "Account {$invoice->account_no}: {$result['reason']}";
-                        }
-                    }
-                } catch (Throwable $e) {
-                    $this->writeLog("[{$counter}/{$totalCount}] ✗ FATAL ERROR in loop: " . $e->getMessage());
-                    $this->writeLog("[TRACE] " . $e->getTraceAsString());
-                    $errors[] = "Account {$invoice->account_no}: " . $e->getMessage();
+                $result = $this->processDisconnection($invoice, $dcActualOffset);
+                
+                if ($result['success']) {
+                    $processedCount++;
+                    $this->writeLog("[{$counter}/{$totalCount}] ✓ SUCCESS - Transaction Committed");
+                } else {
                     $skippedCount++;
+                    $this->writeLog("[{$counter}/{$totalCount}] ⊘ SKIPPED: {$result['reason']}");
+                    if (isset($result['reason'])) {
+                        $errors[] = "Account {$invoice->account_no}: {$result['reason']}";
+                    }
                 }
             }
 
@@ -263,10 +256,27 @@ class AutoDisconnectService
         // Create transaction to ensure atomicity
         DB::beginTransaction();
         try {
+            // 1. Restrict via RADIUS first
+            $this->writeLog("  [RADIUS] Initiating restriction...");
+            $restrictResult = $this->radiusService->restrictedUser([
+                'username' => $username,
+                'accountNumber' => $accountNo,
+                'remarks' => 'Auto DC',
+                'updatedBy' => 'System'
+            ]);
+
+            if ($restrictResult['status'] !== 'success') {
+                $reason = $restrictResult['message'] ?? 'Unknown RADIUS error';
+                $this->writeLog("  [CRITICAL] RADIUS failure: {$reason}. STOPPING ENTIRE PROCESS.");
+                DB::rollBack();
+                throw new Exception("CRITICAL RADIUS FAILURE: {$reason}");
+            }
+            $this->writeLog("  [RADIUS] ✓ Successfully restricted");
+
+            // 2. Apply disconnection fee if configured
             $config = BillingConfig::first();
             $dcFee = floatval($config->disconnection_fee ?? 0);
 
-            // Apply disconnection fee if configured
             if ($dcFee > 0) {
                 $this->writeLog("  [FEE] Applying disconnection fee: ₱" . number_format($dcFee, 2));
 
@@ -323,21 +333,7 @@ class AutoDisconnectService
                 $this->writeLog("  [FEE] No disconnection fee (set to 0)");
             }
 
-            // Restrict via RADIUS using existing service
-            $this->writeLog("  [RADIUS] Initiating restriction...");
-            $restrictResult = $this->radiusService->restrictedUser([
-                'username' => $username,
-                'accountNumber' => $accountNo,
-                'remarks' => 'Auto DC',
-                'updatedBy' => 'System'
-            ]);
-
-            if ($restrictResult['status'] !== 'success') {
-                throw new Exception("RADIUS restrict failed: " . ($restrictResult['message'] ?? 'Unknown error'));
-            }
-            $this->writeLog("  [RADIUS] ✓ Successfully restricted");
-
-            // Override billing account status to Inactive (RADIUS service sets Restricted; we want Inactive here)
+            // 3. Override billing account status to Inactive (RADIUS service sets Restricted; we want Inactive here)
             $inactiveStatusId = DB::table('billing_status')->where('status_name', 'Inactive')->value('id') ?? 4;
             DB::table('billing_accounts')
                 ->where('id', $billingAccount->id)
