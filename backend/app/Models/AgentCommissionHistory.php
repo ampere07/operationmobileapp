@@ -17,8 +17,16 @@ class AgentCommissionHistory extends Model
         'created_by',
         'remarks',
         'proof_of_payment',
-        'agent_id'
+        'agent_id',
+        'updated_by',
+        'updated_at',
+        'approved_by'
     ];
     
     public $timestamps = false; // The table has created_at but uses CURRENT_TIMESTAMP, and no updated_at
+
+    public function agent()
+    {
+        return $this->belongsTo(User::class, 'agent_id');
+    }
 }

@@ -74,6 +74,7 @@ class RadiusStatusSyncService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+            \Log::channel('radiusrelated')->error('[STATUS SYNC CRITICAL] Global failure: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -263,6 +264,7 @@ class RadiusStatusSyncService
                     'username' => $account->username ?? 'unknown',
                     'error' => $e->getMessage()
                 ]);
+                \Log::channel('radiusrelated')->error('[STATUS SYNC ACCOUNT ERROR] Account: ' . ($account->account_no ?? 'Unknown') . ' - Error: ' . $e->getMessage());
             }
         }
 
@@ -304,7 +306,9 @@ class RadiusStatusSyncService
             }
         }
 
-        return null;
+        $errorMsg = 'Failed to connect to RADIUS API after ' . self::MAX_RETRIES . ' attempts. URL: ' . $url;
+        \Log::channel('radiusrelated')->error('[STATUS SYNC API FAILED] ' . $errorMsg);
+        throw new \RuntimeException($errorMsg);
     }
 }
 

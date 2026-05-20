@@ -14,7 +14,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->decimal('price', 10, 2)->nullable();
             $table->unsignedBigInteger('group_id')->nullable();
-            $table->unsignedBigInteger('modified_by_user_id')->nullable();
+            $table->unsignedBigInteger('modified_by_user')->nullable();
             $table->dateTime('modified_date')->nullable();
         });
     }

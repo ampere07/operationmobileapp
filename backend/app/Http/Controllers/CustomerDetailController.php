@@ -117,6 +117,8 @@ class CustomerDetailController extends Controller
                     'createdAt' => $billingAccount->created_at ? $billingAccount->created_at->format('Y-m-d H:i:s') : null,
                     'updatedBy' => $billingAccount->updated_by,
                     'updatedAt' => $billingAccount->updated_at ? $billingAccount->updated_at->format('Y-m-d H:i:s') : null,
+                    'vip_expiration' => $billingAccount->vip_expiration,
+                    'vip_remarks' => $billingAccount->vip_remarks,
                 ],
                 
                 'technicalDetails' => $technicalDetail ? [

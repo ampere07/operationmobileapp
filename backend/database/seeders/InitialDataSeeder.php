@@ -95,7 +95,7 @@ class InitialDataSeeder extends Seeder
             'description' => 'Basic internet plan with 25Mbps speed',
             'price' => 999.00,
             'group_id' => $groupId,
-            'modified_by_user_id' => null,
+            'modified_by_user' => null,
             'modified_date' => now(),
         ]);
 

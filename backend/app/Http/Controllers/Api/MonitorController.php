@@ -914,8 +914,8 @@ class MonitorController extends Controller
                         }
                         
                         $since = $workingTask->start_time;
-                        // Set primaryTimeDisp to total working time today
-                        $primaryTimeDisp = $workingTimeStr; 
+                        // Set primaryTimeDisp to null so it counts the current task duration live in the frontend
+                        $primaryTimeDisp = null; 
                     } else {
                         $status = 'Available';
                         $lastFinished = $allTasks->filter(function($t) { return !empty($t->start_time) && !empty($t->end_time); })->sortBy('end_time')->last();

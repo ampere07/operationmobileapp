@@ -66,7 +66,27 @@ class ConsolidatedNotificationController extends Controller
                 });
 
             // Merge and Sort
-            $all = $applications->concat($jobCompeltions)
+            $radiusStatus = DB::table('system_config')->where('config_key', 'radius_api_status')->first();
+            $radiusAlert = collect();
+            if ($radiusStatus && $radiusStatus->config_value === 'offline') {
+                $radiusError = DB::table('system_config')->where('config_key', 'radius_api_last_error')->first();
+                $errorMessage = $radiusError ? $radiusError->config_value : 'System could not connect to RADIUS API';
+                $updatedAt = Carbon::parse($radiusStatus->updated_at)->setTimezone('Asia/Manila');
+                
+                $radiusAlert->push([
+                    'id' => 999999, // Static distinct ID for radius offline alerts
+                    'type' => 'radius_offline',
+                    'customer_name' => 'RADIUS Connection Failure',
+                    'plan_name' => $errorMessage,
+                    'title' => 'RADIUS Connection Failure',
+                    'message' => $errorMessage,
+                    'timestamp' => $updatedAt->timestamp,
+                    'formatted_date' => $updatedAt->diffForHumans(),
+                    'raw_date' => $updatedAt->toIso8601String()
+                ]);
+            }
+
+            $all = $applications->concat($jobCompeltions)->concat($radiusAlert)
                 ->sortByDesc('timestamp')
                 ->take($limit)
                 ->values();

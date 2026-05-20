@@ -617,9 +617,8 @@ class CustomerDetailUpdateController extends Controller
                     ]);
                     $radiusMessage = $radiusResult['message'] ?? 'Radius and Database updated successfully';
                 } catch (\Exception $e) {
-                    $radiusMessage = $radiusResult['message'] ?? 'Radius updated successfully';
-                } catch (\Exception $e) {
                     Log::error('Radius username update failed', ['error' => $e->getMessage()]);
+                    \Log::channel('radiusrelated')->error('[CUSTOMER DETAIL RADIUS UPDATE FAILED] Account: ' . $accountNo . ' - Old User: ' . $oldUsername . ' - New User: ' . $newUsernameInput . ' - Error: ' . $e->getMessage());
                     $radiusMessage = 'Radius update failed: ' . $e->getMessage();
                 }
             }

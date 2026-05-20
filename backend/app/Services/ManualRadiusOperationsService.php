@@ -1031,6 +1031,13 @@ class ManualRadiusOperationsService
         $logPath = storage_path('logs/manual_radius_operations.log');
         file_put_contents($logPath, $logMessage . PHP_EOL, FILE_APPEND);
         
+        // Mirror errors to the radiusrelated channel for visibility in the Log Viewer
+        if (str_contains(strtoupper($message), 'ERROR') || 
+            str_contains(strtoupper($message), 'EXCEPTION') || 
+            str_contains(strtoupper($message), 'FAILED')) {
+            \Log::channel('radiusrelated')->error("[{$this->logName}] {$message}");
+        }
+        
         // Also log to Laravel default log
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }

@@ -268,6 +268,7 @@ class AutoDisconnectService
             if ($restrictResult['status'] !== 'success') {
                 $reason = $restrictResult['message'] ?? 'Unknown RADIUS error';
                 $this->writeLog("  [CRITICAL] RADIUS failure: {$reason}. STOPPING ENTIRE PROCESS.");
+                \Log::channel('radiusrelated')->error('[AUTO DC RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $reason);
                 DB::rollBack();
                 throw new Exception("CRITICAL RADIUS FAILURE: {$reason}");
             }
@@ -375,6 +376,11 @@ class AutoDisconnectService
             DB::rollBack();
             $this->writeLog("  [ERROR] Transaction rolled back for Account {$accountNo}: " . $e->getMessage());
             $this->writeLog("  [TRACE] " . $e->getTraceAsString());
+            
+            if (str_contains($e->getMessage(), 'RADIUS')) {
+                \Log::channel('radiusrelated')->error('[AUTO DC EXCEPTION] Account: ' . $accountNo . ' - Error: ' . $e->getMessage());
+            }
+            
             throw $e;
         }
     }
@@ -519,7 +525,9 @@ class AutoDisconnectService
                     if ($restrictResult['status'] === 'success') {
                         $this->writeLog("  [RADIUS] ✓ Successfully restricted");
                     } else {
-                        $this->writeLog("  [RADIUS] ✗ Restrict failed: " . ($restrictResult['message'] ?? 'Unknown'));
+                        $reason = $restrictResult['message'] ?? 'Unknown';
+                        $this->writeLog("  [RADIUS] ✗ Restrict failed: " . $reason);
+                        \Log::channel('radiusrelated')->error('[AUTO PULLOUT RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $reason);
                     }
 
                     // 3. Update billing status to Inactive

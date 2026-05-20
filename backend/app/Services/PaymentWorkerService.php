@@ -537,12 +537,14 @@ class PaymentWorkerService
                 return 'success';
             } else {
                 $this->workerLog("[RECONNECT FAILED] " . $result['message']);
+                \Log::channel('radiusrelated')->error('[PAYMENT WORKER RECONNECT FAILED] Account: ' . $accountNo . ' - Message: ' . $result['message']);
                 return 'failed';
             }
             
         } catch (Exception $e) {
             $this->workerLog("[RECONNECT EXCEPTION] Failed for {$account->account_no}: {$e->getMessage()}");
             $this->workerLog("[RECONNECT EXCEPTION] Trace: {$e->getTraceAsString()}");
+            \Log::channel('radiusrelated')->error('[PAYMENT WORKER RECONNECT EXCEPTION] Account: ' . ($account->account_no ?? 'Unknown') . ' - Error: ' . $e->getMessage());
             return 'exception';
         }
     }

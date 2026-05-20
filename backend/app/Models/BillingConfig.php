@@ -22,7 +22,6 @@ class BillingConfig extends Model
         'disconnection_fee',
         'pullout_offset',
         'pullout_day',
-        'agent_commission',
         'updated_by',
         'created_by'
     ];
@@ -36,7 +35,6 @@ class BillingConfig extends Model
         'disconnection_fee' => 'decimal:2',
         'pullout_offset' => 'integer',
         'pullout_day' => 'integer',
-        'agent_commission' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

@@ -84,28 +84,71 @@ class CheckVipExpiration extends Command
                 if ($expirationDate === $todayString) {
                     $this->logToFile("VIP EXPIRED: Account {$account->account_no} (User: {$account->username}) expires today ($expirationDate)", $logPath);
 
-                    // Call disconnect service
-                    $result = $this->radiusService->disconnectUser([
+                    // Call restrict service
+                    $result = $this->radiusService->restrictedUser([
                         'accountNumber' => $account->account_no,
                         'username' => $account->username,
-                        'remarks' => 'VIP Expiration - Auto Disconnect',
+                        'remarks' => 'VIP Expiration - Auto Restrict',
                         'updatedBy' => 'System'
                     ]);
 
                     if ($result['status'] === 'success') {
-                        // Explicitly update status to 4 as requested
+                        // Calculate duration the user has been a VIP
+                        $vipStartDate = null;
+                        
+                        // Look up details update logs for when status changed to 7 (VIP)
+                        $firstVipLog = DB::table('details_update_logs')
+                            ->where('account_id', $account->id)
+                            ->where(function($query) {
+                                $query->where('new_details', 'like', '%"billing_status_id":7%')
+                                      ->orWhere('new_details', 'like', '%"billing_status_id":"7"%')
+                                      ->orWhere('new_details', 'like', '%"billing_status_id": 7%');
+                            })
+                            ->orderBy('created_at', 'asc')
+                            ->first();
+
+                        if ($firstVipLog) {
+                            $vipStartDate = Carbon::parse($firstVipLog->created_at);
+                        } else {
+                            // Fallback to billing account's created_at
+                            $billingAcc = DB::table('billing_accounts')->where('id', $account->id)->first();
+                            if ($billingAcc && !empty($billingAcc->created_at)) {
+                                $vipStartDate = Carbon::parse($billingAcc->created_at);
+                            }
+                        }
+
+                        $durationString = 'unknown duration';
+                        if ($vipStartDate) {
+                            $diff = $vipStartDate->diff(now());
+                            $durationParts = [];
+                            if ($diff->y > 0) {
+                                $durationParts[] = $diff->y . ' ' . ($diff->y === 1 ? 'year' : 'years');
+                            }
+                            if ($diff->m > 0) {
+                                $durationParts[] = $diff->m . ' ' . ($diff->m === 1 ? 'month' : 'months');
+                            }
+                            if ($diff->d > 0 || empty($durationParts)) {
+                                $durationParts[] = $diff->d . ' ' . ($diff->d === 1 ? 'day' : 'days');
+                            }
+                            $durationString = implode(', ', $durationParts);
+                        }
+
+                        $currentDate = now()->format('Y-m-d');
+                        $remarks = "This VIP account has been restricted on {$currentDate} via system automation because the VIP subscription expired on {$expirationDate}. Total duration as VIP: {$durationString}.";
+
                         DB::table('billing_accounts')
                             ->where('id', $account->id)
                             ->update([
                                 'billing_status_id' => 4,
+                                'vip_remarks' => $remarks,
                                 'updated_at' => now(),
                                 'updated_by' => 'System'
                             ]);
-                        
+
                         $disconnectedCount++;
-                        $this->logToFile("[SUCCESS] Disconnected and updated status to 4 for {$account->account_no}", $logPath);
+                        $this->logToFile("[SUCCESS] Restricted user session, updated status to 4, and updated vip_remarks for {$account->account_no}. Duration: {$durationString}", $logPath);
                     } else {
-                        $this->logToFile("[ERROR] Failed to disconnect {$account->account_no}: " . ($result['message'] ?? 'Unknown error'), $logPath);
+                        $this->logToFile("[ERROR] Failed to restrict {$account->account_no}: " . ($result['message'] ?? 'Unknown error'), $logPath);
                     }
                 }
             } catch (\Exception $e) {

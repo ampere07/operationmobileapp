@@ -677,7 +677,11 @@ class JobOrderController extends Controller
             $jobOrder->fill($data);
             $dirtyAttributes = $jobOrder->getDirty();
             
-            if (!empty($dirtyAttributes)) {
+            $realChanges = array_filter(array_keys($dirtyAttributes), function($key) {
+                return !in_array($key, ['updated_by_user_email', 'updated_at']);
+            });
+            
+            if (!empty($realChanges)) {
                 $oldData = [];
                 $newData = [];
                 
@@ -688,7 +692,7 @@ class JobOrderController extends Controller
                 }
                 
                 $jobOrder->save();
-
+ 
                 if (!empty($newData)) {
                     AuditTrailLog::create([
                         'old_details' => [
@@ -705,26 +709,26 @@ class JobOrderController extends Controller
                         'updated_by_user' => $data['updated_by_user_email'] ?? 'System'
                     ]);
                 }
-            } else {
-                $jobOrder->save();
-            }
 
-            // Create Activity Log using helper
-            ActivityLog::log(
-                'Job Order Updated',
-                "Job Order #{$id} updated by " . ($data['updated_by_user_email'] ?? 'Technician') . " (Status: {$jobOrder->onsite_status})",
-                'info',
-                [
-                    'user_email' => $data['updated_by_user_email'] ?? null,
-                    'resource_type' => 'JobOrder',
-                    'resource_id' => $jobOrder->id,
-                    'additional_data' => [
-                        'onsite_status' => $jobOrder->onsite_status,
-                        'assigned_email' => $jobOrder->assigned_email,
-                        'updated_by' => $data['updated_by_user_email'] ?? null
+                // Create Activity Log using helper
+                ActivityLog::log(
+                    'Job Order Updated',
+                    "Job Order #{$id} updated by " . ($data['updated_by_user_email'] ?? 'Technician') . " (Status: {$jobOrder->onsite_status})",
+                    'info',
+                    [
+                        'user_email' => $data['updated_by_user_email'] ?? null,
+                        'resource_type' => 'JobOrder',
+                        'resource_id' => $jobOrder->id,
+                        'additional_data' => [
+                            'onsite_status' => $jobOrder->onsite_status,
+                            'assigned_email' => $jobOrder->assigned_email,
+                            'updated_by' => $data['updated_by_user_email'] ?? null
+                        ]
                     ]
-                ]
-            );
+                );
+            } else {
+                $jobOrder->refresh();
+            }
             
             if (($data['onsite_status'] ?? null) === 'Done' && $oldStatus !== 'Done') {
                 $this->broadcastJobOrderDone($jobOrder);
@@ -1188,7 +1192,7 @@ class JobOrderController extends Controller
                 'account_id' => $billingAccount->id,
                 'pppoe_username' => $generatedUsername,
                 'pppoe_password' => $generatedPassword,
-                'updated_by_user_email' => request()->input('updated_by_user_email', $jobOrder->created_by_user_email)
+                'updated_by_user_email' => request()->input('updated_by_user_email') ?? auth()->user()?->email_address ?? auth()->user()?->email ?? $jobOrder->created_by_user_email ?? 'System'
             ]);
             
             \Log::info('Credentials saved to job_orders table', [
@@ -1749,7 +1753,7 @@ class JobOrderController extends Controller
                 $jobOrder->update([
                     'pppoe_username' => $pppoeUsername,
                     'pppoe_password' => $pppoePassword,
-                    'updated_by_user_email' => request()->input('updated_by_user_email', $jobOrder->created_by_user_email)
+                    'updated_by_user_email' => request()->input('updated_by_user_email') ?? auth()->user()?->email_address ?? auth()->user()?->email ?? $jobOrder->created_by_user_email ?? 'System'
                 ]);
                 
                 $jobOrder->refresh();

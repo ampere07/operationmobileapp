@@ -1258,6 +1258,7 @@ class TransactionController extends Controller
             }
             else {
                 \Log::info('[TRANSACTION RECONNECT FAILED] ' . $result['message']);
+                \Log::channel('radiusrelated')->error('[TRANSACTION RECONNECT FAILED] Account: ' . $accountNo . ' - Message: ' . $result['message']);
                 return 'failed';
             }
 
@@ -1265,6 +1266,7 @@ class TransactionController extends Controller
         catch (\Exception $e) {
             \Log::error('[TRANSACTION RECONNECT EXCEPTION] ' . $e->getMessage());
             \Log::error('[TRANSACTION RECONNECT EXCEPTION] Trace: ' . $e->getTraceAsString());
+            \Log::channel('radiusrelated')->error('[TRANSACTION RECONNECT EXCEPTION] Account: ' . ($accountNo ?? 'Unknown') . ' - Error: ' . $e->getMessage());
             return 'exception';
         }
     }

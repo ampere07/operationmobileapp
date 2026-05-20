@@ -257,7 +257,7 @@ return new class extends Migration
         // Plan list table foreign keys
         Schema::table('plan_list', function (Blueprint $table) {
             $table->foreign('group_id')->references('id')->on('group_list')->onDelete('set null');
-            $table->foreign('modified_by_user_id')->references('id')->on('users')->onDelete('set null');
+            $table->foreign('modified_by_user')->references('id')->on('users')->onDelete('set null');
         });
 
         // Group list table foreign keys
@@ -450,7 +450,7 @@ return new class extends Migration
 
         Schema::table('plan_list', function (Blueprint $table) {
             $table->dropForeign(['group_id']);
-            $table->dropForeign(['modified_by_user_id']);
+            $table->dropForeign(['modified_by_user']);
         });
 
         Schema::table('attachments', function (Blueprint $table) {

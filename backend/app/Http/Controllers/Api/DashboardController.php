@@ -54,6 +54,23 @@ class DashboardController extends Controller
             $applicationQuery = DB::table('applications')
                 ->where('applications.organization_id', $organizationId);
 
+            // Fetch service connection statuses from cached background cron check
+            $radiusStatus = DB::table('system_config')->where('config_key', 'radius_api_status')->first();
+            $radiusOfflineMessage = null;
+            if ($radiusStatus && $radiusStatus->config_value === 'offline') {
+                $radiusError = DB::table('system_config')->where('config_key', 'radius_api_last_error')->first();
+                $radiusOfflineMessage = $radiusError ? $radiusError->config_value : 'Failed to connect to RADIUS API';
+            }
+            $radiusIsOnline = ($radiusStatus ? $radiusStatus->config_value : 'online') === 'online';
+
+            $smartOltStatus = DB::table('system_config')->where('config_key', 'smart_olt_status')->first();
+            $smartOltError = null;
+            if ($smartOltStatus && $smartOltStatus->config_value === 'offline') {
+                $smartOltErrorRecord = DB::table('system_config')->where('config_key', 'smart_olt_last_error')->first();
+                $smartOltError = $smartOltErrorRecord ? $smartOltErrorRecord->config_value : 'Failed to connect to SmartOLT API';
+            }
+            $smartOltOnline = ($smartOltStatus ? $smartOltStatus->config_value : 'online') === 'online';
+
             $counts = [
                 // Radius Stats (Overall)
                 'radius_online' => (clone $onlineStatusQuery)->where('online_status.session_status', 'Online')->count(),
@@ -105,6 +122,20 @@ class DashboardController extends Controller
                 'so_visit_in_progress' => (clone $serviceOrderQuery)->where('service_orders.visit_status', 'In Progress')->whereDate($dateField, $todayStr)->count(),
                 'app_pending' => (clone $applicationQuery)->where('applications.status', 'Pending')->count(),
                 'jo_in_progress' => (clone $jobOrderQuery)->where('job_orders.onsite_status', 'In Progress')->count(),
+
+                // Service Statuses
+                'services' => [
+                    'radius' => [
+                        'status' => $radiusIsOnline ? 'online' : 'offline',
+                        'message' => $radiusOfflineMessage,
+                        'updated_at' => $radiusStatus ? Carbon::parse($radiusStatus->updated_at)->toIso8601String() : null
+                    ],
+                    'smartolt' => [
+                        'status' => $smartOltOnline ? 'online' : 'offline',
+                        'message' => $smartOltError,
+                        'updated_at' => $smartOltStatus ? Carbon::parse($smartOltStatus->updated_at)->toIso8601String() : null
+                    ]
+                ]
             ];
 
             return response()->json([

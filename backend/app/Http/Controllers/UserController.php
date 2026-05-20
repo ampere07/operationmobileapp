@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Organization;
+use App\Models\AgentBalance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -124,6 +125,15 @@ class UserController extends Controller
             
             if (!$user) {
                 throw new \Exception('Failed to create user');
+            }
+
+            $user->load(['organization', 'role', 'agent']);
+
+            if ($user->role_id == 4 || ($user->role && strtolower($user->role->role_name) === 'agent')) {
+                AgentBalance::firstOrCreate(
+                    ['agent_id' => $user->id],
+                    ['balance' => 0.00]
+                );
             }
 
             // Try to log user creation activity (but don't fail if logging fails)
@@ -288,6 +298,14 @@ class UserController extends Controller
             }
 
             $user->update($updateData);
+            $user->load(['organization', 'role', 'agent']);
+
+            if ($user->role_id == 4 || ($user->role && strtolower($user->role->role_name) === 'agent')) {
+                AgentBalance::firstOrCreate(
+                    ['agent_id' => $user->id],
+                    ['balance' => 0.00]
+                );
+            }
 
             // Try to log user update activity (but don't fail if logging fails)
             try {

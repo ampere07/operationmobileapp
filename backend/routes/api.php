@@ -56,6 +56,7 @@ Route::post('/tech-in-out/time-out', [TechInOutController::class, 'timeOut']);
 Route::get('/reports', [ReportController::class , 'index']);
 Route::get('/commissions', [CommissionController::class, 'index']);
 Route::get('/commissions/history', [CommissionController::class, 'getHistory']);
+Route::post('/commissions/history', [CommissionController::class, 'storeHistory']);
 Route::get('/commissions/trend', [CommissionController::class, 'getTrend']);
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
@@ -107,11 +108,17 @@ Route::post('/sms-blast', [SmsBlastController::class , 'store']);
 Route::get('/expenses-logs', [ExpensesLogController::class , 'index']);
 Route::get('/disconnection-logs', [DisconnectionLogsController::class , 'index']);
 Route::get('/smart-olt/validate-sn', [\App\Http\Controllers\SmartOltController::class , 'validateOnuSn']);
+Route::post('/smart-olt/update-name', [\App\Http\Controllers\SmartOltController::class , 'updateOnuNameBySn']);
+Route::post('/smart-olt/delete-name', [\App\Http\Controllers\SmartOltController::class , 'deleteOnuNameBySn']);
 Route::get('/smart-olt', [\App\Http\Controllers\SmartOltController::class , 'index']);
 Route::post('/smart-olt', [\App\Http\Controllers\SmartOltController::class , 'store']);
 Route::put('/smart-olt/{id}', [\App\Http\Controllers\SmartOltController::class , 'update']);
 Route::delete('/smart-olt/{id}', [\App\Http\Controllers\SmartOltController::class , 'destroy']);
 Route::get('/reconnection-logs', [ReconnectionLogsController::class , 'index']);
+Route::get('/data-logs', [\App\Http\Controllers\Api\DataLogsController::class , 'index']);
+
+// File-based Log Viewers (SmartOLT & Radius)
+Route::get('/file-logs/{type}', [\App\Http\Controllers\FileLogController::class, 'getLogFile']);
 
 // SMS Template Routes
 Route::apiResource('sms-templates', SMSTemplateController::class);
@@ -1179,6 +1186,23 @@ Route::post('/login', function (Request $request) {
             $fullName = $user->username;
         }
 
+        // Get role permissions (for custom roles)
+        // Note: Role model casts 'permissions' to array automatically
+        $rolePermissions = null;
+        if ($user->role) {
+            $rawPerms = $user->role->permissions;
+            \Log::info('Login permissions debug', [
+                'user_id' => $user->id,
+                'role_id' => $user->role_id,
+                'role_name' => $user->role->role_name ?? 'unknown',
+                'raw_permissions' => $rawPerms,
+                'permissions_type' => gettype($rawPerms),
+            ]);
+            if (is_array($rawPerms) && count($rawPerms) > 0) {
+                $rolePermissions = $rawPerms;
+            }
+        }
+
         $responseData = [
             'user' => [
                 'id' => $user->id,
@@ -1187,6 +1211,7 @@ Route::post('/login', function (Request $request) {
                 'full_name' => $fullName,
                 'role' => $primaryRole,
                 'role_id' => $user->role_id,
+                'permissions' => $rolePermissions,
             ]
         ];
 

@@ -157,8 +157,8 @@ try {
         'updated' => 0,
         'online' => 0,
         'offline' => 0,
-        'inactive' => 0,
-        'blocked' => 0,
+        'restricted' => 0,
+        'disconnected' => 0,
         'not_found' => 0,
         'errors' => 0
     ];
@@ -185,11 +185,11 @@ try {
                 
                 if ($group === 'Disconnected' || $group === 'Mikrotik-Group:Disconnected') {
                     if ($hasSession) {
-                        $status = 'Blocked';
-                        $stats['blocked']++;
+                        $status = 'Disconnected';
+                        $stats['disconnected']++;
                     } else {
-                        $status = 'Inactive';
-                        $stats['inactive']++;
+                        $status = 'Restricted';
+                        $stats['restricted']++;
                     }
                 } else {
                     if ($hasSession) {
@@ -246,8 +246,8 @@ try {
     writeLog("Updated: {$stats['updated']}");
     writeLog("Online: {$stats['online']}");
     writeLog("Offline: {$stats['offline']}");
-    writeLog("Inactive: {$stats['inactive']}");
-    writeLog("Blocked: {$stats['blocked']}");
+    writeLog("Restricted: {$stats['restricted']}");
+    writeLog("Disconnected: {$stats['disconnected']}");
     writeLog("Not Found: {$stats['not_found']}");
     writeLog("Errors: {$stats['errors']}");
     

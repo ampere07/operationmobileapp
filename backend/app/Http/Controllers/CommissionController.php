@@ -11,7 +11,7 @@ use Carbon\Carbon;
 
 class CommissionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         try {
             $user = auth()->user();
@@ -25,7 +25,11 @@ class CommissionController extends Controller
             $billingConfig = BillingConfig::first();
             $agentCommission = $billingConfig ? $billingConfig->agent_commission : 0;
 
-            $commissions = JobOrder::whereHas('application', function($q) use ($user) {
+            $limit = $request->input('limit', 2000);
+            $offset = $request->input('offset', 0);
+            $updatedAfter = $request->input('updated_after');
+
+            $query = JobOrder::whereHas('application', function($q) use ($user) {
                 $fn1 = strtolower(trim($user->first_name . ' ' . $user->last_name));
                 $fn2 = strtolower(trim($user->full_name));
                 $email = strtolower(trim($user->email_address ?? ''));
@@ -40,10 +44,19 @@ class CommissionController extends Controller
             ->where(function($q) {
                 $q->where(DB::raw('LOWER(onsite_status)'), 'done')
                   ->orWhere(DB::raw('LOWER(onsite_status)'), 'completed');
-            })
-            ->with('application')
-            ->orderBy('created_at', 'desc')
-            ->get();
+            });
+
+            if ($updatedAfter) {
+                $query->where('updated_at', '>=', $updatedAfter);
+            }
+
+            $total = $query->count();
+
+            $commissions = $query->with('application')
+                ->orderBy('created_at', 'desc')
+                ->offset($offset)
+                ->limit($limit)
+                ->get();
 
             // Transform data for the frontend
             $data = $commissions->map(function ($item) use ($agentCommission) {
@@ -68,8 +81,11 @@ class CommissionController extends Controller
                     'total' => '₱' . number_format($totalCommission, 2),
                     'pending' => '₱' . number_format(0, 2),
                     'thisMonth' => '₱' . number_format($thisMonthCommission, 2),
-                    'totalCount' => $commissions->count()
-                ]
+                    'totalCount' => $total,
+                    'user_name' => $user->full_name ?? ($user->first_name . ' ' . $user->last_name),
+                    'user_created_at' => $user->created_at ? $user->created_at->format('M d, Y') : null
+                ],
+                'total' => $total
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -88,20 +104,93 @@ class CommissionController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
             }
 
-            $agentId = $user->id;
+            // If user is admin/billing, they might want to see history for a specific agent
+            $agentId = $request->input('agent_id', $user->id);
 
-            $history = AgentCommissionHistory::where('agent_id', $agentId)
-                ->orderBy('created_at', 'desc')
+            // Basic check: if not admin and trying to see someone else's history, block it
+            $userRole = strtolower($user->role->role_name ?? '');
+            if ($user->id != $agentId && !in_array($userRole, ['admin', 'billing', 'superadmin'])) {
+                $agentId = $user->id;
+            }
+
+            $limit = $request->input('limit', 2000);
+            $offset = $request->input('offset', 0);
+            $updatedAfter = $request->input('updated_after');
+
+            $query = AgentCommissionHistory::with('agent')
+                ->where('agent_id', $agentId);
+
+            if ($updatedAfter) {
+                $query->where('updated_at', '>=', $updatedAfter);
+            }
+            
+            $total = $query->count();
+
+            $history = $query->orderBy('created_at', 'desc')
+                ->offset($offset)
+                ->limit($limit)
                 ->get();
+
+            $data = $history->map(function($item) {
+                return [
+                    'id' => $item->id,
+                    'ref_number' => $item->ref_number,
+                    'total_amount' => $item->total_amount,
+                    'created_by' => $item->created_by,
+                    'created_at' => $item->created_at,
+                    'remarks' => $item->remarks,
+                    'proof_of_payment' => $item->proof_of_payment,
+                    'agent_id' => $item->agent_id,
+                    'agent_name' => $item->agent ? ($item->agent->full_name ?? ($item->agent->first_name . ' ' . $item->agent->last_name)) : 'Unknown',
+                    'updated_by' => $item->updated_by,
+                    'updated_at' => $item->updated_at,
+                    'approved_by' => $item->approved_by
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => $history
+                'data' => $data,
+                'total' => $total
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch payout history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function storeHistory(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $validated = $request->validate([
+                'agent_id' => 'required|integer',
+                'ref_number' => 'required|string|max:100',
+                'total_amount' => 'required|numeric|min:0',
+                'remarks' => 'nullable|string',
+                'proof_of_payment' => 'nullable|string'
+            ]);
+
+            $validated['created_by'] = $user->full_name ?? $user->email_address ?? 'System';
+            
+            $history = AgentCommissionHistory::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Commission payment recorded successfully',
+                'data' => $history
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to record commission payment',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -205,3 +294,4 @@ class CommissionController extends Controller
         }
     }
 }
+

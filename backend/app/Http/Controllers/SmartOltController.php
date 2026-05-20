@@ -253,8 +253,353 @@ class SmartOltController extends Controller
             ], 500);
         }
     }
+
+    public function updateOnuNameBySn(Request $request)
+    {
+        try {
+            Log::channel('smartoltrelated')->info('Updating ONU Name By SN Request:', $request->all());
+
+            $sn = $request->input('sn');
+            $pppoe_username = $request->input('pppoe_username');
+
+            if (!$sn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Router Modem SN is required'
+                ], 400);
+            }
+
+            if (!$pppoe_username) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'PPPoE Username is required'
+                ], 400);
+            }
+
+            // Get SmartOLT configuration from database
+            $config = SmartOlt::first();
+
+            if (!$config) {
+                Log::channel('smartoltrelated')->error('SmartOLT Name Update Failed (Config Missing)');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cant Connect to SmartOLT. Please contact admin.'
+                ], 404);
+            }
+
+            $subDomain = $config->sub_domain;
+            $token = $config->token;
+
+            // Step 1: Retrieve ONU details using Serial Number
+            $getOnuUrl = "https://{$subDomain}.smartolt.com/api/onu/get_onus_details_by_sn/{$sn}";
+            Log::channel('smartoltrelated')->info("Calling SmartOLT API to get ONU details: $getOnuUrl");
+
+            $getOnuResponse = Http::withHeaders([
+                'X-Token' => $token
+            ])->get($getOnuUrl);
+
+            Log::channel('smartoltrelated')->info('SmartOLT Get ONU Details API Response Status: ' . $getOnuResponse->status());
+
+            if (!$getOnuResponse->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch ONU details from SmartOLT: ' . $getOnuResponse->status()
+                ], 400);
+            }
+
+            $getOnuData = $getOnuResponse->json();
+
+            // Check if SmartOLT returned an error status in get_onus_details_by_sn
+            if (isset($getOnuData['status']) && $getOnuData['status'] === false) {
+                $errorMsg = $getOnuData['error'] ?? 'Unknown error';
+                Log::channel('smartoltrelated')->warning('SmartOLT Get ONU Details Failed (API Error):', [
+                    'sn' => $sn,
+                    'error' => $errorMsg
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'SmartOLT API error: ' . $errorMsg
+                ], 200);
+            }
+
+            if (!isset($getOnuData['onus']) || !is_array($getOnuData['onus']) || empty($getOnuData['onus'])) {
+                Log::channel('smartoltrelated')->warning('SmartOLT Get ONU Details Failed (Not Found):', [
+                    'sn' => $sn
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Serial Number not found in SmartOLT system'
+                ], 404);
+            }
+
+            $onuDetails = $getOnuData['onus'][0];
+            $onuExternalId = $onuDetails['unique_external_id'] ?? $onuDetails['onu_external_id'] ?? $onuDetails['id'] ?? null;
+
+            if (!$onuExternalId) {
+                Log::channel('smartoltrelated')->error('SmartOLT Get ONU Details Failed (No External ID):', [
+                    'sn' => $sn,
+                    'onu_details' => $onuDetails
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not determine the unique external ID for the ONU.'
+                ], 400);
+            }
+
+            // Step 2: Call update_location_details to update the name
+            $updateUrl = "https://{$subDomain}.smartolt.com/api/onu/update_location_details/{$onuExternalId}";
+            Log::channel('smartoltrelated')->info("Calling SmartOLT API to update ONU name: $updateUrl for external ID: $onuExternalId");
+
+            // According to API specification, we send a POST request with the 'name' parameter
+            $updateResponse = Http::withHeaders([
+                'X-Token' => $token
+            ])->asForm()->post($updateUrl, [
+                'name' => $pppoe_username
+            ]);
+
+            Log::channel('smartoltrelated')->info('SmartOLT Update ONU Name API Response Status: ' . $updateResponse->status());
+
+            if ($updateResponse->successful()) {
+                $updateData = $updateResponse->json();
+                
+                if (isset($updateData['status']) && $updateData['status'] === false) {
+                    $errorMsg = $updateData['error'] ?? 'Failed to update name';
+                    Log::channel('smartoltrelated')->warning('SmartOLT Update ONU Name Failed (API Error):', [
+                        'sn' => $sn,
+                        'onu_external_id' => $onuExternalId,
+                        'name' => $pppoe_username,
+                        'error' => $errorMsg
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'SmartOLT API: ' . $errorMsg
+                    ], 200);
+                }
+
+                Log::channel('smartoltrelated')->info('SmartOLT Update ONU Name Successful:', [
+                    'sn' => $sn,
+                    'onu_external_id' => $onuExternalId,
+                    'name' => $pppoe_username
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'ONU name updated successfully to ' . $pppoe_username
+                ]);
+            } else {
+                $errorMessage = 'Error updating ONU name in SmartOLT: ' . $updateResponse->status();
+                try {
+                    $errorData = $updateResponse->json();
+                    if (isset($errorData['message'])) {
+                        $errorMessage = $errorData['message'];
+                    } elseif (isset($errorData['error'])) {
+                        $errorMessage = $errorData['error'];
+                    }
+                } catch (\Exception $e) {}
+
+                Log::channel('smartoltrelated')->error('SmartOLT Update ONU Name Failed (HTTP Error):', [
+                    'sn' => $sn,
+                    'onu_external_id' => $onuExternalId,
+                    'name' => $pppoe_username,
+                    'status' => $updateResponse->status(),
+                    'error' => $errorMessage
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            $isConnectionError = str_contains(strtolower($e->getMessage()), 'resolve') || 
+                               str_contains(strtolower($e->getMessage()), 'timeout') || 
+                               str_contains(strtolower($e->getMessage()), 'connect');
+
+            $logMsg = $isConnectionError ? 'SmartOLT Update ONU Name Failed (Connection Error): ' : 'SmartOLT Update ONU Name Exception: ';
+            
+            Log::channel('smartoltrelated')->error($logMsg . $e->getMessage(), [
+                'sn' => $request->input('sn'),
+                'pppoe_username' => $request->input('pppoe_username'),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $userMessage = $isConnectionError 
+                ? 'Could not connect to SmartOLT API. Please check server internet connection.'
+                : 'Error updating ONU name: ' . $e->getMessage();
+
+            return response()->json([
+                'success' => false,
+                'message' => $userMessage
+            ], 500);
+        }
+    }
+
+    public function deleteOnuNameBySn(Request $request)
+    {
+        try {
+            Log::channel('smartoltrelated')->info('Deleting ONU Name By SN Request:', $request->all());
+
+            $sn = $request->input('sn');
+
+            if (!$sn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Router Modem SN is required'
+                ], 400);
+            }
+
+            // Get SmartOLT configuration from database
+            $config = SmartOlt::first();
+
+            if (!$config) {
+                Log::channel('smartoltrelated')->error('SmartOLT Name Delete Failed (Config Missing)');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cant Connect to SmartOLT. Please contact admin.'
+                ], 404);
+            }
+
+            $subDomain = $config->sub_domain;
+            $token = $config->token;
+
+            // Step 1: Retrieve ONU details using Serial Number
+            $getOnuUrl = "https://{$subDomain}.smartolt.com/api/onu/get_onus_details_by_sn/{$sn}";
+            Log::channel('smartoltrelated')->info("Calling SmartOLT API to get ONU details: $getOnuUrl");
+
+            $getOnuResponse = Http::withHeaders([
+                'X-Token' => $token
+            ])->get($getOnuUrl);
+
+            Log::channel('smartoltrelated')->info('SmartOLT Get ONU Details API Response Status: ' . $getOnuResponse->status());
+
+            if (!$getOnuResponse->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch ONU details from SmartOLT: ' . $getOnuResponse->status()
+                ], 400);
+            }
+
+            $getOnuData = $getOnuResponse->json();
+
+            // Check if SmartOLT returned an error status in get_onus_details_by_sn
+            if (isset($getOnuData['status']) && $getOnuData['status'] === false) {
+                $errorMsg = $getOnuData['error'] ?? 'Unknown error';
+                Log::channel('smartoltrelated')->warning('SmartOLT Get ONU Details Failed (API Error):', [
+                    'sn' => $sn,
+                    'error' => $errorMsg
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'SmartOLT API error: ' . $errorMsg
+                ], 200);
+            }
+
+            if (!isset($getOnuData['onus']) || !is_array($getOnuData['onus']) || empty($getOnuData['onus'])) {
+                Log::channel('smartoltrelated')->warning('SmartOLT Get ONU Details Failed (Not Found):', [
+                    'sn' => $sn
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Serial Number not found in SmartOLT system'
+                ], 404);
+            }
+
+            $onuDetails = $getOnuData['onus'][0];
+            $onuExternalId = $onuDetails['unique_external_id'] ?? $onuDetails['onu_external_id'] ?? $onuDetails['id'] ?? null;
+
+            if (!$onuExternalId) {
+                Log::channel('smartoltrelated')->error('SmartOLT Get ONU Details Failed (No External ID):', [
+                    'sn' => $sn,
+                    'onu_details' => $onuDetails
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not determine the unique external ID for the ONU.'
+                ], 400);
+            }
+
+            // Step 2: Call update_location_details to update the name to empty
+            $updateUrl = "https://{$subDomain}.smartolt.com/api/onu/update_location_details/{$onuExternalId}";
+            Log::channel('smartoltrelated')->info("Calling SmartOLT API to delete ONU name: $updateUrl for external ID: $onuExternalId");
+
+            $updateResponse = Http::withHeaders([
+                'X-Token' => $token
+            ])->asForm()->post($updateUrl, [
+                'name' => ''
+            ]);
+
+            Log::channel('smartoltrelated')->info('SmartOLT Delete ONU Name API Response Status: ' . $updateResponse->status());
+
+            if ($updateResponse->successful()) {
+                $updateData = $updateResponse->json();
+                
+                if (isset($updateData['status']) && $updateData['status'] === false) {
+                    $errorMsg = $updateData['error'] ?? 'Failed to delete name';
+                    Log::channel('smartoltrelated')->warning('SmartOLT Delete ONU Name Failed (API Error):', [
+                        'sn' => $sn,
+                        'onu_external_id' => $onuExternalId,
+                        'error' => $errorMsg
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'SmartOLT API: ' . $errorMsg
+                    ], 200);
+                }
+
+                Log::channel('smartoltrelated')->info('SmartOLT Delete ONU Name Successful:', [
+                    'sn' => $sn,
+                    'onu_external_id' => $onuExternalId
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'ONU name cleared successfully'
+                ]);
+            } else {
+                $errorMessage = 'Error clearing ONU name in SmartOLT: ' . $updateResponse->status();
+                try {
+                    $errorData = $updateResponse->json();
+                    if (isset($errorData['message'])) {
+                        $errorMessage = $errorData['message'];
+                    } elseif (isset($errorData['error'])) {
+                        $errorMessage = $errorData['error'];
+                    }
+                } catch (\Exception $e) {}
+
+                Log::channel('smartoltrelated')->error('SmartOLT Delete ONU Name Failed (HTTP Error):', [
+                    'sn' => $sn,
+                    'onu_external_id' => $onuExternalId,
+                    'status' => $updateResponse->status(),
+                    'error' => $errorMessage
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            $isConnectionError = str_contains(strtolower($e->getMessage()), 'resolve') || 
+                               str_contains(strtolower($e->getMessage()), 'timeout') || 
+                               str_contains(strtolower($e->getMessage()), 'connect');
+
+            $logMsg = $isConnectionError ? 'SmartOLT Delete ONU Name Failed (Connection Error): ' : 'SmartOLT Delete ONU Name Exception: ';
+            
+            Log::channel('smartoltrelated')->error($logMsg . $e->getMessage(), [
+                'sn' => $request->input('sn'),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $userMessage = $isConnectionError 
+                ? 'Could not connect to SmartOLT API. Please check server internet connection.'
+                : 'Error clearing ONU name: ' . $e->getMessage();
+
+            return response()->json([
+                'success' => false,
+                'message' => $userMessage
+            ], 500);
+        }
+    }
 }
-
-
-
-

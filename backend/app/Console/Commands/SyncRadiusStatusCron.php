@@ -51,6 +51,16 @@ class SyncRadiusStatusCron extends Command
                 'errors' => $stats['errors']
             ]);
 
+            // Set system config status to online
+            try {
+                \App\Models\SystemConfig::updateOrCreate(
+                    ['config_key' => 'radius_api_status'],
+                    ['config_value' => 'online', 'updated_by' => 'system']
+                );
+            } catch (\Exception $configEx) {
+                Log::error('Failed to update radius_api_status to online', ['error' => $configEx->getMessage()]);
+            }
+
             if ($stats['errors'] > 0) {
                 Log::build([
                     'driver' => 'single',
@@ -75,6 +85,37 @@ class SyncRadiusStatusCron extends Command
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            // Save status offline and error details
+            try {
+                \App\Models\SystemConfig::updateOrCreate(
+                    ['config_key' => 'radius_api_status'],
+                    ['config_value' => 'offline', 'updated_by' => 'system']
+                );
+                \App\Models\SystemConfig::updateOrCreate(
+                    ['config_key' => 'radius_api_last_error'],
+                    ['config_value' => $e->getMessage(), 'updated_by' => 'system']
+                );
+            } catch (\Exception $configEx) {
+                Log::error('Failed to update radius_api_status to offline', ['error' => $configEx->getMessage()]);
+            }
+
+            // Broadcast the failure event
+            try {
+                $alertData = [
+                    'id' => time(),
+                    'type' => 'radius_offline',
+                    'title' => 'RADIUS Connection Failed',
+                    'message' => 'System could not connect to RADIUS API: ' . $e->getMessage(),
+                    'timestamp' => now()->timestamp,
+                    'formatted_date' => 'Just now'
+                ];
+                event(new \App\Events\RadiusStatusAlert($alertData));
+            } catch (\Exception $broadcastEx) {
+                Log::error('Failed to broadcast RADIUS offline event', [
+                    'error' => $broadcastEx->getMessage()
+                ]);
+            }
 
             $this->error('RADIUS Status Sync Failed: ' . $e->getMessage());
 
