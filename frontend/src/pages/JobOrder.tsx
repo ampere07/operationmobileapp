@@ -159,6 +159,30 @@ const formatDate = (dateStr?: string | null): string => {
   }
 };
 
+const checkIsStarted = (time?: string | null) => {
+  if (!time) return false;
+  const lowerTime = String(time).toLowerCase().trim();
+  return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+};
+
+const isWorkStarted = (item: JobOrder) => {
+  const hasStart = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
+  const hasEnd = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
+  
+  if (hasStart && !hasEnd) {
+    return true;
+  }
+  
+  const onsiteStatus = (item.Onsite_Status || item.onsite_status || '').toLowerCase().trim();
+  const hasStatusActive = onsiteStatus === 'inprogress' || onsiteStatus === 'in progress' || onsiteStatus === 'in-progress';
+  
+  if (hasStatusActive && !hasEnd) {
+    return true;
+  }
+  
+  return false;
+};
+
 const formatPrice = (price?: number | null): string => {
   if (price === null || price === undefined || price === 0) return '-';
   return `₱${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -267,9 +291,18 @@ const JobOrderCard = React.memo(({
   >
     <View style={jo.cardInner}>
       <View style={jo.cardLeft}>
-        <Text style={[jo.cardName, { color: '#111827' }]}>
-          {getClientFullName(jobOrder)}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+          <Text style={[jo.cardName, { color: '#111827', marginBottom: 0 }]}>
+            {getClientFullName(jobOrder)}
+          </Text>
+          {isWorkStarted(jobOrder) && (
+            <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                Work Started
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={[jo.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
           {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
         </Text>
@@ -466,9 +499,9 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         if (!matchesAgent) return false;
       }
 
-      // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
-      if (userRoleId === 2) {
-        const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase();
+      // Universal: hide job orders with onsite status "done", "completed", or "failed" after 1 day
+      if (debouncedSearch === '') {
+        const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
         if (onsiteStatus === 'done' || onsiteStatus === 'completed' || onsiteStatus === 'failed') {
           // Use updated_at or EndTimeStamp to determine when it was completed
           const completionTime = jobOrder.Updated_At || jobOrder.updated_at || jobOrder.EndTimeStamp || jobOrder.end_timestamp;
@@ -529,6 +562,13 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
   const sortedJobOrders = useMemo(() => {
     return [...filteredJobOrders].sort((a, b) => {
+      const activeA = isWorkStarted(a) ? 1 : 0;
+      const activeB = isWorkStarted(b) ? 1 : 0;
+
+      if (activeA !== activeB) {
+        return activeB - activeA; // Started/active ones first
+      }
+
       const idA = parseInt(String(a.id)) || 0;
       const idB = parseInt(String(b.id)) || 0;
       return idB - idA;

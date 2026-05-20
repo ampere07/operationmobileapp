@@ -24,6 +24,16 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import { updateWorkOrder } from '../services/workOrderService';
 import ConfirmationModal from '../modals/MoveToJoModal';
 import StartTimerModal from '../modals/StartTimerModal';
+import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
+import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { useWorkOrderStore } from '../store/workOrderStore';
+import { techInOutService } from '../services/techInOutService';
+
+const checkIsStarted = (time?: string | null) => {
+  if (!time) return false;
+  const lowerTime = String(time).toLowerCase().trim();
+  return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+};
 
 const formatDate = (dateStr?: string | null): string => {
   if (!dateStr) return 'Not set';
@@ -130,16 +140,25 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
 }) => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+  const { serviceOrders } = useServiceOrderContext();
+  const { jobOrders } = useJobOrderContext();
+  const { workOrders } = useWorkOrderStore();
+
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => propColorPalette ?? settingsColorPaletteService.getActiveSync());
   const [userRole, setUserRole] = useState<string>('');
   const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userFullName, setUserFullName] = useState<string>('');
+  const [techStatus, setTechStatus] = useState<'online' | 'offline'>('offline');
+  const [showTimeInWarning, setShowTimeInWarning] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
-  const [isStarted, setIsStarted] = useState(!!workOrder?.start_time);
-  const [isEnded, setIsEnded] = useState(!!workOrder?.end_time);
+  const [isStarted, setIsStarted] = useState(checkIsStarted(workOrder?.start_time));
+  const [isEnded, setIsEnded] = useState(checkIsStarted(workOrder?.end_time));
   const [now, setNow] = useState(dayjs().tz('Asia/Manila').add(8, 'hour'));
 
   useEffect(() => {
@@ -157,12 +176,93 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
   }, [isStarted, isEnded]);
 
   useEffect(() => {
-    setIsStarted(!!workOrder?.start_time);
-    setIsEnded(!!workOrder?.end_time);
+    setIsStarted(checkIsStarted(workOrder?.start_time));
+    setIsEnded(checkIsStarted(workOrder?.end_time));
   }, [workOrder?.start_time, workOrder?.end_time]);
 
-  const handleStartTimer = () => {
-    setIsStartTimerModalOpen(true);
+  const handleStartTimer = async () => {
+    if (!workOrder) return;
+    try {
+      const isTechnician = userRole === 'technician' || userRoleId === 2 || String(userRoleId) === '2';
+      if (isTechnician) {
+        if (techStatus === 'offline') {
+          setShowTimeInWarning(true);
+          return;
+        }
+
+        const isJobInProgress = (item: any) => {
+          const hasStarted = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
+          const hasEnded = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
+          const status = (item.visit_status || item.visitStatus || item.onsite_status || item.Onsite_Status || item.work_status || item.workStatus || '').toLowerCase().trim();
+          
+          if (!hasStarted || hasEnded) return false;
+          if (status !== 'in progress' && status !== 'reschedule' && status !== 'inprogress' && status !== 'in-progress') return false;
+
+          const loggedInEmail = userEmail.toLowerCase().trim();
+          const loggedInName = userFullName.toLowerCase().trim();
+          if (!loggedInEmail) return false;
+
+          const assigned = (item.assignedEmail || item.assigned_email || item.visitBy || item.visit_by_user || item.Visit_By || item.visit_by || item.assign_to || item.assignTo || '').toLowerCase();
+          const isAssigned = assigned.includes(loggedInEmail) || (loggedInName && assigned.includes(loggedInName));
+
+          const itemTechs = Array.isArray(item.technicians) ? item.technicians : [];
+          const isTechAssigned = itemTechs.some((tech: string) => {
+            const t = String(tech).toLowerCase();
+            return t.includes(loggedInEmail) || (loggedInName && t.includes(loggedInName));
+          });
+
+          return isAssigned || isTechAssigned;
+        };
+
+        // Check for other active work orders
+        const activeWorkOrder = workOrders.find(wo => 
+          wo.id !== workOrder.id && 
+          isJobInProgress(wo)
+        );
+
+        // Check for active service orders
+        const activeServiceOrder = serviceOrders.find(so => 
+          isJobInProgress(so)
+        );
+
+        // Check for active job orders
+        const activeJobOrder = jobOrders.find(jo => 
+          isJobInProgress(jo)
+        );
+
+        if (activeWorkOrder || activeServiceOrder || activeJobOrder) {
+          let activeJobDetails = '';
+          if (activeServiceOrder) {
+            const id = activeServiceOrder.ticketId || activeServiceOrder.id;
+            const name = activeServiceOrder.fullName || 'Unknown';
+            activeJobDetails = `\n\nActive Job:\n• Type: Service Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeJobOrder) {
+            const id = activeJobOrder.id || activeJobOrder.JobOrder_ID || 'N/A';
+            const name = [
+              activeJobOrder.First_Name || activeJobOrder.first_name || '',
+              activeJobOrder.Middle_Initial || activeJobOrder.middle_initial ? (activeJobOrder.Middle_Initial || activeJobOrder.middle_initial) + '.' : '',
+              activeJobOrder.Last_Name || activeJobOrder.last_name || ''
+            ].filter(Boolean).join(' ').trim() || 'Unknown Client';
+            activeJobDetails = `\n\nActive Job:\n• Type: Job Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeWorkOrder) {
+            const id = activeWorkOrder.id || 'N/A';
+            const name = activeWorkOrder.instructions || 'No Instructions';
+            activeJobDetails = `\n\nActive Job:\n• Type: Work Order\n• ID: ${id}\n• Name: ${name}`;
+          }
+
+          Alert.alert(
+            'Cannot Start',
+            `You already have another job in progress. Please finish it before starting a new one.${activeJobDetails}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
+      setIsStartTimerModalOpen(true);
+    } catch (err: any) {
+      setError(`Failed to prepare timer: ${err.message}`);
+    }
   };
 
   const handleConfirmStartTimer = async (selectedTechnicians: string[]) => {
@@ -174,7 +274,6 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
       await updateWorkOrder(workOrder.id!, {
         start_time: currentTime,
         end_time: null,
-        // technicians: selectedTechnicians, // Work order might not have multiple techs field in same way, but let's assume it might or just set start_time
       } as any);
 
       (workOrder as any).start_time = currentTime;
@@ -214,8 +313,6 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
     }
   };
 
-
-
   useEffect(() => {
     const loadSettings = async () => {
       const authData = await AsyncStorage.getItem('authData');
@@ -224,6 +321,23 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
           const parsed = JSON.parse(authData);
           setUserRoleId(parsed.role_id || parsed.roleId || null);
           setUserRole(parsed.role?.toLowerCase() || parsed.roleName?.toLowerCase() || '');
+          setUserEmail(parsed.email_address || parsed.email || '');
+          const fullName = parsed.full_name || `${parsed.first_name || ''} ${parsed.last_name || ''}`.trim();
+          setUserFullName(fullName || parsed.username || '');
+
+          const currentRole = parsed.role?.toLowerCase() || parsed.roleName?.toLowerCase() || '';
+          const currentRoleId = parsed.role_id || parsed.roleId || null;
+          const isTechnician = currentRole === 'technician' || currentRoleId === 2;
+          if (isTechnician) {
+            const userId = parsed.id || parsed.user_id || parsed.user?.id;
+            if (userId) {
+              const response = await techInOutService.getStatus(userId);
+              if (response.success && response.data) {
+                const isOnline = !!(response.data.time_in && !response.data.time_out);
+                setTechStatus(isOnline ? 'online' : 'offline');
+              }
+            }
+          }
         } catch (error) { }
       }
     };
@@ -415,6 +529,16 @@ const WorkOrderDetails: React.FC<WorkOrderDetailsProps & { isDarkMode?: boolean;
         cancelText="Close"
         onConfirm={() => setShowSuccessModal(false)}
         onCancel={() => setShowSuccessModal(false)}
+      />
+
+      <ConfirmationModal
+        isOpen={showTimeInWarning}
+        title="Action Required"
+        message="You need to time in first in the menu before starting a work order."
+        confirmText="OK"
+        cancelText="Close"
+        onConfirm={() => setShowTimeInWarning(false)}
+        onCancel={() => setShowTimeInWarning(false)}
       />
 
       <StartTimerModal

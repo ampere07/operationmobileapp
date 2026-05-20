@@ -27,6 +27,30 @@ import AssignWorkOrderModal from '../modals/AssignWorkOrderModal';
 // --- Static Helpers & Components ---
 const ITEMS_PER_PAGE = 50;
 
+const checkIsStarted = (time?: string | null) => {
+  if (!time) return false;
+  const lowerTime = String(time).toLowerCase().trim();
+  return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+};
+
+const isWorkStarted = (wo: WorkOrder) => {
+  const hasStart = checkIsStarted(wo.start_time);
+  const hasEnd = checkIsStarted(wo.end_time);
+  
+  if (hasStart && !hasEnd) {
+    return true;
+  }
+  
+  const status = (wo.work_status || '').toLowerCase().trim();
+  const hasStatusActive = status === 'in progress' || status === 'inprogress' || status === 'in-progress';
+                          
+  if (hasStatusActive && !hasEnd) {
+    return true;
+  }
+  
+  return false;
+};
+
 const StatusText = React.memo(({ status }: { status?: string | null }) => {
   if (!status) return <Text style={st.statusDash}>-</Text>;
 
@@ -65,9 +89,18 @@ const WorkOrderCard = React.memo(({
   >
     <View style={st.cardInner}>
       <View style={st.cardLeft}>
-        <Text style={[st.cardName, { color: '#111827' }]} numberOfLines={1} ellipsizeMode="tail">
-          {wo.instructions || 'No Instructions'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+          <Text style={[st.cardName, { color: '#111827', marginBottom: 0, flex: 1 }]} numberOfLines={1} ellipsizeMode="tail">
+            {wo.instructions || 'No Instructions'}
+          </Text>
+          {isWorkStarted(wo) && (
+            <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                Work Started
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={[st.cardSub, { color: '#4b5563' }]}>
           {formatDate(wo.requested_date)}
         </Text>
@@ -153,27 +186,27 @@ const WorkOrderPage: React.FC = () => {
       const meName = userName.toLowerCase().trim();
       filtered = filtered.filter((wo: WorkOrder) => {
         const targetAssign = (wo.assign_to || '').toLowerCase().trim();
-        const matchesAssignment = (meEmail && targetAssign === meEmail) || (meName && targetAssign === meName);
+        return (meEmail && targetAssign === meEmail) || (meName && targetAssign === meName);
+      });
+    }
 
-        if (!matchesAssignment) return false;
+    // Universal 1-day visibility filter: hide done/completed/failed/cancelled work orders after today if search is empty
+    const isSearchEmpty = searchQuery.toLowerCase().trim() === '';
+    if (isSearchEmpty) {
+      filtered = filtered.filter((wo: WorkOrder) => {
+        const status = (wo.work_status || '').toLowerCase().trim();
+        if (status === 'done' || status === 'completed' || status === 'failed' || status === 'cancelled') {
+          const completionTime = wo.end_time || wo.updated_date;
+          if (completionTime) {
+            const completionDate = new Date(completionTime);
+            const today = new Date();
+            const isToday = completionDate.getFullYear() === today.getFullYear() &&
+              completionDate.getMonth() === today.getMonth() &&
+              completionDate.getDate() === today.getDate();
 
-        // Technician (Role 2) only sees "done" or "completed" status for 1 day (today)
-        if (roleIdNum === 2) {
-          const status = (wo.work_status || '').toLowerCase().trim();
-          if (status === 'done' || status === 'completed') {
-            const completionTime = wo.end_time || wo.updated_date;
-            if (completionTime) {
-              const completionDate = new Date(completionTime);
-              const today = new Date();
-              const isToday = completionDate.getFullYear() === today.getFullYear() &&
-                completionDate.getMonth() === today.getMonth() &&
-                completionDate.getDate() === today.getDate();
-
-              if (!isToday) return false;
-            }
+            if (!isToday) return false;
           }
         }
-
         return true;
       });
     }

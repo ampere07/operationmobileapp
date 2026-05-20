@@ -25,6 +25,32 @@ const formatDate = (dateStr?: string | null): string => {
     return dateStr;
   }
 };
+
+const checkIsStarted = (time?: string | null) => {
+  if (!time) return false;
+  const lowerTime = String(time).toLowerCase().trim();
+  return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+};
+
+const isWorkStarted = (item: ServiceOrder) => {
+  const hasStart = checkIsStarted(item.start_time);
+  const hasEnd = checkIsStarted(item.end_time);
+  
+  if (hasStart && !hasEnd) {
+    return true;
+  }
+  
+  const visitStatus = (item.visitStatus || '').toLowerCase().trim();
+  const supportStatus = (item.supportStatus || '').toLowerCase().trim();
+  const hasStatusActive = visitStatus === 'in progress' || visitStatus === 'in-progress' || 
+                          supportStatus === 'in progress' || supportStatus === 'in-progress';
+                          
+  if (hasStatusActive && !hasEnd) {
+    return true;
+  }
+  
+  return false;
+};
 const StatusText = React.memo(({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;
 
@@ -104,7 +130,16 @@ const ServiceOrderCard = React.memo(({
   >
     <View style={so.cardInner}>
       <View style={so.cardLeft}>
-        <Text style={[so.cardName, { color: '#111827' }]}>{serviceOrder.fullName}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+          <Text style={[so.cardName, { color: '#111827', marginBottom: 0 }]}>{serviceOrder.fullName}</Text>
+          {isWorkStarted(serviceOrder) && (
+            <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                Work Started
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={[so.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
           {formatDate(serviceOrder.timestamp)} | {serviceOrder.fullAddress}
         </Text>
@@ -331,6 +366,22 @@ const ServiceOrderPage: React.FC = () => {
           }
         }
 
+        // Universal: hide service orders with visitStatus "done" or "failed" after 1 day
+        if (isSearchEmpty) {
+          const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
+          if (visitStatus === 'done' || visitStatus === 'failed') {
+            const completionTime = serviceOrder.rawUpdatedAt || serviceOrder.end_time;
+            if (completionTime) {
+              const completionDate = new Date(completionTime);
+              const today = new Date();
+              const isToday = completionDate.getFullYear() === today.getFullYear() &&
+                completionDate.getMonth() === today.getMonth() &&
+                completionDate.getDate() === today.getDate();
+              if (!isToday) return false;
+            }
+          }
+        }
+
         const matchesSearch = isSearchEmpty ||
           itemExtractorMap.fullName(serviceOrder).toLowerCase().includes(lowerSearch) ||
           itemExtractorMap.fullAddress(serviceOrder).toLowerCase().includes(lowerSearch) ||
@@ -368,6 +419,13 @@ const ServiceOrderPage: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
+        const activeA = isWorkStarted(a) ? 1 : 0;
+        const activeB = isWorkStarted(b) ? 1 : 0;
+
+        if (activeA !== activeB) {
+          return activeB - activeA; // Started/active ones first
+        }
+
         const timeA = a.rawUpdatedAt ? new Date(a.rawUpdatedAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
         const timeB = b.rawUpdatedAt ? new Date(b.rawUpdatedAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
         return timeB - timeA;
@@ -565,13 +623,13 @@ const ServiceOrderPage: React.FC = () => {
                     />
                   )}
                   onEndReached={() => {
-                    if (hasMore && !isFetchingNextPage) {
+                    if (!shouldPaginate && hasMore && !isFetchingNextPage) {
                       fetchNextPage();
                     }
                   }}
                   onEndReachedThreshold={0.5}
                   ListFooterComponent={
-                    isFetchingNextPage ? (
+                    (!shouldPaginate && isFetchingNextPage) ? (
                       <View style={{ padding: 20, alignItems: 'center' }}>
                         <Text style={{ color: '#6b7280' }}>Loading more...</Text>
                       </View>

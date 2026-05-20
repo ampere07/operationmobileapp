@@ -8,6 +8,7 @@ import StartTimerModal from '../modals/StartTimerModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { useWorkOrderStore } from '../store/workOrderStore';
 import { formatToGMT8MySQL } from '../utils/dateUtils';
 import { updateServiceOrder } from '../services/serviceOrderService';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
@@ -288,12 +289,15 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh, serviceOrders } = useServiceOrderContext();
   const { jobOrders } = useJobOrderContext();
+  const { workOrders } = useWorkOrderStore();
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState<boolean>(false);
   const [showFieldSettings, setShowFieldSettings] = useState(false);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userFullName, setUserFullName] = useState<string>('');
   const [customerDetail, setCustomerDetail] = useState<CustomerDetailData | null>(null);
   const [orderItems, setOrderItems] = useState<ServiceOrderItem[]>([]);
 
@@ -377,6 +381,8 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
           userData = JSON.parse(authData);
           if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
           if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
+          setUserEmail(userData.email || '');
+          setUserFullName(userData.full_name || '');
 
           // Check technician status - Always check if user is a technician
           const currentRole = userRoleProp || userData.role?.toLowerCase() || '';
@@ -467,10 +473,27 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         }
 
         const isJobInProgress = (item: any) => {
-          const hasStarted = checkIsStarted(item.start_time);
-          const hasEnded = checkIsStarted(item.end_time);
+          const hasStarted = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
+          const hasEnded = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
           const status = (item.visit_status || item.visitStatus || item.onsite_status || item.Onsite_Status || '').toLowerCase().trim();
-          return hasStarted && !hasEnded && (status === 'in progress' || status === 'reschedule');
+          
+          if (!hasStarted || hasEnded) return false;
+          if (status !== 'in progress' && status !== 'reschedule' && status !== 'inprogress' && status !== 'in-progress') return false;
+
+          const loggedInEmail = userEmail.toLowerCase().trim();
+          const loggedInName = userFullName.toLowerCase().trim();
+          if (!loggedInEmail) return false;
+
+          const assigned = (item.assignedEmail || item.assigned_email || item.visitBy || item.visit_by_user || item.Visit_By || item.visit_by || '').toLowerCase();
+          const isAssigned = assigned.includes(loggedInEmail) || (loggedInName && assigned.includes(loggedInName));
+
+          const itemTechs = Array.isArray(item.technicians) ? item.technicians : [];
+          const isTechAssigned = itemTechs.some((tech: string) => {
+            const t = String(tech).toLowerCase();
+            return t.includes(loggedInEmail) || (loggedInName && t.includes(loggedInName));
+          });
+
+          return isAssigned || isTechAssigned;
         };
 
         // Check for other active service orders
@@ -484,10 +507,34 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
           isJobInProgress(jo)
         );
 
-        if (activeServiceOrder || activeJobOrder) {
+        // Check for active work orders
+        const activeWorkOrder = workOrders.find(wo => 
+          isJobInProgress(wo)
+        );
+
+        if (activeServiceOrder || activeJobOrder || activeWorkOrder) {
+          let activeJobDetails = '';
+          if (activeServiceOrder) {
+            const id = activeServiceOrder.ticketId || activeServiceOrder.id;
+            const name = activeServiceOrder.fullName || 'Unknown';
+            activeJobDetails = `\n\nActive Job:\n• Type: Service Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeJobOrder) {
+            const id = activeJobOrder.id || activeJobOrder.JobOrder_ID || 'N/A';
+            const name = [
+              activeJobOrder.First_Name || activeJobOrder.first_name || '',
+              activeJobOrder.Middle_Initial || activeJobOrder.middle_initial ? (activeJobOrder.Middle_Initial || activeJobOrder.middle_initial) + '.' : '',
+              activeJobOrder.Last_Name || activeJobOrder.last_name || ''
+            ].filter(Boolean).join(' ').trim() || 'Unknown Client';
+            activeJobDetails = `\n\nActive Job:\n• Type: Job Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeWorkOrder) {
+            const id = activeWorkOrder.id || 'N/A';
+            const name = activeWorkOrder.instructions || 'No Instructions';
+            activeJobDetails = `\n\nActive Job:\n• Type: Work Order\n• ID: ${id}\n• Name: ${name}`;
+          }
+
           Alert.alert(
             'Cannot Start',
-            'You already have another job in progress. Please finish it before starting a new one.',
+            `You already have another job in progress. Please finish it before starting a new one.${activeJobDetails}`,
             [{ text: 'OK' }]
           );
           return;

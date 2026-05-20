@@ -28,6 +28,15 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.34',
+            date: 'May 20, 2026',
+            title: 'Attendance Alerts & Job Start Refinements',
+            updates: [
+                { text: 'Auto Time-Out Alerts: Technicians will now receive an automatic time-out reminder at 9:00 PM and 9:10 PM PH Time if they are still timed in.', visibility: 'technician' },
+                { text: 'User-Bound Job Start Checks: Resolved an issue where technicians were blocked from starting a job due to other technicians\' active tasks. The start validator is now strictly user-specific.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.33',
             date: 'May 13, 2026',
             title: 'Service Order Precision & Error Handling',

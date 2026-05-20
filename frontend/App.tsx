@@ -10,6 +10,8 @@ import SplashScreen from './src/components/SplashScreen';
 import { settingsColorPaletteService } from './src/services/settingsColorPaletteService';
 import { PaymentSuccessProvider } from './src/contexts/PaymentSuccessContext';
 import IdleWarningModal from './src/modals/IdleWarningModal';
+import AutoTimeOutWarningModal from './src/modals/AutoTimeOutWarningModal';
+import { techInOutService } from './src/services/techInOutService';
 
 import { View, AppState, PanResponder, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -38,6 +40,9 @@ function App() {
 
   const [showIdleWarning, _setShowIdleWarning] = useState(false);
   const isWarningVisible = useRef(false);
+
+  const [showAutoTimeOutWarning, setShowAutoTimeOutWarning] = useState(false);
+  const lastShownSlots = useRef<{ date: string; slots: string[] }>({ date: '', slots: [] });
 
   const setShowIdleWarning = (visible: boolean) => {
     isWarningVisible.current = visible;
@@ -92,6 +97,69 @@ function App() {
       if (logoutTimer.current) clearTimeout(logoutTimer.current);
     }
   }, [isLoggedIn]);
+
+  // ─── Auto Time-Out Reminder ────────────────────────────────────────────────
+  // Fires at exactly 9:00 PM and 9:10 PM (PH time) if the technician is still
+  // timed in. Tracks which slots have already been shown today so it only fires
+  // once per slot per day.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const checkAutoTimeOut = async () => {
+      try {
+        const authData = await AsyncStorage.getItem('authData');
+        if (!authData) return;
+
+        const parsedUser = JSON.parse(authData);
+        const role = (parsedUser.role || '').toLowerCase();
+        const roleId = Number(parsedUser.role_id);
+        const isTechnician = role === 'technician' || roleId === 2;
+        if (!isTechnician) return;
+
+        // Get PH time (UTC+8)
+        const now = new Date();
+        const phOffset = 8 * 60; // minutes
+        const phTime = new Date(now.getTime() + (phOffset + now.getTimezoneOffset()) * 60000);
+        const hours = phTime.getHours();
+        const minutes = phTime.getMinutes();
+        const todayStr = phTime.toDateString();
+
+        // Determine which slot we're in (if any)
+        let currentSlot: string | null = null;
+        if (hours === 21 && minutes === 0) currentSlot = '21:00';
+        if (hours === 21 && minutes === 10) currentSlot = '21:10';
+
+        if (!currentSlot) return;
+
+        // Reset slot tracking on a new day
+        if (lastShownSlots.current.date !== todayStr) {
+          lastShownSlots.current = { date: todayStr, slots: [] };
+        }
+
+        // Skip if this slot was already shown today
+        if (lastShownSlots.current.slots.includes(currentSlot)) return;
+
+        // Verify the technician has an active time-in
+        const userId = parsedUser.id || parsedUser.user_id;
+        if (!userId) return;
+
+        const response = await techInOutService.getStatus(userId);
+        if (response.success && response.data?.time_in && !response.data?.time_out) {
+          // Mark slot as shown and display warning
+          lastShownSlots.current.slots.push(currentSlot);
+          setShowAutoTimeOutWarning(true);
+        }
+      } catch (e) {
+        // Silently swallow — this is a background check
+      }
+    };
+
+    // Check immediately, then every 30 seconds
+    checkAutoTimeOut();
+    const intervalId = setInterval(checkAutoTimeOut, 30_000);
+    return () => clearInterval(intervalId);
+  }, [isLoggedIn]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -264,6 +332,11 @@ function App() {
             onStayLoggedIn={resetTimer}
             onLogout={handleLogout}
             countdown={30}
+          />
+          <AutoTimeOutWarningModal
+            visible={showAutoTimeOutWarning}
+            onClose={() => setShowAutoTimeOutWarning(false)}
+            userData={userData}
           />
         </PaymentSuccessProvider>
       ) : (

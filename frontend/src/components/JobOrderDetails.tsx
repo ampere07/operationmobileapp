@@ -19,6 +19,7 @@ import { Application } from '../types/application';
 import { getJobOrderItems, JobOrderItem } from '../services/jobOrderItemService';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { useServiceOrderContext } from '../contexts/ServiceOrderContext';
+import { useWorkOrderStore } from '../store/workOrderStore';
 import { techInOutService } from '../services/techInOutService';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -43,6 +44,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const isMobile = propIsMobile || width < 768;
   const { silentRefresh, jobOrders } = useJobOrderContext();
   const { serviceOrders } = useServiceOrderContext();
+  const { workOrders } = useWorkOrderStore();
 
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
   const [loading, setLoading] = useState(false);
@@ -56,6 +58,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>(billingStatusesProp || []);
   const [userRole, setUserRole] = useState<string>(userRoleProp || '');
   const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userFullName, setUserFullName] = useState<string>('');
   const [applicationData, setApplicationData] = useState<Application | null>(null);
   const [jobOrderItems, setJobOrderItems] = useState<JobOrderItem[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -172,6 +176,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
           userData = JSON.parse(authData);
           if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
           if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
+          setUserEmail(userData.email || '');
+          setUserFullName(userData.full_name || '');
 
           // Check technician status - Always check if user is a technician
           const currentRole = userRoleProp || userData.role?.toLowerCase() || '';
@@ -626,10 +632,27 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         }
 
         const isJobInProgress = (item: any) => {
-          const hasStarted = checkIsStarted(item.start_time);
-          const hasEnded = checkIsStarted(item.end_time);
-          const status = (item.Onsite_Status || item.onsite_status || '').toLowerCase().trim();
-          return hasStarted && !hasEnded && (status === 'in progress' || status === 'reschedule');
+          const hasStarted = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
+          const hasEnded = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
+          const status = (item.visit_status || item.visitStatus || item.onsite_status || item.Onsite_Status || '').toLowerCase().trim();
+          
+          if (!hasStarted || hasEnded) return false;
+          if (status !== 'in progress' && status !== 'reschedule' && status !== 'inprogress' && status !== 'in-progress') return false;
+
+          const loggedInEmail = userEmail.toLowerCase().trim();
+          const loggedInName = userFullName.toLowerCase().trim();
+          if (!loggedInEmail) return false;
+
+          const assigned = (item.assignedEmail || item.assigned_email || item.visitBy || item.visit_by_user || item.Visit_By || item.visit_by || '').toLowerCase();
+          const isAssigned = assigned.includes(loggedInEmail) || (loggedInName && assigned.includes(loggedInName));
+
+          const itemTechs = Array.isArray(item.technicians) ? item.technicians : [];
+          const isTechAssigned = itemTechs.some((tech: string) => {
+            const t = String(tech).toLowerCase();
+            return t.includes(loggedInEmail) || (loggedInName && t.includes(loggedInName));
+          });
+
+          return isAssigned || isTechAssigned;
         };
 
         // Check for other active job orders
@@ -643,10 +666,34 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
           isJobInProgress(so)
         );
 
-        if (activeJobOrder || activeServiceOrder) {
+        // Check for active work orders
+        const activeWorkOrder = workOrders.find(wo => 
+          isJobInProgress(wo)
+        );
+
+        if (activeJobOrder || activeServiceOrder || activeWorkOrder) {
+          let activeJobDetails = '';
+          if (activeServiceOrder) {
+            const id = activeServiceOrder.ticketId || activeServiceOrder.id;
+            const name = activeServiceOrder.fullName || 'Unknown';
+            activeJobDetails = `\n\nActive Job:\n• Type: Service Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeJobOrder) {
+            const id = activeJobOrder.id || activeJobOrder.JobOrder_ID || 'N/A';
+            const name = [
+              activeJobOrder.First_Name || activeJobOrder.first_name || '',
+              activeJobOrder.Middle_Initial || activeJobOrder.middle_initial ? (activeJobOrder.Middle_Initial || activeJobOrder.middle_initial) + '.' : '',
+              activeJobOrder.Last_Name || activeJobOrder.last_name || ''
+            ].filter(Boolean).join(' ').trim() || 'Unknown Client';
+            activeJobDetails = `\n\nActive Job:\n• Type: Job Order\n• ID: ${id}\n• Name: ${name}`;
+          } else if (activeWorkOrder) {
+            const id = activeWorkOrder.id || 'N/A';
+            const name = activeWorkOrder.instructions || 'No Instructions';
+            activeJobDetails = `\n\nActive Job:\n• Type: Work Order\n• ID: ${id}\n• Name: ${name}`;
+          }
+
           Alert.alert(
             'Cannot Start',
-            'You already have another job in progress. Please finish it before starting a new one.',
+            `You already have another job in progress. Please finish it before starting a new one.${activeJobDetails}`,
             [{ text: 'OK' }]
           );
           return;
