@@ -28,6 +28,15 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.36',
+            date: 'May 21, 2026',
+            title: 'Validation Cooldown & Work Started Logic Fix',
+            updates: [
+                { text: 'Validate Button Cooldown: Added a 30-second cooldown timer to the Modem/Router SN validation button in both Job Order Completion and Service Order Edit modals to prevent API spamming.', visibility: 'technician' },
+                { text: 'Work Started Display Logic: Corrected the status badge logic for Service, Job, and Work Orders to show "Work Started" strictly when a start time is recorded and no end time is present.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.34',
             date: 'May 20, 2026',
             title: 'Attendance Alerts & Job Start Refinements',

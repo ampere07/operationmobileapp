@@ -319,10 +319,23 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [activeTechField, setActiveTechField] = useState<'visit_by' | 'visit_with' | 'visit_with_other' | null>(null);
 
   const [mostUsedLcpnaps, setMostUsedLcpnaps] = useState<LCPNAP[]>([]);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isDoneRendering, setIsDoneRendering] = useState(false);
   const [isValidatingSN, setIsValidatingSN] = useState(false);
   const [isSNValidated, setIsSNValidated] = useState(false);
+  const [validateCooldown, setValidateCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer: any;
+    if (validateCooldown > 0) {
+      timer = setInterval(() => {
+        setValidateCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [validateCooldown]);
 
   // Shared mounted flag – set false on unmount so ALL async callbacks can bail out
   const isMountedRef = useRef(true);
@@ -435,6 +448,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       setOrderItems([{ itemId: '', quantity: '' }]);
       setTechInputValue('');
       setIsSNValidated(false);
+      setValidateCooldown(0);
       return;
     }
 
@@ -994,7 +1008,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       return;
     }
 
-    if (isValidatingSN) return;
+    if (isValidatingSN || validateCooldown > 0) return;
 
     if (formData.connectionType !== 'Fiber') {
       Alert.alert('Validation Info', 'SN validation is only available for Fiber connections.');
@@ -1002,6 +1016,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     }
 
     setIsValidatingSN(true);
+    setValidateCooldown(30);
     try {
       const response = await apiClient.get('/smart-olt/validate-sn', {
         params: { 
@@ -2716,11 +2731,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                               <TouchableOpacity
                                 onPress={handleValidateSN}
-                                disabled={isValidatingSN}
+                                disabled={isValidatingSN || validateCooldown > 0}
                                 style={{
                                   paddingVertical: 14,
                                   paddingHorizontal: 16,
-                                  backgroundColor: isValidatingSN ? '#9ca3af' : (colorPalette?.primary || '#7c3aed'),
+                                  backgroundColor: (isValidatingSN || validateCooldown > 0) ? '#9ca3af' : (colorPalette?.primary || '#7c3aed'),
                                   borderRadius: 12,
                                   justifyContent: 'center',
                                   alignItems: 'center',
@@ -2730,6 +2745,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               >
                                 {isValidatingSN ? (
                                   <ActivityIndicator size="small" color="#ffffff" />
+                                ) : validateCooldown > 0 ? (
+                                  <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>{validateCooldown}s</Text>
                                 ) : (
                                   <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>VALIDATE</Text>
                                 )}

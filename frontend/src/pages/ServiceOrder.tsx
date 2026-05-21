@@ -36,20 +36,7 @@ const isWorkStarted = (item: ServiceOrder) => {
   const hasStart = checkIsStarted(item.start_time);
   const hasEnd = checkIsStarted(item.end_time);
   
-  if (hasStart && !hasEnd) {
-    return true;
-  }
-  
-  const visitStatus = (item.visitStatus || '').toLowerCase().trim();
-  const supportStatus = (item.supportStatus || '').toLowerCase().trim();
-  const hasStatusActive = visitStatus === 'in progress' || visitStatus === 'in-progress' || 
-                          supportStatus === 'in progress' || supportStatus === 'in-progress';
-                          
-  if (hasStatusActive && !hasEnd) {
-    return true;
-  }
-  
-  return false;
+  return hasStart && !hasEnd;
 };
 const StatusText = React.memo(({ status, type }: { status?: string, type: 'support' | 'visit' }) => {
   if (!status) return <Text style={{ color: '#9ca3af' }}>Unknown</Text>;

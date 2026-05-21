@@ -38,7 +38,7 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
     imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
     activeTechField, setActiveTechField, setFormData,
     loadingPercentage, loadingMessage, currentStep, showLoadingModal,
-    isSNValidated, isValidatingSN, handleValidateSN
+    isSNValidated, isValidatingSN, handleValidateSN, validateCooldown
   } = useServiceOrderEdit(isOpen, serviceOrderData, onClose, onSave);
 
   const activeColor = colorPalette?.primary || '#7c3aed';
@@ -246,9 +246,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                       <TouchableOpacity
                                         onPress={handleValidateSN}
-                                        disabled={isValidatingSN}
+                                        disabled={isValidatingSN || validateCooldown > 0}
                                         style={[styles.validateButton, {
-                                          backgroundColor: isValidatingSN ? '#9ca3af' : activeColor,
+                                          backgroundColor: (isValidatingSN || validateCooldown > 0) ? '#9ca3af' : activeColor,
                                           height: 50,
                                           minWidth: 90,
                                           marginRight: 8
@@ -256,6 +256,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                       >
                                         {isValidatingSN ? (
                                           <ActivityIndicator size="small" color="#fff" />
+                                        ) : validateCooldown > 0 ? (
+                                          <Text style={styles.validateButtonText}>{validateCooldown}s</Text>
                                         ) : (
                                           <Text style={styles.validateButtonText}>VALIDATE</Text>
                                         )}
@@ -317,9 +319,9 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                   <TouchableOpacity
                                     onPress={handleValidateSN}
-                                    disabled={isValidatingSN}
+                                    disabled={isValidatingSN || validateCooldown > 0}
                                     style={[styles.validateButton, {
-                                      backgroundColor: isValidatingSN ? '#9ca3af' : activeColor,
+                                      backgroundColor: (isValidatingSN || validateCooldown > 0) ? '#9ca3af' : activeColor,
                                       height: 50,
                                       minWidth: 90,
                                       marginRight: 8
@@ -327,6 +329,8 @@ const ServiceOrderEditModal: React.FC<ServiceOrderEditModalProps> = ({
                                   >
                                     {isValidatingSN ? (
                                       <ActivityIndicator size="small" color="#fff" />
+                                    ) : validateCooldown > 0 ? (
+                                      <Text style={styles.validateButtonText}>{validateCooldown}s</Text>
                                     ) : (
                                       <Text style={styles.validateButtonText}>VALIDATE</Text>
                                     )}

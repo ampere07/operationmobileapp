@@ -37,18 +37,7 @@ const isWorkStarted = (wo: WorkOrder) => {
   const hasStart = checkIsStarted(wo.start_time);
   const hasEnd = checkIsStarted(wo.end_time);
   
-  if (hasStart && !hasEnd) {
-    return true;
-  }
-  
-  const status = (wo.work_status || '').toLowerCase().trim();
-  const hasStatusActive = status === 'in progress' || status === 'inprogress' || status === 'in-progress';
-                          
-  if (hasStatusActive && !hasEnd) {
-    return true;
-  }
-  
-  return false;
+  return hasStart && !hasEnd;
 };
 
 const StatusText = React.memo(({ status }: { status?: string | null }) => {

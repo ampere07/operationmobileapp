@@ -169,18 +169,7 @@ const isWorkStarted = (item: JobOrder) => {
   const hasStart = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
   const hasEnd = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
   
-  if (hasStart && !hasEnd) {
-    return true;
-  }
-  
-  const onsiteStatus = (item.Onsite_Status || item.onsite_status || '').toLowerCase().trim();
-  const hasStatusActive = onsiteStatus === 'inprogress' || onsiteStatus === 'in progress' || onsiteStatus === 'in-progress';
-  
-  if (hasStatusActive && !hasEnd) {
-    return true;
-  }
-  
-  return false;
+  return hasStart && !hasEnd;
 };
 
 const formatPrice = (price?: number | null): string => {

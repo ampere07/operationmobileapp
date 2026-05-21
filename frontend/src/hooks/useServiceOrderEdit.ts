@@ -115,6 +115,19 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
   const [showLoadingModal, setShowLoadingModal] = useState(false);
   const [isSNValidated, setIsSNValidated] = useState(false);
   const [isValidatingSN, setIsValidatingSN] = useState(false);
+  const [validateCooldown, setValidateCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer: any;
+    if (validateCooldown > 0) {
+      timer = setInterval(() => {
+        setValidateCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [validateCooldown]);
 
   // Data Lists
   const [technicians, setTechnicians] = useState<Array<{ name: string; email: string }>>([]);
@@ -173,6 +186,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       initialDataLoadedRef.current = false;
       setActivePicker(null);
       setSearchQueries({});
+      setValidateCooldown(0);
     }
   }, [isOpen]);
 
@@ -470,7 +484,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       return;
     }
 
-    if (isValidatingSN) return;
+    if (isValidatingSN || validateCooldown > 0) return;
 
     if (formData.connectionType !== 'Fiber') {
       Alert.alert('Validation Info', 'SN validation is only available for Fiber connections.');
@@ -478,6 +492,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     }
 
     setIsValidatingSN(true);
+    setValidateCooldown(30);
     try {
       // 1. SmartOLT Validation
       const response = await apiClient.get('/smart-olt/validate-sn', {
@@ -733,7 +748,7 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
     imageFiles, isDrawingSignature, setIsDrawingSignature, signatureRef, handleSignatureOK, scrollEnabled, setScrollEnabled,
     activeTechField, setActiveTechField,
     loadingPercentage, loadingMessage, currentStep, showLoadingModal,
-    isSNValidated, isValidatingSN, handleValidateSN
+    isSNValidated, isValidatingSN, handleValidateSN, validateCooldown
   };
 };
 
