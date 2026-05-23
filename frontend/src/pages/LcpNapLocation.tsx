@@ -3,15 +3,13 @@ import { View, Text, Pressable, useWindowDimensions, ActivityIndicator, TextInpu
 import { MapPin, Search, Plus, Navigation } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoLocation from 'expo-location';
-import MapView, { Marker, Circle } from 'react-native-maps';
+import MapView, { Marker, Circle, UrlTile } from 'react-native-maps';
 import { FlashList } from '@shopify/flash-list';
 import AddLcpNapLocationModal from '../modals/AddLcpNapLocationModal';
 import LcpNapLocationDetails from '../components/LcpNapLocationDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import apiClient from '../config/api';
-
 import axios from 'axios';
-import { GOOGLE_MAPS_API_KEY } from '../config/maps';
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -81,6 +79,21 @@ const getPinSize = (delta: number) => {
   return 10;
 };
 
+// ─── Photon Geocoding (free, no API key, powered by OpenStreetMap data) ──────────
+// Photon by Komoot: https://photon.komoot.io — designed for app usage, no rate limit issues
+
+const photonSearch = async (query: string): Promise<any[]> => {
+  try {
+    // bbox: min_lon,min_lat,max_lon,max_lat (Philippines bounding box)
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&bbox=114.1,4.4,126.6,21.1`;
+    const response = await axios.get(url);
+    return response.data?.features || [];
+  } catch (err) {
+    console.error('Photon geocoding error:', err);
+    return [];
+  }
+};
+
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 const CustomMarker = React.memo<{
@@ -91,19 +104,17 @@ const CustomMarker = React.memo<{
   const isFull = (location.total_technical_details || 0) >= (location.port_total || 0) && (location.port_total || 0) > 0;
 
   // tracksViewChanges=false after the very first render.
-  // Resetting it on pinSize changes forces the native layer to re-render
-  // ALL markers on every zoom event, which is the #1 cause of slow pin loading.
   const [tracksViewChanges, setTracksViewChanges] = React.useState(true);
   const hasSettled = React.useRef(false);
 
   React.useEffect(() => {
-    if (hasSettled.current) return; // Never reset once settled
+    if (hasSettled.current) return;
     const timer = setTimeout(() => {
       setTracksViewChanges(false);
       hasSettled.current = true;
     }, 300);
     return () => clearTimeout(timer);
-  }, []); // ← empty dep array: runs ONCE on mount, not on every pinSize change
+  }, []);
 
   return (
     <Marker
@@ -188,7 +199,7 @@ const LcpNapLocation: React.FC = () => {
     longitude: 121.7740
   });
   const [headerHeight, setHeaderHeight] = useState(0);
-  // Pin dropped at the searched Google Place so the user can see exactly where they navigated to
+  // Pin dropped at the searched place so the user can see exactly where they navigated to
   const [searchedPlacePin, setSearchedPlacePin] = useState<{ latitude: number; longitude: number; title: string } | null>(null);
 
   const mapRef = useRef<MapView>(null);
@@ -196,9 +207,6 @@ const LcpNapLocation: React.FC = () => {
   const isTablet = width >= 768;
   const primaryColor = colorPalette?.primary || '#7c3aed';
 
-  // Batched region ref — holds the latest region without triggering a render.
-  // A single debounced setState at 120 ms batches all three values into one update,
-  // eliminating the 3-sequential-setState storm that caused 3× render per pan/zoom.
   const pendingRegionRef = useRef({
     latitude: 12.8797,
     longitude: 121.7740,
@@ -206,8 +214,6 @@ const LcpNapLocation: React.FC = () => {
     longitudeDelta: 12,
   });
 
-  // Flag to prevet the search list from popping up immediately after a selection is made.
-  // When true, the search effect will fetch data but NOT set showSuggestions to true.
   const skipShowSuggestionsRef = useRef(false);
 
   // Initialization
@@ -231,14 +237,13 @@ const LcpNapLocation: React.FC = () => {
     ExpoLocation.requestForegroundPermissionsAsync().catch(() => { });
   }, []);
 
-  // Combined search for markers and places
+  // Combined search using local markers + Nominatim (free OSM geocoding)
   useEffect(() => {
     const query = searchQuery.trim();
     if (query.length < 2) {
       setSearchSuggestions([]);
       setShowSuggestions(false);
       setDebouncedSearch(query);
-      // Clear the place pin when search is cleared
       if (query.length === 0) setSearchedPlacePin(null);
       return;
     }
@@ -246,13 +251,12 @@ const LcpNapLocation: React.FC = () => {
     const fetchSuggestions = async () => {
       setIsSearchingSuggestions(true);
 
-      // Only auto-show if we aren't explicitly skipping (i.e. we just selected something)
       if (!skipShowSuggestionsRef.current) {
         setShowSuggestions(true);
       }
-      skipShowSuggestionsRef.current = false; // Reset for next interaction
+      skipShowSuggestionsRef.current = false;
 
-      // Local markers search
+      // Local LCP-NAP markers search
       const localMatches = markers
         .filter(m =>
           m.lcpnap_name.toLowerCase().includes(query.toLowerCase()) ||
@@ -268,22 +272,27 @@ const LcpNapLocation: React.FC = () => {
           data: m
         }));
 
-      // Google Places search
+      // Photon by Komoot — free geocoding powered by OSM data, no API key needed
       let placeMatches: any[] = [];
       try {
-        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ph`;
-        const response = await axios.get(url);
-        if (response.data && response.data.predictions) {
-          placeMatches = response.data.predictions.map((p: any) => ({
-            type: 'place',
-            id: p.place_id,
-            title: p.structured_formatting.main_text,
-            subtitle: p.structured_formatting.secondary_text,
-            place_id: p.place_id
-          }));
-        }
+        const features = await photonSearch(query);
+        placeMatches = features
+          .filter((f: any) => f.geometry?.coordinates?.length === 2)
+          .map((f: any) => {
+            const props = f.properties || {};
+            const name = props.name || props.city || props.district || query;
+            const parts = [props.city, props.state, props.country].filter(Boolean);
+            return {
+              type: 'place',
+              id: `photon-${f.properties?.osm_id || Math.random()}`,
+              title: name,
+              subtitle: parts.join(', ') || 'Philippines',
+              latitude: f.geometry.coordinates[1],  // Photon returns [lon, lat]
+              longitude: f.geometry.coordinates[0],
+            };
+          });
       } catch (err) {
-        console.error('Places API error:', err);
+        console.error('Photon geocoding error:', err);
       }
 
       const results = [];
@@ -308,7 +317,6 @@ const LcpNapLocation: React.FC = () => {
   const processMarkers = (data: any[]): LocationMarker[] =>
     data.map((item: any) => ({
       ...item,
-      // Favor numeric lat/lng from server; fallback to parsing if server sent strings
       latitude: typeof item.latitude === 'number' ? item.latitude : parseCoordinates(item.coordinates)?.latitude || 0,
       longitude: typeof item.longitude === 'number' ? item.longitude : parseCoordinates(item.coordinates)?.longitude || 0,
       lcpnap_name: item.lcpnap_name || 'Unnamed'
@@ -329,16 +337,13 @@ const LcpNapLocation: React.FC = () => {
   const loadLocations = useCallback(async () => {
     setIsLoading(true);
     try {
-      // ── Phase 1: lightweight pins ──────────────────────────────────────────
-      // This returns numeric lat/lng and fewer keys. Very fast.
       const minRes = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations?minimal=1');
       if (minRes.data.success && minRes.data.data) {
         const pinData = processMarkers(minRes.data.data);
         setMarkers(pinData);
         fitMap(pinData);
-        setIsLoading(false); // Map is interactive now
+        setIsLoading(false);
 
-        // ── Phase 2: enriched data with session counts ────────────────────────
         try {
           const fullRes = await apiClient.get<ApiResponse<any[]>>('/lcp-nap-locations');
           if (fullRes.data.success && fullRes.data.data) {
@@ -377,14 +382,12 @@ const LcpNapLocation: React.FC = () => {
   ], [markers.length, lcpNapGroups]);
 
   const markersToDisplay = useMemo((): LocationMarker[] => {
-    // 1. Initial filter by selected group
     let filtered = markers;
     if (selectedLcpNapId !== 'all') {
       const group = lcpNapGroups.find(g => g.lcpnap_id === selectedLcpNapId);
       filtered = group ? group.locations : [];
     }
 
-    // 2. Filter by search query
     const query = debouncedSearch.trim().toLowerCase();
     const isPlaceActive = !!(searchedPlacePin && query === searchedPlacePin.title.toLowerCase());
 
@@ -397,7 +400,7 @@ const LcpNapLocation: React.FC = () => {
       return filtered.slice(0, 100);
     }
 
-    // 3. Viewport Culling — only render markers in the current view + 50% buffer
+    // Viewport culling — only render markers in view + 50% buffer
     const latSpan = currentRegion.latitudeDelta * 1.5;
     const lngSpan = currentRegion.longitudeDelta * 1.5;
     const latMin = currentRegion.latitude - latSpan / 2;
@@ -410,12 +413,9 @@ const LcpNapLocation: React.FC = () => {
       m.longitude >= lngMin && m.longitude <= lngMax
     );
 
-    // 4. Limit rendered pins. If within limit, return as-is (no sort cost).
     const limit = parseInt(pinLimit) || 50;
     if (visible.length <= limit) return visible;
 
-    // Only pay the sort cost when we actually need to trim.
-    // Use cheap Manhattan distance — no Math.sqrt needed.
     const cLat = mapCenter.latitude;
     const cLng = mapCenter.longitude;
     return visible
@@ -468,47 +468,32 @@ const LcpNapLocation: React.FC = () => {
     }
   }, []);
 
-  const handleSuggestionSelect = async (suggestion: any) => {
-    skipShowSuggestionsRef.current = true; // Prevent re-opening immediately after selection
+  // Handle suggestion selection — works for both LCP-NAP markers and Nominatim place results
+  const handleSuggestionSelect = useCallback(async (suggestion: any) => {
+    skipShowSuggestionsRef.current = true;
     setSearchQuery(suggestion.title);
-    setDebouncedSearch(suggestion.title); // Update debounced state immediately to avoid flicker and pin hiding
+    setDebouncedSearch(suggestion.title);
     setShowSuggestions(false);
 
     if (suggestion.type === 'lcpnap') {
-      // Clear any place pin when navigating to an LCP-NAP marker
       setSearchedPlacePin(null);
       handleLocationSelect(suggestion.data);
     } else {
-      // Pre-set title to bypass text filtering immediately while we fetch real coordinates
-      setSearchedPlacePin({ latitude: 0, longitude: 0, title: suggestion.title });
-      setIsLoading(true);
-      try {
-        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&fields=geometry&key=${GOOGLE_MAPS_API_KEY}`;
-        const response = await axios.get(url);
-        if (response.data && response.data.result && response.data.result.geometry) {
-          const { lat, lng } = response.data.result.geometry.location;
-          // Drop a pin at the searched place so it's visible after the camera animates
-          setSearchedPlacePin({
-            latitude: lat,
-            longitude: lng,
-            title: suggestion.title
-          });
-          mapRef.current?.animateToRegion({
-            latitude: lat,
-            longitude: lng,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01
-          }, 1000);
-          setMapCenter({ latitude: lat, longitude: lng });
-        }
-      } catch (err) {
-        console.error('Place details error:', err);
-        Alert.alert('Error', 'Could not get location details');
-      } finally {
-        setIsLoading(false);
+      // Nominatim already returns coordinates directly — no second API call needed
+      const lat = suggestion.latitude;
+      const lng = suggestion.longitude;
+      if (lat && lng) {
+        setSearchedPlacePin({ latitude: lat, longitude: lng, title: suggestion.title });
+        mapRef.current?.animateToRegion({
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01
+        }, 1000);
+        setMapCenter({ latitude: lat, longitude: lng });
       }
     }
-  };
+  }, [handleLocationSelect]);
 
   const pinSize = getPinSize(currentDelta);
 
@@ -547,11 +532,11 @@ const LcpNapLocation: React.FC = () => {
                 <View style={styles.flex1}>
                   <TextInput
                     style={[styles.searchInput, { color: '#111827' }]}
-                    placeholder="Search Lcpnap or Places..."
+                    placeholder="Search LCP-NAP or Places..."
                     placeholderTextColor="#9ca3af"
                     value={searchQuery}
                     onChangeText={(text) => {
-                      skipShowSuggestionsRef.current = false; // User is typing, allow auto-show
+                      skipShowSuggestionsRef.current = false;
                       setSearchQuery(text);
                     }}
                     onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
@@ -586,27 +571,50 @@ const LcpNapLocation: React.FC = () => {
                 style={styles.map}
                 initialRegion={{ latitude: 12.8797, longitude: 121.7740, latitudeDelta: 12, longitudeDelta: 12 }}
                 minZoomLevel={5.8}
-                maxZoomLevel={20}
+                maxZoomLevel={19}
                 showsUserLocation
-                showsMyLocationButton
+                showsMyLocationButton={false}
                 onUserLocationChange={e => e.nativeEvent.coordinate && setUserLocation(e.nativeEvent.coordinate)}
                 onRegionChangeComplete={r => {
-                  // Batch all region state into a single update via a ref + one debounced setState.
-                  // Previously this fired 3 separate setStates → 3 re-renders → 3× markersToDisplay recalculations per pan.
                   pendingRegionRef.current = r;
-                  setCurrentRegion(r); // single batched update; currentDelta & mapCenter are derived below
+                  setCurrentRegion(r);
                   setCurrentDelta(r.latitudeDelta);
                   setMapCenter({ latitude: r.latitude, longitude: r.longitude });
                 }}
-                onMapReady={() => mapRef.current?.setMapBoundaries({ latitude: 21.1, longitude: 126.6 }, { latitude: 4.4, longitude: 114.1 })}
-                customMapStyle={[{ featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] }]}
+                mapType="none"
+                showsPointsOfInterest={false}
+                // Disable Google-specific props
+                showsBuildings={false}
+                showsTraffic={false}
+                showsIndoors={false}
               >
+                {/* ESRI ArcGIS World Light Gray Base — free tiles, no API key, designed for app use, hides POIs */}
+                <UrlTile
+                  urlTemplate="https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                  maximumZ={19}
+                  flipY={false}
+                  tileSize={256}
+                  // @ts-ignore
+                  zIndex={-2}
+                />
+                {/* ESRI ArcGIS World Light Gray Reference — provides clean labels without POIs */}
+                <UrlTile
+                  urlTemplate="https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+                  maximumZ={19}
+                  flipY={false}
+                  tileSize={256}
+                  // @ts-ignore
+                  zIndex={-1}
+                />
+
                 {userLocation && <Circle center={userLocation} radius={100} fillColor="rgba(59, 130, 246, 0.1)" strokeColor="rgba(59, 130, 246, 0.4)" strokeWidth={2} />}
+
                 {markersToDisplay.map(loc => (
                   <CustomMarker key={loc.id} location={loc} pinSize={pinSize} onPress={handleLocationSelect} />
                 ))}
-                {/* Place search result pin — visually distinct red drop-pin */}
-                {searchedPlacePin && (
+
+                {/* Place search result pin — visually distinct */}
+                {searchedPlacePin && searchedPlacePin.latitude !== 0 && (
                   <Marker
                     coordinate={{ latitude: searchedPlacePin.latitude, longitude: searchedPlacePin.longitude }}
                     title={searchedPlacePin.title}
@@ -681,6 +689,11 @@ const LcpNapLocation: React.FC = () => {
               </Pressable>
             </View>
 
+            {/* Map attribution — required by tile provider */}
+            <View style={styles.osmAttribution}>
+              <Text style={styles.osmAttributionText}>Powered by Esri | © OpenStreetMap</Text>
+            </View>
+
             {isLoading && (
               <View style={[styles.loaderOverlay, { backgroundColor: 'rgba(243, 244, 246, 0.7)' }]}>
                 <View style={styles.loaderContent}>
@@ -693,10 +706,10 @@ const LcpNapLocation: React.FC = () => {
         </View>
       </View>
 
-      <AddLcpNapLocationModal 
-        isOpen={showAddModal} 
-        onClose={() => { setShowAddModal(false); setEditLocation(null); }} 
-        onSave={() => loadLocations()} 
+      <AddLcpNapLocationModal
+        isOpen={showAddModal}
+        onClose={() => { setShowAddModal(false); setEditLocation(null); }}
+        onSave={() => loadLocations()}
         editData={editLocation}
       />
 
@@ -704,11 +717,11 @@ const LcpNapLocation: React.FC = () => {
         <Modal visible={!!selectedLocation} animationType="slide" transparent onRequestClose={() => setSelectedLocation(null)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.mobileDetailsContainer, isTablet && { width: 500, alignSelf: 'center', marginBottom: 40, borderRadius: 20 }]}>
-              <LcpNapLocationDetails 
-                location={selectedLocation!} 
-                onClose={() => setSelectedLocation(null)} 
+              <LcpNapLocationDetails
+                location={selectedLocation!}
+                onClose={() => setSelectedLocation(null)}
                 onEdit={() => handleEdit(selectedLocation!)}
-                isMobile={!isTablet} 
+                isMobile={!isTablet}
               />
             </View>
           </View>
@@ -757,6 +770,8 @@ const styles = StyleSheet.create({
   suggestionTitle: { fontSize: 14, fontWeight: '600' },
   suggestionSubtitle: { fontSize: 12, marginTop: 2 },
   searchingLoader: { position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  osmAttribution: { position: 'absolute', bottom: 4, left: 8, zIndex: 5 },
+  osmAttributionText: { fontSize: 9, color: '#4b5563', backgroundColor: 'rgba(255,255,255,0.75)', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3 },
 });
 
 export default LcpNapLocation;

@@ -463,16 +463,16 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
       // Hydrate from cache immediately for perceived speed
       if (isCacheValid) {
-        if (DATA_CACHE.technicians) setTechnicians(DATA_CACHE.technicians);
+        if (Array.isArray(DATA_CACHE.technicians)) setTechnicians(DATA_CACHE.technicians);
         if (DATA_CACHE.usernamePattern) setUsernamePattern(DATA_CACHE.usernamePattern);
         if (isDone) {
-          if (DATA_CACHE.lcpnaps) setLcpnaps(DATA_CACHE.lcpnaps);
-          if (DATA_CACHE.inventory) setInventoryItems(DATA_CACHE.inventory);
-          if (DATA_CACHE.plans) setPlans(DATA_CACHE.plans);
-          if (DATA_CACHE.vlans) setVlans(DATA_CACHE.vlans);
-          if (DATA_CACHE.usageTypes) setUsageTypes(DATA_CACHE.usageTypes);
-          if (DATA_CACHE.routerModels) setRouterModels(DATA_CACHE.routerModels);
-          if (DATA_CACHE.mostUsedLcpnaps) setMostUsedLcpnaps(DATA_CACHE.mostUsedLcpnaps);
+          if (Array.isArray(DATA_CACHE.lcpnaps)) setLcpnaps(DATA_CACHE.lcpnaps);
+          if (Array.isArray(DATA_CACHE.inventory)) setInventoryItems(DATA_CACHE.inventory);
+          if (Array.isArray(DATA_CACHE.plans)) setPlans(DATA_CACHE.plans);
+          if (Array.isArray(DATA_CACHE.vlans)) setVlans(DATA_CACHE.vlans);
+          if (Array.isArray(DATA_CACHE.usageTypes)) setUsageTypes(DATA_CACHE.usageTypes);
+          if (Array.isArray(DATA_CACHE.routerModels)) setRouterModels(DATA_CACHE.routerModels);
+          if (Array.isArray(DATA_CACHE.mostUsedLcpnaps)) setMostUsedLcpnaps(DATA_CACHE.mostUsedLcpnaps);
         }
       }
 
@@ -525,33 +525,65 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       }
 
       // Process Done
-      if (lcpRes && lcpRes.status === 'fulfilled' && lcpRes.value?.success) setLcpnaps(lcpRes.value.data);
-      if (vlanRes && vlanRes.status === 'fulfilled' && vlanRes.value?.success) setVlans(vlanRes.value.data);
-      if (usageRes && usageRes.status === 'fulfilled' && usageRes.value?.success) {
-        setUsageTypes(usageRes.value.data.filter((ut: any) => {
+      if (lcpRes && lcpRes.status === 'fulfilled' && lcpRes.value?.success && Array.isArray(lcpRes.value.data)) {
+        setLcpnaps(lcpRes.value.data);
+      }
+      if (vlanRes && vlanRes.status === 'fulfilled' && vlanRes.value?.success && Array.isArray(vlanRes.value.data)) {
+        setVlans(vlanRes.value.data);
+      }
+      if (usageRes && usageRes.status === 'fulfilled' && usageRes.value?.success && Array.isArray(usageRes.value.data)) {
+        const filteredUt = usageRes.value.data.filter((ut: any) => {
           const val = String(ut.usage_name || ut.Usage_Name || '').toLowerCase();
           return val && val !== 'undefined' && val !== 'null';
-        }));
+        });
+        setUsageTypes(filteredUt);
       }
-      if (invRes && invRes.status === 'fulfilled' && invRes.value?.success) {
+      if (invRes && invRes.status === 'fulfilled' && invRes.value?.success && Array.isArray(invRes.value.data)) {
         const items = invRes.value.data;
-        setInventoryItems(items.filter((i: any) => String(i.category_id) === '1'));
-        setRouterModels(items.filter((i: any) => String(i.category_id) === '11').map((i: any, index: number) => ({
+        const filteredInv = items.filter((i: any) => String(i.category_id) === '1');
+        setInventoryItems(filteredInv);
+        const filteredRouter = items.filter((i: any) => String(i.category_id) === '11').map((i: any, index: number) => ({
           model: i.item_name, brand: 'Inventory', description: i.item_description || '', id: index
-        })));
+        }));
+        setRouterModels(filteredRouter);
       }
-      if (planRes && planRes.status === 'fulfilled') setPlans(planRes.value);
-      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled' && mostUsedLcpRes.value?.success) setMostUsedLcpnaps(mostUsedLcpRes.value.data);
+      if (planRes && planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
+        setPlans(planRes.value);
+      }
+      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled' && mostUsedLcpRes.value?.success && Array.isArray(mostUsedLcpRes.value.data)) {
+        setMostUsedLcpnaps(mostUsedLcpRes.value.data);
+      }
 
       // Cache Update
       DATA_CACHE.lastFetch = Date.now();
-      if (lcpRes && lcpRes.status === 'fulfilled') DATA_CACHE.lcpnaps = lcpRes.value.data;
-      if (invRes && invRes.status === 'fulfilled') DATA_CACHE.inventory = invRes.value.data;
-      if (planRes && planRes.status === 'fulfilled') DATA_CACHE.plans = planRes.value;
-      if (vlanRes && vlanRes.status === 'fulfilled') DATA_CACHE.vlans = vlanRes.value.data;
-      if (usageRes && usageRes.status === 'fulfilled') DATA_CACHE.usageTypes = usageRes.value.data;
-      if (userPatRes.status === 'fulfilled') DATA_CACHE.usernamePattern = userPatRes.value[0];
-      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled') DATA_CACHE.mostUsedLcpnaps = mostUsedLcpRes.value.data;
+      if (lcpRes && lcpRes.status === 'fulfilled' && lcpRes.value?.success && Array.isArray(lcpRes.value.data)) {
+        DATA_CACHE.lcpnaps = lcpRes.value.data;
+      }
+      if (invRes && invRes.status === 'fulfilled' && invRes.value?.success && Array.isArray(invRes.value.data)) {
+        const items = invRes.value.data;
+        DATA_CACHE.inventory = items.filter((i: any) => String(i.category_id) === '1');
+        DATA_CACHE.routerModels = items.filter((i: any) => String(i.category_id) === '11').map((i: any, index: number) => ({
+          model: i.item_name, brand: 'Inventory', description: i.item_description || '', id: index
+        }));
+      }
+      if (planRes && planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
+        DATA_CACHE.plans = planRes.value;
+      }
+      if (vlanRes && vlanRes.status === 'fulfilled' && vlanRes.value?.success && Array.isArray(vlanRes.value.data)) {
+        DATA_CACHE.vlans = vlanRes.value.data;
+      }
+      if (usageRes && usageRes.status === 'fulfilled' && usageRes.value?.success && Array.isArray(usageRes.value.data)) {
+        DATA_CACHE.usageTypes = usageRes.value.data.filter((ut: any) => {
+          const val = String(ut.usage_name || ut.Usage_Name || '').toLowerCase();
+          return val && val !== 'undefined' && val !== 'null';
+        });
+      }
+      if (userPatRes.status === 'fulfilled') {
+        DATA_CACHE.usernamePattern = userPatRes.value[0];
+      }
+      if (mostUsedLcpRes && mostUsedLcpRes.status === 'fulfilled' && mostUsedLcpRes.value?.success && Array.isArray(mostUsedLcpRes.value.data)) {
+        DATA_CACHE.mostUsedLcpnaps = mostUsedLcpRes.value.data;
+      }
     };
 
     fetchAllData(formData.onsiteStatus === 'Done');
@@ -1472,13 +1504,17 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData?.id, jobOrderData?.JobOrder_ID, jobOrderData?.First_Name, jobOrderData?.Last_Name]);
 
-  const selectedLcpnap = useMemo(() => lcpnaps.find(ln => ln.lcpnap_name === formData.lcpnap), [lcpnaps, formData.lcpnap]);
+  const selectedLcpnap = useMemo(() => {
+    const safeLcpnaps = Array.isArray(lcpnaps) ? lcpnaps : [];
+    return safeLcpnaps.find(ln => ln && ln.lcpnap_name === formData.lcpnap);
+  }, [lcpnaps, formData.lcpnap]);
   const portTotal = Number(selectedLcpnap?.port_total || 0) || 0;
 
   // Memoize filtered lists to prevent expensive re-computation on every render
   const filteredRouterModels = useMemo(() => {
-    const query = routerModelSearch.toLowerCase();
-    return routerModels
+    const query = (routerModelSearch || '').toLowerCase();
+    const safeRouterModels = Array.isArray(routerModels) ? routerModels : [];
+    return safeRouterModels
       .filter(rm => {
         if (!rm || !rm.model) return false;
         return String(rm.model).toLowerCase().includes(query);
@@ -1487,23 +1523,27 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   }, [routerModels, routerModelSearch]);
 
   const filteredLcpnaps = useMemo(() => {
-    const query = lcpnapSearch.toLowerCase();
+    const query = (lcpnapSearch || '').toLowerCase();
+    const safeLcpnaps = Array.isArray(lcpnaps) ? lcpnaps : [];
+    const safeMostUsed = Array.isArray(mostUsedLcpnaps) ? mostUsedLcpnaps : [];
 
     if (!query) {
-      return mostUsedLcpnaps;
+      return safeMostUsed.filter(ln => ln && (ln.lcpnap_name || (ln as any).name));
     }
 
-    return lcpnaps
+    return safeLcpnaps
       .filter(ln => {
-        if (!ln || !ln.lcpnap_name) return false;
-        return String(ln.lcpnap_name).toLowerCase().includes(query);
+        if (!ln) return false;
+        const name = ln.lcpnap_name || (ln as any).name || '';
+        return String(name).toLowerCase().includes(query);
       })
       .slice(0, 50);
   }, [lcpnaps, lcpnapSearch, mostUsedLcpnaps]);
 
   const filteredInventoryItems = useMemo(() => {
-    const query = itemSearchModal.toLowerCase();
-    return inventoryItems
+    const query = (itemSearchModal || '').toLowerCase();
+    const safeInventoryItems = Array.isArray(inventoryItems) ? inventoryItems : [];
+    return safeInventoryItems
       .filter(invItem => {
         if (!invItem || !invItem.item_name) return false;
         return String(invItem.item_name).toLowerCase().includes(query);
@@ -1596,40 +1636,45 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   }, [activeTechField, handleInputChange]);
 
   const filteredUsageTypes = useMemo(() => {
-    const query = usageTypeSearch.toLowerCase();
-    return usageTypes
-      .map(ut => String(ut.usage_name || (ut as any).Usage_Name))
-      .filter(name => name.toLowerCase().includes(query))
+    const query = (usageTypeSearch || '').toLowerCase();
+    const safeUsageTypes = Array.isArray(usageTypes) ? usageTypes : [];
+    return safeUsageTypes
+      .filter(ut => ut != null)
+      .map(ut => String(ut.usage_name || (ut as any).Usage_Name || ''))
+      .filter(name => name && name.toLowerCase().includes(query))
       .slice(0, 50);
   }, [usageTypes, usageTypeSearch]);
 
   const availablePorts = useMemo(() => {
     const ports = Array.from({ length: portTotal }, (_, i) => `P${(i + 1).toString().padStart(2, '0')}`);
-    return ports.filter(p => !usedPorts.has(p));
+    const safeUsedPorts = usedPorts instanceof Set ? usedPorts : new Set<string>();
+    return ports.filter(p => !safeUsedPorts.has(p));
   }, [portTotal, usedPorts]);
 
   const filteredPorts = useMemo(() => {
-    const query = portSearch.toLowerCase();
-    return availablePorts
-      .filter(p => p.toLowerCase().includes(query))
+    const query = (portSearch || '').toLowerCase();
+    const safeAvailablePorts = Array.isArray(availablePorts) ? availablePorts : [];
+    return safeAvailablePorts
+      .filter(p => p && p.toLowerCase().includes(query))
       .slice(0, 50);
   }, [availablePorts, portSearch]);
 
   const filteredVlans = useMemo(() => {
-    const query = vlanSearch.toLowerCase();
-    return vlans
-      .filter(vlan => vlan.value != null)
+    const query = (vlanSearch || '').toLowerCase();
+    const safeVlans = Array.isArray(vlans) ? vlans : [];
+    return safeVlans
+      .filter(vlan => vlan && vlan.value != null)
       .map(vlan => vlan.value!.toString())
       .filter(v => v.toLowerCase().includes(query))
       .slice(0, 50);
   }, [vlans, vlanSearch]);
 
   const filteredTechs = useMemo(() => {
-    const query = techSearch.toLowerCase();
-    let list = technicians;
-    if (activeTechField === 'visit_by') list = visitByTechnicians;
-    else if (activeTechField === 'visit_with') list = visitWithTechnicians;
-    else if (activeTechField === 'visit_with_other') list = visitWithOtherTechnicians;
+    const query = (techSearch || '').toLowerCase();
+    let list = Array.isArray(technicians) ? technicians : [];
+    if (activeTechField === 'visit_by') list = Array.isArray(visitByTechnicians) ? visitByTechnicians : [];
+    else if (activeTechField === 'visit_with') list = Array.isArray(visitWithTechnicians) ? visitWithTechnicians : [];
+    else if (activeTechField === 'visit_with_other') list = Array.isArray(visitWithOtherTechnicians) ? visitWithOtherTechnicians : [];
 
     // Add "None" for Visit With and Visit With Other
     const finalList = (activeTechField === 'visit_with' || activeTechField === 'visit_with_other')
@@ -1637,20 +1682,21 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       : list;
 
     return finalList
-      .filter(t => t.name.toLowerCase().includes(query))
+      .filter(t => t && t.name && t.name.toLowerCase().includes(query))
       .slice(0, 50);
   }, [technicians, techSearch, activeTechField, visitByTechnicians, visitWithTechnicians, visitWithOtherTechnicians]);
 
   const renderLcpnapItem = useCallback(({ item, extraData }: any) => {
+    if (!item) return null;
     const name = item.lcpnap_name || item.name || '';
     if (!name) return null;
     return (
       <MiniModalItem
         label={name}
-        isSelected={extraData.selectedValue === name}
-        onPress={extraData.onPress}
-        isDarkMode={extraData.isDarkMode}
-        primaryColor={extraData.primaryColor}
+        isSelected={extraData && extraData.selectedValue === name}
+        onPress={extraData && extraData.onPress}
+        isDarkMode={extraData && extraData.isDarkMode}
+        primaryColor={(extraData && extraData.primaryColor) || '#7c3aed'}
       />
     );
   }, []);
@@ -1958,7 +2004,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   extraData={lcpnapExtraData}
                   // @ts-ignore
                   estimatedItemSize={60}
-                  keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                  keyExtractor={(item, index) => {
+                    if (!item) return index.toString();
+                    const itemId = item.id || (item as any).ID;
+                    return itemId ? itemId.toString() : index.toString();
+                  }}
                   ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                   renderItem={renderLcpnapItem}
                   ListEmptyComponent={
@@ -2018,7 +2068,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   extraData={routerModelExtraData}
                   // @ts-ignore
                   estimatedItemSize={60}
-                  keyExtractor={(item, index) => item.model ? item.model.toString() : index.toString()}
+                  keyExtractor={(item, index) => {
+                    if (!item) return index.toString();
+                    const model = item.model;
+                    return model ? model.toString() : index.toString();
+                  }}
                   ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                   renderItem={renderRouterModelItem}
                   ListEmptyComponent={
@@ -2081,7 +2135,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   extraData={itemExtraData}
                   // @ts-ignore
                   estimatedItemSize={60}
-                  keyExtractor={(item, index) => item.id !== undefined ? item.id.toString() : index.toString()}
+                  keyExtractor={(item, index) => {
+                    if (!item) return index.toString();
+                    const itemId = item.id || (item as any).ID;
+                    return itemId !== undefined ? itemId.toString() : index.toString();
+                  }}
                   ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                   renderItem={renderItemItem}
                   ListEmptyComponent={
@@ -2323,7 +2381,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                   extraData={techExtraData}
                   // @ts-ignore
                   estimatedItemSize={60}
-                  keyExtractor={(item, index) => item.email || index.toString()}
+                  keyExtractor={(item, index) => {
+                    if (!item) return index.toString();
+                    const email = item.email;
+                    return email ? email.toString() : index.toString();
+                  }}
                   ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                   renderItem={renderTechItem}
                   ListEmptyComponent={

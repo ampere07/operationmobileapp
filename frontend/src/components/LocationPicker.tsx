@@ -202,6 +202,10 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
             region={region}
             onRegionChangeComplete={setRegion}
             onPress={handleMapPress}
+            showsPointsOfInterest={false}
+            showsBuildings={false}
+            showsTraffic={false}
+            showsIndoors={false}
             userInterfaceStyle={isDarkMode ? 'dark' : 'light'}
           >
             {coordinates && (

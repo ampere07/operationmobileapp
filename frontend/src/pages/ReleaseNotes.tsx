@@ -28,6 +28,15 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.37',
+            date: 'May 23, 2026',
+            title: 'Map POI Removal & Stability Fixes',
+            updates: [
+                { text: 'Map POI Removal: Switched to ESRI Light Gray Canvas Base + Reference tiles and disabled native Points of Interest (POIs) to ensure a clean, distraction-free map interface without commercial markers.', visibility: 'technician' },
+                { text: 'Android Map Crash Resolution: Removed unstable custom map style components, resolving a native Android crash (ArrayIndexOutOfBoundsException) during MapView bridge initialization.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.36',
             date: 'May 21, 2026',
             title: 'Validation Cooldown & Work Started Logic Fix',
