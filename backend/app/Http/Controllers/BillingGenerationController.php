@@ -727,5 +727,173 @@ class BillingGenerationController extends Controller
             ], 500);
         }
     }
+
+    public function generateCustomBilling(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'account_no'     => 'required|string|exists:billing_accounts,account_no',
+                'service_charge' => 'nullable|numeric|min:0',
+            ]);
+
+            $userId        = $request->user()->id ?? 1;
+            $accountNo     = $validated['account_no'];
+            $serviceCharge = floatval($validated['service_charge'] ?? 0);
+            $generationDate = \Carbon\Carbon::now('Asia/Manila');
+
+            $account = \App\Models\BillingAccount::where('account_no', $accountNo)
+                ->with(['customer', 'technicalDetails', 'plan'])
+                ->first();
+
+            if (!$account) {
+                return response()->json(['success' => false, 'message' => 'Account not found'], 404);
+            }
+
+            if (!$account->customer) {
+                return response()->json(['success' => false, 'message' => 'No customer linked to this account'], 400);
+            }
+
+            // If a custom service charge is provided, insert an Unused record so
+            // createEnhancedStatement will automatically pick it up and mark it Used.
+            if ($serviceCharge > 0) {
+                \Illuminate\Support\Facades\DB::table('service_charge_logs')->insert([
+                    'account_no'          => $accountNo,
+                    'service_charge'      => $serviceCharge,
+                    'status'              => 'Unused',
+                    'created_by'  => $userId,
+                    'updated_by'  => $userId,
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ]);
+            }
+
+            $results = [
+                'account_no'    => $account->account_no,
+                'customer_name' => $account->customer->full_name,
+                'soa'           => null,
+                'invoice'       => null,
+                'notifications' => ['email_queued' => false, 'sms_sent' => false, 'errors' => []],
+            ];
+
+            $statement = null;
+            $invoice   = null;
+
+            // 1. Generate SOA
+            try {
+                $statement = $this->enhancedBillingService->createEnhancedStatement($account, $generationDate, $userId);
+                $results['soa'] = [
+                    'id'              => $statement->id,
+                    'total_amount_due' => $statement->total_amount_due,
+                    'due_date'        => $statement->due_date->format('Y-m-d'),
+                    'statement_date'  => $statement->statement_date->format('Y-m-d'),
+                    'service_charge'  => $statement->service_charge,
+                ];
+            } catch (\Exception $e) {
+                Log::error('Custom billing - SOA generation failed', [
+                    'account_no' => $accountNo,
+                    'error'      => $e->getMessage(),
+                ]);
+                $results['soa'] = ['error' => $e->getMessage()];
+            }
+
+            // 2. Generate Invoice (refresh account to get updated balance)
+            try {
+                $account->refresh();
+                $invoice = $this->enhancedBillingService->createEnhancedInvoice($account, $generationDate, $userId);
+
+                // The service_charge_log was already consumed (marked Used) during SOA
+                // generation above. createEnhancedInvoice therefore sees no Unused records
+                // and returns service_fees = 0. We must explicitly apply the custom service
+                // charge to the invoice and to account_balance here.
+                if ($serviceCharge > 0) {
+                    $newServiceCharge = round(floatval($invoice->service_charge ?? 0) + $serviceCharge, 2);
+                    $newTotal         = round(floatval($invoice->total_amount)       + $serviceCharge, 2);
+
+                    $invoice->update([
+                        'service_charge' => $newServiceCharge,
+                        'total_amount'   => $newTotal,
+                        'status'         => $newTotal <= 0 ? 'Paid' : 'Unpaid',
+                    ]);
+                    $invoice->refresh();
+
+                    // account_balance was already set by createEnhancedInvoice to
+                    // (plan price [+ previous balance]).  Add the service charge on top.
+                    $account->refresh();
+                    $account->update([
+                        'account_balance' => round(floatval($account->account_balance) + $serviceCharge, 2),
+                    ]);
+                    $account->refresh();
+
+                    Log::info('Custom billing - service charge patched into invoice and account_balance', [
+                        'account_no'      => $accountNo,
+                        'invoice_id'      => $invoice->id,
+                        'service_charge'  => $serviceCharge,
+                        'new_total'       => $newTotal,
+                        'account_balance' => $account->account_balance,
+                    ]);
+                }
+
+                $results['invoice'] = [
+                    'id'             => $invoice->id,
+                    'total_amount'   => $invoice->total_amount,
+                    'service_charge' => $invoice->service_charge,
+                    'due_date'       => $invoice->due_date->format('Y-m-d'),
+                    'invoice_date'   => $invoice->invoice_date->format('Y-m-d'),
+                ];
+            } catch (\Exception $e) {
+                Log::error('Custom billing - Invoice generation failed', [
+                    'account_no' => $accountNo,
+                    'error'      => $e->getMessage(),
+                ]);
+                $results['invoice'] = ['error' => $e->getMessage()];
+            }
+
+            // 3. Send notifications (email + SMS) once for both SOA & Invoice
+            if ($statement || $invoice) {
+                try {
+                    $account->refresh();
+                    $timeToSend = \Carbon\Carbon::now('Asia/Manila')->setTime(8, 0, 0)->format('Y-m-d H:i:s');
+                    $notifResult = $this->notificationService->notifyBillingGenerated(
+                        $account,
+                        $invoice,
+                        $statement,
+                        $timeToSend
+                    );
+                    $results['notifications'] = [
+                        'email_queued'  => $notifResult['email_queued'] ?? false,
+                        'sms_sent'      => $notifResult['sms_sent'] ?? false,
+                        'pdf_generated' => $notifResult['pdf_generated'] ?? false,
+                        'errors'        => $notifResult['errors'] ?? [],
+                    ];
+                } catch (\Exception $e) {
+                    Log::warning('Custom billing - Notification failed', [
+                        'account_no' => $accountNo,
+                        'error'      => $e->getMessage(),
+                    ]);
+                    $results['notifications']['errors'][] = $e->getMessage();
+                }
+            }
+
+            // 4. Broadcast Pusher events so Invoice / SOA pages refresh live
+            event(new InvoiceUpdated(['action' => 'custom_generated', 'account_no' => $accountNo]));
+            event(new SOAUpdated(['action' => 'custom_generated', 'account_no' => $accountNo]));
+
+            return response()->json([
+                'success' => true,
+                'message' => "Custom billing generated successfully for account {$accountNo}",
+                'data'    => $results,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in generateCustomBilling: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate custom billing',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
 

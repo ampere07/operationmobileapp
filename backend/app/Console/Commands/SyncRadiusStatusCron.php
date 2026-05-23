@@ -100,27 +100,11 @@ class SyncRadiusStatusCron extends Command
                 Log::error('Failed to update radius_api_status to offline', ['error' => $configEx->getMessage()]);
             }
 
-            // Broadcast the failure event
-            try {
-                $alertData = [
-                    'id' => time(),
-                    'type' => 'radius_offline',
-                    'title' => 'RADIUS Connection Failed',
-                    'message' => 'System could not connect to RADIUS API: ' . $e->getMessage(),
-                    'timestamp' => now()->timestamp,
-                    'formatted_date' => 'Just now'
-                ];
-                event(new \App\Events\RadiusStatusAlert($alertData));
-            } catch (\Exception $broadcastEx) {
-                Log::error('Failed to broadcast RADIUS offline event', [
-                    'error' => $broadcastEx->getMessage()
-                ]);
-            }
-
             $this->error('RADIUS Status Sync Failed: ' . $e->getMessage());
 
             return Command::FAILURE;
         }
     }
 }
+
 

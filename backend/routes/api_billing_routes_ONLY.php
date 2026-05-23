@@ -64,6 +64,9 @@ Route::prefix('billing-generation')->group(function () {
     
     // Get statements
     Route::get('/statements', [BillingGenerationController::class, 'getStatements']);
+
+    // Generate custom billing for a single account with optional service charge
+    Route::post('/generate-custom', [BillingGenerationController::class, 'generateCustomBilling']);
 });
 
 // Test route to verify routes are working

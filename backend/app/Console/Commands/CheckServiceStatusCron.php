@@ -79,23 +79,6 @@ class CheckServiceStatusCron extends Command
             );
 
             if (!$radiusOnline) {
-                // Broadcast real-time websocket warning toast to frontend users
-                try {
-                    $alertData = [
-                        'id' => time(),
-                        'type' => 'radius_offline',
-                        'title' => 'RADIUS Connection Failed',
-                        'message' => 'System could not connect to RADIUS API: ' . $radiusError,
-                        'timestamp' => now()->timestamp,
-                        'formatted_date' => 'Just now'
-                    ];
-                    event(new RadiusStatusAlert($alertData));
-                } catch (\Exception $broadcastEx) {
-                    $logger->error('Failed to broadcast RADIUS offline health check event', [
-                        'error' => $broadcastEx->getMessage()
-                    ]);
-                }
-
                 \Log::channel('radiusrelated')->error('[HEALTH CHECK FAILED] RADIUS is offline: ' . $radiusError);
             }
         } catch (\Exception $dbEx) {
@@ -162,3 +145,4 @@ class CheckServiceStatusCron extends Command
         return Command::SUCCESS;
     }
 }
+

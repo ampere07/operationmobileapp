@@ -2361,6 +2361,7 @@ Route::prefix('billing-generation')->group(function () {
     Route::post('/force-generate-all', [\App\Http\Controllers\BillingGenerationController::class , 'forceGenerateAll']);
     Route::get('/invoices', [\App\Http\Controllers\BillingGenerationController::class , 'getInvoices']);
     Route::get('/statements', [\App\Http\Controllers\BillingGenerationController::class , 'getStatements']);
+    Route::post('/generate-custom', [\App\Http\Controllers\BillingGenerationController::class , 'generateCustomBilling']);
 });
 
 // Billing Records Routes - Direct database fetch (separate from billing-generation)
@@ -3154,6 +3155,7 @@ Route::prefix('billing-generation')->group(function () {
     Route::post('/generate-invoices', [BillingGenerationController::class , 'generateEnhancedInvoices']);
     Route::get('/invoices', [BillingGenerationController::class , 'getInvoices']);
     Route::get('/statements', [BillingGenerationController::class , 'getStatements']);
+    Route::post('/generate-custom', [BillingGenerationController::class , 'generateCustomBilling']);
 });
 
 Route::get('/billing-generation/test', function () {
