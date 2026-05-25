@@ -101,14 +101,20 @@ class MonitorController extends Controller
 
             // -------------------------
             // Barangay list (from barangay table)
+            // Only fetch for actions that actually use barangay filtering.
+            // Skipping this on yearly-chart actions saves a redundant query per request.
             // -------------------------
-            $barangays = DB::table('barangay')
-                ->select(DB::raw('TRIM(barangay) as Name'))
-                ->where('barangay', '!=', '')
-                ->orderBy('barangay')
-                ->get();
-
-            $response['barangays'] = $barangays;
+            $barangayActions = ['billing_status', 'app_status', 'so_status', 'jo_status', 'queue_mon', 'app_map'];
+            if (in_array($action, $barangayActions, true)) {
+                $barangays = DB::table('barangay')
+                    ->select(DB::raw('TRIM(barangay) as Name'))
+                    ->where('barangay', '!=', '')
+                    ->orderBy('barangay')
+                    ->get();
+                $response['barangays'] = $barangays;
+            } else {
+                $response['barangays'] = [];
+            }
 
             // -------------------------
             // TEMPLATE MANAGEMENT
@@ -461,121 +467,87 @@ class MonitorController extends Controller
             // Shows count of each status (Paid, Unpaid, etc.) for the selected year
             // X-axis: Status values (Paid, Unpaid, Pending, etc.), Y-axis: Count or Amount
             if (in_array($action, ['invoice_mon', 'transactions_mon', 'portal_mon'], true)) {
+                // Use a date range instead of YEAR() function so MySQL can use an index on the date column
+                $yearStart = $year . '-01-01';
+                $yearEnd   = $year . '-12-31';
+
+                $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                $result = [];
+                foreach ($months as $m) {
+                    $result[$m] = ['label' => $m, 'series' => []];
+                }
+
                 if ($action === 'invoice_mon') {
-                    // Get count/sum for each invoice status per month in the given year
                     $qb = DB::table('invoices');
                     $applyOrg($qb, 'invoices');
                     $qb->select(
                             DB::raw("MONTH(invoice_date) as month_num"),
                             DB::raw("MONTHNAME(invoice_date) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
-                            // Count records or sum amounts based on param
                             $param === 'amount'
                             ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
                             : DB::raw("COUNT(*) as value")
                         )
-                        ->whereYear('invoice_date', $year)
+                        ->whereBetween('invoice_date', [$yearStart, $yearEnd])
                         ->whereNotNull('invoice_date')
                         ->groupBy(DB::raw("MONTH(invoice_date)"), DB::raw("MONTHNAME(invoice_date)"), DB::raw("IFNULL(status, 'Unknown')"))
-                        ->orderBy(DB::raw("MONTH(invoice_date)"))
-                        ->get();
+                        ->orderBy(DB::raw("MONTH(invoice_date)"));
 
-                    // Transform to: {label: "January", series: {"Paid": 1000, "Unpaid": 200}}
-                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                    $result = [];
-
-                    foreach ($months as $month) {
-                        $result[$month] = ['label' => $month, 'series' => []];
-                    }
-
-                    foreach ($qb as $row) {
+                    foreach ($qb->get() as $row) {
                         if (isset($result[$row->month_name])) {
                             $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-
-                    return response()->json([
-                        'status' => 'success',
-                        'data' => array_values($result),
-                        'barangays' => $response['barangays']
-                    ]);
                 } elseif ($action === 'transactions_mon') {
-                    // Get all transaction statuses per month
                     $qb = DB::table('transactions');
                     $applyOrg($qb, 'transactions');
                     $qb->select(
                             DB::raw("MONTH(date_processed) as month_num"),
                             DB::raw("MONTHNAME(date_processed) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
-                            // Count records or sum amounts based on param
                             $param === 'amount'
                             ? DB::raw("SUM(IFNULL(received_payment, 0)) as value")
                             : DB::raw("COUNT(*) as value")
                         )
-                        ->whereYear('date_processed', $year)
+                        ->whereBetween('date_processed', [$yearStart, $yearEnd])
                         ->whereNotNull('date_processed')
                         ->groupBy(DB::raw("MONTH(date_processed)"), DB::raw("MONTHNAME(date_processed)"), DB::raw("IFNULL(status, 'Unknown')"))
-                        ->orderBy(DB::raw("MONTH(date_processed)"))
-                        ->get();
+                        ->orderBy(DB::raw("MONTH(date_processed)"));
 
-                    // Transform to: {label: "January", series: {"Completed": 100, "Pending": 20}}
-                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                    $result = [];
-
-                    foreach ($months as $month) {
-                        $result[$month] = ['label' => $month, 'series' => []];
-                    }
-
-                    foreach ($qb as $row) {
+                    foreach ($qb->get() as $row) {
                         if (isset($result[$row->month_name])) {
                             $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-
-                    return response()->json([
-                        'status' => 'success',
-                        'data' => array_values($result),
-                        'barangays' => $response['barangays']
-                    ]);
                 } else {
-                    // Get all portal payment statuses per month
+                    // portal_mon
                     $qb = DB::table('payment_portal_logs');
                     $applyOrg($qb, 'payment_portal_logs');
                     $qb->select(
                             DB::raw("MONTH(date_time) as month_num"),
                             DB::raw("MONTHNAME(date_time) as month_name"),
                             DB::raw("IFNULL(status, 'Unknown') as status_value"),
-                            // Count records or sum amounts based on param
                             $param === 'amount'
                             ? DB::raw("SUM(IFNULL(total_amount, 0)) as value")
                             : DB::raw("COUNT(*) as value")
                         )
-                        ->whereYear('date_time', $year)
+                        ->whereBetween('date_time', [$yearStart, $yearEnd])
                         ->whereNotNull('date_time')
                         ->groupBy(DB::raw("MONTH(date_time)"), DB::raw("MONTHNAME(date_time)"), DB::raw("IFNULL(status, 'Unknown')"))
-                        ->orderBy(DB::raw("MONTH(date_time)"))
-                        ->get();
+                        ->orderBy(DB::raw("MONTH(date_time)"));
 
-                    // Transform to: {label: "January", series: {"Success": 80, "Failed": 5}}
-                    $months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                    $result = [];
-
-                    foreach ($months as $month) {
-                        $result[$month] = ['label' => $month, 'series' => []];
-                    }
-
-                    foreach ($qb as $row) {
+                    foreach ($qb->get() as $row) {
                         if (isset($result[$row->month_name])) {
                             $result[$row->month_name]['series'][$row->status_value] = (float) $row->value;
                         }
                     }
-
-                    return response()->json([
-                        'status' => 'success',
-                        'data' => array_values($result),
-                        'barangays' => $response['barangays']
-                    ]);
                 }
+
+                return response()->json([
+                    'status' => 'success',
+                    'data' => array_values($result),
+                    'barangays' => $response['barangays']
+                ]);
             }
 
             // 8) EXPENSES (your real table is expenses_log; category_id exists)
@@ -1255,6 +1227,7 @@ class MonitorController extends Controller
         }
     }
 }
+
 
 
 

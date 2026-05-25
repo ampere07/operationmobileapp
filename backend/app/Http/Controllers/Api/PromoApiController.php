@@ -57,6 +57,7 @@ class PromoApiController extends Controller
                     'name' => $promo->name,
                     'description' => $promo->status,
                     'status' => $promo->status,
+                    'organization_id' => $promo->organization_id,
                     'created_at' => $promo->created_at ? $promo->created_at->format('Y-m-d H:i:s') : null,
                     'updated_at' => $promo->updated_at ? $promo->updated_at->format('Y-m-d H:i:s') : null,
                     'creator_email' => $promo->creator_email,
@@ -303,3 +304,4 @@ class PromoApiController extends Controller
         }
     }
 }
+

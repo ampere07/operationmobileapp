@@ -159,7 +159,20 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
         ],
+
+        'radiusrelated' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/radiusrelated.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
+        'smartoltrelated' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/smartoltrelated.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
     ],
 
 ];
+
 

@@ -13,8 +13,14 @@ class WorkOrderCategory extends Model
     
     protected $fillable = [
         'category',
-        'created_by'
+        'created_by',
+        'organization_id'
+    ];
+
+    protected $casts = [
+        'organization_id' => 'integer'
     ];
     
     public $timestamps = true;
 }
+

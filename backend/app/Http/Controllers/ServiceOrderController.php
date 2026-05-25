@@ -931,9 +931,20 @@ class ServiceOrderController extends Controller
                 'request_support_status' => $supportStatus
             ]);
 
+            // Check if triggers were already executed in the original service order
+            $originalConcern = trim($order->concern ?? '');
+            $originalSupportStatus = strtolower(trim($order->support_status ?? ''));
+            $originalVisitStatus = strtolower(trim($order->visit_status ?? ''));
+            $originalRepairCategory = strtolower(trim($order->repair_category ?? ''));
+
+            $isAlreadyResolvedReconnect = (($originalConcern === 'Reconnect' || $originalConcern === 'Upgrade/Downgrade Plan') && $originalSupportStatus === 'resolved');
+            $isAlreadyResolvedRestrict = (($originalConcern === 'Restrict' || $originalConcern === 'Disconnect') && $originalSupportStatus === 'resolved');
+            $isAlreadyPulloutDone = ($originalRepairCategory === 'pullout' && $originalVisitStatus === 'done');
+            $isAlreadyMigrationDone = (in_array($originalRepairCategory, ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port']) && $originalVisitStatus === 'done');
+
             $reconnectStatus = null;
             $normalizedConcern = $currentConcern ? strtolower(trim($currentConcern)) : '';
-            if ($normalizedConcern && ($normalizedConcern === 'reconnect' || $normalizedConcern === 'upgrade/downgrade plan') && $supportStatus === 'resolved') {
+            if ($normalizedConcern && ($normalizedConcern === 'reconnect' || $normalizedConcern === 'upgrade/downgrade plan') && $supportStatus === 'resolved' && !$isAlreadyResolvedReconnect) {
                 $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
                 if ($billingAccount) {
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
@@ -978,7 +989,7 @@ class ServiceOrderController extends Controller
             $restrictedStatus = null;
             $pulloutStatus = null;
 
-            if ($currentConcern && $supportStatus === 'resolved') {
+            if ($currentConcern && $supportStatus === 'resolved' && !$isAlreadyResolvedRestrict) {
                 $lowerConcern = strtolower($currentConcern);
                 if ($lowerConcern === 'restrict' || $lowerConcern === 'disconnect') {
                     $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
@@ -1007,7 +1018,7 @@ class ServiceOrderController extends Controller
                 $repairCategory = strtolower(trim($order->repair_category));
             }
 
-            if ($repairCategory === 'pullout' && $visitStatus === 'done') {
+            if ($repairCategory === 'pullout' && $visitStatus === 'done' && !$isAlreadyPulloutDone) {
                 $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
                 if ($billingAccount) {
                     \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
@@ -1020,7 +1031,7 @@ class ServiceOrderController extends Controller
             // Trigger Migration if repair category is 'Migrate', 'Relocate', 'Relocate Router', or 'Transfer LCP/NAP/PORT' and visit status is 'Done'
             $migrationStatus = null;
             $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port'];
-            if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done') {
+            if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done' && !$isAlreadyMigrationDone) {
                 $billingAccount = BillingAccount::where('account_no', $order->account_no)->first();
                 if ($billingAccount) {
                     \Log::info('Triggering auto-migration for Service Order', [
@@ -1219,6 +1230,8 @@ class ServiceOrderController extends Controller
             $billingAccount = BillingAccount::find($billingAccount->id);
             $accountNo = $billingAccount->account_no;
 
+            $isAlreadyActive = ($billingAccount->billing_status_id == 1);
+
             \Log::info('[SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
 
             // Step 2: Trigger RADIUS Reconnection
@@ -1270,67 +1283,71 @@ class ServiceOrderController extends Controller
             \Log::info('[SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
             // Send SMS Notification
-            try {
-                $smsTemplate = DB::table('sms_templates')
-                    ->where('template_type', 'Reconnect')
-                    ->where('is_active', 1)
-                    ->first();
-
-                if ($smsTemplate) {
-                    $customerInfo = DB::table('billing_accounts')
-                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                        ->where('billing_accounts.account_no', $accountNo)
-                        ->select(
-                        'customers.contact_number_primary',
-                        'customers.email_address',
-                        'customers.desired_plan as plan_name',
-                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                    )
+            if (!$isAlreadyActive) {
+                try {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Reconnect')
+                        ->where('is_active', 1)
                         ->first();
 
-                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                        $message = $smsTemplate->message_content;
-                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                        $message = str_replace('{{customer_name}}', $customerName, $message);
-                        $message = str_replace('{{account_no}}', $accountNo, $message);
-                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    if ($smsTemplate) {
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                            'customers.contact_number_primary',
+                            'customers.email_address',
+                            'customers.desired_plan as plan_name',
+                            DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                        )
+                            ->first();
 
-                        $smsService = new \App\Services\ItexmoSmsService();
-                        $smsResult = $smsService->send([
-                            'contact_no' => $customerInfo->contact_number_primary,
-                            'message' => $message
-                        ]);
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            $message = $smsTemplate->message_content;
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $message = str_replace('{{customer_name}}', $customerName, $message);
+                            $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                        if ($smsResult['success']) {
-                            \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
+                            }
                         }
                     }
                 }
-            }
-            catch (\Exception $e) {
-                \Log::error('[SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                }
             }
 
             // Email Notification
-            try {
-                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+            if (!$isAlreadyActive) {
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
 
-                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
-                    $emailService = app(\App\Services\EmailQueueService::class);
-                    $emailData = [
-                        'customer_name' => $customerInfo->full_name,
-                        'account_no' => $accountNo,
-                        'plan_name' => $customerInfo->plan_name,
-                        'recipient_email' => $customerInfo->email_address,
-                    ];
-                    $emailService->queueFromTemplate('RECONNECT', $emailData);
-                    \Log::info('[SERVICE ORDER RECONNECT EMAIL] Email queued');
+                    if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                        $emailService = app(\App\Services\EmailQueueService::class);
+                        $emailData = [
+                            'customer_name' => $customerInfo->full_name,
+                            'account_no' => $accountNo,
+                            'plan_name' => $customerInfo->plan_name,
+                            'recipient_email' => $customerInfo->email_address,
+                        ];
+                        $emailService->queueFromTemplate('RECONNECT', $emailData);
+                        \Log::info('[SERVICE ORDER RECONNECT EMAIL] Email queued');
+                    }
                 }
-            }
-            catch (\Exception $e) {
-                \Log::error('[SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                catch (\Exception $e) {
+                    \Log::error('[SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
             }
 
             return 'success';
@@ -1782,24 +1799,20 @@ class ServiceOrderController extends Controller
             // SPECIAL CASE: Transfer LCP/NAP/PORT & Migrate
             $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
             if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
-                \Log::info("[SERVICE ORDER] Handling {$repairCategory} via Disable/Update/Enable sequence");
+                \Log::info("[SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
 
-                // 1. Disable Old User
-                $radiusOps->disabledUser([
-                    'username' => $oldUsername,
-                    'accountNumber' => $accountNo,
-                    'updatedBy' => $updatedByUser
-                ]);
-
-                // 2. Generate ONLY New Username (keep existing password)
+                // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
                 $customerData = (array)$fullInfo;
                 $newUsername = $pppoeService->generateUniqueUsername($customerData);
 
-                \Log::info("[SERVICE ORDER] Transfer: Updating username from {$oldUsername} to {$newUsername}");
+                \Log::info("[SERVICE ORDER] Renaming username: '{$oldUsername}' -> '{$newUsername}'");
 
-                // 3. Update Credentials (RADIUS + DB username)
+                // 2. Update Credentials — updateRadiusCredentials handles:
+                //    disable → kill session → PATCH name → re-enable (same .id)
+                //    Do NOT call disabledUser() first — that caused a double
+                //    disable + double session kill race condition on MikroTik.
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,
                     'username' => $oldUsername,
@@ -1809,19 +1822,10 @@ class ServiceOrderController extends Controller
                 ]);
 
                 if ($credResult['status'] === 'success') {
-                    \Log::info('[SERVICE ORDER] Credentials updated successfully, now enabling...');
-
-                    // 4. Enable New User
-                    $radiusOps->enabledUser([
-                        'username' => $newUsername,
-                        'accountNumber' => $accountNo,
-                        'updatedBy' => $updatedByUser
-                    ]);
-
-                    \Log::info('[SERVICE ORDER] User enabled successfully. Transfer complete.');
+                    \Log::info('[SERVICE ORDER] Username renamed and re-enabled successfully. Transfer complete.');
                     return 'success';
                 } else {
-                    \Log::error('[SERVICE ORDER] Failed to update credentials during transfer.');
+                    \Log::error('[SERVICE ORDER] Failed to rename username during transfer: ' . ($credResult['message'] ?? 'unknown'));
                     return 'radius_failed';
                 }
             }
@@ -1841,99 +1845,33 @@ class ServiceOrderController extends Controller
                 return 'no_change';
             }
 
-            // RADIUS ACCOUNT CREATION LOGIC
+            // RADIUS RENAME LOGIC — same approach as Transfer LCP/NAP/PORT:
+            // updateCredentials does disable → kill session → PATCH name → re-enable in place.
+            // No delete + recreate — that was wiping the user and breaking the connection.
             $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
-                \Log::channel('radiusrelated')->info('[SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
+                \Log::info("[SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
+                $radiusOps = app(ManualRadiusOperationsService::class);
 
-                // STEP 1: DELETE THE OLD ACCOUNT
-                try {
-                    $radiusOps = app(ManualRadiusOperationsService::class);
-                    \Log::info('Triggering deleteAccount for old username: ' . $oldUsername);
-                    $radiusOps->deleteAccount($oldUsername);
-                }
-                catch (\Exception $delEx) {
-                    \Log::channel('radiusrelated')->error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
-                // We continue anyway so the new account can be created
-                }
+                $credResult = $radiusOps->updateCredentials([
+                    'accountNumber' => $accountNo,
+                    'username' => $oldUsername,
+                    'newUsername' => $newUsername,
+                    'newPassword' => null, // Keep existing password
+                    'updatedBy' => $updatedByUser
+                ]);
 
-                $radiusConfig = RadiusConfig::first();
-                if ($radiusConfig) {
-                    $radiusUrl = $radiusConfig->ssl_type . '://' . $radiusConfig->ip . ':' . $radiusConfig->port . '/rest/user-manage/user';
-
-                    // Generate new password for relocation/transfer
-                    $newPassword = $pppoeService->generatePassword($customerData);
-
-                    // Get plan
-                    $desiredPlan = $fullInfo->desired_plan ?? '';
-                    $planName = $desiredPlan;
-                    if ($desiredPlan && strpos($desiredPlan, ' - ') !== false) {
-                        $planName = trim(explode(' - ', $desiredPlan)[0]);
-                    }
-
-                    $payload = [
-                        'name' => $newUsername,
-                        'group' => $planName,
-                        'password' => $newPassword
-                    ];
-
-                    \Log::info('Submitting to RADIUS API via Service Order (Relocate/Transfer)', [
-                        'url' => $radiusUrl,
-                        'name' => $newUsername,
-                        'group' => $planName
-                    ]);
-
-                    try {
-                        $response = Http::withOptions(['verify' => false])
-                            ->withBasicAuth($radiusConfig->username, $radiusConfig->password)
-                            ->put($radiusUrl, $payload);
-
-                        if ($response->status() === 204 || $response->successful()) {
-                            \Log::info('RADIUS account created successfully. Proceeding with DB updates.');
-
-                            // Update technical_details
-                            DB::table('technical_details')
-                                ->where('account_id', $billingAccount->id)
-                                ->update([
-                                'username' => $newUsername,
-                                'updated_at' => now(),
-                                'updated_by' => $updatedByUser
-                            ]);
-
-                            // Update job_orders: username, pppoe_username, and pppoe_password
-                            DB::table('job_orders')
-                                ->where('account_id', $billingAccount->id)
-                                ->update([
-                                'pppoe_username' => $newUsername,
-                                'username' => $newUsername,
-                                'pppoe_password' => $newPassword,
-                                'updated_at' => now()
-                            ]);
-
-                            \Log::info('[SERVICE ORDER MIGRATION SUCCESS] Migration synced successfully after RADIUS success');
-                            return 'success';
-                        }
-                        else {
-                            \Log::error('RADIUS account creation failed. DB will NOT be updated for relocation.', [
-                                'status' => $response->status(),
-                                'body' => $response->body()
-                            ]);
-                            return 'radius_failed';
-                        }
-                    }
-                    catch (\Exception $radiusEx) {
-                        \Log::channel('radiusrelated')->error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
-                        return 'exception';
-                    }
-                }
-                else {
-                    \Log::channel('radiusrelated')->error('Radius config not found');
-                    return 'radius_config_missing';
+                if ($credResult['status'] === 'success') {
+                    \Log::info('[SERVICE ORDER MIGRATION SUCCESS] Username renamed in place. No delete/recreate.');
+                    return 'success';
+                } else {
+                    \Log::error('[SERVICE ORDER MIGRATION] Rename failed: ' . ($credResult['message'] ?? 'unknown'));
+                    return 'radius_failed';
                 }
             }
             else {
-                // For other categories like plain 'migrate', we update DB without RADIUS as before
+                // For other categories, DB-only update (no RADIUS change needed)
                 \Log::info('[SERVICE ORDER MIGRATION PROCEED] Updating database credentials (DB ONLY) for ' . $oldUsername);
 
                 DB::table('technical_details')
@@ -1961,6 +1899,295 @@ class ServiceOrderController extends Controller
         catch (\Exception $e) {
             \Log::error('[SERVICE ORDER MIGRATION EXCEPTION] ' . $e->getMessage());
             return 'exception';
+        }
+    }
+
+    /**
+     * Generate a pro-rated invoice for a newly installed account.
+     *
+     * Formula:
+     *   daily_rate  = plan_price / 30
+     *   days        = today → user's billing_day (within the current/next month)
+     *   total       = daily_rate * days
+     *
+     * The invoice is created with status Unpaid and the account_balance is
+     * increased by the same amount. SMS and email notifications are sent.
+     *
+     * POST /api/service-orders/generate-installation-invoice
+     * Body: { account_no: string, user_id?: int }
+     */
+    public function generateProRatedInstallationInvoice(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'account_no' => 'required|string|exists:billing_accounts,account_no',
+                'user_id'    => 'nullable|integer',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $accountNo = $request->input('account_no');
+            $userId    = $request->input('user_id') ?? (Auth::id() ?? 1);
+
+            // ── 1. Load account & customer ───────────────────────────────────────
+            $billingAccount = BillingAccount::with('customer')->where('account_no', $accountNo)->firstOrFail();
+            $customer       = $billingAccount->customer;
+
+            if (!$customer) {
+                return response()->json(['success' => false, 'message' => 'Customer not found for this account.'], 404);
+            }
+
+            // ── 2. Resolve plan price ────────────────────────────────────────────
+            $desiredPlan = $customer->desired_plan ?? '';
+
+            // Extract plan name (strip " - ₱999" or " 999" suffixes)
+            $planName = trim($desiredPlan);
+            if (strpos($planName, ' - ') !== false) {
+                $planName = trim(explode(' - ', $planName)[0]);
+            } elseif (strpos($planName, ' ') !== false) {
+                $planName = trim(explode(' ', $planName)[0]);
+            }
+
+            $plan = DB::table('plan_list')->where('plan_name', $planName)->first();
+
+            if (!$plan || empty($plan->price) || $plan->price <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Plan '{$planName}' not found or has no valid price.",
+                ], 422);
+            }
+
+            $planPrice = floatval($plan->price);
+
+            // ── 3. Calculate pro-rated amount ────────────────────────────────────
+            $today      = \Carbon\Carbon::now('Asia/Manila');
+            $billingDay = intval($billingAccount->billing_day ?? 0);
+
+            // Determine the next billing date based on billing_day
+            if ($billingDay === 0) {
+                // End-of-month billing: use last day of this month
+                $nextBillingDate = $today->copy()->endOfMonth()->startOfDay();
+            } else {
+                // Build a candidate date in the current month
+                $candidateThisMonth = $today->copy()->day($billingDay)->startOfDay();
+
+                if ($candidateThisMonth->greaterThan($today)) {
+                    // Billing day is still ahead this month
+                    $nextBillingDate = $candidateThisMonth;
+                } else {
+                    // Billing day already passed; use same day next month
+                    $nextBillingDate = $today->copy()->addMonthNoOverflow()->day($billingDay)->startOfDay();
+                }
+            }
+
+            // Total days from today UP TO (but not including) billing day
+            // e.g. today = May 10, billing_day = 20 → 10 days
+            $totalDays = $today->copy()->startOfDay()->diffInDays($nextBillingDate);
+
+            if ($totalDays <= 0) {
+                $totalDays = 1; // Always charge at least 1 day
+            }
+
+            $dailyRate   = round($planPrice / 30, 6);
+            $totalAmount = round($dailyRate * $totalDays, 2);
+
+            Log::info('[PRO-RATE INVOICE] Calculation', [
+                'account_no'       => $accountNo,
+                'plan_name'        => $planName,
+                'plan_price'       => $planPrice,
+                'daily_rate'       => $dailyRate,
+                'today'            => $today->format('Y-m-d'),
+                'next_billing_date'=> $nextBillingDate->format('Y-m-d'),
+                'total_days'       => $totalDays,
+                'total_amount'     => $totalAmount,
+            ]);
+
+            // ── 4. Create invoice ────────────────────────────────────────────────
+            DB::beginTransaction();
+
+            // Due date: 7 days from today (or pull from billing config)
+            $dueDateOffset = intval(optional(DB::table('billing_configs')->first())->due_date_day ?? 7);
+            $dueDate       = $today->copy()->addDays($dueDateOffset)->format('Y-m-d');
+
+            $invoice = \App\Models\Invoice::create([
+                'account_no'             => $accountNo,
+                'invoice_date'           => $today->format('Y-m-d'),
+                'invoice_balance'        => $totalAmount,
+                'others_and_basic_charges' => 0,
+                'service_charge'         => 0,
+                'rebate'                 => 0,
+                'discounts'              => 0,
+                'staggered'              => 0,
+                'total_amount'           => $totalAmount,
+                'received_payment'       => 0.00,
+                'due_date'               => $dueDate,
+                'status'                 => $totalAmount <= 0 ? 'Paid' : 'Unpaid',
+                'created_by'             => (string) $userId,
+                'updated_by'             => (string) $userId,
+            ]);
+
+            // ── 5. Update account balance ────────────────────────────────────────
+            $previousBalance = floatval($billingAccount->account_balance ?? 0);
+            $newBalance      = round($previousBalance + $totalAmount, 2);
+
+            $billingAccount->account_balance    = $newBalance;
+            $billingAccount->balance_update_date = $today->format('Y-m-d');
+            $billingAccount->save();
+
+            DB::commit();
+
+            Log::info('[PRO-RATE INVOICE] Invoice created and balance updated', [
+                'account_no'       => $accountNo,
+                'invoice_id'       => $invoice->id,
+                'total_amount'     => $totalAmount,
+                'previous_balance' => $previousBalance,
+                'new_balance'      => $newBalance,
+            ]);
+
+            // ── 6. SMS notification ──────────────────────────────────────────────
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Invoice')
+                    ->where('is_active', 1)
+                    ->first();
+
+                // Fallback to generic Billing template if no Invoice template exists
+                if (!$smsTemplate) {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Billing')
+                        ->where('is_active', 1)
+                        ->first();
+                }
+
+                if ($smsTemplate && !empty($customer->contact_number_primary)) {
+                    $customerName      = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ($customer->first_name . ' ' . $customer->last_name)));
+                    $planNameFormatted = str_replace('₱', 'P', $desiredPlan);
+                    $formattedAmount   = number_format($totalAmount, 2);
+                    $invoiceDateStr    = $today->format('Y-m-d');
+
+                    $message = $smsTemplate->message_content;
+                    $message = str_replace('{{customer_name}}',  $customerName,      $message);
+                    $message = str_replace('{{account_no}}',     $accountNo,         $message);
+                    $message = str_replace('{{plan_name}}',      $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}',       $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}',     $formattedAmount,   $message);
+                    $message = str_replace('{{amount}}',         $formattedAmount,   $message);
+                    $message = str_replace('{{invoice_date}}',   $invoiceDateStr,    $message);
+                    $message = str_replace('{{due_date}}',       $dueDate,           $message);
+                    $message = str_replace('{{date}}',           $invoiceDateStr,    $message);
+
+                    $smsService = new \App\Services\ItexmoSmsService();
+                    $smsResult  = $smsService->send([
+                        'contact_no' => $customer->contact_number_primary,
+                        'message'    => $message,
+                    ]);
+
+                    Log::info('[PRO-RATE INVOICE] SMS result', [
+                        'account_no' => $accountNo,
+                        'success'    => $smsResult['success'] ?? false,
+                    ]);
+                }
+            } catch (\Exception $smsEx) {
+                Log::error('[PRO-RATE INVOICE] SMS exception: ' . $smsEx->getMessage());
+            }
+
+            // ── 7. Email notification ────────────────────────────────────────────
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'INVOICE')
+                    ->orWhere('Template_Code', 'BILLING')
+                    ->first();
+
+                if ($emailTemplate && !empty($customer->email_address)) {
+                    $emailService    = app(\App\Services\EmailQueueService::class);
+                    $brandName       = DB::table('form_ui')->value('brand_name') ?? 'Your ISP';
+                    $customerName    = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ($customer->first_name . ' ' . $customer->last_name)));
+
+                    $emailData = [
+                        'customer_name'   => $customerName,
+                        'account_no'      => $accountNo,
+                        'plan_name'       => $desiredPlan,
+                        'amount_due'      => number_format($totalAmount, 2),
+                        'Amount'          => number_format($totalAmount, 2),
+                        'amount'          => number_format($totalAmount, 2),
+                        'invoice_date'    => $today->format('Y-m-d'),
+                        'due_date'        => $dueDate,
+                        'Date'            => $today->format('Y-m-d'),
+                        'Company_Name'    => $brandName,
+                        'recipient_email' => $customer->email_address,
+                    ];
+
+                    $emailService->queueFromTemplate($emailTemplate->Template_Code, $emailData);
+
+                    Log::info('[PRO-RATE INVOICE] Email queued', [
+                        'account_no' => $accountNo,
+                        'email'      => $customer->email_address,
+                    ]);
+                }
+            } catch (\Exception $emailEx) {
+                Log::error('[PRO-RATE INVOICE] Email exception: ' . $emailEx->getMessage());
+            }
+
+            // ── 8. Activity log ──────────────────────────────────────────────────
+            ActivityLog::log(
+                'Pro-Rated Invoice Generated',
+                "Pro-rated invoice #{$invoice->id} generated for {$accountNo}. "
+                    . "Days: {$totalDays} (today → billing day {$billingDay}). "
+                    . "Amount: {$totalAmount}.",
+                'info',
+                [
+                    'resource_type'   => 'Invoice',
+                    'resource_id'     => $invoice->id,
+                    'additional_data' => [
+                        'account_no'        => $accountNo,
+                        'plan_name'         => $planName,
+                        'plan_price'        => $planPrice,
+                        'daily_rate'        => $dailyRate,
+                        'total_days'        => $totalDays,
+                        'total_amount'      => $totalAmount,
+                        'previous_balance'  => $previousBalance,
+                        'new_balance'       => $newBalance,
+                        'next_billing_date' => $nextBillingDate->format('Y-m-d'),
+                    ],
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pro-rated invoice generated successfully.',
+                'data'    => [
+                    'invoice_id'        => $invoice->id,
+                    'account_no'        => $accountNo,
+                    'plan_name'         => $planName,
+                    'plan_price'        => $planPrice,
+                    'daily_rate'        => round($dailyRate, 4),
+                    'total_days'        => $totalDays,
+                    'invoice_date'      => $today->format('Y-m-d'),
+                    'next_billing_date' => $nextBillingDate->format('Y-m-d'),
+                    'due_date'          => $dueDate,
+                    'total_amount'      => $totalAmount,
+                    'previous_balance'  => $previousBalance,
+                    'new_balance'       => $newBalance,
+                    'invoice_status'    => $invoice->status,
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[PRO-RATE INVOICE] Exception: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate pro-rated invoice.',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
     }
 

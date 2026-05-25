@@ -92,6 +92,7 @@ class DCNoticeApiController extends Controller
                         'created_by_user_id' => $notice->created_by_user_id,
                         'updated_at' => $notice->updated_at?->format('Y-m-d H:i:s'),
                         'updated_by_user_id' => $notice->updated_by_user_id,
+                        'organization_id' => $notice->organization_id,
                     ];
                 });
 
@@ -121,6 +122,7 @@ class DCNoticeApiController extends Controller
                     'created_by_user_id' => $notice->created_by_user_id,
                     'updated_at' => $notice->updated_at?->format('Y-m-d H:i:s'),
                     'updated_by_user_id' => $notice->updated_by_user_id,
+                    'organization_id' => $notice->organization_id,
                     'account_no' => $account?->account_no ?? null,
                     'full_name' => $customer?->full_name ?? null,
                     'contact_number' => $customer?->contact_number_primary ?? null,
@@ -384,4 +386,5 @@ class DCNoticeApiController extends Controller
         }
     }
 }
+
 

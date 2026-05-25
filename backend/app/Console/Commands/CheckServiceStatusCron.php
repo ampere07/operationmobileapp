@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\RadiusConfig;
 use App\Models\SmartOlt;
 use App\Models\SystemConfig;
-use App\Events\RadiusStatusAlert;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -145,4 +144,5 @@ class CheckServiceStatusCron extends Command
         return Command::SUCCESS;
     }
 }
+
 

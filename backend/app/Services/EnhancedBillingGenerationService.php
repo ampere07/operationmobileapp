@@ -243,6 +243,7 @@ class EnhancedBillingGenerationService
 
     public function createEnhancedStatement(BillingAccount $account, Carbon $statementDate, int $userId): StatementOfAccount
     {
+        $statementDate = $statementDate->copy()->setTimezone('Asia/Manila')->startOfDay();
         DB::beginTransaction();
 
         try {
@@ -330,6 +331,7 @@ class EnhancedBillingGenerationService
 
     public function createEnhancedInvoice(BillingAccount $account, Carbon $invoiceDate, int $userId): Invoice
     {
+        $invoiceDate = $invoiceDate->copy()->setTimezone('Asia/Manila')->startOfDay();
         DB::beginTransaction();
 
         try {
@@ -450,13 +452,18 @@ class EnhancedBillingGenerationService
         if ($account->billing_day === self::END_OF_MONTH_BILLING) {
             return $baseDate->copy()->endOfMonth();
         }
-
-        if ($account->billing_day != 30) {
-            $daysRemaining = 30 - $account->billing_day;
-            return $baseDate->copy()->addDays($daysRemaining);
+        
+        // Normalize time to start of day to avoid time propagation issues
+        $baseDate = $baseDate->copy()->startOfDay();
+        $adjustedDate = $baseDate->copy()->day($account->billing_day);
+        
+        // If the calculated billing day is in the past relative to the generation date,
+        // it means we are generating the bill in advance for the next month.
+        if ($adjustedDate->format('Y-m-d') < $baseDate->format('Y-m-d')) {
+            $adjustedDate->addMonth();
         }
         
-        return $baseDate->copy();
+        return $adjustedDate;
     }
 
     protected function calculateProrateAmount(BillingAccount $account, float $monthlyFee, Carbon $currentDate): float
@@ -1093,4 +1100,5 @@ class EnhancedBillingGenerationService
         }
     }
 }
+
 

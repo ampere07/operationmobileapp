@@ -706,8 +706,26 @@ class ServiceOrderApiController extends Controller
                             ->where('account_no', $serviceOrder->account_no)
                             ->update([
                             'account_balance' => $newBalance,
-                            'balance_update_date' => now()
+                            'balance_update_date' => now(),
+                            'updated_at' => now()
                         ]);
+
+                        try {
+                            event(new \App\Events\CustomerUpdated([
+                                'account_no' => $serviceOrder->account_no,
+                                'type' => 'customer_updated',
+                                'edit_type' => 'billing_details',
+                                'title' => 'Customer Updated',
+                                'message' => "Customer balance updated for account {$serviceOrder->account_no}",
+                                'timestamp' => now()->timestamp,
+                                'formatted_date' => now()->format('Y-m-d h:i:s A')
+                            ]));
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to broadcast customer update via Soketi from ServiceOrderApiController', [
+                                'account_no' => $serviceOrder->account_no,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
 
                         $data['status'] = 'used';
 
@@ -790,9 +808,20 @@ class ServiceOrderApiController extends Controller
                 'request_support_status' => $supportStatus
             ]);
 
+            // Check if triggers were already executed in the original service order
+            $originalConcern = trim($serviceOrder->concern ?? '');
+            $originalSupportStatus = strtolower(trim($serviceOrder->support_status ?? ''));
+            $originalVisitStatus = strtolower(trim($serviceOrder->visit_status ?? ''));
+            $originalRepairCategory = strtolower(trim($serviceOrder->repair_category ?? ''));
+
+            $isAlreadyResolvedReconnect = (($originalConcern === 'Reconnect' || $originalConcern === 'Upgrade/Downgrade Plan') && $originalSupportStatus === 'resolved');
+            $isAlreadyResolvedRestrict = (($originalConcern === 'Restrict' || $originalConcern === 'Disconnect') && $originalSupportStatus === 'resolved');
+            $isAlreadyPulloutDone = ($originalRepairCategory === 'pullout' && $originalVisitStatus === 'done');
+            $isAlreadyMigrationDone = (in_array($originalRepairCategory, ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port']) && $originalVisitStatus === 'done');
+
             $reconnectStatus = null;
             $normalizedConcern = $currentConcern ? strtolower(trim($currentConcern)) : '';
-            if ($normalizedConcern && ($normalizedConcern === 'reconnect' || $normalizedConcern === 'upgrade/downgrade plan') && $supportStatus === 'resolved') {
+            if ($normalizedConcern && ($normalizedConcern === 'reconnect' || $normalizedConcern === 'upgrade/downgrade plan') && $supportStatus === 'resolved' && !$isAlreadyResolvedReconnect) {
                 $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
                 if ($billingAccount) {
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
@@ -835,7 +864,7 @@ class ServiceOrderApiController extends Controller
 
             // Trigger Restriction/Disconnection based on concern and support status
             $restrictedStatus = null;
-            if ($currentConcern && $supportStatus === 'resolved') {
+            if ($currentConcern && $supportStatus === 'resolved' && !$isAlreadyResolvedRestrict) {
                 $lowerConcern = strtolower($currentConcern);
                 if ($lowerConcern === 'restrict' || $lowerConcern === 'disconnect') {
                     $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
@@ -863,7 +892,7 @@ class ServiceOrderApiController extends Controller
                 $repairCategory = strtolower(trim($serviceOrder->repair_category));
             }
 
-            if ($repairCategory === 'pullout' && $visitStatus === 'done') {
+            if ($repairCategory === 'pullout' && $visitStatus === 'done' && !$isAlreadyPulloutDone) {
                 $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
                 if ($billingAccount) {
                     \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
@@ -875,8 +904,8 @@ class ServiceOrderApiController extends Controller
 
             // Trigger Migration if repair category is 'Migrate', 'Relocate', or 'Transfer LCP/NAP/PORT' and visit status is 'Done'
             $migrationStatus = null;
-            $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port', 'reactivation'];
-            if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done') {
+            $relocateCategories = ['migrate', 'relocate', 'relocate router', 'transfer lcp/nap/port'];
+            if (in_array($repairCategory, $relocateCategories) && $visitStatus === 'done' && !$isAlreadyMigrationDone) {
                 $billingAccount = BillingAccount::where('account_no', $serviceOrder->account_no)->first();
                 if ($billingAccount) {
                     \Log::info('Triggering auto-migration for Service Order', [
@@ -1098,6 +1127,8 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER RECONNECT PROCEED] Reconnecting user for account: ' . $accountNo);
 
+            $isAlreadyActive = ($billingAccount->billing_status_id == 1);
+
             // Step 4: Update billing_status_id to 1 (Active) BEFORE reconnecting
             $billingAccount->billing_status_id = 1;
             $billingAccount->updated_at = now();
@@ -1109,67 +1140,71 @@ class ServiceOrderApiController extends Controller
             \Log::info('[API SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
             // Send SMS Notification
-            try {
-                $smsTemplate = DB::table('sms_templates')
-                    ->where('template_type', 'Reconnect')
-                    ->where('is_active', 1)
-                    ->first();
-
-                if ($smsTemplate) {
-                    $customerInfo = DB::table('billing_accounts')
-                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                        ->where('billing_accounts.account_no', $accountNo)
-                        ->select(
-                        'customers.contact_number_primary',
-                        'customers.email_address',
-                        'customers.desired_plan as plan_name',
-                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                    )
+            if (!$isAlreadyActive) {
+                try {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Reconnect')
+                        ->where('is_active', 1)
                         ->first();
 
-                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                        $message = $smsTemplate->message_content;
-                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                        $message = str_replace('{{customer_name}}', $customerName, $message);
-                        $message = str_replace('{{account_no}}', $accountNo, $message);
-                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    if ($smsTemplate) {
+                        $customerInfo = DB::table('billing_accounts')
+                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                            ->where('billing_accounts.account_no', $accountNo)
+                            ->select(
+                            'customers.contact_number_primary',
+                            'customers.email_address',
+                            'customers.desired_plan as plan_name',
+                            DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                        )
+                            ->first();
 
-                        $smsService = new \App\Services\ItexmoSmsService();
-                        $smsResult = $smsService->send([
-                            'contact_no' => $customerInfo->contact_number_primary,
-                            'message' => $message
-                        ]);
+                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                            $message = $smsTemplate->message_content;
+                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $message = str_replace('{{customer_name}}', $customerName, $message);
+                            $message = str_replace('{{account_no}}', $accountNo, $message);
+                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                        if ($smsResult['success']) {
-                            \Log::info('[API SERVICE ORDER RECONNECT SMS] SMS sent');
+                            $smsService = new \App\Services\ItexmoSmsService();
+                            $smsResult = $smsService->send([
+                                'contact_no' => $customerInfo->contact_number_primary,
+                                'message' => $message
+                            ]);
+
+                            if ($smsResult['success']) {
+                                \Log::info('[API SERVICE ORDER RECONNECT SMS] SMS sent');
+                            }
                         }
                     }
                 }
-            }
-            catch (\Exception $e) {
-                \Log::error('[API SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                catch (\Exception $e) {
+                    \Log::error('[API SERVICE ORDER RECONNECT SMS EXCEPTION] ' . $e->getMessage());
+                }
             }
 
             // Email Notification
-            try {
-                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+            if (!$isAlreadyActive) {
+                try {
+                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
 
-                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
-                    $emailService = app(\App\Services\EmailQueueService::class);
-                    $emailData = [
-                        'customer_name' => $customerInfo->full_name,
-                        'account_no' => $accountNo,
-                        'plan_name' => $customerInfo->plan_name,
-                        'recipient_email' => $customerInfo->email_address,
-                    ];
-                    $emailService->queueFromTemplate('RECONNECT', $emailData);
-                    \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
+                    if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                        $emailService = app(\App\Services\EmailQueueService::class);
+                        $emailData = [
+                            'customer_name' => $customerInfo->full_name,
+                            'account_no' => $accountNo,
+                            'plan_name' => $customerInfo->plan_name,
+                            'recipient_email' => $customerInfo->email_address,
+                        ];
+                        $emailService->queueFromTemplate('RECONNECT', $emailData);
+                        \Log::info('[API SERVICE ORDER RECONNECT EMAIL] Email queued');
+                    }
                 }
-            }
-            catch (\Exception $e) {
-                \Log::error('[API SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                catch (\Exception $e) {
+                    \Log::error('[API SERVICE ORDER RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
+                }
             }
 
             return 'success';
@@ -1623,27 +1658,23 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER MIGRATION] Found old username: ' . $oldUsername);
 
-            // SPECIAL CASE: Transfer LCP/NAP/PORT & Migrate
+            // SPECIAL CASE: Transfer LCP/NAP/PORT, Migrate & Reactivation
             $normalizedCategory = $repairCategory ? strtolower(trim($repairCategory)) : '';
-            if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate' || $normalizedCategory === 'reactivation') {
-                \Log::info("[API SERVICE ORDER] Handling {$repairCategory} via Disable/Update/Enable sequence");
+            if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
+                \Log::info("[API SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
 
-                // 1. Disable Old User
-                $radiusOps->disabledUser([
-                    'username' => $oldUsername,
-                    'accountNumber' => $accountNo,
-                    'updatedBy' => $updatedByUser
-                ]);
-
-                // 2. Generate ONLY New Username (keep existing password)
+                // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
                 $customerData = (array)$fullInfo;
                 $newUsername = $pppoeService->generateUniqueUsername($customerData);
 
-                \Log::info("[API SERVICE ORDER] Transfer: Updating username from {$oldUsername} to {$newUsername}");
+                \Log::info("[API SERVICE ORDER] Renaming username: '{$oldUsername}' -> '{$newUsername}'");
 
-                // 3. Update Credentials (RADIUS + DB username)
+                // 2. Update Credentials — updateRadiusCredentials handles:
+                //    disable → kill session → PATCH name → re-enable (same .id)
+                //    Do NOT call disabledUser() first — that caused a double
+                //    disable + double session kill race condition on MikroTik.
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,
                     'username' => $oldUsername,
@@ -1653,19 +1684,10 @@ class ServiceOrderApiController extends Controller
                 ]);
 
                 if ($credResult['status'] === 'success') {
-                    \Log::info('[API SERVICE ORDER] Credentials updated successfully, now enabling...');
-
-                    // 4. Enable New User
-                    $radiusOps->enabledUser([
-                        'username' => $newUsername,
-                        'accountNumber' => $accountNo,
-                        'updatedBy' => $updatedByUser
-                    ]);
-
-                    \Log::info('[API SERVICE ORDER] User enabled successfully. Transfer complete.');
+                    \Log::info('[API SERVICE ORDER] Username renamed and re-enabled successfully. Transfer complete.');
                     return 'success';
                 } else {
-                    \Log::error('[API SERVICE ORDER] Failed to update credentials during transfer.');
+                    \Log::error('[API SERVICE ORDER] Failed to rename username during transfer: ' . ($credResult['message'] ?? 'unknown'));
                     return 'radius_failed';
                 }
             }
@@ -1685,99 +1707,33 @@ class ServiceOrderApiController extends Controller
                 return 'no_change';
             }
 
-            // RADIUS ACCOUNT CREATION LOGIC
+            // RADIUS RENAME LOGIC — same approach as Transfer LCP/NAP/PORT:
+            // updateCredentials does disable → kill session → PATCH name → re-enable in place.
+            // No delete + recreate — that was wiping the user and breaking the connection.
             $targetCategories = ['relocate', 'relocate router', 'transfer lcp nap vlan'];
 
             if (in_array($normalizedCategory, $targetCategories)) {
-                \Log::channel('radiusrelated')->info('[API SERVICE ORDER] RADIUS Account Deletion/Creation starting for category: ' . $normalizedCategory);
+                \Log::info("[API SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
+                $radiusOps = app(ManualRadiusOperationsService::class);
 
-                // STEP 1: DELETE THE OLD ACCOUNT
-                try {
-                    $radiusOps = app(ManualRadiusOperationsService::class);
-                    \Log::info('Triggering deleteAccount for old username: ' . $oldUsername);
-                    $radiusOps->deleteAccount($oldUsername);
-                }
-                catch (\Exception $delEx) {
-                    \Log::channel('radiusrelated')->error('Exception during old RADIUS account deletion: ' . $delEx->getMessage());
-                // We continue anyway so the new account can be created
-                }
+                $credResult = $radiusOps->updateCredentials([
+                    'accountNumber' => $accountNo,
+                    'username' => $oldUsername,
+                    'newUsername' => $newUsername,
+                    'newPassword' => null, // Keep existing password
+                    'updatedBy' => $updatedByUser
+                ]);
 
-                $radiusConfig = RadiusConfig::first();
-                if ($radiusConfig) {
-                    $radiusUrl = $radiusConfig->ssl_type . '://' . $radiusConfig->ip . ':' . $radiusConfig->port . '/rest/user-manage/user';
-
-                    // Generate new password for relocation/transfer
-                    $newPassword = $pppoeService->generatePassword($customerData);
-
-                    // Get plan
-                    $desiredPlan = $fullInfo->desired_plan ?? '';
-                    $planName = $desiredPlan;
-                    if ($desiredPlan && strpos($desiredPlan, ' - ') !== false) {
-                        $planName = trim(explode(' - ', $desiredPlan)[0]);
-                    }
-
-                    $payload = [
-                        'name' => $newUsername,
-                        'group' => $planName,
-                        'password' => $newPassword
-                    ];
-
-                    \Log::info('Submitting to RADIUS API via Service Order (Relocate/Transfer)', [
-                        'url' => $radiusUrl,
-                        'name' => $newUsername,
-                        'group' => $planName
-                    ]);
-
-                    try {
-                        $response = Http::withOptions(['verify' => false])
-                            ->withBasicAuth($radiusConfig->username, $radiusConfig->password)
-                            ->put($radiusUrl, $payload);
-
-                        if ($response->status() === 204 || $response->successful()) {
-                            \Log::info('RADIUS account created successfully. Proceeding with DB updates.');
-
-                            // Update technical_details
-                            DB::table('technical_details')
-                                ->where('account_id', $billingAccount->id)
-                                ->update([
-                                'username' => $newUsername,
-                                'updated_at' => now(),
-                                'updated_by' => $updatedByUser
-                            ]);
-
-                            // Update job_orders: username, pppoe_username, and pppoe_password
-                            DB::table('job_orders')
-                                ->where('account_id', $billingAccount->id)
-                                ->update([
-                                'pppoe_username' => $newUsername,
-                                'username' => $newUsername,
-                                'pppoe_password' => $newPassword,
-                                'updated_at' => now()
-                            ]);
-
-                            \Log::info('[API SERVICE ORDER MIGRATION SUCCESS] Migration synced successfully after RADIUS success');
-                            return 'success';
-                        }
-                        else {
-                            \Log::error('RADIUS account creation failed. DB will NOT be updated for relocation.', [
-                                'status' => $response->status(),
-                                'body' => $response->body()
-                            ]);
-                            return 'radius_failed';
-                        }
-                    }
-                    catch (\Exception $radiusEx) {
-                        \Log::channel('radiusrelated')->error('Exception during RADIUS account creation: ' . $radiusEx->getMessage());
-                        return 'exception';
-                    }
-                }
-                else {
-                    \Log::channel('radiusrelated')->error('Radius config not found');
-                    return 'radius_config_missing';
+                if ($credResult['status'] === 'success') {
+                    \Log::info('[API SERVICE ORDER MIGRATION SUCCESS] Username renamed in place. No delete/recreate.');
+                    return 'success';
+                } else {
+                    \Log::error('[API SERVICE ORDER MIGRATION] Rename failed: ' . ($credResult['message'] ?? 'unknown'));
+                    return 'radius_failed';
                 }
             }
             else {
-                // For other categories like plain 'migrate', we update DB without RADIUS as before
+                // For other categories, DB-only update (no RADIUS change needed)
                 \Log::info('[API SERVICE ORDER MIGRATION PROCEED] Updating database credentials (DB ONLY) for ' . $oldUsername);
 
                 DB::table('technical_details')

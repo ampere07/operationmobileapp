@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Transaction;
 use App\Models\BillingAccount;
+use App\Models\OnlineStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -360,6 +361,37 @@ class TransactionController extends Controller
             $newBalance = $currentBalance;
             $invoiceUpdateResult = ['invoices_paid' => [], 'invoices_partial' => [], 'distribution' => []];
 
+            // --- Snapshot old state BEFORE any changes ---
+            $oldBillingAccountBalance = $currentBalance;
+            $oldBillingStatusId = $billingAccount->billing_status_id;
+
+            // Fetch invoices that will be affected (Unpaid/Partial for this account)
+            $invoicesBeforeUpdate = \App\Models\Invoice::where('account_no', $accountNo)
+                ->whereIn('status', ['Unpaid', 'Partial'])
+                ->orderBy('invoice_date', 'asc')
+                ->get()
+                ->map(fn($inv) => [
+                    'table'            => 'invoices',
+                    'invoice_id'       => $inv->id,
+                    'invoice_date'     => $inv->invoice_date,
+                    'old_status'       => $inv->status,
+                    'old_received_payment' => floatval($inv->received_payment ?? 0),
+                ])
+                ->toArray();
+
+            // Snapshot online_status session_group before approval triggers reconnection
+            $onlineStatusSnapshot = null;
+            $onlineStatusRecord = OnlineStatus::where('account_id', $billingAccount->id)->first();
+            if ($onlineStatusRecord) {
+                $onlineStatusSnapshot = [
+                    'table'               => 'online_status',
+                    'account_id'          => $onlineStatusRecord->account_id,
+                    'username'            => $onlineStatusRecord->username,
+                    'old_session_group'   => $onlineStatusRecord->session_group,
+                    'old_session_status'  => $onlineStatusRecord->session_status,
+                ];
+            }
+
             if ($transaction->transaction_type !== 'Security Deposit') {
                 $newBalance = $currentBalance - $paymentReceived;
 
@@ -390,6 +422,24 @@ class TransactionController extends Controller
             $transaction->updated_by_user = $request->input('updated_by_user') ?? (Auth::check() ?Auth::user()->email_address : 'unknown');
             $transaction->approved_by = $request->input('approved_by') ?? (Auth::check() ?Auth::user()->email_address : 'unknown');
             $transaction->account_balance_before = $currentBalance;
+
+            // Build updated_column snapshot of OLD data before this approval
+            $updatedColumnSnapshot = [
+                [
+                    'table'                  => 'billing_accounts',
+                    'account_no'             => $accountNo,
+                    'old_account_balance'    => round($oldBillingAccountBalance, 2),
+                    'old_billing_status_id'  => $oldBillingStatusId,
+                ],
+            ];
+            foreach ($invoicesBeforeUpdate as $inv) {
+                $updatedColumnSnapshot[] = $inv;
+            }
+            if ($onlineStatusSnapshot) {
+                $updatedColumnSnapshot[] = $onlineStatusSnapshot;
+            }
+            $transaction->updated_column = $updatedColumnSnapshot;
+
             $transaction->save();
 
             DB::commit();
@@ -953,6 +1003,35 @@ class TransactionController extends Controller
                     $newBalance = $currentBalance;
                     $invoiceUpdateResult = ['invoices_paid' => [], 'invoices_partial' => [], 'distribution' => []];
 
+                    // --- Snapshot old state BEFORE any changes ---
+                    $oldBillingAccountBalance = $currentBalance;
+                    $oldBillingStatusId = $billingAccount->billing_status_id;
+                    $invoicesBeforeUpdate = \App\Models\Invoice::where('account_no', $accountNo)
+                        ->whereIn('status', ['Unpaid', 'Partial'])
+                        ->orderBy('invoice_date', 'asc')
+                        ->get()
+                        ->map(fn($inv) => [
+                            'table'            => 'invoices',
+                            'invoice_id'       => $inv->id,
+                            'invoice_date'     => $inv->invoice_date,
+                            'old_status'       => $inv->status,
+                            'old_received_payment' => floatval($inv->received_payment ?? 0),
+                        ])
+                        ->toArray();
+
+                    // Snapshot online_status session_group before approval triggers reconnection
+                    $batchOnlineStatusSnapshot = null;
+                    $batchOnlineStatusRecord = OnlineStatus::where('account_id', $billingAccount->id)->first();
+                    if ($batchOnlineStatusRecord) {
+                        $batchOnlineStatusSnapshot = [
+                            'table'               => 'online_status',
+                            'account_id'          => $batchOnlineStatusRecord->account_id,
+                            'username'            => $batchOnlineStatusRecord->username,
+                            'old_session_group'   => $batchOnlineStatusRecord->session_group,
+                            'old_session_status'  => $batchOnlineStatusRecord->session_status,
+                        ];
+                    }
+
                     if ($transaction->transaction_type !== 'Security Deposit') {
                         $newBalance = $currentBalance - $paymentReceived;
 
@@ -969,6 +1048,24 @@ class TransactionController extends Controller
                     $transaction->updated_by_user = $request->input('updated_by_user') ?? (Auth::check() ?Auth::user()->email_address : 'unknown');
                     $transaction->approved_by = $request->input('approved_by') ?? (Auth::check() ?Auth::user()->email_address : 'unknown');
                     $transaction->account_balance_before = $currentBalance;
+
+                    // Build updated_column snapshot of OLD data before this approval
+                    $batchSnapshot = [
+                        [
+                            'table'                  => 'billing_accounts',
+                            'account_no'             => $accountNo,
+                            'old_account_balance'    => round($oldBillingAccountBalance, 2),
+                            'old_billing_status_id'  => $oldBillingStatusId,
+                        ],
+                    ];
+                    foreach ($invoicesBeforeUpdate as $inv) {
+                        $batchSnapshot[] = $inv;
+                    }
+                    if ($batchOnlineStatusSnapshot) {
+                        $batchSnapshot[] = $batchOnlineStatusSnapshot;
+                    }
+                    $transaction->updated_column = $batchSnapshot;
+
                     $transaction->save();
 
                     DB::commit();
@@ -1176,82 +1273,86 @@ class TransactionController extends Controller
                 }
 
                 // Send SMS Notification
-                try {
-                    // Fetch SMS template
-                    $smsTemplate = DB::table('sms_templates')
-                        ->where('template_type', 'Reconnect')
-                        ->where('is_active', 1)
-                        ->first();
-
-                    if ($smsTemplate) {
-                        // Get Customer Name and Contact Number
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                            'customers.contact_number_primary',
-                            'customers.email_address',
-                            DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                        )
+                if (!$isAlreadyActive) {
+                    try {
+                        // Fetch SMS template
+                        $smsTemplate = DB::table('sms_templates')
+                            ->where('template_type', 'Reconnect')
+                            ->where('is_active', 1)
                             ->first();
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            // Replace variables
-                            $message = $smsTemplate->message_content;
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
+                        if ($smsTemplate) {
+                            // Get Customer Name and Contact Number
+                            $customerInfo = DB::table('billing_accounts')
+                                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                                ->where('billing_accounts.account_no', $accountNo)
+                                ->select(
+                                'customers.contact_number_primary',
+                                'customers.email_address',
+                                DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                            )
+                                ->first();
 
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                            if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
+                                // Replace variables
+                                $message = $smsTemplate->message_content;
+                                $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                                $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
 
-                            // Send SMS
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
+                                $message = str_replace('{{customer_name}}', $customerName, $message);
+                                $message = str_replace('{{account_no}}', $accountNo, $message);
+                                $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                                $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                            if ($smsResult['success']) {
-                                \Log::info('[TRANSACTION RECONNECT SMS] SMS sent to ' . $customerInfo->contact_number_primary);
+                                // Send SMS
+                                $smsService = new \App\Services\ItexmoSmsService();
+                                $smsResult = $smsService->send([
+                                    'contact_no' => $customerInfo->contact_number_primary,
+                                    'message' => $message
+                                ]);
+
+                                if ($smsResult['success']) {
+                                    \Log::info('[TRANSACTION RECONNECT SMS] SMS sent to ' . $customerInfo->contact_number_primary);
+                                }
+                                else {
+                                    \Log::error('[TRANSACTION RECONNECT SMS FAILED] ' . ($smsResult['error'] ?? 'Unknown error'));
+                                }
                             }
                             else {
-                                \Log::error('[TRANSACTION RECONNECT SMS FAILED] ' . ($smsResult['error'] ?? 'Unknown error'));
+                                \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No contact number found for account ' . $accountNo);
                             }
                         }
                         else {
-                            \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No contact number found for account ' . $accountNo);
+                            \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No active Reconnect SMS template found');
                         }
                     }
-                    else {
-                        \Log::warning('[TRANSACTION RECONNECT SMS SKIP] No active Reconnect SMS template found');
+                    catch (\Exception $e) {
+                        \Log::error('[TRANSACTION RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                     }
-                }
-                catch (\Exception $e) {
-                    \Log::error('[TRANSACTION RECONNECT SMS EXCEPTION] ' . $e->getMessage());
                 }
 
                 // Send Email Notification
-                try {
-                    $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
+                if (!$isAlreadyActive) {
+                    try {
+                        $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
 
-                    if ($emailTemplate && $customerInfo && !empty($customerInfo->email_address)) {
-                        $emailService = app(\App\Services\EmailQueueService::class);
-                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                        $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
+                        if ($emailTemplate && $customerInfo && !empty($customerInfo->email_address)) {
+                            $emailService = app(\App\Services\EmailQueueService::class);
+                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                            $planNameFormatted = str_replace('₱', 'P', $plan ?? '');
 
-                        $emailData = [
-                            'customer_name' => $customerName,
-                            'account_no' => $accountNo,
-                            'plan_name' => $planNameFormatted,
-                            'recipient_email' => $customerInfo->email_address,
-                        ];
-                        $emailService->queueFromTemplate('RECONNECT', $emailData);
-                        \Log::info('[TRANSACTION RECONNECT EMAIL] Email queued for: ' . $customerInfo->email_address);
+                            $emailData = [
+                                'customer_name' => $customerName,
+                                'account_no' => $accountNo,
+                                'plan_name' => $planNameFormatted,
+                                'recipient_email' => $customerInfo->email_address,
+                            ];
+                            $emailService->queueFromTemplate('RECONNECT', $emailData);
+                            \Log::info('[TRANSACTION RECONNECT EMAIL] Email queued for: ' . $customerInfo->email_address);
+                        }
+                    } catch (\Exception $e) {
+                        \Log::error('[TRANSACTION RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
                     }
-                } catch (\Exception $e) {
-                    \Log::error('[TRANSACTION RECONNECT EMAIL EXCEPTION] ' . $e->getMessage());
                 }
 
                 return 'success';

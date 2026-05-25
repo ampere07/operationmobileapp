@@ -29,12 +29,14 @@ class Transaction extends Model
         'approved_by',
         'account_balance_before',
         'organization_id',
+        'updated_column',
     ];
 
     protected $casts = [
         'payment_date' => 'datetime',
         'date_processed' => 'datetime',
         'received_payment' => 'decimal:2',
+        'updated_column' => 'array',
     ];
 
     public function account()
@@ -72,4 +74,5 @@ class Transaction extends Model
         return $this->hasOne(\App\Models\TransactionRevert::class, 'transaction_id');
     }
 }
+
 

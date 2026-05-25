@@ -6,6 +6,7 @@ use App\Models\TransactionRevert;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\BillingAccount;
+use App\Models\OnlineStatus;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -242,79 +243,245 @@ class TransactionRevertController extends Controller
 
                 if ($transaction->status === 'Done') {
                     $accountNo = $transaction->account_no;
-                    $paymentToRevert = floatval($transaction->received_payment);
                     $transactionId = $transaction->id;
                     $userId = Auth::id();
                     $currentTime = now();
 
-                    if ($accountNo) {
-                        $billingAccount = BillingAccount::where('account_no', $accountNo)->first();
+                    // Decode updated_column snapshot (old state before approval)
+                    $snapshot = $transaction->updated_column; // already cast to array by model
 
-                        if ($billingAccount && $transaction->transaction_type !== 'Security Deposit') {
-                            $currentBalance = floatval($billingAccount->account_balance ?? 0);
-                            $newBalance = $currentBalance + $paymentToRevert;
+                    if (!empty($snapshot) && is_array($snapshot)) {
+                        // --- Restore billing_accounts balance from snapshot ---
+                        $billingAccountSnapshot = collect($snapshot)->firstWhere('table', 'billing_accounts');
 
-                            $billingAccount->account_balance = round($newBalance, 2);
-                            $billingAccount->balance_update_date = $currentTime;
-                            $billingAccount->updated_by = $userId;
-                            $billingAccount->save();
+                        if ($billingAccountSnapshot && $accountNo) {
+                            $billingAccount = BillingAccount::where('account_no', $accountNo)->first();
 
-                            // Revert Invoice Payments
-                            $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
-                                ->orderBy('invoice_date', 'desc')
-                                ->get();
+                            if ($billingAccount && $transaction->transaction_type !== 'Security Deposit') {
+                                $billingAccount->account_balance = round(floatval($billingAccountSnapshot['old_account_balance']), 2);
+                                $billingAccount->balance_update_date = $currentTime;
+                                $billingAccount->updated_by = $userId;
 
-                            $remainingToRevert = $paymentToRevert;
+                                // Restore billing_status_id only if the snapshot recorded it
+                                // AND it actually changed during approval (e.g. reconnection set it to Active)
+                                $snapshotStatusId = $billingAccountSnapshot['old_billing_status_id'] ?? null;
+                                $currentStatusId  = $billingAccount->billing_status_id;
 
-                            foreach ($invoices as $invoice) {
-                                if ($remainingToRevert <= 0) break;
-
-                                $currentReceived = floatval($invoice->received_payment ?? 0);
-                                $toSubtract = min($currentReceived, $remainingToRevert);
-                                $newReceived = $currentReceived - $toSubtract;
-                                $invoice->received_payment = round($newReceived, 2);
-
-                                if ($newReceived <= 0) {
-                                    $invoice->status = 'Unpaid';
+                                if ($snapshotStatusId !== null && $snapshotStatusId !== $currentStatusId) {
+                                    $billingAccount->billing_status_id = $snapshotStatusId;
+                                    \Log::info('Revert via snapshot: billing_status_id restored', [
+                                        'account_no'   => $accountNo,
+                                        'from_status'  => $currentStatusId,
+                                        'to_status'    => $snapshotStatusId,
+                                    ]);
                                 } else {
-                                    $invoice->status = 'Partial';
+                                    \Log::info('Revert via snapshot: billing_status_id unchanged, no restore needed', [
+                                        'account_no'  => $accountNo,
+                                        'status_id'   => $currentStatusId,
+                                    ]);
                                 }
 
-                                $invoice->transaction_id = null;
-                                $invoice->updated_by = Auth::check() ? Auth::user()->email_address : 'unknown';
-                                $invoice->updated_at = $currentTime;
-                                $invoice->save();
+                                $billingAccount->save();
 
-                                $remainingToRevert -= $toSubtract;
+                                \Log::info('Revert via snapshot: billing_accounts balance restored', [
+                                    'account_no'       => $accountNo,
+                                    'restored_balance' => $billingAccountSnapshot['old_account_balance'],
+                                ]);
                             }
                         }
 
-                        // Update transaction status
-                        $transaction->status = 'Pending';
-                        $transaction->date_processed = null;
-                        $transaction->approved_by = null;
-                        $transaction->account_balance_before = null;
-                        $transaction->updated_by_user = Auth::check() ? Auth::user()->email_address : 'unknown';
-                        $transaction->save();
+                        // --- Restore each invoice from snapshot ---
+                        $invoiceSnapshots = collect($snapshot)->where('table', 'invoices')->values();
 
-                        // Activity log
-                        \App\Models\ActivityLog::log(
-                            'Transaction Reverted via Revert Request',
-                            "Transaction #{$transactionId} ({$accountNo}) reverted after revert request #{$revert->id} approved",
-                            'warning',
-                            [
-                                'resource_type' => 'Transaction',
-                                'resource_id' => $transactionId,
-                                'additional_data' => [
-                                    'revert_request_id' => $revert->id,
-                                    'account_no' => $accountNo,
-                                    'payment_amount' => $paymentToRevert,
-                                ]
-                            ]
-                        );
+                        foreach ($invoiceSnapshots as $invSnap) {
+                            $invoice = \App\Models\Invoice::find($invSnap['invoice_id']);
+                            if (!$invoice) continue;
 
-                        event(new TransactionUpdated(['action' => 'reverted', 'transaction_id' => $transactionId, 'account_no' => $accountNo]));
+                            $invoice->received_payment = round(floatval($invSnap['old_received_payment']), 2);
+                            $invoice->status           = $invSnap['old_status'];
+                            $invoice->transaction_id   = null;
+                            $invoice->updated_by       = Auth::check() ? Auth::user()->email_address : 'unknown';
+                            $invoice->updated_at       = $currentTime;
+                            $invoice->save();
+
+                            \Log::info('Revert via snapshot: invoice restored', [
+                                'invoice_id'           => $invSnap['invoice_id'],
+                                'restored_status'      => $invSnap['old_status'],
+                                'restored_received'    => $invSnap['old_received_payment'],
+                            ]);
+                        }
+
+                        // Also clear transaction_id from any invoice that still references this transaction
+                        // but was NOT in the snapshot (edge-case guard)
+                        \App\Models\Invoice::where('transaction_id', $transactionId)
+                            ->whereNotIn('id', $invoiceSnapshots->pluck('invoice_id')->toArray())
+                            ->update(['transaction_id' => null, 'updated_at' => $currentTime]);
+
+                        // --- Restore online_status session_group from snapshot ---
+                        $onlineStatusSnapshot = collect($snapshot)->firstWhere('table', 'online_status');
+                        if ($onlineStatusSnapshot) {
+                            $onlineStatusRecord = OnlineStatus::where('account_id', $onlineStatusSnapshot['account_id'])->first();
+                            if ($onlineStatusRecord) {
+                                $snapshotGroup  = $onlineStatusSnapshot['old_session_group'] ?? null;
+                                $snapshotStatus = $onlineStatusSnapshot['old_session_status'] ?? null;
+                                $username       = $onlineStatusSnapshot['username'] ?? $onlineStatusRecord->username;
+
+                                $normalizedGroup = strtolower(trim($snapshotGroup ?? ''));
+
+                                if ($normalizedGroup === 'restricted') {
+                                    // Old session_group was Restricted — push user back to Restricted in RADIUS
+                                    try {
+                                        $manualRadiusService = new \App\Services\ManualRadiusOperationsService();
+                                        $result = $manualRadiusService->restrictedUser([
+                                            'accountNumber' => $accountNo,
+                                            'username'      => $username,
+                                            'remarks'       => 'Transaction Revert — restoring Restricted status',
+                                            'updatedBy'     => Auth::check() ? Auth::user()->email_address : 'unknown',
+                                        ]);
+
+                                        if ($result['status'] === 'success') {
+                                            \Log::info('Revert: RADIUS restrictedUser called successfully', [
+                                                'account_no' => $accountNo,
+                                                'username'   => $username,
+                                            ]);
+                                        } else {
+                                            \Log::warning('Revert: RADIUS restrictedUser call failed', [
+                                                'account_no' => $accountNo,
+                                                'username'   => $username,
+                                                'reason'     => $result['message'] ?? 'unknown',
+                                            ]);
+                                        }
+                                    } catch (\Throwable $radiusEx) {
+                                        \Log::error('Revert: Exception calling restrictedUser', [
+                                            'account_no' => $accountNo,
+                                            'username'   => $username,
+                                            'error'      => $radiusEx->getMessage(),
+                                        ]);
+                                    }
+
+                                } elseif ($normalizedGroup === 'disconnected') {
+                                    // Old session_group was Disconnected — push user back to Disconnected in RADIUS
+                                    try {
+                                        $manualRadiusService = new \App\Services\ManualRadiusOperationsService();
+                                        $result = $manualRadiusService->disconnectUser([
+                                            'accountNumber' => $accountNo,
+                                            'username'      => $username,
+                                            'remarks'       => 'Transaction Revert — restoring Disconnected status',
+                                            'updatedBy'     => Auth::check() ? Auth::user()->email_address : 'unknown',
+                                        ]);
+
+                                        if ($result['status'] === 'success') {
+                                            \Log::info('Revert: RADIUS disconnectUser called successfully', [
+                                                'account_no' => $accountNo,
+                                                'username'   => $username,
+                                            ]);
+                                        } else {
+                                            \Log::warning('Revert: RADIUS disconnectUser call failed', [
+                                                'account_no' => $accountNo,
+                                                'username'   => $username,
+                                                'reason'     => $result['message'] ?? 'unknown',
+                                            ]);
+                                        }
+                                    } catch (\Throwable $radiusEx) {
+                                        \Log::error('Revert: Exception calling disconnectUser', [
+                                            'account_no' => $accountNo,
+                                            'username'   => $username,
+                                            'error'      => $radiusEx->getMessage(),
+                                        ]);
+                                    }
+
+                                } else {
+                                    // Old session_group is a plan name — no RADIUS call needed.
+                                    // The DB-side online_status record is already correct after
+                                    // reconnectUser() ran during approval; approval already set it
+                                    // to the plan group, which is what it was before, so nothing to undo.
+                                    \Log::info('Revert: online_status session_group is a plan name — no RADIUS action required', [
+                                        'account_no'    => $accountNo,
+                                        'username'      => $username,
+                                        'session_group' => $snapshotGroup,
+                                    ]);
+                                }
+                            }
+                        }
+
+                    } else {
+                        // --- Fallback: no snapshot, use old subtraction-based logic ---
+                        \Log::warning('Revert: no updated_column snapshot found, falling back to payment-subtraction logic', [
+                            'transaction_id' => $transactionId,
+                        ]);
+
+                        if ($accountNo) {
+                            $billingAccount = BillingAccount::where('account_no', $accountNo)->first();
+                            $paymentToRevert = floatval($transaction->received_payment);
+
+                            if ($billingAccount && $transaction->transaction_type !== 'Security Deposit') {
+                                $billingAccount->account_balance = round(floatval($billingAccount->account_balance) + $paymentToRevert, 2);
+                                $billingAccount->balance_update_date = $currentTime;
+                                $billingAccount->updated_by = $userId;
+
+                                // Fallback: no snapshot available for billing_status_id.
+                                // We cannot safely restore the old status here, so we log a warning.
+                                \Log::warning('Revert fallback: billing_status_id not restored (no snapshot)', [
+                                    'transaction_id' => $transactionId,
+                                    'account_no'     => $accountNo,
+                                ]);
+
+                                $billingAccount->save();
+
+                                $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
+                                    ->orderBy('invoice_date', 'desc')
+                                    ->get();
+
+                                $remainingToRevert = $paymentToRevert;
+
+                                foreach ($invoices as $invoice) {
+                                    if ($remainingToRevert <= 0) break;
+
+                                    $currentReceived = floatval($invoice->received_payment ?? 0);
+                                    if ($currentReceived <= 0) continue;
+
+                                    $toSubtract  = min($currentReceived, $remainingToRevert);
+                                    $newReceived = $currentReceived - $toSubtract;
+
+                                    $invoice->received_payment = round($newReceived, 2);
+                                    $invoice->status           = $newReceived <= 0 ? 'Unpaid' : 'Partial';
+                                    $invoice->transaction_id   = null;
+                                    $invoice->updated_by       = Auth::check() ? Auth::user()->email_address : 'unknown';
+                                    $invoice->updated_at       = $currentTime;
+                                    $invoice->save();
+
+                                    $remainingToRevert -= $toSubtract;
+                                }
+                            }
+                        }
                     }
+
+                    // Update transaction back to Pending and clear updated_column
+                    $transaction->status               = 'Pending';
+                    $transaction->date_processed       = null;
+                    $transaction->approved_by          = null;
+                    $transaction->account_balance_before = null;
+                    $transaction->updated_column       = null;
+                    $transaction->updated_by_user      = Auth::check() ? Auth::user()->email_address : 'unknown';
+                    $transaction->save();
+
+                    // Activity log
+                    \App\Models\ActivityLog::log(
+                        'Transaction Reverted via Revert Request',
+                        "Transaction #{$transactionId} ({$accountNo}) reverted after revert request #{$revert->id} approved",
+                        'warning',
+                        [
+                            'resource_type' => 'Transaction',
+                            'resource_id'   => $transactionId,
+                            'additional_data' => [
+                                'revert_request_id' => $revert->id,
+                                'account_no'        => $accountNo,
+                                'used_snapshot'     => !empty($snapshot),
+                            ]
+                        ]
+                    );
+
+                    event(new TransactionUpdated(['action' => 'reverted', 'transaction_id' => $transactionId, 'account_no' => $accountNo]));
                 }
             }
 
@@ -338,3 +505,4 @@ class TransactionRevertController extends Controller
         }
     }
 }
+
