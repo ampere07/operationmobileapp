@@ -58,6 +58,7 @@ Route::get('/commissions', [CommissionController::class, 'index']);
 Route::get('/commissions/history', [CommissionController::class, 'getHistory']);
 Route::post('/commissions/history', [CommissionController::class, 'storeHistory']);
 Route::get('/commissions/trend', [CommissionController::class, 'getTrend']);
+Route::get('/commissions/agent-job-orders', [CommissionController::class, 'getJobOrdersByAgent']);
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
     $reports = \App\Models\Report::all();

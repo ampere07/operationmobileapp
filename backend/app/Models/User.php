@@ -78,6 +78,11 @@ class User extends Authenticatable
         return $this->belongsTo(Agent::class, 'agent_id', 'id');
     }
 
+    public function agentBalance()
+    {
+        return $this->hasOne(AgentBalance::class, 'agent_id');
+    }
+
     // Accessor for full name
     public function getFullNameAttribute()
     {

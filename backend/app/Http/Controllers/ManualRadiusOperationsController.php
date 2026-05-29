@@ -47,6 +47,9 @@ class ManualRadiusOperationsController extends Controller
             $action = $request->input('action');
             $params = $request->all();
 
+            // Scope RADIUS operations to the authenticated user's organization
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
+
             Log::info("Manual RADIUS Operation", [
                 'action' => $action,
                 'account' => $params['accountNumber'] ?? 'N/A',
@@ -217,6 +220,7 @@ class ManualRadiusOperationsController extends Controller
                 ], 422);
             }
 
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
             $result = $this->radiusService->disconnectUser($request->all());
             $statusCode = $result['status'] === 'success' ? 200 : 400;
 
@@ -257,6 +261,7 @@ class ManualRadiusOperationsController extends Controller
                 ], 422);
             }
 
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
             $result = $this->radiusService->reconnectUser($request->all());
             $statusCode = $result['status'] === 'success' ? 200 : 400;
 
@@ -298,6 +303,7 @@ class ManualRadiusOperationsController extends Controller
                 ], 422);
             }
 
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
             $result = $this->radiusService->updateCredentials($request->all());
             $statusCode = $result['status'] === 'success' ? 200 : 400;
 
@@ -337,6 +343,7 @@ class ManualRadiusOperationsController extends Controller
                 ], 422);
             }
 
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
             $result = $this->radiusService->disabledUser($request->all());
             $statusCode = $result['status'] === 'success' ? 200 : 400;
 
@@ -376,6 +383,7 @@ class ManualRadiusOperationsController extends Controller
                 ], 422);
             }
 
+            $this->radiusService->setOrganizationId(auth()->user()?->organization_id);
             $result = $this->radiusService->enabledUser($request->all());
             $statusCode = $result['status'] === 'success' ? 200 : 400;
 

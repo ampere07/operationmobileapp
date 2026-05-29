@@ -14,7 +14,7 @@ class RadiusReconnectionService
     /**
      * Attempt automatic reconnection after payment
      */
-    public function attemptReconnect($accountNo)
+    public function attemptReconnect($accountNo, ?int $organizationId = null)
     {
         try {
             $this->writeLog("=== RECONNECTION ATTEMPT START ===");
@@ -52,9 +52,24 @@ class RadiusReconnectionService
             }
 
             // Get RADIUS configuration
-            $radiusConfigs = DB::table('radius_config')
-                ->orderBy('id')
-                ->get();
+            if ($organizationId) {
+                $radiusConfigs = DB::table('radius_config')
+                    ->where('organization_id', $organizationId)
+                    ->orderBy('id')
+                    ->get();
+
+                if ($radiusConfigs->isEmpty()) {
+                    $radiusConfigs = DB::table('radius_config')
+                        ->whereNull('organization_id')
+                        ->orderBy('id')
+                        ->get();
+                }
+            } else {
+                $radiusConfigs = DB::table('radius_config')
+                    ->whereNull('organization_id')
+                    ->orderBy('id')
+                    ->get();
+            }
 
             if ($radiusConfigs->isEmpty()) {
                 $this->writeLog("[ERROR] No RADIUS configurations found");
@@ -72,8 +87,8 @@ class RadiusReconnectionService
                 ];
             }
 
-            // Clean plan name (strip price suffix but preserve multi-word plan names and names with numbers like "FLASH 1999")
             // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
+            $rawPlan  = $account->desired_plan ?? '';
             $cleanPlan = preg_replace('/\s*-\s*(?:P|₱)?\d+.*/i', '', $rawPlan);
             $cleanPlan = preg_replace('/\s+(?:P|₱)?\d+.*/i', '', $cleanPlan);
             $cleanPlan = trim($cleanPlan);
@@ -81,6 +96,7 @@ class RadiusReconnectionService
 
             // Perform reconnection using the global ManualRadiusOperationsService
             $manualRadiusService = new ManualRadiusOperationsService();
+            $manualRadiusService->setOrganizationId($organizationId);
             $params = [
                 'accountNumber' => $accountNo,
                 'username' => $username,

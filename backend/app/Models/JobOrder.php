@@ -56,6 +56,7 @@ class JobOrder extends Model
         'proof_image_url',
         'organization_id',
         'technicians',
+        'commission_status',
     ];
 
     protected $dates = [

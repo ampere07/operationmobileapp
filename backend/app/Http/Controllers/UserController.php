@@ -19,7 +19,7 @@ class UserController extends Controller
             $organizationId = $user ? $user->organization_id : null;
             $roleId = $user ? $user->role_id : null;
 
-            $query = User::with(['organization', 'role', 'agent']);
+            $query = User::with(['organization', 'role', 'agent', 'agentBalance']);
             
             // A Global SuperAdmin must have role_id 7 AND no organization_id
             $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
@@ -87,6 +87,7 @@ class UserController extends Controller
             'role_id' => 'nullable|integer|exists:roles,id',
             'agent_id' => 'nullable|integer|exists:agents,id',
             'active' => 'sometimes|boolean',
+            'commission' => 'nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -127,12 +128,15 @@ class UserController extends Controller
                 throw new \Exception('Failed to create user');
             }
 
-            $user->load(['organization', 'role', 'agent']);
+            $user->load(['organization', 'role', 'agent', 'agentBalance']);
 
             if ($user->role_id == 4 || ($user->role && strtolower($user->role->role_name) === 'agent')) {
-                AgentBalance::firstOrCreate(
+                AgentBalance::updateOrCreate(
                     ['agent_id' => $user->id],
-                    ['balance' => 0.00]
+                    [
+                        'balance' => 0.00,
+                        'commission' => $request->commission ?? 0.00
+                    ]
                 );
             }
 
@@ -147,7 +151,7 @@ class UserController extends Controller
                 \Log::warning('Failed to log user creation activity: ' . $logError->getMessage());
             }
             
-            $responseUser = $user->load(['organization', 'role', 'agent']);
+            $responseUser = $user->load(['organization', 'role', 'agent', 'agentBalance']);
 
             return response()->json([
                 'success' => true,
@@ -173,7 +177,7 @@ class UserController extends Controller
             $roleId = $authUser ? $authUser->role_id : null;
             $isGlobalAdmin = ($roleId == 7 && $organizationId === null);
             
-            $user = User::with(['organization', 'role', 'agent'])->findOrFail($id);
+            $user = User::with(['organization', 'role', 'agent', 'agentBalance'])->findOrFail($id);
             
             if (!$isGlobalAdmin) {
                 if ($organizationId) {
@@ -229,6 +233,7 @@ class UserController extends Controller
             'role_id' => 'sometimes|nullable|integer|exists:roles,id',
             'agent_id' => 'sometimes|nullable|integer|exists:agents,id',
             'active' => 'sometimes|boolean',
+            'commission' => 'sometimes|nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -298,13 +303,26 @@ class UserController extends Controller
             }
 
             $user->update($updateData);
-            $user->load(['organization', 'role', 'agent']);
+            $user->load(['organization', 'role', 'agent', 'agentBalance']);
 
             if ($user->role_id == 4 || ($user->role && strtolower($user->role->role_name) === 'agent')) {
-                AgentBalance::firstOrCreate(
-                    ['agent_id' => $user->id],
-                    ['balance' => 0.00]
-                );
+                $balanceData = [];
+                if ($request->has('commission')) {
+                    $balanceData['commission'] = $request->commission;
+                }
+                // Check if record exists, if not, initialize balance to 0.00
+                if (!AgentBalance::where('agent_id', $user->id)->exists()) {
+                    $balanceData['balance'] = 0.00;
+                    if (!isset($balanceData['commission'])) {
+                        $balanceData['commission'] = 0.00;
+                    }
+                }
+                if (!empty($balanceData)) {
+                    AgentBalance::updateOrCreate(
+                        ['agent_id' => $user->id],
+                        $balanceData
+                    );
+                }
             }
 
             // Try to log user update activity (but don't fail if logging fails)
@@ -322,7 +340,7 @@ class UserController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'User updated successfully',
-                'data' => $user->load(['organization', 'role', 'agent'])
+                'data' => $user->load(['organization', 'role', 'agent', 'agentBalance'])
             ]);
         } catch (\Exception $e) {
             \Log::error('User update failed for ID ' . $id . ': ' . $e->getMessage());

@@ -18,6 +18,8 @@ class AgentCommissionHistory extends Model
         'remarks',
         'proof_of_payment',
         'agent_id',
+        'organization_id',
+        'commission_id_list',
         'updated_by',
         'updated_at',
         'approved_by'

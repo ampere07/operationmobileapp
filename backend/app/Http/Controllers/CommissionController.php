@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\JobOrder;
 use App\Models\AgentCommissionHistory;
+use App\Models\AgentBalance;
 use App\Models\BillingConfig;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -22,29 +24,23 @@ class CommissionController extends Controller
                 ], 401);
             }
 
-            $billingConfig = BillingConfig::first();
-            $agentCommission = $billingConfig ? $billingConfig->agent_commission : 0;
+            $agentId = $request->input('agent_id');
+            $userRole = strtolower($user->role->role_name ?? '');
+
+            // Non-admins can only see their own history
+            if (!in_array($userRole, ['admin', 'billing', 'superadmin'])) {
+                $agentId = $user->id;
+            }
 
             $limit = $request->input('limit', 2000);
             $offset = $request->input('offset', 0);
             $updatedAfter = $request->input('updated_after');
 
-            $query = JobOrder::whereHas('application', function($q) use ($user) {
-                $fn1 = strtolower(trim($user->first_name . ' ' . $user->last_name));
-                $fn2 = strtolower(trim($user->full_name));
-                $email = strtolower(trim($user->email_address ?? ''));
-                
-                $q->where(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn1 . '%')
-                  ->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn2 . '%');
-                
-                if ($email) {
-                    $q->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $email . '%');
-                }
-            })
-            ->where(function($q) {
-                $q->where(DB::raw('LOWER(onsite_status)'), 'done')
-                  ->orWhere(DB::raw('LOWER(onsite_status)'), 'completed');
-            });
+            $query = AgentCommissionHistory::with('agent');
+
+            if ($agentId) {
+                $query->where('agent_id', $agentId);
+            }
 
             if ($updatedAfter) {
                 $query->where('updated_at', '>=', $updatedAfter);
@@ -52,27 +48,27 @@ class CommissionController extends Controller
 
             $total = $query->count();
 
-            $commissions = $query->with('application')
-                ->orderBy('created_at', 'desc')
+            $history = $query->orderBy('created_at', 'desc')
                 ->offset($offset)
                 ->limit($limit)
                 ->get();
 
             // Transform data for the frontend
-            $data = $commissions->map(function ($item) use ($agentCommission) {
+            $data = $history->map(function ($item) {
                 return [
-                    'id' => 'JO-' . str_pad($item->transaction_id, 5, '0', STR_PAD_LEFT),
-                    'customer' => $item->first_name . ' ' . $item->last_name,
-                    'service' => $item->desired_plan,
-                    'date' => $item->date_installed ? date('M d, Y', strtotime($item->date_installed)) : date('M d, Y', strtotime($item->created_at)),
+                    'id' => 'JO-' . str_pad($item->id, 5, '0', STR_PAD_LEFT),
+                    'customer' => $item->agent ? ($item->agent->full_name ?? ($item->agent->first_name . ' ' . $item->agent->last_name)) : 'Unknown',
+                    'service' => 'Payout (Ref: ' . $item->ref_number . ')',
+                    'date' => $item->created_at ? date('M d, Y', strtotime($item->created_at)) : null,
                     'status' => 'Paid',
-                    'amount' => '₱' . number_format($agentCommission, 2)
+                    'amount' => '₱' . number_format($item->total_amount, 2),
+                    'commission_id_list' => $item->commission_id_list
                 ];
             });
 
             // Calculate totals
-            $totalCommission = $commissions->count() * $agentCommission;
-            $thisMonthCommission = $commissions->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()])->count() * $agentCommission;
+            $totalCommission = $history->sum('total_amount');
+            $thisMonthCommission = $history->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('total_amount');
 
             return response()->json([
                 'success' => true,
@@ -104,12 +100,11 @@ class CommissionController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
             }
 
-            // If user is admin/billing, they might want to see history for a specific agent
-            $agentId = $request->input('agent_id', $user->id);
-
-            // Basic check: if not admin and trying to see someone else's history, block it
+            $agentId = $request->input('agent_id');
             $userRole = strtolower($user->role->role_name ?? '');
-            if ($user->id != $agentId && !in_array($userRole, ['admin', 'billing', 'superadmin'])) {
+
+            // Non-admins can only see their own history
+            if (!in_array($userRole, ['admin', 'billing', 'superadmin'])) {
                 $agentId = $user->id;
             }
 
@@ -117,8 +112,11 @@ class CommissionController extends Controller
             $offset = $request->input('offset', 0);
             $updatedAfter = $request->input('updated_after');
 
-            $query = AgentCommissionHistory::with('agent')
-                ->where('agent_id', $agentId);
+            $query = AgentCommissionHistory::with('agent');
+
+            if ($agentId) {
+                $query->where('agent_id', $agentId);
+            }
 
             if ($updatedAfter) {
                 $query->where('updated_at', '>=', $updatedAfter);
@@ -142,6 +140,7 @@ class CommissionController extends Controller
                     'proof_of_payment' => $item->proof_of_payment,
                     'agent_id' => $item->agent_id,
                     'agent_name' => $item->agent ? ($item->agent->full_name ?? ($item->agent->first_name . ' ' . $item->agent->last_name)) : 'Unknown',
+                    'commission_id_list' => $item->commission_id_list,
                     'updated_by' => $item->updated_by,
                     'updated_at' => $item->updated_at,
                     'approved_by' => $item->approved_by
@@ -171,21 +170,42 @@ class CommissionController extends Controller
             }
 
             $validated = $request->validate([
-                'agent_id' => 'required|integer',
-                'ref_number' => 'required|string|max:100',
-                'total_amount' => 'required|numeric|min:0',
-                'remarks' => 'nullable|string',
-                'proof_of_payment' => 'nullable|string'
+                'agent_id'      => 'required|integer',
+                'ref_number'    => 'required|string|max:100',
+                'total_amount'  => 'required|numeric|min:0',
+                'remarks'       => 'nullable|string',
+                'proof_of_payment' => 'nullable|string',
+                'job_order_ids' => 'nullable|array',
+                'job_order_ids.*' => 'integer',
             ]);
 
+            $jobOrderIds = $validated['job_order_ids'] ?? [];
+            unset($validated['job_order_ids']);
+
+            $validated['commission_id_list'] = !empty($jobOrderIds) ? implode(',', $jobOrderIds) : null;
             $validated['created_by'] = $user->full_name ?? $user->email_address ?? 'System';
-            
+            $validated['organization_id'] = $user->organization_id ?? null;
+
             $history = AgentCommissionHistory::create($validated);
+
+            // Mark all referenced job orders as commission paid
+            if (!empty($jobOrderIds)) {
+                JobOrder::whereIn('id', $jobOrderIds)
+                    ->update(['commission_status' => 'Paid']);
+            }
+
+            // Deduct the payout amount from the agent's balance
+            $agentBalance = AgentBalance::where('agent_id', $validated['agent_id'])->first();
+            if ($agentBalance) {
+                $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
+                $agentBalance->update(['balance' => $newBalance]);
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Commission payment recorded successfully',
-                'data' => $history
+                'data'    => $history,
+                'updated_job_orders' => count($jobOrderIds),
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -290,6 +310,93 @@ class CommissionController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch commission trend',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get job orders referred by a specific agent name, plus the agent's commission rate.
+     * Used by the payout modal to auto-populate job order list and total amount.
+     */
+    public function getJobOrdersByAgent(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $agentId   = $request->input('agent_id');
+            $agentName = trim($request->input('agent_name', ''));
+
+            if (!$agentId && !$agentName) {
+                return response()->json(['success' => false, 'message' => 'agent_id or agent_name is required'], 422);
+            }
+
+            // Resolve commission rate from agent_balance
+            $commissionRate = 0;
+            if ($agentId) {
+                $balance = AgentBalance::where('agent_id', $agentId)->first();
+                $commissionRate = $balance ? (float)$balance->commission : 0;
+            }
+
+            // Build name variants to match against referred_by
+            $nameVariants = [];
+            if ($agentName) {
+                $nameVariants[] = strtolower($agentName);
+            }
+            if ($agentId) {
+                $agent = User::find($agentId);
+                if ($agent) {
+                    $nameVariants[] = strtolower(trim($agent->first_name . ' ' . $agent->last_name));
+                    if ($agent->full_name) {
+                        $nameVariants[] = strtolower(trim($agent->full_name));
+                    }
+                }
+            }
+            $nameVariants = array_unique(array_filter($nameVariants));
+
+            if (empty($nameVariants)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => ['job_order_ids' => [], 'commission_rate' => $commissionRate, 'total_amount' => 0]
+                ]);
+            }
+
+            // Query job orders via application's referred_by
+            $query = JobOrder::whereHas('application', function ($q) use ($nameVariants) {
+                $q->where(function ($sq) use ($nameVariants) {
+                    foreach ($nameVariants as $name) {
+                        $sq->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $name . '%');
+                    }
+                });
+            })
+            ->where(DB::raw('LOWER(onsite_status)'), 'done')
+            ->where(function ($q) {
+                $q->whereNull('commission_status')
+                  ->orWhere(DB::raw('LOWER(commission_status)'), '!=', 'paid');
+            })
+            ->orderBy('id', 'asc');
+
+            $jobOrders = $query->get(['id']);
+            $ids = $jobOrders->pluck('id')->toArray();
+            $count = count($ids);
+            $totalAmount = $count * $commissionRate;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'job_order_ids'   => $ids,
+                    'commission_rate' => $commissionRate,
+                    'total_amount'    => $totalAmount,
+                    'count'           => $count,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch agent job orders',
+                'error'   => $e->getMessage()
             ], 500);
         }
     }

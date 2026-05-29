@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\BillingAccount;
 use App\Models\OnlineStatus;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use App\Services\ManualRadiusOperationsService;
 use App\Events\TransactionUpdated;
 use App\Events\TransactionViewingUpdate;
@@ -1256,6 +1259,10 @@ class TransactionController extends Controller
             \Log::info('[TRANSACTION RECONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
 
             $manualRadiusService = new ManualRadiusOperationsService();
+            $organizationId = DB::table('customers')
+                ->where('id', $billingAccount->customer_id)
+                ->value('organization_id');
+            $manualRadiusService->setOrganizationId($organizationId ? (int)$organizationId : null);
             $result = $manualRadiusService->reconnectUser($params);
 
             if ($result['status'] === 'success') {
@@ -1355,6 +1362,8 @@ class TransactionController extends Controller
                     }
                 }
 
+                $this->failPulloutServiceOrders($billingAccount->id, $accountNo);
+
                 return 'success';
             }
             else {
@@ -1369,6 +1378,42 @@ class TransactionController extends Controller
             \Log::error('[TRANSACTION RECONNECT EXCEPTION] Trace: ' . $e->getTraceAsString());
             \Log::channel('radiusrelated')->error('[TRANSACTION RECONNECT EXCEPTION] Account: ' . ($accountNo ?? 'Unknown') . ' - Error: ' . $e->getMessage());
             return 'exception';
+        }
+    }
+
+    /**
+     * Mark open Pullout service orders as Failed when an account is reconnected.
+     * Only fires when balance reaches 0 and billing_status_id is set to 1 via reconnectUser.
+     */
+    private function failPulloutServiceOrders(int $accountId, string $accountNo): void
+    {
+        try {
+            $updated = \App\Models\ServiceOrder::where('Account_Number', $accountNo)
+                ->whereRaw('LOWER(TRIM(Concern)) = ?', ['pullout'])
+                ->whereNotIn('Support_Status', ['Failed', 'Completed'])
+                ->whereNotIn('Visit_Status', ['Failed', 'Completed'])
+                ->get();
+
+            if ($updated->isEmpty()) {
+                \Log::info('[PULLOUT CHECK] No open Pullout service orders found for account: ' . $accountNo);
+                return;
+            }
+
+            foreach ($updated as $serviceOrder) {
+                $serviceOrder->Support_Status = 'Failed';
+                $serviceOrder->Visit_Status   = 'Failed';
+                $serviceOrder->Modified_By    = Auth::check() ? Auth::user()->email_address : 'System';
+                $serviceOrder->Modified_Date  = now();
+                $serviceOrder->save();
+
+                \Log::info('[PULLOUT CHECK] Pullout service order marked Failed', [
+                    'service_order_id' => $serviceOrder->id,
+                    'ticket_id'        => $serviceOrder->ticket_id ?? $serviceOrder->Ticket_ID,
+                    'account_no'       => $accountNo,
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Log::error('[PULLOUT CHECK EXCEPTION] Account: ' . $accountNo . ' - ' . $e->getMessage());
         }
     }
 
@@ -1556,6 +1601,277 @@ class TransactionController extends Controller
                 'success' => false,
                 'message' => 'Failed to delete transaction',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate a pro-rated invoice for a newly installed account.
+     *
+     * POST /api/transactions/generate-installation-invoice
+     * Body: { account_no: string, user_id?: int }
+     */
+    public function generateProRatedInstallationInvoice(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'account_no' => 'required|string|exists:billing_accounts,account_no',
+                'user_id'    => 'nullable|integer',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $accountNo = $request->input('account_no');
+            $userId    = $request->input('user_id') ?? (Auth::id() ?? 1);
+
+            // ── 1. Load account & customer ───────────────────────────────────────
+            $billingAccount = BillingAccount::with('customer')->where('account_no', $accountNo)->firstOrFail();
+            $customer       = $billingAccount->customer;
+
+            if (!$customer) {
+                return response()->json(['success' => false, 'message' => 'Customer not found for this account.'], 404);
+            }
+
+            // ── 2. Resolve plan price ────────────────────────────────────────────
+            $desiredPlan = $customer->desired_plan ?? '';
+
+            $planName = trim($desiredPlan);
+            if (strpos($planName, ' - ') !== false) {
+                $planName = trim(explode(' - ', $planName)[0]);
+            } elseif (strpos($planName, ' ') !== false) {
+                $planName = trim(explode(' ', $planName)[0]);
+            }
+
+            $plan = DB::table('plan_list')->where('plan_name', $planName)->first();
+
+            if (!$plan || empty($plan->price) || $plan->price <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Plan '{$planName}' not found or has no valid price.",
+                ], 422);
+            }
+
+            $planPrice = floatval($plan->price);
+
+            // ── 3. Calculate pro-rated amount ────────────────────────────────────
+            $today      = \Carbon\Carbon::now('Asia/Manila');
+            $billingDay = intval($billingAccount->billing_day ?? 0);
+
+            if ($billingDay === 0) {
+                $nextBillingDate = $today->copy()->endOfMonth()->startOfDay();
+            } else {
+                $candidateThisMonth = $today->copy()->day($billingDay)->startOfDay();
+
+                if ($candidateThisMonth->greaterThan($today)) {
+                    $nextBillingDate = $candidateThisMonth;
+                } else {
+                    $nextBillingDate = $today->copy()->addMonthNoOverflow()->day($billingDay)->startOfDay();
+                }
+            }
+
+            $totalDays = $today->copy()->startOfDay()->diffInDays($nextBillingDate);
+
+            if ($totalDays <= 0) {
+                $totalDays = 1;
+            }
+
+            $dailyRate   = round($planPrice / 30, 6);
+            $totalAmount = round($dailyRate * $totalDays, 2);
+
+            Log::info('[PRO-RATE INVOICE] Calculation', [
+                'account_no'        => $accountNo,
+                'plan_name'         => $planName,
+                'plan_price'        => $planPrice,
+                'daily_rate'        => $dailyRate,
+                'today'             => $today->format('Y-m-d'),
+                'next_billing_date' => $nextBillingDate->format('Y-m-d'),
+                'total_days'        => $totalDays,
+                'total_amount'      => $totalAmount,
+            ]);
+
+            // ── 4. Create invoice ────────────────────────────────────────────────
+            DB::beginTransaction();
+
+            $dueDateOffset = intval(optional(DB::table('billing_configs')->first())->due_date_day ?? 7);
+            $dueDate       = $today->copy()->addDays($dueDateOffset)->format('Y-m-d');
+
+            $invoice = \App\Models\Invoice::create([
+                'account_no'               => $accountNo,
+                'invoice_date'             => $today->format('Y-m-d'),
+                'invoice_balance'          => $totalAmount,
+                'others_and_basic_charges' => 0,
+                'service_charge'           => 0,
+                'rebate'                   => 0,
+                'discounts'                => 0,
+                'staggered'                => 0,
+                'total_amount'             => $totalAmount,
+                'received_payment'         => 0.00,
+                'due_date'                 => $dueDate,
+                'status'                   => $totalAmount <= 0 ? 'Paid' : 'Unpaid',
+                'created_by'               => (string) $userId,
+                'updated_by'               => (string) $userId,
+            ]);
+
+            // ── 5. Update account balance ────────────────────────────────────────
+            $previousBalance = floatval($billingAccount->account_balance ?? 0);
+            $newBalance      = round($previousBalance + $totalAmount, 2);
+
+            $billingAccount->account_balance     = $newBalance;
+            $billingAccount->balance_update_date = $today->format('Y-m-d');
+            $billingAccount->save();
+
+            DB::commit();
+
+            Log::info('[PRO-RATE INVOICE] Invoice created and balance updated', [
+                'account_no'       => $accountNo,
+                'invoice_id'       => $invoice->id,
+                'total_amount'     => $totalAmount,
+                'previous_balance' => $previousBalance,
+                'new_balance'      => $newBalance,
+            ]);
+
+            // ── 6. SMS notification ──────────────────────────────────────────────
+            try {
+                $smsTemplate = DB::table('sms_templates')
+                    ->where('template_type', 'Invoice')
+                    ->where('is_active', 1)
+                    ->first();
+
+                if (!$smsTemplate) {
+                    $smsTemplate = DB::table('sms_templates')
+                        ->where('template_type', 'Billing')
+                        ->where('is_active', 1)
+                        ->first();
+                }
+
+                if ($smsTemplate && !empty($customer->contact_number_primary)) {
+                    $customerName      = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ($customer->first_name . ' ' . $customer->last_name)));
+                    $planNameFormatted = str_replace('₱', 'P', $desiredPlan);
+                    $formattedAmount   = number_format($totalAmount, 2);
+                    $invoiceDateStr    = $today->format('Y-m-d');
+
+                    $message = $smsTemplate->message_content;
+                    $message = str_replace('{{customer_name}}', $customerName,      $message);
+                    $message = str_replace('{{account_no}}',    $accountNo,         $message);
+                    $message = str_replace('{{plan_name}}',     $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}',      $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}',    $formattedAmount,   $message);
+                    $message = str_replace('{{amount}}',        $formattedAmount,   $message);
+                    $message = str_replace('{{invoice_date}}',  $invoiceDateStr,    $message);
+                    $message = str_replace('{{due_date}}',      $dueDate,           $message);
+                    $message = str_replace('{{date}}',          $invoiceDateStr,    $message);
+
+                    $smsService = new \App\Services\ItexmoSmsService();
+                    $smsResult  = $smsService->send([
+                        'contact_no' => $customer->contact_number_primary,
+                        'message'    => $message,
+                    ]);
+
+                    Log::info('[PRO-RATE INVOICE] SMS result', [
+                        'account_no' => $accountNo,
+                        'success'    => $smsResult['success'] ?? false,
+                    ]);
+                }
+            } catch (\Exception $smsEx) {
+                Log::error('[PRO-RATE INVOICE] SMS exception: ' . $smsEx->getMessage());
+            }
+
+            // ── 7. Email notification ────────────────────────────────────────────
+            try {
+                $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'INVOICE')
+                    ->orWhere('Template_Code', 'BILLING')
+                    ->first();
+
+                if ($emailTemplate && !empty($customer->email_address)) {
+                    $emailService = app(\App\Services\EmailQueueService::class);
+                    $brandName    = DB::table('form_ui')->value('brand_name') ?? 'Your ISP';
+                    $customerName = preg_replace('/\s+/', ' ', trim($customer->full_name ?? ($customer->first_name . ' ' . $customer->last_name)));
+
+                    $emailData = [
+                        'customer_name'   => $customerName,
+                        'account_no'      => $accountNo,
+                        'plan_name'       => $desiredPlan,
+                        'amount_due'      => number_format($totalAmount, 2),
+                        'Amount'          => number_format($totalAmount, 2),
+                        'amount'          => number_format($totalAmount, 2),
+                        'invoice_date'    => $today->format('Y-m-d'),
+                        'due_date'        => $dueDate,
+                        'Date'            => $today->format('Y-m-d'),
+                        'Company_Name'    => $brandName,
+                        'recipient_email' => $customer->email_address,
+                    ];
+
+                    $emailService->queueFromTemplate($emailTemplate->Template_Code, $emailData);
+
+                    Log::info('[PRO-RATE INVOICE] Email queued', [
+                        'account_no' => $accountNo,
+                        'email'      => $customer->email_address,
+                    ]);
+                }
+            } catch (\Exception $emailEx) {
+                Log::error('[PRO-RATE INVOICE] Email exception: ' . $emailEx->getMessage());
+            }
+
+            // ── 8. Activity log ──────────────────────────────────────────────────
+            ActivityLog::log(
+                'Pro-Rated Invoice Generated',
+                "Pro-rated invoice #{$invoice->id} generated for {$accountNo}. "
+                    . "Days: {$totalDays} (today → billing day {$billingDay}). "
+                    . "Amount: {$totalAmount}.",
+                'info',
+                [
+                    'resource_type'   => 'Invoice',
+                    'resource_id'     => $invoice->id,
+                    'additional_data' => [
+                        'account_no'        => $accountNo,
+                        'plan_name'         => $planName,
+                        'plan_price'        => $planPrice,
+                        'daily_rate'        => $dailyRate,
+                        'total_days'        => $totalDays,
+                        'total_amount'      => $totalAmount,
+                        'previous_balance'  => $previousBalance,
+                        'new_balance'       => $newBalance,
+                        'next_billing_date' => $nextBillingDate->format('Y-m-d'),
+                    ],
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pro-rated invoice generated successfully.',
+                'data'    => [
+                    'invoice_id'        => $invoice->id,
+                    'account_no'        => $accountNo,
+                    'plan_name'         => $planName,
+                    'plan_price'        => $planPrice,
+                    'daily_rate'        => round($dailyRate, 4),
+                    'total_days'        => $totalDays,
+                    'invoice_date'      => $today->format('Y-m-d'),
+                    'next_billing_date' => $nextBillingDate->format('Y-m-d'),
+                    'due_date'          => $dueDate,
+                    'total_amount'      => $totalAmount,
+                    'previous_balance'  => $previousBalance,
+                    'new_balance'       => $newBalance,
+                    'invoice_status'    => $invoice->status,
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('[PRO-RATE INVOICE] Exception: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate pro-rated invoice.',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }

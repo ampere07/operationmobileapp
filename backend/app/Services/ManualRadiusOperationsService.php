@@ -13,6 +13,12 @@ use App\Models\ReconnectionLog;
 class ManualRadiusOperationsService
 {
     private $logName = 'Manual_DCRC';
+    private ?int $organizationId = null;
+
+    public function setOrganizationId(?int $organizationId): void
+    {
+        $this->organizationId = $organizationId;
+    }
 
     /**
      * Disconnect user from RADIUS and update database
@@ -943,9 +949,26 @@ class ManualRadiusOperationsService
      */
     private function getRadiusEndpoints(): array
     {
-        $radiusConfigs = DB::table('radius_config')
-            ->orderBy('id')
-            ->get();
+        if ($this->organizationId) {
+            // Org user: use org-specific configs, fall back to global (null) configs
+            $radiusConfigs = DB::table('radius_config')
+                ->where('organization_id', $this->organizationId)
+                ->orderBy('id')
+                ->get();
+
+            if ($radiusConfigs->isEmpty()) {
+                $radiusConfigs = DB::table('radius_config')
+                    ->whereNull('organization_id')
+                    ->orderBy('id')
+                    ->get();
+            }
+        } else {
+            // No org: use only configs that have no organization_id
+            $radiusConfigs = DB::table('radius_config')
+                ->whereNull('organization_id')
+                ->orderBy('id')
+                ->get();
+        }
 
         if ($radiusConfigs->isEmpty()) {
             throw new Exception("No RADIUS configurations found");

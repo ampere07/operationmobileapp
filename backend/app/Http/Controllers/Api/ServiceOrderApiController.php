@@ -1650,7 +1650,7 @@ class ServiceOrderApiController extends Controller
             \Log::info('[API SERVICE ORDER MIGRATION] Force starting for account: ' . $accountNo);
 
             // Get data for username generation
-            $fullInfo = DB::table('billing_acscounts')
+            $fullInfo = DB::table('billing_accounts')
                 ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
                 ->where('billing_accounts.account_no', $accountNo)

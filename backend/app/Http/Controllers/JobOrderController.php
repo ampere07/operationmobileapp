@@ -978,6 +978,7 @@ class JobOrderController extends Controller
             $application = $jobOrder->application;
             $actionUserEmail = request()->input('updated_by_user_email') ?? auth()->user()?->email_address ?? auth()->user()?->email ?? 'admin@amperecloud.com';
             $actionUserId = auth()->id() ?? 1;
+            $organizationId = auth()->user()?->organization_id ?? null;
 
             \Log::info('Job Order Approval - Application Data', [
                 'application_id' => $application->id,
@@ -1034,6 +1035,7 @@ class JobOrderController extends Controller
                     'second_government_valid_id_url' => $application->secondary_government_valid_id_url,
                     'document_attachment_url' => $application->document_attachment_url,
                     'other_isp_bill_url' => $application->other_isp_bill_url,
+                    'organization_id' => $organizationId,
                     'created_by' => $actionUserEmail,
                     'updated_by' => $actionUserEmail,
                 ]);
@@ -1115,6 +1117,7 @@ class JobOrderController extends Controller
                 'balance_update_date' => now(),
                 'billing_day' => $jobOrder->billing_day,
                 'billing_status_id' => 1,
+                'organization_id' => $organizationId,
                 'created_by' => $actionUserEmail,
                 'updated_by' => $actionUserEmail,
             ]);
@@ -1165,6 +1168,7 @@ class JobOrderController extends Controller
                 'vlan' => $jobOrder->vlan,
                 'lcpnap' => $jobOrder->lcpnap,
                 'usage_type' => $jobOrder->usage_type,
+                'organization_id' => $organizationId,
                 'created_by' => $actionUserEmail,
                 'updated_by' => $actionUserEmail,
             ]);
@@ -1222,6 +1226,7 @@ class JobOrderController extends Controller
                     'role_id' => $customerRoleId,
                     'status' => 'active',
                     'active' => 1,
+                    'organization_id' => $organizationId,
                     'created_by_user_id' => $actionUserId,
                     'updated_by_user_id' => $actionUserId,
                 ];
@@ -1694,7 +1699,11 @@ class JobOrderController extends Controller
                 'job_order_id' => $id
             ]);
 
-            $radiusConfig = RadiusConfig::first();
+            $organizationId = $jobOrder->organization_id ?? auth()->user()?->organization_id ?? null;
+            $radiusConfig = $organizationId
+                ? RadiusConfig::where('organization_id', $organizationId)->first()
+                    ?? RadiusConfig::whereNull('organization_id')->first()
+                : RadiusConfig::whereNull('organization_id')->first();
             
             if (!$radiusConfig) {
                 \Log::channel('radiusrelated')->error('RADIUS configuration not found in database for JobOrder: ' . $id);

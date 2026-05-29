@@ -477,7 +477,7 @@ class AutoDisconnectService
                 try {
                     // Check if pullout request already exists
                     $existingPullout = ServiceOrder::where('account_no', $accountNo)
-                        ->where('concern', 'Pullout')
+                        ->whereIn('concern', ['Pullout', 'For Pullout', 'for pullout'])
                         ->whereNotIn('support_status', ['Closed', 'Cancelled'])
                         ->exists();
 
@@ -634,7 +634,7 @@ class AutoDisconnectService
         $serviceOrder->Timestamp = Carbon::now();
         $serviceOrder->account_no = $billingAccount->account_no;
         $serviceOrder->support_status = 'For Visit';
-        $serviceOrder->concern = 'Pullout';
+        $serviceOrder->concern = 'for pullout';
         $serviceOrder->concern_remarks = "System Auto Generated (Overdue {$pulloutOffset} Days)";
         $serviceOrder->requested_by = 'System';
         $serviceOrder->created_by_user = 'System';

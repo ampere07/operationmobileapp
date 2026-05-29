@@ -33,10 +33,11 @@ class RadiusStatusSyncService
             // Step 1: Sync billing accounts to online_status quickly (outside of a long transaction)
             $this->syncAccountsToOnlineStatus($stats);
             
-            $radiusConfig = RadiusConfig::first();
-            if (!$radiusConfig) {
+            $radiusConfigs = RadiusConfig::all();
+            if ($radiusConfigs->isEmpty()) {
                 throw new \Exception('RADIUS configuration not found');
             }
+            $radiusConfig = $radiusConfigs->first();
 
             // Step 2: Fetch RADIUS data (potentially slow I/O)
             $radiusUsers = $this->fetchRadiusUsers($radiusConfig);

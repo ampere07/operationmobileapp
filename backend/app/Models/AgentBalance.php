@@ -14,6 +14,7 @@ class AgentBalance extends Model
     protected $fillable = [
         'agent_id',
         'balance',
+        'commission',
     ];
 
     public function agent()

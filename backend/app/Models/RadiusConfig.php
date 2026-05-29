@@ -19,7 +19,8 @@ class RadiusConfig extends Model
         'port',
         'username',
         'password',
-        'updated_by'
+        'updated_by',
+        'organization_id'
     ];
 
     protected $casts = [

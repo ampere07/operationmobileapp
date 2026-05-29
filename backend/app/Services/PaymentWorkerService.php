@@ -190,26 +190,35 @@ class PaymentWorkerService
 
                 $this->workerLog("Success: Logged Ref $ref - Amount: ₱" . number_format($amount, 2) . " - {$result['distribution_summary']}");
 
-                // Check if reconnection is needed
-                $currentBalance = DB::table('billing_accounts')
+                // Read reconnect conditions before committing (still within transaction for consistency)
+                $latestBillingAccount = DB::table('billing_accounts')
                     ->where('account_no', $accountNo)
-                    ->value('account_balance');
+                    ->select('account_balance', 'billing_status_id')
+                    ->first();
 
-                if ($currentBalance <= 0) {
+                $currentBalance  = floatval($latestBillingAccount->account_balance ?? 0);
+                $currentStatusId = intval($latestBillingAccount->billing_status_id ?? 1);
+                $needsReconnect  = ($currentStatusId !== 1 || $currentBalance <= 0);
+
+                // Commit billing FIRST — payment is real regardless of what RADIUS does
+                DB::commit();
+
+                // Send Approval Notifications (after commit so they're never rolled back)
+                $this->sendApprovalSms($account, $result['invoices_paid'] ?? [], $amount, $ref);
+                $this->sendApprovalEmail($account, $result['invoices_paid'] ?? [], $amount, $ref);
+
+                // Attempt reconnection AFTER commit — RADIUS failure must never roll back a real payment
+                if ($needsReconnect) {
+                    $this->workerLog("Reconnect triggered for $ref — Status ID: {$currentStatusId}, Balance: ₱" . number_format($currentBalance, 2));
                     $reconnectStatus = $this->attemptReconnect($account);
-                    
+
+                    // Update reconnect_status outside the main transaction (standalone)
                     DB::table('pending_payments')
                         ->where('id', $id)
                         ->update(['reconnect_status' => $reconnectStatus]);
-                    
+
                     $this->workerLog("Reconnect attempt for $ref: $reconnectStatus");
                 }
-
-                DB::commit();
-
-                // Send Approval Notifications
-                $this->sendApprovalSms($account, $result['invoices_paid'] ?? [], $amount, $ref);
-                $this->sendApprovalEmail($account, $result['invoices_paid'] ?? [], $amount, $ref);
                 
             } else {
                 // Billing update failed
@@ -378,6 +387,13 @@ class PaymentWorkerService
             // Reload billing account to get latest balance and status
             $billingAccount = DB::table('billing_accounts')->where('id', $account->account_id)->first();
             $accountNo = $billingAccount->account_no;
+
+            // Resolve organization_id from the billing account's customer
+            $organizationId = DB::table('customers')
+                ->where('id', $billingAccount->customer_id)
+                ->value('organization_id');
+
+            $this->manualRadiusService->setOrganizationId($organizationId ? (int)$organizationId : null);
             
             $this->workerLog("[RECONNECT CHECK] Starting for account: {$accountNo}");
             
@@ -534,6 +550,8 @@ class PaymentWorkerService
                     $this->workerLog("[RECONNECT EMAIL EXCEPTION] " . $e->getMessage());
                 }
 
+                $this->failPulloutServiceOrders($accountNo);
+
                 return 'success';
             } else {
                 $this->workerLog("[RECONNECT FAILED] " . $result['message']);
@@ -546,6 +564,43 @@ class PaymentWorkerService
             $this->workerLog("[RECONNECT EXCEPTION] Trace: {$e->getTraceAsString()}");
             \Log::channel('radiusrelated')->error('[PAYMENT WORKER RECONNECT EXCEPTION] Account: ' . ($account->account_no ?? 'Unknown') . ' - Error: ' . $e->getMessage());
             return 'exception';
+        }
+    }
+
+    /**
+     * Mark open Pullout service orders as Failed when an account is reconnected.
+     * Only fires when balance reaches 0 and billing_status_id is set to 1 via reconnectUser.
+     */
+    private function failPulloutServiceOrders(string $accountNo): void
+    {
+        try {
+            $orders = DB::table('service_orders')
+                ->where('Account_Number', $accountNo)
+                ->whereRaw('LOWER(TRIM(Concern)) = ?', ['pullout'])
+                ->whereNotIn('Support_Status', ['Failed', 'Completed'])
+                ->whereNotIn('Visit_Status', ['Failed', 'Completed'])
+                ->get();
+
+            if ($orders->isEmpty()) {
+                $this->workerLog('[PULLOUT CHECK] No open Pullout service orders found for account: ' . $accountNo);
+                return;
+            }
+
+            foreach ($orders as $order) {
+                DB::table('service_orders')
+                    ->where('id', $order->id)
+                    ->update([
+                        'Support_Status' => 'Failed',
+                        'Visit_Status'   => 'Failed',
+                        'Modified_By'    => 'Payment Worker',
+                        'Modified_Date'  => now(),
+                        'updated_at'     => now(),
+                    ]);
+
+                $this->workerLog('[PULLOUT CHECK] Pullout service order marked Failed - ID: ' . $order->id . ', Account: ' . $accountNo);
+            }
+        } catch (Exception $e) {
+            $this->workerLog('[PULLOUT CHECK EXCEPTION] Account: ' . $accountNo . ' - ' . $e->getMessage());
         }
     }
 

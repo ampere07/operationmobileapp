@@ -41,10 +41,12 @@ class ConcernController extends Controller
         }
 
         try {
+            $user = auth()->user();
             $concern = Concern::create([
                 'concern_name' => $request->concern_name,
                 'modified_by' => $request->modified_by,
                 'modified_at' => now(),
+                'organization_id' => $user?->organization_id ?? null,
             ]);
 
             // Log Activity
