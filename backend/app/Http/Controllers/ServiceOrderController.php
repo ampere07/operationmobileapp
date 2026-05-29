@@ -51,17 +51,21 @@ class ServiceOrderController extends Controller
 
             if ($request->has('assigned_email')) {
                 Log::info('Filtering by assigned_email: ' . $request->assigned_email);
+                
                 $whereClauses[] = "assigned_email = ?";
                 $params[] = $request->assigned_email;
-            }
 
-            if ($request->has('user_role') && strtolower($request->query('user_role')) === 'technician') {
-                $sevenDaysAgo = now()->subDays(7)->format('Y-m-d H:i:s');
-                $whereClauses[] = "updated_at >= ?";
-                $params[] = $sevenDaysAgo;
-                Log::info('Filtering service orders for technician role: only showing records from last 7 days', [
-                    'cutoff_date' => $sevenDaysAgo
-                ]);
+                // Exclude records where support_status is Resolved or Failed — technician should not see these
+                $whereClauses[] = "LOWER(support_status) NOT IN ('resolved', 'failed')";
+
+                // Technician specific filtering rules based on user request:
+                // 1. visit status in progress or reschedule -> no date filtering
+                // 2. visit status done or failed -> only 1 day
+                $whereClauses[] = "(
+                    LOWER(visit_status) IN ('in progress', 'in-progress', 'reschedule', 'scheduled', 'for visit')
+                    OR (LOWER(visit_status) IN ('done', 'completed', 'failed') AND DATE(COALESCE(updated_at, end_time, created_at)) >= DATE(DATE_SUB(NOW(), INTERVAL 1 DAY)))
+                    OR visit_status IS NULL
+                )";
             }
 
             // Apply search filter
@@ -950,7 +954,7 @@ class ServiceOrderController extends Controller
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
                         'account_no' => $order->account_no
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $updatedByUser);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $updatedByUser, $organizationId);
 
                     if ($reconnectStatus === 'success' && $normalizedConcern === 'upgrade/downgrade plan') {
                         try {
@@ -997,7 +1001,7 @@ class ServiceOrderController extends Controller
                         \Log::info("Triggering auto-restriction for Service Order with {$currentConcern} concern", [
                             'account_no' => $order->account_no
                         ]);
-                        $restrictedStatus = $this->attemptRestriction($billingAccount, $updatedByUser);
+                        $restrictedStatus = $this->attemptRestriction($billingAccount, $updatedByUser, $organizationId);
                     }
                 }
             }
@@ -1024,7 +1028,7 @@ class ServiceOrderController extends Controller
                     \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
                         'account_no' => $order->account_no
                     ]);
-                    $pulloutStatus = $this->attemptPullout($billingAccount, $updatedByUser);
+                    $pulloutStatus = $this->attemptPullout($billingAccount, $updatedByUser, $organizationId);
                 }
             }
 
@@ -1037,7 +1041,7 @@ class ServiceOrderController extends Controller
                     \Log::info('Triggering auto-migration for Service Order', [
                         'account_no' => $order->account_no
                     ]);
-                    $migrationStatus = $this->attemptMigration($billingAccount, $repairCategory);
+                    $migrationStatus = $this->attemptMigration($billingAccount, $repairCategory, $updatedByUser, $organizationId);
 
                     // Update job_orders table with new LCPNAP, port, and vlan for relocation categories
                     $newLcpnap = $request->input('new_lcpnap');
@@ -1223,7 +1227,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptReconnection($billingAccount, $serviceOrderId = null, $updatedBy = 'System'): string
+    private function attemptReconnection($billingAccount, $serviceOrderId = null, $updatedBy = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1237,6 +1241,7 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Reconnection
             try {
                 $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                $manualRadiusService->setOrganizationId($organizationId);
                 $radiusParams = [
                     'accountNumber' => $accountNo,
                     'remarks' => 'Reconnected via Service Order',
@@ -1359,7 +1364,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptRestriction($billingAccount, $updatedByUser = 'System'): string
+    private function attemptRestriction($billingAccount, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1385,6 +1390,7 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Restriction
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1508,6 +1514,7 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Disconnection
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId ?? null);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1605,7 +1612,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptPullout($billingAccount, $updatedByUser = 'System'): string
+    private function attemptPullout($billingAccount, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1634,6 +1641,7 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Disconnection/Pullout
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1762,7 +1770,7 @@ class ServiceOrderController extends Controller
         }
     }
 
-    private function attemptMigration($billingAccount, $repairCategory = null, $updatedByUser = 'System'): string
+    private function attemptMigration($billingAccount, $repairCategory = null, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             $accountNo = $billingAccount->account_no;
@@ -1801,6 +1809,7 @@ class ServiceOrderController extends Controller
             if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
                 \Log::info("[SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
 
                 // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
@@ -1853,6 +1862,7 @@ class ServiceOrderController extends Controller
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info("[SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
 
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,

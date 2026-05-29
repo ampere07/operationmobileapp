@@ -44,6 +44,21 @@ class ServiceOrderApiController extends Controller
             // Apply filters
             if ($request->has('assigned_email')) {
                 $query->where('so.assigned_email', $request->input('assigned_email'));
+
+                // Exclude records where support_status is Resolved or Failed — technician should not see these
+                $query->whereRaw("LOWER(so.support_status) NOT IN ('resolved', 'failed')");
+
+                // Technician specific filtering rules based on user request:
+                // 1. visit status in progress or reschedule -> no date filtering
+                // 2. visit status done or failed -> only 1 day
+                $query->where(function ($q) {
+                    $q->whereIn(DB::raw('LOWER(so.visit_status)'), ['in progress', 'in-progress', 'reschedule', 'scheduled', 'for visit'])
+                      ->orWhere(function ($q2) {
+                          $q2->whereIn(DB::raw('LOWER(so.visit_status)'), ['done', 'completed', 'failed'])
+                             ->whereRaw("DATE(COALESCE(so.updated_at, so.end_time, so.created_at)) >= DATE(DATE_SUB(NOW(), INTERVAL 1 DAY))");
+                      })
+                      ->orWhereNull('so.visit_status');
+                });
             }
 
             if ($request->has('account_no')) {
@@ -827,7 +842,7 @@ class ServiceOrderApiController extends Controller
                     \Log::info("Triggering auto-reconnect for Service Order with {$currentConcern} concern", [
                         'account_no' => $serviceOrder->account_no
                     ]);
-                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $updatedByUser);
+                    $reconnectStatus = $this->attemptReconnection($billingAccount, $id, $updatedByUser, $organizationId);
 
                     if ($reconnectStatus === 'success' && $normalizedConcern === 'upgrade/downgrade plan') {
                         try {
@@ -872,7 +887,7 @@ class ServiceOrderApiController extends Controller
                         \Log::info("Triggering auto-restriction for Service Order with {$currentConcern} concern", [
                             'account_no' => $serviceOrder->account_no
                         ]);
-                        $restrictedStatus = $this->attemptRestriction($billingAccount, $updatedByUser);
+                        $restrictedStatus = $this->attemptRestriction($billingAccount, $updatedByUser, $organizationId);
                     }
                 }
             }
@@ -898,7 +913,7 @@ class ServiceOrderApiController extends Controller
                     \Log::info('Triggering auto-pullout for Service Order with Pullout repair category', [
                         'account_no' => $serviceOrder->account_no
                     ]);
-                    $pulloutStatus = $this->attemptPullout($billingAccount, $updatedByUser);
+                    $pulloutStatus = $this->attemptPullout($billingAccount, $updatedByUser, $organizationId);
                 }
             }
 
@@ -911,7 +926,7 @@ class ServiceOrderApiController extends Controller
                     \Log::info('Triggering auto-migration for Service Order', [
                         'account_no' => $serviceOrder->account_no
                     ]);
-                    $migrationStatus = $this->attemptMigration($billingAccount, $repairCategory, $updatedByUser);
+                    $migrationStatus = $this->attemptMigration($billingAccount, $repairCategory, $updatedByUser, $organizationId);
 
                     // Update job_orders table with new LCPNAP, port, and vlan for relocation categories
                     $newLcpnap = $request->input('new_lcpnap');
@@ -1067,7 +1082,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptReconnection($billingAccount, $serviceOrderId = null, $updatedByUser = 'System'): string
+    private function attemptReconnection($billingAccount, $serviceOrderId = null, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1109,6 +1124,7 @@ class ServiceOrderApiController extends Controller
             // Step 3: Trigger RADIUS Reconnection
             try {
                 $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                $manualRadiusService->setOrganizationId($organizationId);
                 $radiusParams = [
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1216,7 +1232,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptRestriction($billingAccount, $updatedByUser = 'System'): string
+    private function attemptRestriction($billingAccount, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1242,6 +1258,7 @@ class ServiceOrderApiController extends Controller
             // Step 2: Trigger RADIUS Restriction
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1467,7 +1484,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptPullout($billingAccount, $updatedByUser = 'System'): string
+    private function attemptPullout($billingAccount, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             // Reload billing account
@@ -1496,6 +1513,7 @@ class ServiceOrderApiController extends Controller
             // Step 2: Trigger RADIUS Disconnection/Pullout
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1624,7 +1642,7 @@ class ServiceOrderApiController extends Controller
         }
     }
 
-    private function attemptMigration($billingAccount, $repairCategory = null, $updatedByUser = 'System'): string
+    private function attemptMigration($billingAccount, $repairCategory = null, $updatedByUser = 'System', ?int $organizationId = null): string
     {
         try {
             $accountNo = $billingAccount->account_no;
@@ -1632,7 +1650,7 @@ class ServiceOrderApiController extends Controller
             \Log::info('[API SERVICE ORDER MIGRATION] Force starting for account: ' . $accountNo);
 
             // Get data for username generation
-            $fullInfo = DB::table('billing_accounts')
+            $fullInfo = DB::table('billing_acscounts')
                 ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
                 ->where('billing_accounts.account_no', $accountNo)
@@ -1663,6 +1681,7 @@ class ServiceOrderApiController extends Controller
             if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
                 \Log::info("[API SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
 
                 // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
@@ -1715,6 +1734,7 @@ class ServiceOrderApiController extends Controller
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info("[API SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
+                $radiusOps->setOrganizationId($organizationId);
 
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,

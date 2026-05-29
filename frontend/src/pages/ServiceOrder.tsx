@@ -333,41 +333,8 @@ const ServiceOrderPage: React.FC = () => {
 
     return serviceOrders
       .filter(serviceOrder => {
-        // Role-based filtering: Role 2 (Technician) only sees "done" status for 1 day (today)
-        // LIFTED if search is active so they can find old records
-        if (userRoleId === 2 && isSearchEmpty) {
-          const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
-          const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
 
-          if (visitStatus === 'done' || visitStatus === 'completed' || visitStatus === 'failed' || supportStatus === 'resolved' || supportStatus === 'completed' || supportStatus === 'done') {
-            const completionTime = serviceOrder.rawUpdatedAt || serviceOrder.end_time;
-            if (completionTime) {
-              const completionDate = new Date(completionTime);
-              const today = new Date();
-              const isToday = completionDate.getFullYear() === today.getFullYear() &&
-                completionDate.getMonth() === today.getMonth() &&
-                completionDate.getDate() === today.getDate();
 
-              if (!isToday) return false;
-            }
-          }
-        }
-
-        // Universal: hide service orders with visitStatus "done" or "failed" after 1 day
-        if (isSearchEmpty) {
-          const visitStatus = (serviceOrder.visitStatus || '').toLowerCase().trim();
-          if (visitStatus === 'done' || visitStatus === 'failed') {
-            const completionTime = serviceOrder.rawUpdatedAt || serviceOrder.end_time;
-            if (completionTime) {
-              const completionDate = new Date(completionTime);
-              const today = new Date();
-              const isToday = completionDate.getFullYear() === today.getFullYear() &&
-                completionDate.getMonth() === today.getMonth() &&
-                completionDate.getDate() === today.getDate();
-              if (!isToday) return false;
-            }
-          }
-        }
 
         const matchesSearch = isSearchEmpty ||
           itemExtractorMap.fullName(serviceOrder).toLowerCase().includes(lowerSearch) ||
@@ -427,6 +394,11 @@ const ServiceOrderPage: React.FC = () => {
     return filteredServiceOrders.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredServiceOrders, currentPage, shouldPaginate]);
 
+  useEffect(() => {
+    const ticketIds = paginatedServiceOrders.map(order => order.id);
+    console.log(`[ServiceOrder.tsx] Currently showing ${ticketIds.length} tickets:`, ticketIds);
+  }, [paginatedServiceOrders]);
+
   const totalPages = useMemo(() => {
     if (!shouldPaginate) return 1;
     return Math.ceil(filteredServiceOrders.length / itemsPerPage);
@@ -435,6 +407,7 @@ const ServiceOrderPage: React.FC = () => {
   const handlePageChange = useCallback(async (newPage: number) => {
     if (newPage > totalPages && hasMore) {
       await fetchNextPage();
+      setCurrentPage(newPage);
       return;
     }
     setCurrentPage(prev => {
@@ -655,19 +628,19 @@ const ServiceOrderPage: React.FC = () => {
                 </Pressable>
 
                 <View style={so.pageIndicatorWrap}>
-                  <Text style={[so.pageIndicator, { color: '#111827' }]}>Page {currentPage} of {totalPages}</Text>
+                  <Text style={[so.pageIndicator, { color: '#111827' }]}>Page {currentPage} of {totalPages}{hasMore ? '+' : ''}</Text>
                 </View>
 
                 <Pressable
                   onPress={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages && !hasMore}
                   style={[so.pageBtn, {
-                    backgroundColor: currentPage === totalPages ? '#f3f4f6' : '#ffffff',
-                    borderWidth: currentPage === totalPages ? 0 : 1, borderColor: '#d1d5db'
+                    backgroundColor: (currentPage === totalPages && !hasMore) ? '#f3f4f6' : '#ffffff',
+                    borderWidth: (currentPage === totalPages && !hasMore) ? 0 : 1, borderColor: '#d1d5db'
                   }]}
                 >
                   <Text style={[so.pageBtnText, {
-                    color: currentPage === totalPages ? '#9ca3af' : '#374151',
+                    color: (currentPage === totalPages && !hasMore) ? '#9ca3af' : '#374151',
                     fontSize: 18,
                     fontWeight: 'bold'
                   }]}>{">"}</Text>
