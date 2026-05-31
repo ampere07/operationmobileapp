@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, Linking, Platform, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ServiceOrderEditModal from '../modals/ServiceOrderEditModal';
@@ -628,13 +628,31 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
 
     // Special check for images
     if (['houseFrontPicture', 'image1Url', 'image2Url', 'image3Url', 'setupImageUrl', 'routerReadingImageUrl', 'boxReadingImageUrl', 'speedtestImageUrl', 'clientSignatureUrl', 'proof_of_billing_url', 'government_valid_id_url', 'second_government_valid_id_url', 'document_attachment_url', 'other_isp_bill_url'].includes(fieldKey)) {
-      if (fieldKey === 'proof_of_billing_url') return !customerDetail?.proof_of_billing_url;
-      if (fieldKey === 'government_valid_id_url') return !customerDetail?.government_valid_id_url;
-      if (fieldKey === 'second_government_valid_id_url') return !customerDetail?.second_government_valid_id_url;
-      if (fieldKey === 'document_attachment_url') return !customerDetail?.document_attachment_url;
-      if (fieldKey === 'other_isp_bill_url') return !customerDetail?.other_isp_bill_url;
-      if (fieldKey === 'houseFrontPicture') return !(customerDetail?.houseFrontPictureUrl || serviceOrder.houseFrontPicture);
-      return !val || val === 'No image available';
+      if (fieldKey === 'proof_of_billing_url') {
+        const img = customerDetail?.proofOfBillingUrl || customerDetail?.proof_of_billing_url;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      if (fieldKey === 'government_valid_id_url') {
+        const img = customerDetail?.governmentValidIdUrl || customerDetail?.government_valid_id_url;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      if (fieldKey === 'second_government_valid_id_url') {
+        const img = customerDetail?.secondGovernmentValidIdUrl || customerDetail?.second_government_valid_id_url;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      if (fieldKey === 'document_attachment_url') {
+        const img = customerDetail?.documentAttachmentUrl || customerDetail?.document_attachment_url;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      if (fieldKey === 'other_isp_bill_url') {
+        const img = customerDetail?.otherIspBillUrl || customerDetail?.other_isp_bill_url;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      if (fieldKey === 'houseFrontPicture') {
+        const img = customerDetail?.houseFrontPictureUrl || serviceOrder.houseFrontPicture;
+        return !img || img.trim() === '' || img.trim() === 'No image available' || img.trim() === 'No image';
+      }
+      return !val || val.trim() === '' || val.trim() === 'No image available' || val.trim() === 'No image';
     }
 
     // Special check for numeric/currency
@@ -685,7 +703,7 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
         <View style={styles.imageLinkContainer}>
           <Text style={valStyle} selectable={true}>{coords || 'Not provided'}</Text>
           {coords && (
-            <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
+            <Pressable onPress={() => handleOpenURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
               <MapPin width={24} height={24} color="#4b5563" />
             </Pressable>
           )}
@@ -761,11 +779,11 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     region: () => <Text style={valStyle} selectable={true}>{serviceOrder.region || 'None'}</Text>,
     city: () => <Text style={valStyle} selectable={true}>{serviceOrder.city || 'None'}</Text>,
     barangay: () => <Text style={valStyle} selectable={true}>{serviceOrder.barangay || 'None'}</Text>,
-    proof_of_billing_url: () => renderImageLinkContent(customerDetail?.proof_of_billing_url),
-    government_valid_id_url: () => renderImageLinkContent(customerDetail?.government_valid_id_url),
-    second_government_valid_id_url: () => renderImageLinkContent(customerDetail?.second_government_valid_id_url),
-    document_attachment_url: () => renderImageLinkContent(customerDetail?.document_attachment_url),
-    other_isp_bill_url: () => renderImageLinkContent(customerDetail?.other_isp_bill_url),
+    proof_of_billing_url: () => renderImageLinkContent(customerDetail?.proofOfBillingUrl || customerDetail?.proof_of_billing_url),
+    government_valid_id_url: () => renderImageLinkContent(customerDetail?.governmentValidIdUrl || customerDetail?.government_valid_id_url),
+    second_government_valid_id_url: () => renderImageLinkContent(customerDetail?.secondGovernmentValidIdUrl || customerDetail?.second_government_valid_id_url),
+    document_attachment_url: () => renderImageLinkContent(customerDetail?.documentAttachmentUrl || customerDetail?.document_attachment_url),
+    other_isp_bill_url: () => renderImageLinkContent(customerDetail?.otherIspBillUrl || customerDetail?.other_isp_bill_url),
   }), [serviceOrder, userRole, userRoleId, isFieldEmpty, now, isStarted, isEnded, customerDetail, orderItems]);
 
   const renderField = (label: string, content: React.ReactNode) => (
@@ -777,27 +795,74 @@ const ServiceOrderDetails: React.FC<ServiceOrderDetailsProps> = ({
     </View>
   );
 
-  const renderImageLinkContent = (url: string | undefined | null) => (
-    <View style={styles.imageLinkContainer}>
-      {url ? (
-        <Pressable 
-          onPress={() => Linking.openURL(url)}
-          style={({ pressed }) => [
-            { opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' }
-          ]}
-        >
-          <Text style={[styles.imageLinkText, styles.valueText, { color: '#2563eb', textDecorationLine: 'underline', flex: 0, marginRight: 4 }]} selectable={true}>
-            View
+  const handleOpenURL = async (url: string | undefined | null) => {
+    if (!url) return;
+    const trimmed = url.trim();
+    if (trimmed === 'No image available' || trimmed === 'No image' || trimmed === '') {
+      Alert.alert('Info', 'No image available to view.');
+      return;
+    }
+
+    try {
+      let finalUrl = trimmed;
+      // Ensure the URL has a proper scheme
+      if (!/^[a-zA-Z]+:\/\//.test(finalUrl)) {
+        if (finalUrl.startsWith('/')) {
+          const apiBase = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+          const origin = apiBase.split('/api')[0];
+          finalUrl = `${origin}${finalUrl}`;
+        } else {
+          finalUrl = `https://${finalUrl}`;
+        }
+      }
+
+      // On web, use window.open with _blank to open in a new tab
+      // On native, use Linking.openURL
+      if (Platform.OS === 'web') {
+        const win = window.open(finalUrl, '_blank', 'noopener,noreferrer');
+        if (!win) {
+          // Popup was blocked, fall back to Linking
+          await Linking.openURL(finalUrl);
+        }
+      } else {
+        const supported = await Linking.canOpenURL(finalUrl);
+        if (supported) {
+          await Linking.openURL(finalUrl);
+        } else {
+          Alert.alert('Error', 'Cannot open this URL: ' + finalUrl);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', 'Failed to open link: ' + err.message);
+    }
+  };
+
+  const renderImageLinkContent = (url: string | undefined | null) => {
+    const isNoImage = !url || url.trim() === '' || url.trim() === 'No image available' || url.trim() === 'No image';
+    return (
+      <View style={styles.imageLinkContainer}>
+        {!isNoImage ? (
+          <Pressable 
+            onPress={() => handleOpenURL(url)}
+            style={({ pressed }) => [
+              { opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' }
+            ]}
+          >
+            <Text style={[styles.imageLinkText, styles.valueText, { color: '#2563eb', textDecorationLine: 'underline', flex: 0, marginRight: 4 }]} selectable={true}>
+              View
+            </Text>
+            <Pressable onPress={() => handleOpenURL(url)}>
+              <ExternalLink width={14} height={14} color="#2563eb" />
+            </Pressable>
+          </Pressable>
+        ) : (
+          <Text style={[styles.imageLinkText, styles.valueText, { color: '#9ca3af' }]} selectable={true}>
+            No image available
           </Text>
-          <ExternalLink width={14} height={14} color="#2563eb" />
-        </Pressable>
-      ) : (
-        <Text style={[styles.imageLinkText, styles.valueText, { color: '#9ca3af' }]} selectable={true}>
-          No image available
-        </Text>
-      )}
-    </View>
-  );
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.container, { borderLeftWidth: !isMobile ? 1 : 0, backgroundColor: '#f9fafb', borderLeftColor: '#d1d5db' }]}>

@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "SYNC",
-    "slug": "sync",
+    "name": "ATSS",
+    "slug": "atss",
     "scheme": "atss-app",
-    "version": "2.5.39",
+    "version": "2.5.40",
     "orientation": "portrait",
-    "icon": "./assets/logo1.png",
+    "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {
-      "image": "./assets/logo1.png",
+      "image": "./assets/applogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,11 +22,11 @@
       }
     },
     "android": {
-      "name": "SYNC",
-      "icon": "./assets/logo1.png",
+      "name": "ATSS",
+      "icon": "./assets/applogo.png",
       "allowBackup": false,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo1.png",
+        "foregroundImage": "./assets/applogo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -48,7 +48,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "5f68dbaa-53c2-4eef-b89e-7bdd97c58067"
+        "projectId": "0002ea40-23dc-4f5d-98da-82c2ab259bfa"
       }
     }
   }

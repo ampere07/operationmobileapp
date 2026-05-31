@@ -1,6 +1,6 @@
 {
-  "name": "sync",
-  "version": "2.5.39",
+  "name": "atss",
+  "version": "2.5.40",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

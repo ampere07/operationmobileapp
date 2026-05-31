@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, Linking, Platform, useWindowDimensions, StyleSheet, Alert, DeviceEventEmitter } from 'react-native';
 import { X, ExternalLink, Edit, ChevronLeft, Play, Square, MapPin, Paperclip } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatToGMT8MySQL } from '../utils/dateUtils';
@@ -825,11 +825,53 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
 
   const dynamicValueColor = '#111827';
 
+  const handleOpenURL = async (url: string | undefined | null) => {
+    if (!url) return;
+    const trimmed = url.trim();
+    if (trimmed === 'No image available' || trimmed === 'No image' || trimmed === '') {
+      Alert.alert('Info', 'No image available to view.');
+      return;
+    }
+
+    try {
+      let finalUrl = trimmed;
+      // Ensure the URL has a proper scheme
+      if (!/^[a-zA-Z]+:\/\//.test(finalUrl)) {
+        if (finalUrl.startsWith('/')) {
+          const apiBase = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+          const origin = apiBase.split('/api')[0];
+          finalUrl = `${origin}${finalUrl}`;
+        } else {
+          finalUrl = `https://${finalUrl}`;
+        }
+      }
+
+      // On web, use window.open with _blank to open in a new tab
+      // On native, use Linking.openURL
+      if (Platform.OS === 'web') {
+        const win = window.open(finalUrl, '_blank', 'noopener,noreferrer');
+        if (!win) {
+          // Popup was blocked, fall back to Linking
+          await Linking.openURL(finalUrl);
+        }
+      } else {
+        const supported = await Linking.canOpenURL(finalUrl);
+        if (supported) {
+          await Linking.openURL(finalUrl);
+        } else {
+          Alert.alert('Error', 'Cannot open this URL: ' + finalUrl);
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', 'Failed to open link: ' + err.message);
+    }
+  };
+
   const renderImageLink = (url: string | undefined | null) => (
     <View style={st.imageLinkRow}>
       {url ? (
         <Pressable 
-          onPress={() => Linking.openURL(url)}
+          onPress={() => handleOpenURL(url)}
           style={({ pressed }) => [
             { opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center' }
           ]}
@@ -864,7 +906,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         <View style={st.imageLinkRow}>
           <Text style={valStyle} selectable={true}>{coords || 'Not provided'}</Text>
           {coords && (
-            <Pressable onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
+            <Pressable onPress={() => handleOpenURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`)}>
               <MapPin width={24} height={24} color={'#4b5563'} />
             </Pressable>
           )}

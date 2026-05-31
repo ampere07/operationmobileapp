@@ -757,25 +757,26 @@ class ServiceOrderApiController extends Controller
             // --- START CHANGE LOGGING ---
             try {
                 $newServiceOrder = DB::table('service_orders')->where('id', $id)->first();
-                $billingAccount = DB::table('billing_accounts')->where('account_no', $serviceOrder->account_no)->first();
-                
-                if ($newServiceOrder && $billingAccount) {
+                // Resolve billing account for logging (may be null for orphaned service orders)
+                $billingAccountForLog = DB::table('billing_accounts')->where('account_no', $serviceOrder->account_no)->first();
+
+                if ($newServiceOrder) {
                     $changedOld = [];
                     $changedNew = [];
-                    
+
                     // We only log fields that were actually in the request and changed
                     foreach ($data as $key => $newValue) {
                         if ($key === 'updated_at') continue;
-                        
+
                         $oldValue = $serviceOrder->$key ?? null;
-                        
+
                         // Compare values (handling potential type differences)
                         if ((string)$oldValue !== (string)$newValue) {
                             $changedOld[$key] = $oldValue;
                             $changedNew[$key] = $newValue;
                         }
                     }
-                    
+
                     if (!empty($changedOld) || !empty($changedNew)) {
                         $logUserId = null;
                         if ($authUser) {
@@ -790,13 +791,13 @@ class ServiceOrderApiController extends Controller
                         }
 
                         DB::table('details_update_logs')->insert([
-                            'account_id' => $billingAccount->id,
-                            'old_details' => json_encode(['type' => 'service_order_details', 'data' => $changedOld]),
-                            'new_details' => json_encode(['type' => 'service_order_details', 'data' => $changedNew]),
-                            'created_at' => now(),
-                            'created_by_user_id' => $logUserId,
-                            'updated_at' => now(),
-                            'updated_by_user_id' => $logUserId,
+                            'account_id'          => $billingAccountForLog->id ?? null,
+                            'old_details'         => json_encode(['type' => 'service_order_details', 'service_order_id' => $id, 'account_no' => $serviceOrder->account_no, 'data' => $changedOld]),
+                            'new_details'         => json_encode(['type' => 'service_order_details', 'service_order_id' => $id, 'account_no' => $serviceOrder->account_no, 'data' => $changedNew]),
+                            'created_at'          => now(),
+                            'created_by_user_id'  => $logUserId,
+                            'updated_at'          => now(),
+                            'updated_by_user_id'  => $logUserId,
                         ]);
                     }
                 }
@@ -988,12 +989,14 @@ class ServiceOrderApiController extends Controller
 
             if (!empty($oldDataToLog)) {
                 $currentUserId = Auth::id() ?? null;
+                // Resolve account_id from billing account for this log entry
+                $logAccountId = $oldBilling->id ?? ($newBilling->id ?? null);
                 DB::table('details_update_logs')->insert([
-                    'account_id' => $oldBilling->id ?? null,
-                    'old_details' => json_encode($oldDataToLog),
-                    'new_details' => json_encode($newDataToLog),
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'account_id'         => $logAccountId,
+                    'old_details'        => json_encode(['type' => 'service_order_related_tables', 'service_order_id' => $id, 'account_no' => $accountRef, 'data' => $oldDataToLog]),
+                    'new_details'        => json_encode(['type' => 'service_order_related_tables', 'service_order_id' => $id, 'account_no' => $accountRef, 'data' => $newDataToLog]),
+                    'created_at'         => now(),
+                    'updated_at'         => now(),
                     'created_by_user_id' => $currentUserId,
                     'updated_by_user_id' => $currentUserId,
                 ]);

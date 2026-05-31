@@ -19,10 +19,15 @@ export interface CustomerDetailData {
   desiredPlan?: string;
   houseFrontPictureUrl?: string;
   proof_of_billing_url?: string;
+  proofOfBillingUrl?: string;
   government_valid_id_url?: string;
+  governmentValidIdUrl?: string;
   second_government_valid_id_url?: string;
+  secondGovernmentValidIdUrl?: string;
   document_attachment_url?: string;
+  documentAttachmentUrl?: string;
   other_isp_bill_url?: string;
+  otherIspBillUrl?: string;
   groupId?: number;
   groupName?: string;
 

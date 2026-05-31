@@ -812,25 +812,26 @@ class ServiceOrderController extends Controller
                 // --- START CHANGE LOGGING ---
                 try {
                     $newOrder = DB::selectOne("SELECT * FROM service_orders WHERE id = ?", [$id]);
-                    $billingAccount = DB::selectOne("SELECT id FROM billing_accounts WHERE account_no = ?", [$order->account_no]);
-                    
-                    if ($newOrder && $billingAccount) {
+                    // Resolve billing account for logging (may be null for orphaned service orders)
+                    $billingAccountForLog = DB::selectOne("SELECT id FROM billing_accounts WHERE account_no = ?", [$order->account_no]);
+
+                    if ($newOrder) {
                         $changedOld = [];
                         $changedNew = [];
-                        
+
                         // We only log fields that were actually in the updateData and changed
                         foreach ($updateData as $key => $newValue) {
                             if ($key === 'updated_at') continue;
-                            
+
                             $oldValue = $order->$key ?? null;
-                            
+
                             // Compare values
                             if ((string)$oldValue !== (string)$newValue) {
                                 $changedOld[$key] = $oldValue;
                                 $changedNew[$key] = $newValue;
                             }
                         }
-                        
+
                         if (!empty($changedOld) || !empty($changedNew)) {
                             $logUserId = auth()->id();
                             if (!$logUserId) {
@@ -840,12 +841,12 @@ class ServiceOrderController extends Controller
                             }
 
                             DB::table('details_update_logs')->insert([
-                                'account_id' => $billingAccount->id,
-                                'old_details' => json_encode(['type' => 'service_order_details', 'data' => $changedOld]),
-                                'new_details' => json_encode(['type' => 'service_order_details', 'data' => $changedNew]),
-                                'created_at' => now(),
+                                'account_id'         => $billingAccountForLog->id ?? null,
+                                'old_details'        => json_encode(['type' => 'service_order_details', 'service_order_id' => $id, 'account_no' => $order->account_no, 'data' => $changedOld]),
+                                'new_details'        => json_encode(['type' => 'service_order_details', 'service_order_id' => $id, 'account_no' => $order->account_no, 'data' => $changedNew]),
+                                'created_at'         => now(),
                                 'created_by_user_id' => $logUserId,
-                                'updated_at' => now(),
+                                'updated_at'         => now(),
                                 'updated_by_user_id' => $logUserId,
                             ]);
                         }
@@ -1124,12 +1125,14 @@ class ServiceOrderController extends Controller
 
             if (!empty($oldDataToLog)) {
                 $currentUserId = Auth::id() ?? null;
+                // Resolve account_id from billing account for this log entry
+                $logAccountId = $oldBilling->id ?? ($newBilling->id ?? null);
                 DB::table('details_update_logs')->insert([
-                    'account_id' => $oldBilling->id ?? null,
-                    'old_details' => json_encode($oldDataToLog),
-                    'new_details' => json_encode($newDataToLog),
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'account_id'         => $logAccountId,
+                    'old_details'        => json_encode(['type' => 'service_order_related_tables', 'service_order_id' => $id, 'account_no' => $accountRef, 'data' => $oldDataToLog]),
+                    'new_details'        => json_encode(['type' => 'service_order_related_tables', 'service_order_id' => $id, 'account_no' => $accountRef, 'data' => $newDataToLog]),
+                    'created_at'         => now(),
+                    'updated_at'         => now(),
                     'created_by_user_id' => $currentUserId,
                     'updated_by_user_id' => $currentUserId,
                 ]);

@@ -1131,6 +1131,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     try {
 
       try {
+        if (Platform.OS === 'web') {
+          console.log('[MediaLibrary] Skipping gallery save on web platform');
+        } else {
         let { status } = await MediaLibrary.getPermissionsAsync(true);
         if (status !== 'granted') {
           const permissionRes = await MediaLibrary.requestPermissionsAsync(true);
@@ -1187,6 +1190,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
             text: 'Gallery access permission denied. Images were not saved to device gallery.'
           });
         }
+        } // end native-only block
       } catch (galleryError: any) {
         console.error('[MediaLibrary] Error saving images to gallery:', galleryError);
         saveMessages.push({
