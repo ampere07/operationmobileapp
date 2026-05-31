@@ -46,6 +46,18 @@ class CommissionController extends Controller
                 $query->where('updated_at', '>=', $updatedAfter);
             }
 
+            $type = $request->input('type');
+            if ($type) {
+                if ($type === 'commission') {
+                    $query->where(function($q) {
+                        $q->where('type', 'commission')
+                          ->orWhereNull('type');
+                    });
+                } else {
+                    $query->where('type', $type);
+                }
+            }
+
             $total = $query->count();
 
             $history = $query->orderBy('created_at', 'desc')
@@ -62,7 +74,8 @@ class CommissionController extends Controller
                     'date' => $item->created_at ? date('M d, Y', strtotime($item->created_at)) : null,
                     'status' => 'Paid',
                     'amount' => '₱' . number_format($item->total_amount, 2),
-                    'commission_id_list' => $item->commission_id_list
+                    'commission_id_list' => $item->commission_id_list,
+                    'type' => $item->type
                 ];
             });
 
@@ -121,6 +134,20 @@ class CommissionController extends Controller
             if ($updatedAfter) {
                 $query->where('updated_at', '>=', $updatedAfter);
             }
+
+            $type = $request->input('type');
+            if ($type) {
+                if ($type === 'commission') {
+                    $query->where(function($q) {
+                        $q->where('type', 'commission')
+                          ->orWhereNull('type');
+                    });
+                } elseif ($type === 'incentives') {
+                    $query->whereIn('type', ['incentives', 'incentives_payout']);
+                } else {
+                    $query->where('type', $type);
+                }
+            }
             
             $total = $query->count();
 
@@ -143,7 +170,8 @@ class CommissionController extends Controller
                     'commission_id_list' => $item->commission_id_list,
                     'updated_by' => $item->updated_by,
                     'updated_at' => $item->updated_at,
-                    'approved_by' => $item->approved_by
+                    'approved_by' => $item->approved_by,
+                    'type' => $item->type
                 ];
             });
 
@@ -173,15 +201,17 @@ class CommissionController extends Controller
                 'agent_id'      => 'required|integer',
                 'ref_number'    => 'required|string|max:100',
                 'total_amount'  => 'required|numeric|min:0',
-                'remarks'       => 'nullable|string',
-                'proof_of_payment' => 'nullable|string',
+                'remarks'       => 'required|string',
+                'proof_of_payment' => 'required|string',
                 'job_order_ids' => 'nullable|array',
                 'job_order_ids.*' => 'integer',
+                'type'          => 'nullable|string|max:50',
             ]);
 
             $jobOrderIds = $validated['job_order_ids'] ?? [];
             unset($validated['job_order_ids']);
 
+            $validated['type'] = $validated['type'] ?? 'commission';
             $validated['commission_id_list'] = !empty($jobOrderIds) ? implode(',', $jobOrderIds) : null;
             $validated['created_by'] = $user->full_name ?? $user->email_address ?? 'System';
             $validated['organization_id'] = $user->organization_id ?? null;
@@ -194,16 +224,36 @@ class CommissionController extends Controller
                     ->update(['commission_status' => 'Paid']);
             }
 
-            // Deduct the payout amount from the agent's balance
+            // Update the agent's balance (add if incentives, deduct if incentives_payout or commission payout)
             $agentBalance = AgentBalance::where('agent_id', $validated['agent_id'])->first();
             if ($agentBalance) {
-                $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
-                $agentBalance->update(['balance' => $newBalance]);
+                if ($validated['type'] === 'incentives') {
+                    $newBalance = (float)$agentBalance->balance + (float)$validated['total_amount'];
+                    $newIncentives = (float)$agentBalance->incentives + (float)$validated['total_amount'];
+                    $agentBalance->update([
+                        'balance' => $newBalance,
+                        'incentives' => $newIncentives
+                    ]);
+                } elseif ($validated['type'] === 'incentives_payout') {
+                    $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
+                    $newIncentives = max(0, (float)$agentBalance->incentives - (float)$validated['total_amount']);
+                    $agentBalance->update([
+                        'balance' => $newBalance,
+                        'incentives' => $newIncentives
+                    ]);
+                } else {
+                    $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
+                    $agentBalance->update(['balance' => $newBalance]);
+                }
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Commission payment recorded successfully',
+                'message' => $validated['type'] === 'incentives' 
+                    ? 'Incentive recorded successfully' 
+                    : ($validated['type'] === 'incentives_payout' 
+                        ? 'Incentive payout recorded successfully' 
+                        : 'Commission payment recorded successfully'),
                 'data'    => $history,
                 'updated_job_orders' => count($jobOrderIds),
             ], 201);

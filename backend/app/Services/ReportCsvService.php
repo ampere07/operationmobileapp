@@ -124,110 +124,200 @@ class ReportCsvService
     public function getSummaryMetrics($dateRange = null)
     {
         [$startDate, $endDate] = $this->parseDateRange($dateRange);
-
-        // Calculate all metrics requested
         $metrics = [];
         $hasRange = $startDate && $endDate;
+        $range = $hasRange ? [$startDate . ' 00:00:00', $endDate . ' 23:59:59'] : null;
 
-        // transactions table data count
-        if (Schema::hasTable('transactions')) {
-            $query = DB::table('transactions');
-            if ($hasRange) $query->whereBetween('payment_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            $metrics['Transactions Count'] = $query->count();
-            
-            $querySum = DB::table('transactions');
-            if ($hasRange) $querySum->whereBetween('payment_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            $metrics['Transactions Total Received Payment'] = $querySum->sum('received_payment');
+        // 1. Invoices
+        if (Schema::hasTable('invoices')) {
+            $qUnpaid = DB::table('invoices')->where('status', 'Unpaid');
+            if ($hasRange) $qUnpaid->whereBetween('invoice_date', $range);
+            $metrics['Total Unpaid Invoices (Count)'] = $qUnpaid->count();
+            $metrics['Total Unpaid Invoices (Amount)'] = floatval($qUnpaid->sum('total_amount'));
+
+            $qPaid = DB::table('invoices')->where('status', 'Paid');
+            if ($hasRange) $qPaid->whereBetween('invoice_date', $range);
+            $metrics['Total Paid Invoices (Count)'] = $qPaid->count();
+            $metrics['Total Paid Invoices (Amount)'] = floatval($qPaid->sum('total_amount'));
         } else {
-            $metrics['Transactions Count'] = 0;
-            $metrics['Transactions Total Received Payment'] = 0;
+            $metrics['Total Unpaid Invoices (Count)'] = 0;
+            $metrics['Total Unpaid Invoices (Amount)'] = 0.0;
+            $metrics['Total Paid Invoices (Count)'] = 0;
+            $metrics['Total Paid Invoices (Amount)'] = 0.0;
         }
 
-        // payment_portal_logs table
+        // 2. Service Orders (Pullout concern)
+        if (Schema::hasTable('service_orders')) {
+            $qPullAll = DB::table('service_orders')->where('repair_category', 'pullout');
+            $qPullProg = DB::table('service_orders')->where('repair_category', 'pullout')->where('visit_status', 'In Progress');
+            $qPullDone = DB::table('service_orders')->where('repair_category', 'pullout')->where('visit_status', 'Done');
+            $qPullFail = DB::table('service_orders')->where('repair_category', 'pullout')->where('visit_status', 'Failed');
+
+            if ($hasRange) {
+                $qPullAll->whereBetween('created_at', $range);
+                $qPullProg->whereBetween('created_at', $range);
+                $qPullDone->whereBetween('created_at', $range);
+                $qPullFail->whereBetween('created_at', $range);
+            }
+
+            $metrics['Number of Pull Out Concern Service Orders'] = $qPullAll->count();
+            $metrics['Pull Out In Progress'] = $qPullProg->count();
+            $metrics['Pull Out Done'] = $qPullDone->count();
+            $metrics['Pull Out Failed'] = $qPullFail->count();
+        } else {
+            $metrics['Number of Pull Out Concern Service Orders'] = 0;
+            $metrics['Pull Out In Progress'] = 0;
+            $metrics['Pull Out Done'] = 0;
+            $metrics['Pull Out Failed'] = 0;
+        }
+
+        // 3. Payment Portal Logs
         if (Schema::hasTable('payment_portal_logs')) {
-            $query = DB::table('payment_portal_logs');
-            if ($hasRange) $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            $metrics['Payment Portal Logs Count'] = $query->count();
-            
-            $querySum = DB::table('payment_portal_logs');
-            if ($hasRange) $querySum->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            $metrics['Payment Portal Logs Total Amount'] = $querySum->sum('total_amount');
+            $qPPL = DB::table('payment_portal_logs');
+            if ($hasRange) $qPPL->whereBetween('created_at', $range);
+            $metrics['Payment Portal Logs Count'] = $qPPL->count();
+            $metrics['Payment Portal Logs Total Amount'] = floatval($qPPL->sum('total_amount'));
         } else {
             $metrics['Payment Portal Logs Count'] = 0;
-            $metrics['Payment Portal Logs Total Amount'] = 0;
+            $metrics['Payment Portal Logs Total Amount'] = 0.0;
         }
 
-        // sales total count = txn sum + ppl sum
-        $metrics['Sales Total (Value)'] = $metrics['Transactions Total Received Payment'] + $metrics['Payment Portal Logs Total Amount'];
-        $metrics['Sales Total (Count)'] = $metrics['Transactions Count'] + $metrics['Payment Portal Logs Count'];
+        // 4. Transactions & Payment Methods
+        if (Schema::hasTable('transactions')) {
+            $qTx = DB::table('transactions');
+            if ($hasRange) $qTx->whereBetween('payment_date', $range);
+            $metrics['Transactions Count'] = $qTx->count();
+            $metrics['Transactions Total Amount'] = floatval($qTx->sum('received_payment'));
 
-        // inventory items (not usually date filtered as it is current stock)
-        $lowStockCount = 0;
-        $goodStockCount = 0;
+            // Payment Methods breakdown
+            $qPM = DB::table('transactions')
+                ->select('payment_method', DB::raw('count(*) as count'), DB::raw('sum(received_payment) as amount'));
+            if ($hasRange) $qPM->whereBetween('payment_date', $range);
+            $pmList = $qPM->groupBy('payment_method')->get();
+
+            foreach ($pmList as $pm) {
+                $method = $pm->payment_method ?: 'Unknown';
+                $metrics["Payment Method: {$method} (Count)"] = $pm->count;
+                $metrics["Payment Method: {$method} (Amount)"] = floatval($pm->amount);
+            }
+        } else {
+            $metrics['Transactions Count'] = 0;
+            $metrics['Transactions Total Amount'] = 0.0;
+        }
+
+        // 5. Job Orders
+        if (Schema::hasTable('job_orders')) {
+            $qJO = DB::table('job_orders');
+            $qJODone = DB::table('job_orders')->where('onsite_status', 'Done');
+            $qJOProg = DB::table('job_orders')->where('onsite_status', 'In Progress');
+            $qJOFail = DB::table('job_orders')->where('onsite_status', 'Failed');
+
+            if ($hasRange) {
+                $qJO->whereBetween('created_at', $range);
+                $qJODone->whereBetween('created_at', $range);
+                $qJOProg->whereBetween('created_at', $range);
+                $qJOFail->whereBetween('created_at', $range);
+            }
+
+            $metrics['Total Job Orders'] = $qJO->count();
+            $metrics['Job Orders - Done'] = $qJODone->count();
+            $metrics['Job Orders - In Progress'] = $qJOProg->count();
+            $metrics['Job Orders - Failed'] = $qJOFail->count();
+        } else {
+            $metrics['Total Job Orders'] = 0;
+            $metrics['Job Orders - Done'] = 0;
+            $metrics['Job Orders - In Progress'] = 0;
+            $metrics['Job Orders - Failed'] = 0;
+        }
+
+        // 6. Service Orders (overall)
+        if (Schema::hasTable('service_orders')) {
+            $qSO = DB::table('service_orders');
+            $qSODone = DB::table('service_orders')->where('visit_status', 'Done');
+            $qSOProg = DB::table('service_orders')->where('visit_status', 'In Progress');
+            $qSOFail = DB::table('service_orders')->where('visit_status', 'Failed');
+
+            if ($hasRange) {
+                $qSO->whereBetween('created_at', $range);
+                $qSODone->whereBetween('created_at', $range);
+                $qSOProg->whereBetween('created_at', $range);
+                $qSOFail->whereBetween('created_at', $range);
+            }
+
+            $metrics['Total Service Orders'] = $qSO->count();
+            $metrics['Service Orders - Done'] = $qSODone->count();
+            $metrics['Service Orders - In Progress'] = $qSOProg->count();
+            $metrics['Service Orders - Failed'] = $qSOFail->count();
+
+            // Service Orders per Concern
+            $qSOC = DB::table('service_orders')->select('concern', DB::raw('count(*) as count'));
+            if ($hasRange) $qSOC->whereBetween('created_at', $range);
+            $socList = $qSOC->groupBy('concern')->get();
+
+            foreach ($socList as $soc) {
+                $concern = $soc->concern ?: 'Unknown';
+                $metrics["Service Orders per Concern: {$concern}"] = $soc->count;
+            }
+        } else {
+            $metrics['Total Service Orders'] = 0;
+            $metrics['Service Orders - Done'] = 0;
+            $metrics['Service Orders - In Progress'] = 0;
+            $metrics['Service Orders - Failed'] = 0;
+        }
+
+        // 7. LCP/NAP
+        if (Schema::hasTable('lcpnap')) {
+            $metrics['Total LCP/NAP'] = DB::table('lcpnap')->count();
+        } else {
+            $metrics['Total LCP/NAP'] = 0;
+        }
+
+        // 8. Inventory
+        $goodStock = 0;
+        $badStock = 0;
         if (Schema::hasTable('inventory_items')) {
             $items = DB::table('inventory_items')->get();
             foreach ($items as $item) {
                 $qty = $item->total_quantity ?? 0;
                 $alert = $item->quantity_alert ?? 0;
-                if ($qty <= $alert) $lowStockCount++; else $goodStockCount++;
+                if ($qty > $alert) {
+                    $goodStock++;
+                } else {
+                    $badStock++;
+                }
             }
         }
-        $metrics['Low Stock Count'] = $lowStockCount;
-        $metrics['Good Stock Count'] = $goodStockCount;
+        $metrics['Good Stock (Inventory Items)'] = $goodStock;
+        $metrics['Bad Stock (Inventory Items)'] = $badStock;
 
-        // job_orders
-        if (Schema::hasTable('job_orders')) {
-            $qDone = DB::table('job_orders')->where('onsite_status', 'Done');
-            $qProg = DB::table('job_orders')->where('onsite_status', 'In Progress');
-            if ($hasRange) {
-                $qDone->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-                $qProg->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+        // 9. Applications per Barangay
+        if (Schema::hasTable('applications')) {
+            $qApp = DB::table('applications')->select('barangay', DB::raw('count(*) as count'));
+            if ($hasRange) $qApp->whereBetween('created_at', $range);
+            $appList = $qApp->groupBy('barangay')->get();
+
+            foreach ($appList as $app) {
+                $barangay = $app->barangay ?: 'Unknown';
+                $metrics["Applications: {$barangay}"] = $app->count;
             }
-            $metrics['Job Orders (Onsite Status = Done)'] = $qDone->count();
-            $metrics['Job Orders (Onsite Status = In Progress)'] = $qProg->count();
         }
 
-        // service_orders
-        if (Schema::hasTable('service_orders')) {
-            $qRes = DB::table('service_orders')->where('support_status', 'like', '%resolv%');
-            $qVisDone = DB::table('service_orders')->where('visit_status', 'Done');
-            $qPull = DB::table('service_orders')->where('repair_category', 'pullout');
-            $qDonePull = DB::table('service_orders')->where('visit_status', 'Done')->where('repair_category', 'pullout');
-            $qVisProg = DB::table('service_orders')->where('visit_status', 'In Progress');
+        // 10. Subscribers Online per Barangay
+        if (Schema::hasTable('online_status') && Schema::hasTable('billing_accounts') && Schema::hasTable('customers')) {
+            $onlineList = DB::table('online_status')
+                ->join('billing_accounts', 'online_status.account_id', '=', 'billing_accounts.id')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->select('customers.barangay', DB::raw('count(*) as count'))
+                ->groupBy('customers.barangay')
+                ->get();
 
-            if ($hasRange) {
-                $range = [$startDate . ' 00:00:00', $endDate . ' 23:59:59'];
-                $qRes->whereBetween('created_at', $range);
-                $qVisDone->whereBetween('created_at', $range);
-                $qPull->whereBetween('created_at', $range);
-                $qDonePull->whereBetween('created_at', $range);
-                $qVisProg->whereBetween('created_at', $range);
+            foreach ($onlineList as $online) {
+                $barangay = $online->barangay ?: 'Unknown';
+                $metrics["Subscribers Online: {$barangay}"] = $online->count;
             }
-
-            $metrics['Service Orders (Support Status = Resolved)'] = $qRes->count();
-            $metrics['Service Orders (Visit Status = Done)'] = $qVisDone->count();
-            $metrics['Service Orders (Repair Category = Pullout)'] = $qPull->count();
-            $metrics['Service Orders (Done & Pullout)'] = $qDonePull->count();
-            $metrics['Service Orders (Visit Status = In Progress)'] = $qVisProg->count();
-        }
-
-        // work_order
-        $woTable = Schema::hasTable('work_order') ? 'work_order' : (Schema::hasTable('work_orders') ? 'work_orders' : null);
-        if ($woTable) {
-            $qComp = DB::table($woTable)->where('work_status', 'Completed');
-            $qPend = DB::table($woTable)->where('work_status', 'Pending');
-            if ($hasRange) {
-                $range = [$startDate . ' 00:00:00', $endDate . ' 23:59:59'];
-                $qComp->whereBetween('created_at', $range);
-                $qPend->whereBetween('created_at', $range);
-            }
-            $metrics['Work Orders (Completed)'] = $qComp->count();
-            $metrics['Work Orders (Pending)'] = $qPend->count();
-        } else {
-            $metrics['Work Orders (Completed)'] = 0;
-            $metrics['Work Orders (Pending)'] = 0;
         }
 
         return $metrics;
     }
 }
+

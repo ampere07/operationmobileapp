@@ -54,14 +54,26 @@ class DashboardController extends Controller
             $applicationQuery = DB::table('applications')
                 ->where('applications.organization_id', $organizationId);
 
-            // Fetch service connection statuses from cached background cron check
-            $radiusStatus = DB::table('system_config')->where('config_key', 'radius_api_status')->first();
+            // Fetch service connection statuses from live check of the RADIUS config (to match RadiusConfig.tsx)
+            $radiusIsOnline = false;
             $radiusOfflineMessage = null;
-            if ($radiusStatus && $radiusStatus->config_value === 'offline') {
-                $radiusError = DB::table('system_config')->where('config_key', 'radius_api_last_error')->first();
-                $radiusOfflineMessage = $radiusError ? $radiusError->config_value : 'Failed to connect to RADIUS API';
+            $radiusConfig = DB::table('radius_config')->first();
+
+            if ($radiusConfig) {
+                try {
+                    $connection = @fsockopen($radiusConfig->ip, $radiusConfig->port, $errno, $errstr, 2);
+                    if ($connection) {
+                        $radiusIsOnline = true;
+                        fclose($connection);
+                    } else {
+                        $radiusOfflineMessage = "Failed to connect to RADIUS API port {$radiusConfig->port} on {$radiusConfig->ip}: {$errstr} ({$errno})";
+                    }
+                } catch (\Exception $e) {
+                    $radiusOfflineMessage = $e->getMessage();
+                }
+            } else {
+                $radiusOfflineMessage = 'No RADIUS configuration found';
             }
-            $radiusIsOnline = ($radiusStatus ? $radiusStatus->config_value : 'online') === 'online';
 
             $smartOltStatus = DB::table('system_config')->where('config_key', 'smart_olt_status')->first();
             $smartOltError = null;
@@ -128,7 +140,7 @@ class DashboardController extends Controller
                     'radius' => [
                         'status' => $radiusIsOnline ? 'online' : 'offline',
                         'message' => $radiusOfflineMessage,
-                        'updated_at' => $radiusStatus ? Carbon::parse($radiusStatus->updated_at)->toIso8601String() : null
+                        'updated_at' => $radiusConfig ? Carbon::parse($radiusConfig->updated_at)->toIso8601String() : null
                     ],
                     'smartolt' => [
                         'status' => $smartOltOnline ? 'online' : 'offline',

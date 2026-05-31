@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { Settings, Camera, X, ChevronDown, Search, Check, ChevronLeft, MapPin, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
@@ -1024,8 +1025,8 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       if (!formData.onsiteRemarks.trim()) newErrors.onsiteRemarks = 'Onsite Remarks is required';
     }
 
-    // Proof Image is mandatory for all statuses except In Progress
-    if (formData.onsiteStatus !== 'In Progress' && !formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) {
+    // Proof Image is mandatory only for Failed and Reschedule statuses
+    if ((formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && !formData.proofImage && !jobOrderData?.proof_image_url && !jobOrderData?.Proof_Image_URL) {
       newErrors.proofImage = 'Proof Image is required';
     }
 
@@ -1109,13 +1110,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
     setFormData(updatedFormData);
 
-    if (!validateForm()) {
-      showMessageModal('Validation Error', [
-        { type: 'error', text: 'Please fill in all required fields before saving.' }
-      ]);
-      return;
-    }
-
     const jobOrderId = jobOrderData?.id || jobOrderData?.JobOrder_ID;
 
     if (!jobOrderId) {
@@ -1129,12 +1123,90 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
     setShowLoadingModal(true);
     setLoadingPercentage(0);
     setCurrentStep(0);
-    setLoadingMessage('Starting validation...');
+    setLoadingMessage('Saving images to gallery...');
 
     const saveMessages: Array<{ type: 'success' | 'warning' | 'error'; text: string }> = [];
     let progressInterval: NodeJS.Timeout | null = null;
 
     try {
+
+      try {
+        let { status } = await MediaLibrary.getPermissionsAsync(true);
+        if (status !== 'granted') {
+          const permissionRes = await MediaLibrary.requestPermissionsAsync(true);
+          status = permissionRes.status;
+        }
+        if (status === 'granted') {
+          const imageFields = [
+            { key: 'signedContractImage', label: 'Signed_Contract' },
+            { key: 'setupImage', label: 'Setup' },
+            { key: 'boxReadingImage', label: 'Box_Reading' },
+            { key: 'routerReadingImage', label: 'Router_Reading' },
+            { key: 'portLabelImage', label: 'Port_Label' },
+            { key: 'clientSignatureImage', label: 'Client_Signature' },
+            { key: 'clientTaggingImage', label: 'Client_Tagging' },
+            { key: 'proofImage', label: 'Proof' }
+          ];
+
+          const firstName = (jobOrderData?.First_Name || jobOrderData?.first_name || '').trim();
+          const middleInitial = (jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || '').trim();
+          const lastName = (jobOrderData?.Last_Name || jobOrderData?.last_name || '').trim();
+          let rawFullName = `${firstName} ${middleInitial} ${lastName}`.trim();
+          if (!rawFullName) {
+            rawFullName = 'JobOrder';
+          }
+          const cleanName = rawFullName.replace(/[^a-zA-Z0-9]/g, '_');
+          const timestamp = Date.now();
+
+          for (const field of imageFields) {
+            const fileObj = (updatedFormData as any)[field.key];
+            if (fileObj && fileObj.uri) {
+              let ext = 'jpg';
+              if (fileObj.name) {
+                const parts = fileObj.name.split('.');
+                if (parts.length > 1) {
+                  ext = parts.pop().toLowerCase();
+                }
+              } else if (fileObj.uri.endsWith('.png')) {
+                ext = 'png';
+              }
+              const newFileName = `${cleanName}_${field.label}_${timestamp}.${ext}`;
+              const tempUri = `${(ExpoFileSystem as any).cacheDirectory}${newFileName}`;
+              await (ExpoFileSystem as any).copyAsync({
+                from: fileObj.uri,
+                to: tempUri
+              });
+              await MediaLibrary.saveToLibraryAsync(tempUri);
+              console.log(`[MediaLibrary] Successfully saved ${field.key} to gallery as ${newFileName}`);
+            }
+          }
+        } else {
+          console.warn('[MediaLibrary] Permission not granted to save to gallery');
+          saveMessages.push({
+            type: 'warning',
+            text: 'Gallery access permission denied. Images were not saved to device gallery.'
+          });
+        }
+      } catch (galleryError: any) {
+        console.error('[MediaLibrary] Error saving images to gallery:', galleryError);
+        saveMessages.push({
+          type: 'warning',
+          text: `Failed to save images to device gallery: ${galleryError.message || 'Unknown error'}`
+        });
+      }
+
+      // 2. Perform Form Validation
+      setLoadingMessage('Validating form...');
+      setLoadingPercentage(30);
+      if (!validateForm()) {
+        setLoading(false);
+        setShowLoadingModal(false);
+        showMessageModal('Validation Error', [
+          { type: 'error', text: 'Please fill in all required fields before saving.' }
+        ]);
+        return;
+      }
+
       // Finalizing and Saving
       setCurrentStep(0);
       setLoadingPercentage(45);
@@ -1313,7 +1385,24 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       console.log('[API CALL] IMPORTANT: This should UPDATE existing row, NOT create new row');
       console.log('[API CALL] ========================================');
 
-      const jobOrderResponse = await updateJobOrder(jobOrderId, jobOrderUpdateData);
+      let jobOrderResponse: any;
+      let radiusWarning: string | null = null;
+
+      try {
+        jobOrderResponse = await updateJobOrder(jobOrderId, jobOrderUpdateData);
+      } catch (apiError: any) {
+        // Check if the backend returned job_order_saved:true (JO saved but RADIUS failed)
+        const responseData = apiError?.response?.data;
+        if (responseData?.job_order_saved === true) {
+          // Job order WAS saved — treat RADIUS failure as a warning, not a blocking error
+          console.warn('[API WARNING] Job order saved but RADIUS failed:', responseData.message);
+          jobOrderResponse = { success: true, data: responseData.data, message: responseData.message };
+          radiusWarning = responseData.message || 'RADIUS account creation failed';
+        } else {
+          // Real error — rethrow
+          throw apiError;
+        }
+      }
 
       console.log('[API RESPONSE] ========================================');
       console.log('[API RESPONSE] updateJobOrder completed');
@@ -1335,6 +1424,14 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         text: 'Job order updated successfully'
       });
 
+      // If RADIUS failed but JO was saved, show it as a warning
+      if (radiusWarning) {
+        saveMessages.push({
+          type: 'warning',
+          text: `RADIUS: ${radiusWarning}. The job order has been saved. Please retry RADIUS creation manually.`
+        });
+      }
+
       // Clear saved draft
       if (jobOrderId) {
         try {
@@ -1345,8 +1442,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         }
       }
 
-      // RADIUS account creation is now handled by the backend during job order update
-      // when onsiteStatus is set to 'Done'.
+      // Show PPPoE credentials if backend returned them
       if (updatedFormData.onsiteStatus === 'Done' && jobOrderResponse.data) {
         const { pppoe_username, pppoe_password } = jobOrderResponse.data;
         if (pppoe_username && pppoe_password) {
@@ -3537,7 +3633,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
                         </>
                       )}
-                      {formData.onsiteStatus !== 'In Progress' && (
+                      {(formData.onsiteStatus === 'Failed' || formData.onsiteStatus === 'Reschedule') && (
                         <View style={styles.inputGroup}>
                           <ImagePreview
                             imageUrl={imagePreviews.proofImage}

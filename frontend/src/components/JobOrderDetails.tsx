@@ -56,8 +56,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
   const [isStartTimerModalOpen, setIsStartTimerModalOpen] = useState(false);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
   const [billingStatuses, setBillingStatuses] = useState<BillingStatus[]>(billingStatusesProp || []);
-  const [userRole, setUserRole] = useState<string>(userRoleProp || '');
-  const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp || null);
+  const [userRole, setUserRole] = useState<string>((userRoleProp || '').toLowerCase());
+  const [userRoleId, setUserRoleId] = useState<number | null>(userRoleIdProp !== undefined ? userRoleIdProp : null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userFullName, setUserFullName] = useState<string>('');
   const [applicationData, setApplicationData] = useState<Application | null>(null);
@@ -174,8 +174,16 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       if (authData) {
         try {
           userData = JSON.parse(authData);
-          if (!userRoleProp) setUserRole(userData.role?.toLowerCase() || '');
-          if (userRoleIdProp === null) setUserRoleId(Number(userData.role_id));
+          if (userRoleProp) {
+            setUserRole(userRoleProp.toLowerCase());
+          } else {
+            setUserRole(userData.role?.toLowerCase() || '');
+          }
+          if (userRoleIdProp !== undefined && userRoleIdProp !== null) {
+            setUserRoleId(userRoleIdProp);
+          } else {
+            setUserRoleId(userData.role_id ? Number(userData.role_id) : null);
+          }
           setUserEmail(userData.email || '');
           setUserFullName(userData.full_name || '');
 
@@ -417,12 +425,14 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         case 'done':
         case 'active':
         case 'completed':
+        case 'paid':
           return '#4ade80';
         case 'pending':
         case 'in progress':
           return '#fb923c';
         case 'suspended':
         case 'overdue':
+        case 'unpaid':
         case 'cancelled':
           return '#ef4444';
         default:
@@ -788,7 +798,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       visitBy: 'Visit By',
       visitWith: 'Visit With',
       visitWithOther: 'Visit With Other',
-      onsiteStatus: 'Onsite Status',
+      onsiteStatus: isAgent ? 'Commission Status' : 'Onsite Status',
       createdBy: 'Created By',
       created_at: 'Created At',
       modifiedDate: 'Modified Date',
@@ -897,11 +907,17 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     visitBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_By || jobOrder.visit_by || 'Not assigned'}</Text>,
     visitWith: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
     visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
-    onsiteStatus: () => (
-      <Text style={[st.statusCapitalize, { color: getStatusColor(jobOrder.Onsite_Status, 'onsite') }]} selectable={true}>
-        {jobOrder.Onsite_Status === 'inprogress' ? 'In Progress' : (jobOrder.Onsite_Status || 'Not set')}
-      </Text>
-    ),
+    onsiteStatus: () => {
+      const displayStatus = isAgent 
+        ? (jobOrder.commission_status || 'Unpaid') 
+        : (jobOrder.Onsite_Status || jobOrder.onsite_status);
+      const displayType = isAgent ? 'billing' : 'onsite';
+      return (
+        <Text style={[st.statusCapitalize, { color: getStatusColor(displayStatus, displayType) }]} selectable={true}>
+          {displayStatus === 'inprogress' ? 'In Progress' : (displayStatus || 'Not set')}
+        </Text>
+      );
+    },
     createdBy: () => <Text style={valStyle} selectable={true}>{jobOrder.Created_By || jobOrder.Modified_By || jobOrder.created_by_user_email || 'System'}</Text>,
     created_at: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Created_At || jobOrder.created_at)}</Text>,
     modifiedDate: () => <Text style={valStyle} selectable={true}>{formatDate(jobOrder.Modified_Date)}</Text>,

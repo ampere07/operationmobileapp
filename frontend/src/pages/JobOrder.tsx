@@ -46,6 +46,7 @@ const StatusText = React.memo(({ status, type }: { status?: string | null, type:
       case 'done':
       case 'active':
       case 'completed':
+      case 'paid':
         textColor = '#4ade80';
         break;
       case 'pending':
@@ -54,8 +55,7 @@ const StatusText = React.memo(({ status, type }: { status?: string | null, type:
         break;
       case 'suspended':
       case 'overdue':
-        textColor = '#ef4444';
-        break;
+      case 'unpaid':
       case 'cancelled':
         textColor = '#ef4444';
         break;
@@ -270,41 +270,49 @@ const JobOrderCard = React.memo(({
   onPress: (jo: JobOrder) => void;
   userRole: string;
   userRoleId: number | null;
-}) => (
-  <Pressable
-    onPress={() => onPress(jobOrder)}
-    style={[jo.cardRow, {
-      backgroundColor: isSelected ? '#f3f4f6' : 'transparent',
-      borderColor: '#e5e7eb'
-    }]}
-  >
-    <View style={jo.cardInner}>
-      <View style={jo.cardLeft}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
-          <Text style={[jo.cardName, { color: '#111827', marginBottom: 0 }]}>
-            {getClientFullName(jobOrder)}
+}) => {
+  const isAgent = userRole.toLowerCase() === 'agent' || userRoleId === 4;
+  const displayStatus = isAgent 
+    ? (jobOrder.commission_status || 'Unpaid') 
+    : (jobOrder.Onsite_Status || jobOrder.onsite_status);
+  const displayType = isAgent ? 'billing' : 'onsite';
+
+  return (
+    <Pressable
+      onPress={() => onPress(jobOrder)}
+      style={[jo.cardRow, {
+        backgroundColor: isSelected ? '#f3f4f6' : 'transparent',
+        borderColor: '#e5e7eb'
+      }]}
+    >
+      <View style={jo.cardInner}>
+        <View style={jo.cardLeft}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+            <Text style={[jo.cardName, { color: '#111827', marginBottom: 0 }]}>
+              {getClientFullName(jobOrder)}
+            </Text>
+            {isWorkStarted(jobOrder) && (
+              <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                  Work Started
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[jo.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
+            {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
           </Text>
-          {isWorkStarted(jobOrder) && (
-            <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-              <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
-                Work Started
-              </Text>
-            </View>
-          )}
+          <Text style={[jo.cardSub, { color: '#6b7280', marginTop: 4 }]}>
+            Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
+          </Text>
         </View>
-        <Text style={[jo.cardSub, { color: '#4b5563' }]} numberOfLines={2}>
-          {formatDate(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
-        </Text>
-        <Text style={[jo.cardSub, { color: '#6b7280', marginTop: 4 }]}>
-          Fee: {formatPrice(jobOrder.Installation_Fee || jobOrder.installation_fee)}
-        </Text>
+        <View style={jo.cardRight}>
+          <StatusText status={displayStatus} type={displayType} />
+        </View>
       </View>
-      <View style={jo.cardRight}>
-        <StatusText status={jobOrder.Onsite_Status || jobOrder.onsite_status} type="onsite" />
-      </View>
-    </View>
-  </Pressable>
-));
+    </Pressable>
+  );
+});
 
 const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 

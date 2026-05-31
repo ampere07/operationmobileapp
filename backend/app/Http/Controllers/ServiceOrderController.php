@@ -1238,23 +1238,7 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER RECONNECT] Force starting for account: ' . $accountNo);
 
-            // Step 2: Trigger RADIUS Reconnection
-            try {
-                $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
-                $manualRadiusService->setOrganizationId($organizationId);
-                $radiusParams = [
-                    'accountNumber' => $accountNo,
-                    'remarks' => 'Reconnected via Service Order',
-                    'updatedBy' => $updatedBy
-                ];
-                $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
-                \Log::channel('radiusrelated')->info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
-            }
-            catch (\Exception $radEx) {
-                \Log::channel('radiusrelated')->error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
-            }
-
-            // Step 3: Get account details (PPPoE Username and Plan)
+            // Step 1: Get account details (PPPoE Username and Plan)
             $accountInfo = DB::table('billing_accounts')
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
@@ -1277,7 +1261,24 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER RECONNECT PROCEED] Reconnecting user for account: ' . $accountNo);
 
-            // Step 4: Update billing_status_id to 1 (Active) BEFORE reconnecting
+            // Step 2: Trigger RADIUS Reconnection
+            try {
+                $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
+                $radiusParams = [
+                    'accountNumber' => $accountNo,
+                    'username' => $username,
+                    'plan' => $plan,
+                    'remarks' => 'Reconnected via Service Order',
+                    'updatedBy' => $updatedBy
+                ];
+                $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
+                \Log::channel('radiusrelated')->info('[SERVICE ORDER RECONNECT RADIUS] Result:', (array)$radiusResult);
+            }
+            catch (\Exception $radEx) {
+                \Log::channel('radiusrelated')->error('[SERVICE ORDER RECONNECT RADIUS EXCEPTION] ' . $radEx->getMessage());
+            }
+
+            // Step 3: Update billing_status_id to 1 (Active) BEFORE reconnecting
             $billingAccount->billing_status_id = 1;
             $billingAccount->updated_at = now();
             $billingAccount->updated_by = Auth::id();
@@ -1287,6 +1288,18 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
+            // Fetch customer details for notifications
+            $customerInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.contact_number_primary',
+                    'customers.email_address',
+                    'customers.desired_plan as plan_name',
+                    DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                )
+                ->first();
+
             // Send SMS Notification
             if (!$isAlreadyActive) {
                 try {
@@ -1295,36 +1308,23 @@ class ServiceOrderController extends Controller
                         ->where('is_active', 1)
                         ->first();
 
-                    if ($smsTemplate) {
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                            'customers.contact_number_primary',
-                            'customers.email_address',
-                            'customers.desired_plan as plan_name',
-                            DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                        )
-                            ->first();
+                    if ($smsTemplate && $customerInfo && !empty($customerInfo->contact_number_primary)) {
+                        $message = $smsTemplate->message_content;
+                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $message = str_replace('{{customer_name}}', $customerName, $message);
+                        $message = str_replace('{{account_no}}', $accountNo, $message);
+                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            $message = $smsTemplate->message_content;
-                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsResult = $smsService->send([
+                            'contact_no' => $customerInfo->contact_number_primary,
+                            'message' => $message
+                        ]);
 
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
-
-                            if ($smsResult['success']) {
-                                \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
-                            }
+                        if ($smsResult['success']) {
+                            \Log::info('[SERVICE ORDER RECONNECT SMS] SMS sent');
                         }
                     }
                 }
@@ -1338,7 +1338,7 @@ class ServiceOrderController extends Controller
                 try {
                     $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
 
-                    if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                    if (!empty($emailTemplate) && $customerInfo && !empty($customerInfo->email_address)) {
                         $emailService = app(\App\Services\EmailQueueService::class);
                         $emailData = [
                             'customer_name' => $customerInfo->full_name,
@@ -1390,7 +1390,6 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Restriction
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1514,7 +1513,6 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Disconnection
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId ?? null);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1535,6 +1533,19 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER DISCONNECT DB] Updated billing_status_id to 4 (Disconnected) for Account: ' . $accountNo);
 
+            // Fetch customer details for notifications
+            $customerInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.contact_number_primary',
+                    'customers.email_address',
+                    'customers.desired_plan as plan_name',
+                    DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                    'billing_accounts.account_balance'
+                )
+                ->first();
+
             // Send SMS Notification
             try {
                 $smsTemplate = DB::table('sms_templates')
@@ -1542,39 +1553,25 @@ class ServiceOrderController extends Controller
                     ->where('is_active', 1)
                     ->first();
 
-                if ($smsTemplate) {
-                    $customerInfo = DB::table('billing_accounts')
-                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                        ->where('billing_accounts.account_no', $accountNo)
-                        ->select(
-                        'customers.contact_number_primary',
-                        'customers.email_address',
-                        'customers.desired_plan as plan_name',
-                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
-                        'billing_accounts.account_balance'
-                    )
-                        ->first();
+                if ($smsTemplate && $customerInfo && !empty($customerInfo->contact_number_primary)) {
+                    $message = $smsTemplate->message_content;
+                    $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                    $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $accountNo, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
-                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                        $message = $smsTemplate->message_content;
-                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                        $message = str_replace('{{customer_name}}', $customerName, $message);
-                        $message = str_replace('{{account_no}}', $accountNo, $message);
-                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
-                        $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
-                        $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+                    $smsService = new \App\Services\ItexmoSmsService();
+                    $smsResult = $smsService->send([
+                        'contact_no' => $customerInfo->contact_number_primary,
+                        'message' => $message
+                    ]);
 
-                        $smsService = new \App\Services\ItexmoSmsService();
-                        $smsResult = $smsService->send([
-                            'contact_no' => $customerInfo->contact_number_primary,
-                            'message' => $message
-                        ]);
-
-                        if ($smsResult['success']) {
-                            \Log::info('[SERVICE ORDER DISCONNECT SMS] SMS sent');
-                        }
+                    if ($smsResult['success']) {
+                        \Log::info('[SERVICE ORDER DISCONNECT SMS] SMS sent');
                     }
                 }
             }
@@ -1586,7 +1583,7 @@ class ServiceOrderController extends Controller
             try {
                 $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
 
-                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                if (!empty($emailTemplate) && $customerInfo && !empty($customerInfo->email_address)) {
                     $emailService = app(\App\Services\EmailQueueService::class);
                     $emailData = [
                         'customer_name' => $customerInfo->full_name,
@@ -1641,7 +1638,6 @@ class ServiceOrderController extends Controller
             // Step 2: Trigger RADIUS Disconnection/Pullout
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1693,6 +1689,19 @@ class ServiceOrderController extends Controller
 
             \Log::info('[SERVICE ORDER PULLOUT DB] Cleared port in job_orders for Account ID: ' . $billingAccount->id);
 
+            // Fetch customer details for notifications
+            $customerInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.contact_number_primary',
+                    'customers.email_address',
+                    'customers.desired_plan as plan_name',
+                    DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
+                    'billing_accounts.account_balance'
+                )
+                ->first();
+
             // Send SMS Notification
             try {
                 $smsTemplate = DB::table('sms_templates')
@@ -1700,39 +1709,25 @@ class ServiceOrderController extends Controller
                     ->where('is_active', 1)
                     ->first();
 
-                if ($smsTemplate) {
-                    $customerInfo = DB::table('billing_accounts')
-                        ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                        ->where('billing_accounts.account_no', $accountNo)
-                        ->select(
-                        'customers.contact_number_primary',
-                        'customers.email_address',
-                        'customers.desired_plan as plan_name',
-                        DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name"),
-                        'billing_accounts.account_balance'
-                    )
-                        ->first();
+                if ($smsTemplate && $customerInfo && !empty($customerInfo->contact_number_primary)) {
+                    $message = $smsTemplate->message_content;
+                    $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                    $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                    $message = str_replace('{{customer_name}}', $customerName, $message);
+                    $message = str_replace('{{account_no}}', $accountNo, $message);
+                    $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                    $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                    $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
+                    $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
 
-                    if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                        $message = $smsTemplate->message_content;
-                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                        $message = str_replace('{{customer_name}}', $customerName, $message);
-                        $message = str_replace('{{account_no}}', $accountNo, $message);
-                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
-                        $message = str_replace('{{amount_due}}', number_format($customerInfo->account_balance, 2), $message);
-                        $message = str_replace('{{balance}}', number_format($customerInfo->account_balance, 2), $message);
+                    $smsService = new \App\Services\ItexmoSmsService();
+                    $smsResult = $smsService->send([
+                        'contact_no' => $customerInfo->contact_number_primary,
+                        'message' => $message
+                    ]);
 
-                        $smsService = new \App\Services\ItexmoSmsService();
-                        $smsResult = $smsService->send([
-                            'contact_no' => $customerInfo->contact_number_primary,
-                            'message' => $message
-                        ]);
-
-                        if ($smsResult['success']) {
-                            \Log::info('[SERVICE ORDER PULLOUT SMS] SMS sent');
-                        }
+                    if ($smsResult['success']) {
+                        \Log::info('[SERVICE ORDER PULLOUT SMS] SMS sent');
                     }
                 }
             }
@@ -1744,7 +1739,7 @@ class ServiceOrderController extends Controller
             try {
                 $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'DISCONNECTED')->first();
 
-                if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                if (!empty($emailTemplate) && $customerInfo && !empty($customerInfo->email_address)) {
                     $emailService = app(\App\Services\EmailQueueService::class);
                     $emailData = [
                         'customer_name' => $customerInfo->full_name,
@@ -1809,7 +1804,6 @@ class ServiceOrderController extends Controller
             if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
                 \Log::info("[SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
 
                 // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
@@ -1862,7 +1856,6 @@ class ServiceOrderController extends Controller
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info("[SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
 
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,

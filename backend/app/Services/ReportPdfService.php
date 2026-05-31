@@ -18,12 +18,11 @@ class ReportPdfService
             'reportType' => $report->report_type,
             'dateRange'  => $report->date_range,
             'createdBy'  => $report->created_by,
-            'headers'    => array_keys($metrics),
-            'rows'       => [(object)$metrics],
+            'metrics'    => $metrics,
             'generatedAt'=> now()->format('F d, Y h:i A')
         ];
 
-        $pdf = Pdf::loadView('pdf.tabular_report', $data)->setPaper('a4', 'landscape');
+        $pdf = Pdf::loadView('pdf.summary_report', $data)->setPaper('a4', 'portrait');
         
         $fileName = 'Summary_Report_' . time() . '.pdf';
         $tempPath = sys_get_temp_dir() . '/' . $fileName;
@@ -110,3 +109,4 @@ class ReportPdfService
         return $map[$tableName] ?? 'created_at';
     }
 }
+

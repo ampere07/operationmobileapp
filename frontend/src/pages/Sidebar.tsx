@@ -41,6 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
 
   const menuItems: MenuItem[] = [
     { id: 'agent-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['agent'] },
+    { id: 'commission', label: 'Commission', icon: ReceiptText, allowedRoles: ['agent'], allowedRoleIds: [4, '4'] },
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },

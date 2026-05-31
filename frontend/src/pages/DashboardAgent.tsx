@@ -24,6 +24,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const [cashouts, setCashouts] = useState<any[]>([]);
     const [trendData, setTrendData] = useState<{ points: number[], labels: string[] }>({ points: [0,0,0,0], labels: ['','','',''] });
     const [stats, setStats] = useState<any>(null);
+    const [agentBalance, setAgentBalance] = useState<number>(0);
+    const [agentIncentives, setAgentIncentives] = useState<number>(0);
     const [selectedBar, setSelectedBar] = useState<{ index: number, value: number, label: string } | null>(null);
 
     const latestCashouts = useMemo(() => {
@@ -108,6 +110,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
             const response = await fetchAgentCommissionHistory();
             if (response.success) {
                 setCashouts(response.data);
+                setAgentBalance(response.balance !== undefined ? Number(response.balance) : 0);
+                setAgentIncentives(response.incentives !== undefined ? Number(response.incentives) : 0);
             }
         } catch (error) {
             console.error('Failed to fetch cashout history:', error);
@@ -237,9 +241,9 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                                 adjustsFontSizeToFit
                                                 minimumFontScale={0.5}
                                                 allowFontScaling={false}
-                                                style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
+                                                style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
                                             >
-                                                {formatCurrency(0)}
+                                                {formatCurrency(agentIncentives)}
                                             </Text>
                                         </View>
                                         <View style={[styles.billingLeft, { alignItems: 'flex-end' }]}>
@@ -249,9 +253,9 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                                 adjustsFontSizeToFit
                                                 minimumFontScale={0.5}
                                                 allowFontScaling={false}
-                                                style={[styles.balanceAmountText, { fontSize: balance >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
+                                                style={[styles.balanceAmountText, { fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
                                             >
-                                                {formatCurrency(balance)}
+                                                {formatCurrency(agentBalance)}
                                             </Text>
                                         </View>
                                     </View>

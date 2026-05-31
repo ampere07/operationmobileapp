@@ -1259,10 +1259,6 @@ class TransactionController extends Controller
             \Log::info('[TRANSACTION RECONNECT EXECUTE] Calling ManualRadiusOperationsService for ' . $username);
 
             $manualRadiusService = new ManualRadiusOperationsService();
-            $organizationId = DB::table('customers')
-                ->where('id', $billingAccount->customer_id)
-                ->value('organization_id');
-            $manualRadiusService->setOrganizationId($organizationId ? (int)$organizationId : null);
             $result = $manualRadiusService->reconnectUser($params);
 
             if ($result['status'] === 'success') {
@@ -1388,8 +1384,8 @@ class TransactionController extends Controller
     private function failPulloutServiceOrders(int $accountId, string $accountNo): void
     {
         try {
-            $updated = \App\Models\ServiceOrder::where('Account_Number', $accountNo)
-                ->whereRaw('LOWER(TRIM(Concern)) = ?', ['pullout'])
+            $updated = \App\Models\ServiceOrder::where('account_no', $accountNo)
+                ->whereIn(DB::raw('LOWER(TRIM(Concern))'), ['pullout', 'for pullout'])
                 ->whereNotIn('Support_Status', ['Failed', 'Completed'])
                 ->whereNotIn('Visit_Status', ['Failed', 'Completed'])
                 ->get();

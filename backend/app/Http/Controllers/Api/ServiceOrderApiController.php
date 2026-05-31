@@ -1124,7 +1124,6 @@ class ServiceOrderApiController extends Controller
             // Step 3: Trigger RADIUS Reconnection
             try {
                 $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
-                $manualRadiusService->setOrganizationId($organizationId);
                 $radiusParams = [
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1155,6 +1154,18 @@ class ServiceOrderApiController extends Controller
 
             \Log::info('[API SERVICE ORDER RECONNECT SUCCESS] Reconnection (Local Status) completed successfully');
 
+            // Fetch customer details for notifications
+            $customerInfo = DB::table('billing_accounts')
+                ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
+                ->where('billing_accounts.account_no', $accountNo)
+                ->select(
+                    'customers.contact_number_primary',
+                    'customers.email_address',
+                    'customers.desired_plan as plan_name',
+                    DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
+                )
+                ->first();
+
             // Send SMS Notification
             if (!$isAlreadyActive) {
                 try {
@@ -1163,36 +1174,23 @@ class ServiceOrderApiController extends Controller
                         ->where('is_active', 1)
                         ->first();
 
-                    if ($smsTemplate) {
-                        $customerInfo = DB::table('billing_accounts')
-                            ->join('customers', 'billing_accounts.customer_id', '=', 'customers.id')
-                            ->where('billing_accounts.account_no', $accountNo)
-                            ->select(
-                            'customers.contact_number_primary',
-                            'customers.email_address',
-                            'customers.desired_plan as plan_name',
-                            DB::raw("CONCAT(customers.first_name, ' ', IFNULL(customers.middle_initial, ''), ' ', customers.last_name) as full_name")
-                        )
-                            ->first();
+                    if ($smsTemplate && $customerInfo && !empty($customerInfo->contact_number_primary)) {
+                        $message = $smsTemplate->message_content;
+                        $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
+                        $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
+                        $message = str_replace('{{customer_name}}', $customerName, $message);
+                        $message = str_replace('{{account_no}}', $accountNo, $message);
+                        $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
+                        $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
 
-                        if ($customerInfo && !empty($customerInfo->contact_number_primary)) {
-                            $message = $smsTemplate->message_content;
-                            $planNameFormatted = str_replace('₱', 'P', $customerInfo->plan_name ?? '');
-                            $customerName = preg_replace('/\s+/', ' ', trim($customerInfo->full_name));
-                            $message = str_replace('{{customer_name}}', $customerName, $message);
-                            $message = str_replace('{{account_no}}', $accountNo, $message);
-                            $message = str_replace('{{plan_name}}', $planNameFormatted, $message);
-                            $message = str_replace('{{plan_nam}}', $planNameFormatted, $message);
+                        $smsService = new \App\Services\ItexmoSmsService();
+                        $smsResult = $smsService->send([
+                            'contact_no' => $customerInfo->contact_number_primary,
+                            'message' => $message
+                        ]);
 
-                            $smsService = new \App\Services\ItexmoSmsService();
-                            $smsResult = $smsService->send([
-                                'contact_no' => $customerInfo->contact_number_primary,
-                                'message' => $message
-                            ]);
-
-                            if ($smsResult['success']) {
-                                \Log::info('[API SERVICE ORDER RECONNECT SMS] SMS sent');
-                            }
+                        if ($smsResult['success']) {
+                            \Log::info('[API SERVICE ORDER RECONNECT SMS] SMS sent');
                         }
                     }
                 }
@@ -1206,7 +1204,7 @@ class ServiceOrderApiController extends Controller
                 try {
                     $emailTemplate = \App\Models\EmailTemplate::where('Template_Code', 'RECONNECT')->first();
 
-                    if (!empty($emailTemplate) && !empty($customerInfo->email_address)) {
+                    if (!empty($emailTemplate) && $customerInfo && !empty($customerInfo->email_address)) {
                         $emailService = app(\App\Services\EmailQueueService::class);
                         $emailData = [
                             'customer_name' => $customerInfo->full_name,
@@ -1258,7 +1256,6 @@ class ServiceOrderApiController extends Controller
             // Step 2: Trigger RADIUS Restriction
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->restrictedUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1513,7 +1510,6 @@ class ServiceOrderApiController extends Controller
             // Step 2: Trigger RADIUS Disconnection/Pullout
             try {
                 $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
                 $radiusOps->disconnectUser([
                     'accountNumber' => $accountNo,
                     'username' => $username,
@@ -1681,7 +1677,6 @@ class ServiceOrderApiController extends Controller
             if ($normalizedCategory === 'transfer lcp/nap/port' || $normalizedCategory === 'migrate') {
                 \Log::info("[API SERVICE ORDER] Handling {$repairCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
 
                 // 1. Generate new username (keep existing password)
                 $pppoeService = new PppoeUsernameService();
@@ -1734,7 +1729,6 @@ class ServiceOrderApiController extends Controller
             if (in_array($normalizedCategory, $targetCategories)) {
                 \Log::info("[API SERVICE ORDER] Handling {$normalizedCategory} via updateCredentials (rename in place)");
                 $radiusOps = app(ManualRadiusOperationsService::class);
-                $radiusOps->setOrganizationId($organizationId);
 
                 $credResult = $radiusOps->updateCredentials([
                     'accountNumber' => $accountNo,

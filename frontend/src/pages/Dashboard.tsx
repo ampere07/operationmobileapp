@@ -68,6 +68,7 @@ import Support from './Support';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
 import DashboardAgent from './DashboardAgent';
+import Commission from './Commission';
 import Bills from './Bills';
 import Menu from './Menu';
 import ReleaseNotes from './ReleaseNotes';
@@ -176,6 +177,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <DashboardCustomer onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
             case 'agent-dashboard':
                 return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
+            case 'commission':
+                return <Commission />;
             case 'customer-bills':
                 return <Bills initialTab={billsInitialTab} />;
             case 'customer-support':

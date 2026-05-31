@@ -15,6 +15,7 @@ class AgentBalance extends Model
         'agent_id',
         'balance',
         'commission',
+        'incentives',
     ];
 
     public function agent()
@@ -22,3 +23,4 @@ class AgentBalance extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 }
+

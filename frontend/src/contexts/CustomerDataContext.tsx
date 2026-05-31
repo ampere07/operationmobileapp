@@ -90,6 +90,15 @@ export const CustomerDataProvider: React.FC<{ children: ReactNode }> = ({ childr
             const parsedUser = JSON.parse(storedUser);
             if (!parsedUser.username) return;
 
+            // Only fetch customer details if the user role is 'customer'
+            const role = (parsedUser.role || '').toLowerCase();
+            const roleId = Number(parsedUser.role_id);
+            const isCustomer = role === 'customer' || roleId === 3;
+            if (!isCustomer) {
+                setIsLoading(false);
+                return;
+            }
+
             // 1. Fetch Customer Detail
             const detail = await getCustomerDetail(parsedUser.username);
             if (!detail) throw new Error('Could not fetch customer details');
