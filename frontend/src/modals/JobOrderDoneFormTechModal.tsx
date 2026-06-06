@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { Settings, Camera, X, ChevronDown, Search, Check, ChevronLeft, MapPin, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
@@ -1130,74 +1130,6 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
     try {
 
-      try {
-        if (Platform.OS === 'web') {
-          console.log('[MediaLibrary] Skipping gallery save on web platform');
-        } else {
-        let { status } = await MediaLibrary.getPermissionsAsync(true);
-        if (status !== 'granted') {
-          const permissionRes = await MediaLibrary.requestPermissionsAsync(true);
-          status = permissionRes.status;
-        }
-        if (status === 'granted') {
-          const imageFields = [
-            { key: 'signedContractImage', label: 'Signed_Contract' },
-            { key: 'setupImage', label: 'Setup' },
-            { key: 'boxReadingImage', label: 'Box_Reading' },
-            { key: 'routerReadingImage', label: 'Router_Reading' },
-            { key: 'portLabelImage', label: 'Port_Label' },
-            { key: 'clientSignatureImage', label: 'Client_Signature' },
-            { key: 'clientTaggingImage', label: 'Client_Tagging' },
-            { key: 'proofImage', label: 'Proof' }
-          ];
-
-          const firstName = (jobOrderData?.First_Name || jobOrderData?.first_name || '').trim();
-          const middleInitial = (jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || '').trim();
-          const lastName = (jobOrderData?.Last_Name || jobOrderData?.last_name || '').trim();
-          let rawFullName = `${firstName} ${middleInitial} ${lastName}`.trim();
-          if (!rawFullName) {
-            rawFullName = 'JobOrder';
-          }
-          const cleanName = rawFullName.replace(/[^a-zA-Z0-9]/g, '_');
-          const timestamp = Date.now();
-
-          for (const field of imageFields) {
-            const fileObj = (updatedFormData as any)[field.key];
-            if (fileObj && fileObj.uri) {
-              let ext = 'jpg';
-              if (fileObj.name) {
-                const parts = fileObj.name.split('.');
-                if (parts.length > 1) {
-                  ext = parts.pop().toLowerCase();
-                }
-              } else if (fileObj.uri.endsWith('.png')) {
-                ext = 'png';
-              }
-              const newFileName = `${cleanName}_${field.label}_${timestamp}.${ext}`;
-              const tempUri = `${(ExpoFileSystem as any).cacheDirectory}${newFileName}`;
-              await (ExpoFileSystem as any).copyAsync({
-                from: fileObj.uri,
-                to: tempUri
-              });
-              await MediaLibrary.saveToLibraryAsync(tempUri);
-              console.log(`[MediaLibrary] Successfully saved ${field.key} to gallery as ${newFileName}`);
-            }
-          }
-        } else {
-          console.warn('[MediaLibrary] Permission not granted to save to gallery');
-          saveMessages.push({
-            type: 'warning',
-            text: 'Gallery access permission denied. Images were not saved to device gallery.'
-          });
-        }
-        } // end native-only block
-      } catch (galleryError: any) {
-        console.error('[MediaLibrary] Error saving images to gallery:', galleryError);
-        saveMessages.push({
-          type: 'warning',
-          text: `Failed to save images to device gallery: ${galleryError.message || 'Unknown error'}`
-        });
-      }
 
       // 2. Perform Form Validation
       setLoadingMessage('Validating form...');
@@ -1584,16 +1516,26 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         setErrors(prev => ({ ...prev, modemSN: errorMessage }));
       }
 
-      // Precise mapping as requested by user - show specific messages as-is
-      let displayMessage = `Failed to update records: ${errorMessage}`;
+      // Build a specific, descriptive error message based on the source of the failure
+      let displayMessage: string;
 
-      if (
-        lowerError === 'radius offline' || 
-        lowerError === 'radius duplicate' || 
-        lowerError === 'it has a duplicate on onboarded customer' ||
-        lowerError === 'radius api error occured contact support'
-      ) {
-        displayMessage = errorMessage;
+      const isRadiusError =
+        lowerError.includes('radius') ||
+        lowerError.includes('it has a duplicate on onboarded customer');
+
+      const isSmartOltError =
+        lowerError.includes('smart olt') ||
+        lowerError.includes('smartolt') ||
+        lowerError.includes('sn duplicate') ||
+        lowerError.includes('sn not existing') ||
+        lowerError.includes('duplicate detected');
+
+      if (isRadiusError) {
+        displayMessage = `It has an error in Radius due to:\n${errorMessage}`;
+      } else if (isSmartOltError) {
+        displayMessage = `It has an error in the Smart OLT due to:\n${errorMessage}`;
+      } else {
+        displayMessage = `Backend error due to:\n${errorMessage}\n\nPlease contact support.`;
       }
 
       showMessageModal('Error', [

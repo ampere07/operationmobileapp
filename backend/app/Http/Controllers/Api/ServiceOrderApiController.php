@@ -316,6 +316,21 @@ class ServiceOrderApiController extends Controller
                 }
             }
 
+            if (!empty($data['assigned_email'])) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $data['assigned_email'],
+                        'New Service Order Assigned',
+                        "You have been assigned to Service Order #{$ticketId}.",
+                        [],
+                        'SO'
+                    );
+                } catch (\Exception $pushEx) {
+                    Log::error('Failed to send push notification on ServiceOrder store: ' . $pushEx->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Service order created successfully',
@@ -753,6 +768,21 @@ class ServiceOrderApiController extends Controller
             }
 
             DB::table('service_orders')->where('id', $id)->update($data);
+
+            if (isset($data['assigned_email']) && $data['assigned_email'] !== ($serviceOrder->assigned_email ?? null)) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $data['assigned_email'],
+                        'Service Order Assignment Updated',
+                        "You have been assigned to Service Order #{$serviceOrder->ticket_id}.",
+                        [],
+                        'SO'
+                    );
+                } catch (\Exception $pushEx) {
+                    Log::error('Failed to send push notification on ServiceOrder update: ' . $pushEx->getMessage());
+                }
+            }
 
             // --- START CHANGE LOGGING ---
             try {

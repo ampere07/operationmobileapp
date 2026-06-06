@@ -377,6 +377,21 @@ class JobOrderController extends Controller
                 ]
             );
 
+            if (!empty($jobOrder->assigned_email)) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $jobOrder->assigned_email,
+                        'New Job Order Assigned',
+                        "You have been assigned to Job Order #{$jobOrder->id}.",
+                        [],
+                        'JO'
+                    );
+                } catch (\Exception $pushEx) {
+                    \Log::error('Failed to send push notification on JobOrder store: ' . $pushEx->getMessage());
+                }
+            }
+
             $jobOrder->load('application');
 
             \Log::info('JobOrder Created Successfully', [
@@ -726,6 +741,21 @@ class JobOrderController extends Controller
                         ]
                     ]
                 );
+
+                if (isset($newData['assigned_email']) && !empty($newData['assigned_email'])) {
+                    try {
+                        $pushService = app(\App\Services\PushNotificationService::class);
+                        $pushService->sendToUserByEmail(
+                            $newData['assigned_email'],
+                            'Job Order Assigned',
+                            "You have been assigned to Job Order #{$id}.",
+                            [],
+                            'JO'
+                        );
+                    } catch (\Exception $pushEx) {
+                        \Log::error('Failed to send push notification on JobOrder update: ' . $pushEx->getMessage());
+                    }
+                }
             } else {
                 $jobOrder->refresh();
             }

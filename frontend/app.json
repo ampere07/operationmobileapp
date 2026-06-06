@@ -3,7 +3,7 @@
     "name": "ATSS",
     "slug": "atss",
     "scheme": "atss-app",
-    "version": "2.5.40",
+    "version": "2.5.41",
     "orientation": "portrait",
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
@@ -33,6 +33,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.atss.sync",
       "launchMode": "singleTask",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyACI3bm9Mno0-DeH3BiSQ69Y_wSV_PMe9g"
@@ -44,7 +45,17 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/jo.mp3",
+            "./assets/sounds/so.mp3",
+            "./assets/sounds/wo.mp3"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

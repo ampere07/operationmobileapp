@@ -175,6 +175,21 @@ class WorkOrderApiController extends Controller
                 ['resource_type' => 'WorkOrder', 'resource_id' => $workOrder->id]
             );
 
+            if (!empty($workOrder->assign_to)) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $workOrder->assign_to,
+                        'New Work Order Assigned',
+                        "You have been assigned to Work Order #{$workOrder->id}.",
+                        [],
+                        'WO'
+                    );
+                } catch (\Exception $pushEx) {
+                    \Log::error('Failed to send push notification on WorkOrder store: ' . $pushEx->getMessage());
+                }
+            }
+
             event(new WorkOrderUpdated(['action' => 'created', 'work_order_id' => $workOrder->id]));
 
             return response()->json([
@@ -442,6 +457,21 @@ class WorkOrderApiController extends Controller
                 'info',
                 ['resource_type' => 'WorkOrder', 'resource_id' => $workOrder->id]
             );
+
+            if (!empty($data['assign_to'])) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $data['assign_to'],
+                        'Work Order Assigned',
+                        "You have been assigned to Work Order #{$workOrder->id}.",
+                        [],
+                        'WO'
+                    );
+                } catch (\Exception $pushEx) {
+                    \Log::error('Failed to send push notification on WorkOrder update: ' . $pushEx->getMessage());
+                }
+            }
 
             event(new WorkOrderUpdated(['action' => 'updated', 'work_order_id' => $workOrder->id]));
 

@@ -275,6 +275,7 @@ class ServiceOrderController extends Controller
                 'router_reading_image_url' => $request->router_reading_image_url,
                 'box_reading_image_url' => $request->box_reading_image_url,
                 'speedtest_image_url' => $request->speedtest_image_url,
+                'assigned_email' => $request->assigned_email,
             ];
 
             Log::info('Insert data before concern lookup:', $insertData);
@@ -349,6 +350,21 @@ class ServiceOrderController extends Controller
                 ]
             ]
             );
+
+            if (!empty($request->assigned_email)) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $request->assigned_email,
+                        'New Service Order Assigned',
+                        "You have been assigned to Service Order #{$serviceOrderId} (Ticket: {$ticketId}).",
+                        [],
+                        'SO'
+                    );
+                } catch (\Exception $pushEx) {
+                    \Log::error('Failed to send push notification on ServiceOrder store: ' . $pushEx->getMessage());
+                }
+            }
 
             event(new ServiceOrderUpdated(['action' => 'created', 'service_order_id' => $serviceOrderId, 'ticket_id' => $ticketId]));
 
@@ -1091,6 +1107,21 @@ class ServiceOrderController extends Controller
                 ]
             ]
             );
+
+            if (isset($updateData['assigned_email']) && !empty($updateData['assigned_email'])) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $pushService->sendToUserByEmail(
+                        $updateData['assigned_email'],
+                        'Service Order Assigned',
+                        "You have been assigned to Service Order #{$id} (Ticket: {$order->ticket_id}).",
+                        [],
+                        'SO'
+                    );
+                } catch (\Exception $pushEx) {
+                    \Log::error('Failed to send push notification on ServiceOrder update: ' . $pushEx->getMessage());
+                }
+            }
 
             event(new ServiceOrderUpdated(['action' => 'updated', 'service_order_id' => $id, 'ticket_id' => $order->ticket_id]));
 

@@ -74,12 +74,14 @@ import Menu from './Menu';
 import ReleaseNotes from './ReleaseNotes';
 import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 interface DashboardProps {
     onLogout: () => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
+    usePushNotifications();
     const [userData, setUserData] = useState<any>(null);
     const [activeSection, setActiveSection] = useState('dashboard');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

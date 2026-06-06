@@ -409,5 +409,40 @@ class UserController extends Controller
         }
     }
 
+    public function updatePushToken(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'push_token' => 'required|string',
+        ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $user->push_token = $request->push_token;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Push token updated successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Failed to update push token: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update push token',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -103,6 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/monitor/handle', [MonitorController::class , 'handle']);
     Route::get('/dashboard/counts', [\App\Http\Controllers\Api\DashboardController::class , 'getCounts']);
     Route::post('/monitor/handle', [MonitorController::class , 'handle']);
+    Route::post('/users/push-token', [UserController::class, 'updatePushToken']);
 });
 Route::get('/sms-blast', [SmsBlastController::class , 'index']);
 Route::post('/sms-blast', [SmsBlastController::class , 'store']);
