@@ -320,4 +320,3 @@ class ReportCsvService
         return $metrics;
     }
 }
-

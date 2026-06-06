@@ -2405,6 +2405,7 @@ Route::prefix('radius')->group(function () {
     Route::post('/operation', [ManualRadiusOperationsController::class, 'handleOperation']);
     Route::post('/disconnect', [ManualRadiusOperationsController::class, 'disconnectUser']);
     Route::post('/reconnect', [ManualRadiusOperationsController::class, 'reconnectUser']);
+    Route::post('/update-group', [ManualRadiusOperationsController::class, 'updateGroup']);
     Route::post('/update-credentials', [ManualRadiusOperationsController::class, 'updateCredentials']);
     Route::post('/disable', [ManualRadiusOperationsController::class, 'disabledUser']);
     Route::post('/enable', [ManualRadiusOperationsController::class, 'enabledUser']);

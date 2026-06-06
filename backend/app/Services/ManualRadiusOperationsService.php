@@ -14,6 +14,7 @@ class ManualRadiusOperationsService
 {
     private $logName = 'Manual_DCRC';
 
+
     /**
      * Disconnect user from RADIUS and update database
      */
@@ -369,6 +370,70 @@ class ManualRadiusOperationsService
             $this->writeLog("[EXCEPTION] " . $e->getMessage());
             $this->writeLog("[TRACE] " . $e->getTraceAsString());
             $this->writeLog("=== RECONNECT USER END ===");
+            
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'output' => 'Error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Update user group/plan in RADIUS (only disconnects if group changes)
+     */
+    public function updateGroup(array $params): array
+    {
+        try {
+            $accountNo = $params['accountNumber'] ?? '';
+            $username = $params['username'] ?? '';
+            $rawPlan = $params['plan'] ?? '';
+            $updatedBy = $params['updatedBy'] ?? 'System';
+
+            $this->writeLog("=== UPDATE GROUP START ===");
+            $this->writeLog("Account: $accountNo | Username: $username | Raw Plan: $rawPlan");
+
+            if (empty($username)) {
+                throw new Exception("Username is required for group update operation");
+            }
+
+            if (empty($rawPlan)) {
+                throw new Exception("Plan is required for group update operation");
+            }
+
+            // Clean plan name (strip price suffix like "SWIFT 1000", "STARTER - P799.00", etc.)
+            $cleanPlan = preg_replace('/\s*-\s*(?:P|₱)?\d+.*/i', '', $rawPlan);
+            $cleanPlan = preg_replace('/\s+(?:P|₱)?\d+.*/i', '', $cleanPlan);
+            $cleanPlan = trim($cleanPlan);
+            $this->writeLog("Clean Plan: $cleanPlan");
+
+            // Get RADIUS configurations
+            $radiusEndpoints = $this->getRadiusEndpoints();
+
+            // Perform RADIUS operations without forcing session disconnect
+            $this->radiusOps(
+                $radiusEndpoints,
+                $username,
+                $cleanPlan,
+                'Active',
+                false, // isDisconnectAction = false
+                $accountNo,
+                $updatedBy
+            );
+
+            $this->writeLog("[SUCCESS] User group updated successfully");
+            $this->writeLog("=== UPDATE GROUP END ===");
+
+            return [
+                'status' => 'success',
+                'message' => 'User group updated successfully',
+                'output' => 'Success: User group updated'
+            ];
+
+        } catch (Throwable $e) {
+            $this->writeLog("[EXCEPTION] " . $e->getMessage());
+            $this->writeLog("[TRACE] " . $e->getTraceAsString());
+            $this->writeLog("=== UPDATE GROUP END ===");
             
             return [
                 'status' => 'error',
@@ -1101,6 +1166,7 @@ class ManualRadiusOperationsService
         }
     }
 }
+
 
 
 

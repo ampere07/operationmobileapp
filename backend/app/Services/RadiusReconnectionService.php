@@ -51,25 +51,9 @@ class RadiusReconnectionService
                 return 'no_username';
             }
 
-            // Get RADIUS configuration
-            if ($organizationId) {
-                $radiusConfigs = DB::table('radius_config')
-                    ->where('organization_id', $organizationId)
-                    ->orderBy('id')
-                    ->get();
-
-                if ($radiusConfigs->isEmpty()) {
-                    $radiusConfigs = DB::table('radius_config')
-                        ->whereNull('organization_id')
-                        ->orderBy('id')
-                        ->get();
-                }
-            } else {
-                $radiusConfigs = DB::table('radius_config')
-                    ->whereNull('organization_id')
-                    ->orderBy('id')
-                    ->get();
-            }
+            $radiusConfigs = DB::table('radius_config')
+                ->orderBy('id')
+                ->get();
 
             if ($radiusConfigs->isEmpty()) {
                 $this->writeLog("[ERROR] No RADIUS configurations found");
@@ -94,9 +78,7 @@ class RadiusReconnectionService
             $cleanPlan = trim($cleanPlan);
             $this->writeLog("Raw Plan: '$rawPlan' -> Clean Plan: '$cleanPlan'");
 
-            // Perform reconnection using the global ManualRadiusOperationsService
             $manualRadiusService = new ManualRadiusOperationsService();
-            $manualRadiusService->setOrganizationId($organizationId);
             $params = [
                 'accountNumber' => $accountNo,
                 'username' => $username,

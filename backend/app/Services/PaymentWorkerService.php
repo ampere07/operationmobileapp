@@ -198,7 +198,7 @@ class PaymentWorkerService
 
                 $currentBalance  = floatval($latestBillingAccount->account_balance ?? 0);
                 $currentStatusId = intval($latestBillingAccount->billing_status_id ?? 1);
-                $needsReconnect  = ($currentStatusId !== 1 || $currentBalance <= 0);
+                $needsReconnect  = ($currentStatusId !== 1 && $currentBalance <= 0);
 
                 // Commit billing FIRST — payment is real regardless of what RADIUS does
                 DB::commit();
@@ -388,13 +388,6 @@ class PaymentWorkerService
             $billingAccount = DB::table('billing_accounts')->where('id', $account->account_id)->first();
             $accountNo = $billingAccount->account_no;
 
-            // Resolve organization_id from the billing account's customer
-            $organizationId = DB::table('customers')
-                ->where('id', $billingAccount->customer_id)
-                ->value('organization_id');
-
-            $this->manualRadiusService->setOrganizationId($organizationId ? (int)$organizationId : null);
-            
             $this->workerLog("[RECONNECT CHECK] Starting for account: {$accountNo}");
             
             // Step 1: Check if balance qualifies (0 or negative)
@@ -575,8 +568,8 @@ class PaymentWorkerService
     {
         try {
             $orders = DB::table('service_orders')
-                ->where('Account_Number', $accountNo)
-                ->whereRaw('LOWER(TRIM(Concern)) = ?', ['pullout'])
+                ->where('account_no', $accountNo)
+                ->whereIn(DB::raw('LOWER(TRIM(Concern))'), ['pullout', 'for pullout'])
                 ->whereNotIn('Support_Status', ['Failed', 'Completed'])
                 ->whereNotIn('Visit_Status', ['Failed', 'Completed'])
                 ->get();
@@ -861,6 +854,7 @@ class PaymentWorkerService
         return $retryPayments->count();
     }
 }
+
 
 
 

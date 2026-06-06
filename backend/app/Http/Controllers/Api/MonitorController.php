@@ -904,8 +904,8 @@ class MonitorController extends Controller
                             }
                             $since = $viewStartStr;
                         }
-                        // Set primaryTimeDisp to the accumulated total (it continues the count)
-                        $primaryTimeDisp = $availableTimeStr;
+                        // Set primaryTimeDisp to null so it counts the current availability duration live in the frontend
+                        $primaryTimeDisp = null;
                     }
 
                     if ($isOffline) {
@@ -1227,6 +1227,7 @@ class MonitorController extends Controller
         }
     }
 }
+
 
 
 

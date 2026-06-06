@@ -64,6 +64,7 @@ class UserController extends Controller
                 'data' => $users
             ]);
         } catch (\Exception $e) {
+            \Log::error('Fetch users failed: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch users',

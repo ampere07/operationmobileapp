@@ -109,4 +109,3 @@ class ReportPdfService
         return $map[$tableName] ?? 'created_at';
     }
 }
-

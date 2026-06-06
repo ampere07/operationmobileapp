@@ -434,23 +434,28 @@ class GoogleDrivePdfGenerationService
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
             $dcDate = $dueDate ? $dueDate->copy()->addDays($disconnectionDay) : null;
 
-            // Calculate Period Start and End based on SOA history
-            $periodEnd = $soa->statement_date;
-            
-            // Find the SOA immediately preceding the current one for this account
+            // Period_End = current SOA's due date
+            $periodEnd = $dueDate;
+
+            // Period_Start = previous SOA's due date (or date_installed if first SOA)
             $previousSoa = StatementOfAccount::where('account_no', $account->account_no)
                 ->where('id', '<', $soa->id)
                 ->orderBy('id', 'desc')
                 ->first();
 
             if ($previousSoa) {
-                $periodStart = $previousSoa->statement_date;
+                $periodStart = $previousSoa->due_date
+                    ? \Carbon\Carbon::parse($previousSoa->due_date)
+                    : null;
             } else {
                 // If this is the only/first SOA, use the customer's installation date
-                $periodStart = $account->date_installed;
+                $periodStart = $account->date_installed
+                    ? \Carbon\Carbon::parse($account->date_installed)
+                    : null;
             }
 
             $data = array_merge($data, [
+                'Statement_Date' => $soa->statement_date ? \Carbon\Carbon::parse($soa->statement_date)->format('F d, Y') : '-',
                 'SOA_No' => $soa->id,
                 'Prev_Balance' => number_format((float)($soa->balance_from_previous_bill ?? 0), 2),
                 'Prev_Payment' => number_format((float)($soa->payment_received_previous ?? 0), 2),
@@ -502,8 +507,10 @@ class GoogleDrivePdfGenerationService
 
         if ($invoice) {
             $dueDate = \Carbon\Carbon::parse($invoice->due_date);
+            $invoiceDate = $invoice->invoice_date ? \Carbon\Carbon::parse($invoice->invoice_date) : null;
 
             $data = array_merge($data, [
+                'Statement_Date' => $invoiceDate ? $invoiceDate->format('F d, Y') : '-',
                 'Invoice_No' => $invoice->id,
                 'Invoice_Balance' => number_format($invoice->invoice_balance, 2),
                 'Total_Amount' => number_format($invoice->total_amount, 2),
@@ -603,4 +610,5 @@ class GoogleDrivePdfGenerationService
         </style>";
     }
 }
+
 

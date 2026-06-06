@@ -29,7 +29,7 @@ class ManualRadiusOperationsController extends Controller
         try {
             // Validate the action parameter
             $validator = Validator::make($request->all(), [
-                'action' => 'required|in:disconnectUser,reconnectUser,updateCredentials,disabledUser,enabledUser,deleteAccount',
+                'action' => 'required|in:disconnectUser,reconnectUser,updateCredentials,disabledUser,enabledUser,deleteAccount,updateGroup',
                 'accountNumber' => 'nullable|string',
                 'username' => 'required|string',
                 'updatedBy' => 'nullable|string',
@@ -63,6 +63,7 @@ class ManualRadiusOperationsController extends Controller
                 'disabledUser' => $this->handleDisabled($request, $params),
                 'enabledUser' => $this->handleEnabled($request, $params),
                 'deleteAccount' => $this->handleDeletion($request, $params),
+                'updateGroup' => $this->handleUpdateGroup($request, $params),
                 default => [
                     'status' => 'error',
                     'message' => 'Unknown action',
@@ -130,6 +131,28 @@ class ManualRadiusOperationsController extends Controller
         }
 
         return $this->radiusService->reconnectUser($params);
+    }
+
+    /**
+     * Handle update group operation
+     */
+    private function handleUpdateGroup(Request $request, array $params): array
+    {
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+            'plan' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return [
+                'status' => 'error',
+                'message' => 'Validation failed for update group operation',
+                'errors' => $validator->errors(),
+                'output' => 'Error: Validation failed'
+            ];
+        }
+
+        return $this->radiusService->updateGroup($params);
     }
 
     /**
@@ -266,6 +289,46 @@ class ManualRadiusOperationsController extends Controller
 
         } catch (Exception $e) {
             Log::error("Reconnect User Error", [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'output' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update user group (dedicated endpoint)
+     */
+    public function updateGroup(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'accountNumber' => 'nullable|string',
+                'username' => 'required|string',
+                'plan' => 'required|string',
+                'updatedBy' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'output' => 'Error: Validation failed'
+                ], 422);
+            }
+
+            $result = $this->radiusService->updateGroup($request->all());
+            $statusCode = $result['status'] === 'success' ? 200 : 400;
+
+            return response()->json($result, $statusCode);
+
+        } catch (Exception $e) {
+            Log::error("Update Group Error", [
                 'error' => $e->getMessage()
             ]);
 
@@ -415,3 +478,4 @@ class ManualRadiusOperationsController extends Controller
         return $this->radiusService->deleteAccount($params['username']);
     }
 }
+

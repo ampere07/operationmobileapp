@@ -282,23 +282,34 @@ class PdfGenerationService
             $disconnectionDay = $billingConfig ? $billingConfig->disconnection_day : 0;
             $dcDate = $dueDate->copy()->addDays($disconnectionDay);
             
-            // Calculate Period Start and End based on SOA history
-            $periodEnd = $soa->statement_date;
-            
-            // Find the SOA immediately preceding the current one for this account
+            // Period_End = current SOA's due date (already calculated above)
+            $periodEnd = $dueDate;
+
+            // Period_Start = previous SOA's due date (calculated using same billing config logic)
             $previousSoa = StatementOfAccount::where('account_no', $account->account_no)
                 ->where('id', '<', $soa->id)
                 ->orderBy('id', 'desc')
                 ->first();
 
             if ($previousSoa) {
-                $periodStart = $previousSoa->statement_date;
+                // Calculate the previous SOA's due date using the same billing config logic
+                $prevStatementDate = \Carbon\Carbon::parse($previousSoa->statement_date);
+                $prevDaysInMonth = $prevStatementDate->daysInMonth;
+                $prevCalculatedDueDay = $dueDateDay == 0 ? $billingDay : $billingDay + $dueDateDay;
+                if ($prevCalculatedDueDay > $prevDaysInMonth) {
+                    $periodStart = $prevStatementDate->copy()->addMonth()->day($prevCalculatedDueDay - $prevDaysInMonth);
+                } else {
+                    $periodStart = $prevStatementDate->copy()->day($prevCalculatedDueDay);
+                }
             } else {
                 // If this is the only/first SOA, use the customer's installation date
-                $periodStart = $account->date_installed;
+                $periodStart = $account->date_installed
+                    ? \Carbon\Carbon::parse($account->date_installed)
+                    : null;
             }
 
             $data = array_merge($data, [
+                'Statement_Date' => $statementDate->format('F d, Y'),
                 'SOA_No' => $soa->id,
                 'Prev_Balance' => number_format($soa->balance_from_previous_bill, 2),
                 'Prev_Payment' => number_format($soa->payment_received_previous, 2),
@@ -309,7 +320,7 @@ class PdfGenerationService
                 'Total_Due' => number_format($soa->total_amount_due, 2),
                 'Due_Date' => $dueDate->format('F d, Y'),
                 'Period_Start' => $periodStart ? $periodStart->format('m/d/Y') : '-',
-                'Period_End' => $periodEnd ? $periodEnd->format('m/d/Y') : '-',
+                'Period_End' => $periodEnd->format('m/d/Y'),
                 'DC_Date' => $dcDate->format('F d, Y'),
                 // Others and Basic Charges - Individual amounts (show only if > 0)
                 'Amount_Discounts' => $soa->discounts > 0 ? number_format($soa->discounts, 2) : '',
@@ -342,7 +353,7 @@ class PdfGenerationService
         if ($invoice) {
             $billingConfig = \App\Models\BillingConfig::first();
             $billingDay = $account->billing_day;
-            $statementDate = now();
+            $statementDate = $invoice->invoice_date ? \Carbon\Carbon::parse($invoice->invoice_date) : now();
             $daysInMonth = $statementDate->daysInMonth;
             
             $dueDateDay = $billingConfig ? $billingConfig->due_date_day : 0;
@@ -355,6 +366,7 @@ class PdfGenerationService
             }
             
             $data = array_merge($data, [
+                'Statement_Date' => $statementDate->format('F d, Y'),
                 'Invoice_No' => $invoice->id,
                 'Invoice_Balance' => number_format($invoice->invoice_balance, 2),
                 'Total_Amount' => number_format($invoice->total_amount, 2),
@@ -439,3 +451,4 @@ class PdfGenerationService
         </style>";
     }
 }
+
