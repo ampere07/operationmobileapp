@@ -1546,6 +1546,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
 
   const fullName = useMemo(() => `${jobOrderData?.First_Name || jobOrderData?.first_name || ''} ${jobOrderData?.Middle_Initial || jobOrderData?.middle_initial || ''} ${jobOrderData?.Last_Name || jobOrderData?.last_name || ''}`.trim(), [jobOrderData?.id, jobOrderData?.JobOrder_ID, jobOrderData?.First_Name, jobOrderData?.Last_Name]);
 
+  const jobOrderIdentifier = useMemo(() => {
+    const idStr = String(jobOrderData?.JobOrder_ID || jobOrderData?.id || '');
+    return fullName ? `${fullName}_JO_${idStr}` : `JO_${idStr}`;
+  }, [fullName, jobOrderData?.id, jobOrderData?.JobOrder_ID]);
+
   const selectedLcpnap = useMemo(() => {
     const safeLcpnaps = Array.isArray(lcpnaps) ? lcpnaps : [];
     return safeLcpnaps.find(ln => ln && ln.lcpnap_name === formData.lcpnap);
@@ -3195,6 +3200,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('boxReadingImage', file)}
                             error={errors.boxReadingImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
 
                           <ImagePreview
@@ -3204,6 +3210,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('routerReadingImage', file)}
                             error={errors.routerReadingImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
 
                           {(formData.connectionType === 'Antenna' || formData.connectionType === 'Local') && (
@@ -3214,6 +3221,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                               onUpload={(file) => handleImageUpload('portLabelImage', file)}
                               error={errors.portLabelImage}
                               colorPrimary={colorPalette?.primary || '#7c3aed'}
+                              jobOrderName={jobOrderIdentifier}
                             />
                           )}
 
@@ -3224,6 +3232,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('clientTaggingImage', file)}
                             error={errors.clientTaggingImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
 
                           <ImagePreview
@@ -3233,6 +3242,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('setupImage', file)}
                             error={errors.setupImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
 
                           <ImagePreview
@@ -3242,6 +3252,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('signedContractImage', file)}
                             error={errors.signedContractImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
 
                           <View style={styles.inputGroup}>
@@ -3588,6 +3599,7 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                             onUpload={(file) => handleImageUpload('proofImage', file)}
                             error={errors.proofImage}
                             colorPrimary={colorPalette?.primary || '#7c3aed'}
+                            jobOrderName={jobOrderIdentifier}
                           />
                         </View>
                       )}

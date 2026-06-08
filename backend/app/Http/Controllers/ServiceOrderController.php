@@ -202,6 +202,7 @@ class ServiceOrderController extends Controller
                     'image1_url' => $order->image1_url,
                     'image2_url' => $order->image2_url,
                     'image3_url' => $order->image3_url,
+                    'image4' => $order->image4 ?? null,
                     'time_in_image_url' => $order->time_in_image_url ?? null,
                     'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                     'time_out_image_url' => $order->time_out_image_url ?? null,
@@ -276,6 +277,7 @@ class ServiceOrderController extends Controller
                 'box_reading_image_url' => $request->box_reading_image_url,
                 'speedtest_image_url' => $request->speedtest_image_url,
                 'assigned_email' => $request->assigned_email,
+                'image4' => $request->image4,
             ];
 
             Log::info('Insert data before concern lookup:', $insertData);
@@ -479,6 +481,7 @@ class ServiceOrderController extends Controller
                 'image1_url' => $order->image1_url,
                 'image2_url' => $order->image2_url,
                 'image3_url' => $order->image3_url,
+                'image4' => $order->image4 ?? null,
                 'time_in_image_url' => $order->time_in_image_url ?? null,
                 'modem_setup_image_url' => $order->modem_setup_image_url ?? null,
                 'time_out_image_url' => $order->time_out_image_url ?? null,
@@ -745,6 +748,10 @@ class ServiceOrderController extends Controller
 
             if ($request->has('image3_url')) {
                 $updateData['image3_url'] = $request->image3_url;
+            }
+
+            if ($request->has('image4')) {
+                $updateData['image4'] = $request->image4;
             }
 
             if ($request->has('client_signature_url')) {

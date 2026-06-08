@@ -60,6 +60,7 @@ export interface ServiceOrderData {
   image1_url?: string;
   image2_url?: string;
   image3_url?: string;
+  image4?: string;
   setup_image_url?: string;
   router_reading_image_url?: string;
   box_reading_image_url?: string;

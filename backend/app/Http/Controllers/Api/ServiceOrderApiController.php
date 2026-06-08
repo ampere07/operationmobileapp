@@ -229,7 +229,8 @@ class ServiceOrderApiController extends Controller
                 'end_time' => 'nullable|date',
                 'created_by_user' => 'nullable|string|max:255',
                 'updated_by_user' => 'nullable|string|max:255',
-                'proof_image_url' => 'nullable|string|max:255'
+                'proof_image_url' => 'nullable|string|max:255',
+                'image4' => 'sometimes|nullable|string|max:255'
             ]);
 
             // Rate limit and cooldown logic has been removed as per request to allow unlimited ticket submissions.
@@ -278,6 +279,7 @@ class ServiceOrderApiController extends Controller
                 'created_by_user' => $validated['created_by_user'] ?? null,
                 'updated_by_user' => $validated['updated_by_user'] ?? null,
                 'proof_image_url' => $request->input('proof_image_url'),
+                'image4' => $request->input('image4') ?? ($validated['image4'] ?? null),
                 'organization_id' => auth()->user() ? auth()->user()->organization_id : null,
                 'created_at' => now(),
                 'updated_at' => now()
@@ -535,6 +537,7 @@ class ServiceOrderApiController extends Controller
                 'image1_url',
                 'image2_url',
                 'image3_url',
+                'image4',
                 'proof_image_url',
                 'status',
                 'start_time',

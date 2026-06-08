@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, Image, Alert, Modal } from 'react-native';
 import { Camera, X, Upload } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 
 interface ImagePreviewProps {
     label: string;
@@ -11,6 +13,7 @@ interface ImagePreviewProps {
     isDarkMode?: boolean;
     colorPrimary?: string;
     required?: boolean;
+    jobOrderName?: string;
 }
 
 const ImagePreview: React.FC<ImagePreviewProps> = ({
@@ -20,7 +23,8 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
     error,
     isDarkMode = false,
     colorPrimary = '#7c3aed',
-    required = false
+    required = false,
+    jobOrderName
 }) => {
     const [modalVisible, setModalVisible] = useState(false);
 
@@ -65,6 +69,32 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
             const asset = result.assets[0];
+
+            // Save image to phone gallery automatically before upload
+            try {
+                const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+                if (mediaStatus === 'granted') {
+                    let localUri = asset.uri;
+                    if (jobOrderName) {
+                        // Sanitize jobOrderName and label to form a valid filename
+                        const sanitizedJobOrderName = jobOrderName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+                        const sanitizedLabel = label.replace(/[^a-zA-Z0-9_.-]/g, '_');
+                        const newFilename = `${sanitizedJobOrderName}_${sanitizedLabel}.jpg`;
+                        const newUri = `${FileSystem.cacheDirectory}${newFilename}`;
+                        await FileSystem.copyAsync({
+                            from: asset.uri,
+                            to: newUri
+                        });
+                        localUri = newUri;
+                    }
+                    await MediaLibrary.createAssetAsync(localUri);
+                } else {
+                    console.warn('Media library permission not granted, skipping save to gallery');
+                }
+            } catch (mediaError) {
+                console.error('Failed to save photo to gallery:', mediaError);
+            }
+
             const file = {
                 uri: asset.uri,
                 name: asset.fileName || 'photo.jpg',
@@ -91,6 +121,13 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
                             className="w-full h-full"
                             resizeMode="cover"
                         />
+                        <Pressable
+                            onPress={() => onUpload(null)}
+                            className="absolute top-1 right-1 bg-black/60 rounded-full p-1"
+                            hitSlop={8}
+                        >
+                            <X size={14} color="#ffffff" />
+                        </Pressable>
                     </View>
                 ) : (
                     <View className={`w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'

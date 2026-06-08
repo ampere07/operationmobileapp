@@ -55,6 +55,20 @@
             "./assets/sounds/wo.mp3"
           ]
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ATSS to access your photos to select job order images.",
+          "savePhotosPermission": "Allow ATSS to save taken photos to your phone gallery."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ATSS to access your photos to select job order images.",
+          "cameraPermission": "Allow ATSS to access your camera to take job order pictures."
+        }
       ]
     ],
     "extra": {

@@ -13,6 +13,8 @@ import { createServiceOrder } from '../services/serviceOrderService';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import * as WebBrowser from 'expo-web-browser';
 import SupportDetails from '../components/SupportDetails';
+import ImagePreview from '../components/ImagePreview';
+import apiClient from '../config/api';
 
 interface SupportRequest {
   id: string;
@@ -100,6 +102,7 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
   const primaryColor = colorPalette?.primary || '#ef4444';
   const [selectedConcern, setSelectedConcern] = useState<string>('No Internet');
   const [details, setDetails] = useState<string>('');
+  const [image4File, setImage4File] = useState<any | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitMessage, setSubmitMessage] = useState<string>('');
   const [cooldownTime, setCooldownTime] = useState<number>(0);
@@ -303,13 +306,34 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
     setShowLoadingModal(true);
 
     try {
+      let image4Url = '';
+      if (image4File) {
+        const fd = new FormData();
+        fd.append('file', {
+          uri: image4File.uri,
+          name: image4File.name || `image4_${Date.now()}.jpg`,
+          type: image4File.type || 'image/jpeg'
+        } as any);
+
+        const uploadRes = await apiClient.post('/google-drive/upload', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (uploadRes.data?.success) {
+          image4Url = uploadRes.data.data.url;
+        } else {
+          throw new Error(uploadRes.data?.message || 'Failed to upload image');
+        }
+      }
+
       const newServiceOrder = {
         account_no: userAccountNo,
         concern: selectedConcern,
         concern_remarks: details,
         created_by_user: userEmail,
         requested_by: userEmail,
-        support_status: 'Open'
+        support_status: 'Open',
+        image4: image4Url || undefined
       };
 
       console.log('[Support] Submitting service order:', newServiceOrder);
@@ -321,15 +345,16 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
         setShowSuccessModal(true);
         await silentRefresh();
         setDetails('');
+        setImage4File(null);
       } else {
         setShowLoadingModal(false);
         setSubmitMessage(response.message || 'Failed to submit request. Please try again.');
         setTimeout(() => setSubmitMessage(''), 3000);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit request:', error);
       setShowLoadingModal(false);
-      setSubmitMessage('Failed to submit request. Please try again.');
+      setSubmitMessage(error.message || 'Failed to submit request. Please try again.');
       setTimeout(() => setSubmitMessage(''), 3000);
     }
   };
@@ -674,6 +699,18 @@ const Support: React.FC<SupportProps> = ({ forceLightMode }) => {
                       borderColor: isDarkMode ? '#374151' : '#d1d5db',
                       minHeight: 120
                     }}
+                  />
+                </View>
+
+                <View style={{ marginBottom: 24 }}>
+                  <ImagePreview
+                    label="Upload Image (Optional)"
+                    imageUrl={image4File?.uri || null}
+                    onUpload={(file) => {
+                      setImage4File(file);
+                    }}
+                    isDarkMode={isDarkMode}
+                    colorPrimary={primaryColor}
                   />
                 </View>
 
