@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Image, Alert, Modal } from 'react-native';
+import { View, Text, Pressable, Image, Alert, Modal, Platform } from 'react-native';
 import { Camera, X, Upload } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -30,10 +30,12 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
 
     const pickImage = async () => {
         // Request permission
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
-            return;
+        if (Platform.OS === 'ios') {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+                return;
+            }
         }
 
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -72,7 +74,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
 
             // Save image to phone gallery automatically before upload
             try {
-                const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+                const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync(true);
                 if (mediaStatus === 'granted') {
                     let localUri = asset.uri;
                     if (jobOrderName) {

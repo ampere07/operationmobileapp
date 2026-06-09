@@ -3,7 +3,7 @@
     "name": "ATSS",
     "slug": "atss",
     "scheme": "atss-app",
-    "version": "2.5.41",
+    "version": "2.5.42",
     "orientation": "portrait",
     "icon": "./assets/applogo.png",
     "userInterfaceStyle": "light",
@@ -38,7 +38,11 @@
         "googleMaps": {
           "apiKey": "AIzaSyACI3bm9Mno0-DeH3BiSQ69Y_wSV_PMe9g"
         }
-      }
+      },
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

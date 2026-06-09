@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -190,10 +191,12 @@ const InventoryFormModal: React.FC<InventoryFormModalProps> = ({
 
   const handleImageUpload = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission required', 'Media library access is required to select an image.');
-        return;
+      if (Platform.OS === 'ios') {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission required', 'Media library access is required to select an image.');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
