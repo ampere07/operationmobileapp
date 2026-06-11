@@ -50,13 +50,32 @@ class JobOrderController extends Controller
 
             $query = JobOrder::with(['application', 'items'])->orderBy('id', 'desc');
 
-            // Apply organization filter
+            // Apply organization filter or Agent referral filter
             $currentUser = auth()->user();
             if ($currentUser) {
-                if ($currentUser->organization_id) {
-                    $query->where('organization_id', $currentUser->organization_id);
+                $userRole = strtolower($currentUser->role->role_name ?? '');
+                
+                if ($userRole === 'agent' || $currentUser->role_id == 4) {
+                    $fn1 = strtolower(trim($currentUser->first_name . ' ' . $currentUser->last_name));
+                    $fn2 = strtolower(trim($currentUser->full_name));
+                    $email = strtolower(trim($currentUser->email_address ?? ''));
+
+                    $query->whereHas('application', function($q) use ($fn1, $fn2, $email) {
+                        $q->where(function($sq) use ($fn1, $fn2, $email) {
+                            $sq->where(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn1 . '%')
+                               ->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn2 . '%');
+                            
+                            if ($email) {
+                                $sq->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $email . '%');
+                            }
+                        });
+                    });
                 } else {
-                    $query->whereNull('organization_id');
+                    if ($currentUser->organization_id) {
+                        $query->where('organization_id', $currentUser->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
                 }
             }
             
@@ -425,10 +444,29 @@ class JobOrderController extends Controller
             $query = JobOrder::query();
             $currentUser = auth()->user();
             if ($currentUser) {
-                if ($currentUser->organization_id) {
-                    $query->where('organization_id', $currentUser->organization_id);
+                $userRole = strtolower($currentUser->role->role_name ?? '');
+                
+                if ($userRole === 'agent' || $currentUser->role_id == 4) {
+                    $fn1 = strtolower(trim($currentUser->first_name . ' ' . $currentUser->last_name));
+                    $fn2 = strtolower(trim($currentUser->full_name));
+                    $email = strtolower(trim($currentUser->email_address ?? ''));
+
+                    $query->whereHas('application', function($q) use ($fn1, $fn2, $email) {
+                        $q->where(function($sq) use ($fn1, $fn2, $email) {
+                            $sq->where(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn1 . '%')
+                               ->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $fn2 . '%');
+                            
+                            if ($email) {
+                                $sq->orWhere(DB::raw('LOWER(referred_by)'), 'LIKE', '%' . $email . '%');
+                            }
+                        });
+                    });
                 } else {
-                    $query->whereNull('organization_id');
+                    if ($currentUser->organization_id) {
+                        $query->where('organization_id', $currentUser->organization_id);
+                    } else {
+                        $query->whereNull('organization_id');
+                    }
                 }
             }
             
