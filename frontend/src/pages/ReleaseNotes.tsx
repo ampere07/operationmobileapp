@@ -28,6 +28,14 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.43',
+            date: 'June 11, 2026',
+            title: 'Technician Service Order Visibility',
+            updates: [
+                { text: 'Resolved Order Auto-Hide: Service orders with a \"Resolved\" support status are now automatically hidden from the technician\'s list, keeping the view focused on active and pending tasks only.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.37',
             date: 'May 23, 2026',
             title: 'Map POI Removal & Stability Fixes',

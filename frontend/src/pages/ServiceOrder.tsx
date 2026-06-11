@@ -333,8 +333,11 @@ const ServiceOrderPage: React.FC = () => {
 
     return serviceOrders
       .filter(serviceOrder => {
-
-
+        // Hide resolved service orders for technicians
+        if (isTechnician && (userRole.toLowerCase() === 'technician' || userRoleId === 2)) {
+          const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
+          if (supportStatus === 'resolved') return false;
+        }
 
         const matchesSearch = isSearchEmpty ||
           itemExtractorMap.fullName(serviceOrder).toLowerCase().includes(lowerSearch) ||
