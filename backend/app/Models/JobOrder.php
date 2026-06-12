@@ -89,5 +89,11 @@ class JobOrder extends Model
     {
         return $this->belongsTo(LCPNAPLocation::class , 'lcpnap', 'lcpnap_name');
     }
+
+    public function billingAccount()
+    {
+        return $this->belongsTo(BillingAccount::class, 'account_id', 'id');
+    }
 }
+
 

@@ -1653,22 +1653,32 @@ class TransactionController extends Controller
                 ], 422);
             }
 
-            $planPrice = floatval($plan->price);
-
-            // ── 3. Calculate pro-rated amount ────────────────────────────────────
-            $today      = \Carbon\Carbon::now('Asia/Manila');
+            // 💰 3. Calculate pro-rated amount 💰
+            $today = \Carbon\Carbon::now('Asia/Manila')->startOfDay();
             $billingDay = intval($billingAccount->billing_day ?? 0);
 
-            if ($billingDay === 0) {
-                $nextBillingDate = $today->copy()->endOfMonth()->startOfDay();
-            } else {
-                $candidateThisMonth = $today->copy()->day($billingDay)->startOfDay();
+            $billingConfig = \Illuminate\Support\Facades\DB::table('billing_configs')->first();
+            $advanceGeneration = intval($billingConfig->advance_generation ?? 0);
 
-                if ($candidateThisMonth->greaterThan($today)) {
-                    $nextBillingDate = $candidateThisMonth;
-                } else {
-                    $nextBillingDate = $today->copy()->addMonthNoOverflow()->day($billingDay)->startOfDay();
-                }
+            if ($billingDay === 0) {
+                $candidateBillingDate = $today->copy()->endOfMonth()->startOfDay();
+            } else {
+                $candidateBillingDate = $today->copy()->day($billingDay)->startOfDay();
+            }
+
+            $candidateGenerationDate = $candidateBillingDate->copy()->subDays($advanceGeneration);
+
+            if ($today->lessThanOrEqualTo($candidateGenerationDate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Customer has not passed generation day (' . $candidateGenerationDate->format('Y-m-d') . ') yet. No pro-rated invoice needed.'
+                ], 200);
+            }
+
+            if ($billingDay === 0) {
+                $nextBillingDate = $today->copy()->addMonthNoOverflow()->endOfMonth()->startOfDay();
+            } else {
+                $nextBillingDate = $today->copy()->addMonthNoOverflow()->day($billingDay)->startOfDay();
             }
 
             $totalDays = $today->copy()->startOfDay()->diffInDays($nextBillingDate);

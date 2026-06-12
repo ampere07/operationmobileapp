@@ -74,7 +74,6 @@ class ServiceOrder extends Model
         'setup_image_url',
         'box_reading_image_url',
         'router_reading_image_url',
-        'image4',
     ];
 
     protected $dates = [

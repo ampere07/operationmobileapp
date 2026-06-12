@@ -48,7 +48,7 @@ class JobOrderController extends Controller
                 'fast_mode' => $fastMode
             ]);
 
-            $query = JobOrder::with(['application', 'items'])->orderBy('id', 'desc');
+            $query = JobOrder::with(['application', 'items', 'billingAccount.customer'])->orderBy('id', 'desc');
 
             // Apply organization filter
             $currentUser = auth()->user();
@@ -117,6 +117,7 @@ class JobOrderController extends Controller
             if ($fastMode) {
                 $formattedJobOrders = $jobOrders->map(function ($jobOrder) {
                     $application = $jobOrder->application;
+                    $customer = $jobOrder->billingAccount ? $jobOrder->billingAccount->customer : null;
                     
                     return [
                         'id' => $jobOrder->id,
@@ -126,8 +127,8 @@ class JobOrderController extends Controller
                         'Onsite_Status' => $jobOrder->onsite_status,
                         'Assigned_Email' => $jobOrder->assigned_email,
                         'Username' => $jobOrder->username,
-                        'First_Name' => $application ? $application->first_name : null,
-                        'Last_Name' => $application ? $application->last_name : null,
+                        'First_Name' => $application ? $application->first_name : ($customer ? $customer->first_name : null),
+                        'Last_Name' => $application ? $application->last_name : ($customer ? $customer->last_name : null),
                         'Status' => $jobOrder->status,
                         'status' => $jobOrder->status,
                         'Created_By' => $jobOrder->created_by_user_email,
@@ -157,6 +158,7 @@ class JobOrderController extends Controller
             // Normal mode: Return full data
             $formattedJobOrders = $jobOrders->map(function ($jobOrder) {
                 $application = $jobOrder->application;
+                $customer = $jobOrder->billingAccount ? $jobOrder->billingAccount->customer : null;
                 
                 return [
                     'id' => $jobOrder->id,
@@ -220,20 +222,32 @@ class JobOrderController extends Controller
                     'created_by_user_email' => $jobOrder->created_by_user_email,
                     'updated_by_user_email' => $jobOrder->updated_by_user_email,
                     
-                    'First_Name' => $application ? $application->first_name : null,
-                    'Middle_Initial' => $application ? $application->middle_initial : null,
-                    'Last_Name' => $application ? $application->last_name : null,
-                    'Address' => $application ? $application->installation_address : null,
-                    'Installation_Address' => $application ? $application->installation_address : null,
-                    'Location' => $application ? $application->location : null,
-                    'City' => $application ? $application->city : null,
-                    'Region' => $application ? $application->region : null,
-                    'Barangay' => $application ? $application->barangay : null,
-                    'Email_Address' => $application ? $application->email_address : null,
-                    'Mobile_Number' => $application ? $application->mobile_number : null,
-                    'Secondary_Mobile_Number' => $application ? $application->secondary_mobile_number : null,
-                    'Desired_Plan' => $application ? $application->desired_plan : null,
-                    'Referred_By' => $application ? $application->referred_by : null,
+                    'First_Name' => $application ? $application->first_name : ($customer ? $customer->first_name : null),
+                    'Middle_Initial' => $application ? $application->middle_initial : ($customer ? $customer->middle_initial : null),
+                    'Last_Name' => $application ? $application->last_name : ($customer ? $customer->last_name : null),
+                    'Address' => ($application && !empty(trim($application->installation_address ?? ''))) 
+                        ? $application->installation_address 
+                        : ($customer ? $customer->address : null),
+                    'Installation_Address' => ($application && !empty(trim($application->installation_address ?? ''))) 
+                        ? $application->installation_address 
+                        : ($customer ? $customer->address : null),
+                    'Location' => ($application && !empty(trim($application->location ?? ''))) 
+                        ? $application->location 
+                        : ($customer ? $customer->location : null),
+                    'City' => ($application && !empty(trim($application->city ?? ''))) 
+                        ? $application->city 
+                        : ($customer ? $customer->city : null),
+                    'Region' => ($application && !empty(trim($application->region ?? ''))) 
+                        ? $application->region 
+                        : ($customer ? $customer->region : null),
+                    'Barangay' => ($application && !empty(trim($application->barangay ?? ''))) 
+                        ? $application->barangay 
+                        : ($customer ? $customer->barangay : null),
+                    'Email_Address' => $application ? $application->email_address : ($customer ? $customer->email_address : null),
+                    'Mobile_Number' => $application ? $application->mobile_number : ($customer ? $customer->contact_number_primary : null),
+                    'Secondary_Mobile_Number' => $application ? $application->secondary_mobile_number : ($customer ? $customer->contact_number_secondary : null),
+                    'Desired_Plan' => $application ? $application->desired_plan : ($customer ? $customer->desired_plan : null),
+                    'Referred_By' => $application ? $application->referred_by : ($customer ? $customer->referred_by : null),
                     'Billing_Status' => $jobOrder->billing_status,
                     'job_order_items' => $jobOrder->items,
                 ];
@@ -377,21 +391,6 @@ class JobOrderController extends Controller
                 ]
             );
 
-            if (!empty($jobOrder->assigned_email)) {
-                try {
-                    $pushService = app(\App\Services\PushNotificationService::class);
-                    $pushService->sendToUserByEmail(
-                        $jobOrder->assigned_email,
-                        'New Job Order Assigned',
-                        "You have been assigned to Job Order #{$jobOrder->id}.",
-                        [],
-                        'JO'
-                    );
-                } catch (\Exception $pushEx) {
-                    \Log::error('Failed to send push notification on JobOrder store: ' . $pushEx->getMessage());
-                }
-            }
-
             $jobOrder->load('application');
 
             \Log::info('JobOrder Created Successfully', [
@@ -432,7 +431,7 @@ class JobOrderController extends Controller
                 }
             }
             
-            $jobOrder = $query->with(['application', 'items'])->findOrFail($id);
+            $jobOrder = $query->with(['application', 'items', 'billingAccount.customer'])->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -741,21 +740,6 @@ class JobOrderController extends Controller
                         ]
                     ]
                 );
-
-                if (isset($newData['assigned_email']) && !empty($newData['assigned_email'])) {
-                    try {
-                        $pushService = app(\App\Services\PushNotificationService::class);
-                        $pushService->sendToUserByEmail(
-                            $newData['assigned_email'],
-                            'Job Order Assigned',
-                            "You have been assigned to Job Order #{$id}.",
-                            [],
-                            'JO'
-                        );
-                    } catch (\Exception $pushEx) {
-                        \Log::error('Failed to send push notification on JobOrder update: ' . $pushEx->getMessage());
-                    }
-                }
             } else {
                 $jobOrder->refresh();
             }
@@ -1658,6 +1642,20 @@ class JobOrderController extends Controller
             ];
 
             $queuedCount = 0;
+            $oldData = [];
+            $newData = [];
+            $dbColumnMap = [
+                'signed_contract_image' => 'signed_contract_image_url',
+                'setup_image' => 'setup_image_url',
+                'box_reading_image' => 'box_reading_image_url',
+                'router_reading_image' => 'router_reading_image_url',
+                'port_label_image' => 'port_label_image_url',
+                'client_signature_image' => 'client_signature_url',
+                'client_tagging_image' => 'client_tagging_url',
+                'speed_test_image' => 'speedtest_image_url',
+                'proof_image' => 'proof_image_url',
+                'house_front_image' => 'house_front_picture_url',
+            ];
 
             foreach ($imageFields as $field) {
                 if ($request->hasFile($field)) {
@@ -1679,8 +1677,30 @@ class JobOrderController extends Controller
                         'status' => 'pending',
                     ]);
 
+                    $dbColumn = $dbColumnMap[$field] ?? $field;
+                    $oldData[$dbColumn] = $jobOrder->$dbColumn;
+                    $newData[$dbColumn] = 'Queueing upload: ' . $file->getClientOriginalName();
+
                     $queuedCount++;
                 }
+            }
+
+            if ($queuedCount > 0) {
+                $userEmail = auth()->user()?->email ?? 'System';
+                AuditTrailLog::create([
+                    'old_details' => [
+                        'type' => 'joborders',
+                        'id' => $jobOrder->id,
+                        'data' => $oldData
+                    ],
+                    'new_details' => [
+                        'type' => 'joborders',
+                        'id' => $jobOrder->id,
+                        'data' => $newData
+                    ],
+                    'created_by_user' => $userEmail,
+                    'updated_by_user' => $userEmail
+                ]);
             }
 
             Log::info('Job order images queued successfully', [

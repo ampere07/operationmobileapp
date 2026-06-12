@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use App\Events\CustomerViewingUpdate;
 use App\Models\ActivityLog;
+use App\Models\AuditTrailLog;
 class CustomerController extends Controller
 {
     public function broadcastViewing(Request $request): JsonResponse
@@ -363,7 +364,31 @@ class CustomerController extends Controller
             }
 
             if (!empty($imageUrls)) {
+                $oldData = [];
+                $newData = [];
+                foreach ($imageUrls as $dbColumn => $newUrl) {
+                    $oldData[$dbColumn] = $customer->$dbColumn;
+                    $newData[$dbColumn] = $newUrl;
+                }
+
                 $customer->update($imageUrls);
+
+                // Audit Trail Log
+                $userEmail = auth()->user()?->email ?? 'System';
+                AuditTrailLog::create([
+                    'old_details' => [
+                        'type' => 'customers',
+                        'id' => $customer->id,
+                        'data' => $oldData
+                    ],
+                    'new_details' => [
+                        'type' => 'customers',
+                        'id' => $customer->id,
+                        'data' => $newData
+                    ],
+                    'created_by_user' => $userEmail,
+                    'updated_by_user' => $userEmail
+                ]);
 
                 // Log Activity
                 ActivityLog::log(
@@ -394,5 +419,6 @@ class CustomerController extends Controller
         }
     }
 }
+
 
 

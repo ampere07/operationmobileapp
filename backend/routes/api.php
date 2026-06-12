@@ -2572,6 +2572,7 @@ Route::prefix('transactions')->group(function () {
     Route::post('/broadcast-viewing', [\App\Http\Controllers\TransactionController::class , 'broadcastViewing']);
     Route::post('/upload-images', [\App\Http\Controllers\TransactionController::class , 'uploadImages']);
     Route::post('/batch-approve', [\App\Http\Controllers\TransactionController::class , 'batchApprove']);
+    Route::post('/generate-installation-invoice', [\App\Http\Controllers\TransactionController::class , 'generateProRatedInstallationInvoice']);
     Route::get('/{id}', [\App\Http\Controllers\TransactionController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\TransactionController::class , 'update']);
     Route::post('/{id}/approve', [\App\Http\Controllers\TransactionController::class , 'approve']);

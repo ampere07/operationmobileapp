@@ -657,7 +657,31 @@ class ApplicationController extends Controller
             }
 
             if (!empty($imageUrls)) {
+                $oldData = [];
+                $newData = [];
+                foreach ($imageUrls as $dbColumn => $newUrl) {
+                    $oldData[$dbColumn] = $application->$dbColumn;
+                    $newData[$dbColumn] = $newUrl;
+                }
+
                 $application->update($imageUrls);
+
+                // Audit Trail Log
+                $userEmail = auth()->user()?->email ?? 'System';
+                AuditTrailLog::create([
+                    'old_details' => [
+                        'type' => 'applications',
+                        'id' => $application->id,
+                        'data' => $oldData
+                    ],
+                    'new_details' => [
+                        'type' => 'applications',
+                        'id' => $application->id,
+                        'data' => $newData
+                    ],
+                    'created_by_user' => $userEmail,
+                    'updated_by_user' => $userEmail
+                ]);
 
                 // Log Activity
                 ActivityLog::log(
@@ -688,4 +712,5 @@ class ApplicationController extends Controller
         }
     }
 }
+
 

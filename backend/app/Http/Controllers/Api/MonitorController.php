@@ -874,7 +874,7 @@ class MonitorController extends Controller
                     $isPullout = false;
                     if ($workingTask) {
                         $status = 'Working';
-                        $details = ($workingTask->task_type === 'jo' ? 'Job Order' : ($workingTask->task_type === 'so' ? 'Service Order' : 'Work Order'));
+                        $details = ($workingTask->task_type === 'jo' ? 'Job Order' : ($workingTask->task_type === 'so' ? 'Service Order' : 'Work Order')) . ' #' . $workingTask->id;
                         
                         // Add concern for SO or WO
                         if (in_array($workingTask->task_type, ['so', 'wo']) && !empty($workingTask->concern)) {
