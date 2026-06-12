@@ -273,7 +273,7 @@ const JobOrderCard = React.memo(({
 }) => {
   const isAgent = userRole.toLowerCase() === 'agent' || userRoleId === 4;
   const displayStatus = isAgent 
-    ? (jobOrder.commission_status || 'Unpaid') 
+    ? (!jobOrder.commission_status || String(jobOrder.commission_status).toLowerCase() === 'null' ? 'Unpaid' : jobOrder.commission_status) 
     : (jobOrder.Onsite_Status || jobOrder.onsite_status);
   const displayType = isAgent ? 'billing' : 'onsite';
 
@@ -496,37 +496,47 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
         if (!matchesAgent) return false;
       }
 
-      // Universal: hide job orders with onsite status "done", "completed", or "failed" after 1 day
+      // Hide job orders with onsite status "done", "completed", or "failed" after 1 day
+      // Only applicable for technicians
       if (debouncedSearch === '') {
-        const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
-        if (onsiteStatus === 'done' || onsiteStatus === 'completed' || onsiteStatus === 'failed') {
-          // Use updated_at or EndTimeStamp to determine when it was completed
-          const completionTime = jobOrder.Updated_At || jobOrder.updated_at || jobOrder.EndTimeStamp || jobOrder.end_timestamp;
-          if (completionTime) {
-            const completionDate = new Date(completionTime);
-            const today = new Date();
-            const isToday = completionDate.getFullYear() === today.getFullYear() &&
-              completionDate.getMonth() === today.getMonth() &&
-              completionDate.getDate() === today.getDate();
+        const isTechnician = userRole.toLowerCase() === 'technician' || userRoleId === 2;
+        if (isTechnician) {
+          const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
+          if (onsiteStatus === 'done' || onsiteStatus === 'completed' || onsiteStatus === 'failed') {
+            // Use updated_at or EndTimeStamp to determine when it was completed
+            const completionTime = jobOrder.Updated_At || jobOrder.updated_at || jobOrder.EndTimeStamp || jobOrder.end_timestamp;
+            if (completionTime) {
+              const completionDate = new Date(completionTime);
+              const today = new Date();
+              const isToday = completionDate.getFullYear() === today.getFullYear() &&
+                completionDate.getMonth() === today.getMonth() &&
+                completionDate.getDate() === today.getDate();
 
-            if (!isToday) return false;
+              if (!isToday) return false;
+            }
           }
         }
       }
 
       // Status filtering
       if (statusFilter !== 'all') {
-        const s = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
-        if (statusFilter === 'pending') {
-          if (s !== 'pending') return false;
-        } else if (statusFilter === 'inprogress') {
-          if (s !== 'inprogress' && s !== 'in progress' && s !== 'in-progress') return false;
-        } else if (statusFilter === 'done') {
-          if (s !== 'done' && s !== 'completed') return false;
-        } else if (statusFilter === 'cancelled') {
-          if (s !== 'cancelled') return false;
-        } else if (statusFilter === 'failed') {
-          if (s !== 'failed') return false;
+        if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+          const cStatus = (!jobOrder.commission_status || String(jobOrder.commission_status).toLowerCase() === 'null' ? 'unpaid' : String(jobOrder.commission_status).toLowerCase().trim());
+          if (statusFilter === 'unpaid' && cStatus !== 'unpaid') return false;
+          if (statusFilter === 'paid' && cStatus !== 'paid' && cStatus !== 'done') return false;
+        } else {
+          const s = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
+          if (statusFilter === 'pending') {
+            if (s !== 'pending') return false;
+          } else if (statusFilter === 'inprogress') {
+            if (s !== 'inprogress' && s !== 'in progress' && s !== 'in-progress') return false;
+          } else if (statusFilter === 'done') {
+            if (s !== 'done' && s !== 'completed') return false;
+          } else if (statusFilter === 'cancelled') {
+            if (s !== 'cancelled') return false;
+          } else if (statusFilter === 'failed') {
+            if (s !== 'failed') return false;
+          }
         }
       }
 
@@ -910,14 +920,18 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
             <View style={jo.statusModalHeader}>
               <Text style={jo.statusModalTitle}>Filter by Status</Text>
             </View>
-            {[
+            {(userRole.toLowerCase() === 'agent' || userRoleId === 4 ? [
+              { label: 'All Status', value: 'all' },
+              { label: 'Unpaid', value: 'unpaid' },
+              { label: 'Paid', value: 'paid' }
+            ] : [
               { label: 'All Status', value: 'all' },
               { label: 'Pending', value: 'pending' },
               { label: 'In Progress', value: 'inprogress' },
               { label: 'Done', value: 'done' },
               { label: 'Cancelled', value: 'cancelled' },
               { label: 'Failed', value: 'failed' }
-            ].map((item) => (
+            ]).map((item) => (
               <Pressable
                 key={item.value}
                 style={jo.statusItem}

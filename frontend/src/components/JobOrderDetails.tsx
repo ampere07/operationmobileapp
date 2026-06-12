@@ -951,7 +951,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
     onsiteStatus: () => {
       const displayStatus = isAgent 
-        ? (jobOrder.commission_status || 'Unpaid') 
+        ? (!jobOrder.commission_status || String(jobOrder.commission_status).toLowerCase() === 'null' ? 'Unpaid' : jobOrder.commission_status) 
         : (jobOrder.Onsite_Status || jobOrder.onsite_status);
       const displayType = isAgent ? 'billing' : 'onsite';
       return (

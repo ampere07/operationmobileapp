@@ -1,6 +1,6 @@
 {
   "name": "atss",
-  "version": "2.5.43",
+  "version": "2.5.44",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
