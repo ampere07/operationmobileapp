@@ -485,7 +485,16 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       if (!matchesSearch) return false;
 
+      // Role-based filtering: Agents (role_id 4) only see their own referrals
+      if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+        const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
+        // Only match if referredBy contains user's full name or email
+        const matchesAgent =
+          (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+          (userEmail && referredBy.includes(userEmail.toLowerCase()));
 
+        if (!matchesAgent) return false;
+      }
 
       // Universal: hide job orders with onsite status "done", "completed", or "failed" after 1 day
       if (debouncedSearch === '') {
