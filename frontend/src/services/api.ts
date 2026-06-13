@@ -36,9 +36,10 @@ export const fetchApplications = async (): Promise<ApplicationsResponse> => {
   }
 };
 
-export const fetchAgentCommissionHistory = async (): Promise<any> => {
+export const fetchAgentCommissionHistory = async (type?: string): Promise<any> => {
   try {
-    const response = await apiClient.get('/commissions/history');
+    const params = type && type !== 'all' ? { type } : {};
+    const response = await apiClient.get('/commissions/history', { params });
     return response.data;
   } catch (error) {
     console.error('Error fetching agent commission history:', error);

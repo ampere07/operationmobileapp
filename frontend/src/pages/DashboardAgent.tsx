@@ -26,6 +26,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const [stats, setStats] = useState<any>(null);
     const [agentBalance, setAgentBalance] = useState<number>(0);
     const [agentIncentives, setAgentIncentives] = useState<number>(0);
+    const [agentBonus, setAgentBonus] = useState<number>(0);
     const [selectedBar, setSelectedBar] = useState<{ index: number, value: number, label: string } | null>(null);
 
     const latestCashouts = useMemo(() => {
@@ -112,6 +113,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                 setCashouts(response.data);
                 setAgentBalance(response.balance !== undefined ? Number(response.balance) : 0);
                 setAgentIncentives(response.incentives !== undefined ? Number(response.incentives) : 0);
+                setAgentBonus(response.bonus !== undefined ? Number(response.bonus) : 0);
             }
         } catch (error) {
             console.error('Failed to fetch cashout history:', error);
@@ -197,7 +199,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                 }
             >
                 <View style={styles.contentGap}>
-                    <Animated.View style={[styles.balanceCard, { transform: [{ scaleY: cardScaleY }] }]}>
+                    <View style={{ gap: 16 }}>
+                        <Animated.View style={[styles.balanceCard, { transform: [{ scaleY: cardScaleY }] }]}>
                         <LinearGradient
                             colors={isCardFlipped ? ['#000000', colorPalette?.primary || '#ef4444'] : [colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
@@ -233,32 +236,32 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
 
                             {!isCardFlipped ? (
                                 <View style={{ minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
-                                    <View style={styles.billingRow}>
-                                        <View style={styles.billingLeft}>
-                                            <Text allowFontScaling={false} style={styles.balanceLabel}>Incentives/Bonus</Text>
-                                            <Text
-                                                numberOfLines={1}
-                                                adjustsFontSizeToFit
-                                                minimumFontScale={0.5}
-                                                allowFontScaling={false}
-                                                style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
-                                            >
-                                                {formatCurrency(agentIncentives)}
-                                            </Text>
+                                        <View style={styles.billingRow}>
+                                            <View style={styles.billingLeft}>
+                                                <Text allowFontScaling={false} style={styles.balanceLabel}>Incentives</Text>
+                                                <Text
+                                                    numberOfLines={1}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.5}
+                                                    allowFontScaling={false}
+                                                    style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 20 : 24) : 32) : (isMobile ? (isShort ? 28 : 32) : 40) }]}
+                                                >
+                                                    {formatCurrency(agentIncentives)}
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.billingLeft, { alignItems: 'flex-end' }]}>
+                                                <Text allowFontScaling={false} style={styles.balanceLabel}>Bonus</Text>
+                                                <Text
+                                                    numberOfLines={1}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.5}
+                                                    allowFontScaling={false}
+                                                    style={[styles.balanceAmountText, { fontSize: agentBonus >= 1000 ? (isMobile ? (isShort ? 20 : 24) : 32) : (isMobile ? (isShort ? 28 : 32) : 40) }]}
+                                                >
+                                                    {formatCurrency(agentBonus)}
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <View style={[styles.billingLeft, { alignItems: 'flex-end' }]}>
-                                            <Text allowFontScaling={false} style={styles.balanceLabel}>Total Commission</Text>
-                                            <Text
-                                                numberOfLines={1}
-                                                adjustsFontSizeToFit
-                                                minimumFontScale={0.5}
-                                                allowFontScaling={false}
-                                                style={[styles.balanceAmountText, { fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 24 : 28) : 40) : (isMobile ? (isShort ? 32 : 36) : 48) }]}
-                                            >
-                                                {formatCurrency(agentBalance)}
-                                            </Text>
-                                        </View>
-                                    </View>
                                 </View>
                             ) : (
                                 <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
@@ -276,6 +279,27 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                             )}
                         </LinearGradient>
                     </Animated.View>
+
+                    <View style={styles.balanceCard}>
+                        <LinearGradient
+                            colors={[colorPalette?.primary || '#ef4444', '#000000']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 28, paddingHorizontal: isMobile ? 20 : 28, alignItems: 'center', justifyContent: 'center' }]}
+                        >
+                            <Text allowFontScaling={false} style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '600', marginBottom: 8 }}>Total Commission</Text>
+                            <Text
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.5}
+                                allowFontScaling={false}
+                                style={{ fontWeight: 'bold', color: '#ffffff', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
+                            >
+                                {formatCurrency(agentBalance)}
+                            </Text>
+                        </LinearGradient>
+                    </View>
+                </View>
 
                     {/* Cashout History Section */}
                     <View style={styles.sectionGap}>

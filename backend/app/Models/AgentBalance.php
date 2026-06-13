@@ -16,6 +16,8 @@ class AgentBalance extends Model
         'balance',
         'commission',
         'incentives',
+        'Bonus',
+        'bonus',
     ];
 
     public function agent()

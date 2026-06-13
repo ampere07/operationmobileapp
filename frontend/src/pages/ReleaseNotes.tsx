@@ -28,6 +28,15 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.45',
+            date: 'June 12, 2026',
+            title: 'Agent Commission UI & Filters',
+            updates: [
+                { text: 'Separated Balances: Incentives and Bonuses are now split into distinct UI components on the dashboard for clearer visibility.', visibility: 'agent' },
+                { text: 'Payout Filtering: Added a new dropdown filter in the Commission history page, allowing agents to easily view records by specific type (Commission, Incentives, or Bonus).', visibility: 'agent' }
+            ]
+        },
+        {
             version: '2.5.43',
             date: 'June 11, 2026',
             title: 'Technician Service Order Visibility',

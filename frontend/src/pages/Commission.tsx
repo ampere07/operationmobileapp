@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, FlatList, ActivityIndicator, useWindowDimensions, RefreshControl, StyleSheet, DeviceEventEmitter, Linking } from 'react-native';
-import { CircleDollarSign, Calendar, FileText, ArrowLeft, RefreshCw, Landmark } from 'lucide-react-native';
+import { CircleDollarSign, Calendar, FileText, ArrowLeft, RefreshCw, Landmark, ChevronDown } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import dayjs from 'dayjs';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -32,19 +32,23 @@ const Commission: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [balance, setBalance] = useState<number>(0);
   const [incentives, setIncentives] = useState<number>(0);
+  const [bonus, setBonus] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<string>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const fetchHistoryData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     setError(null);
     try {
-      const response = await fetchAgentCommissionHistory();
+      const response = await fetchAgentCommissionHistory(filterType);
       if (response.success) {
         setHistory(response.data || []);
         setCurrentPage(1);
         setBalance(response.balance !== undefined ? Number(response.balance) : 0);
         setIncentives(response.incentives !== undefined ? Number(response.incentives) : 0);
+        setBonus(response.bonus !== undefined ? Number(response.bonus) : 0);
       } else {
         setError(response.message || 'Failed to fetch commission history');
       }
@@ -55,7 +59,7 @@ const Commission: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [filterType]);
 
   useEffect(() => {
     fetchHistoryData();
@@ -253,16 +257,28 @@ const Commission: React.FC = () => {
             style={styles.statCard}
           >
             <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
-            <Text style={styles.statLabel}>Incentives/Bonus</Text>
+            <Text style={styles.statLabel}>Incentives</Text>
             <Text style={styles.statValue}>{formatCurrency(incentives)}</Text>
           </LinearGradient>
 
-          {/* Card 3: Total Paid */}
+          {/* Card 3: Bonus */}
+          <LinearGradient
+            colors={['#3b82f6', '#1e3a8a']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statCard}
+          >
+            <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
+            <Text style={styles.statLabel}>Bonus</Text>
+            <Text style={styles.statValue}>{formatCurrency(bonus)}</Text>
+          </LinearGradient>
+
+          {/* Card 4: Total Paid */}
           <LinearGradient
             colors={['#f59e0b', '#b45309']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.statCard, { width: '100%' }]}
+            style={styles.statCard}
           >
             <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
             <Text style={styles.statLabel}>Total Commission Paid</Text>
@@ -270,27 +286,55 @@ const Commission: React.FC = () => {
           </LinearGradient>
         </View>
 
-        <Text style={styles.sectionTitle}>Payout History</Text>
+        <View style={styles.sectionHeaderBetween}>
+          <Text style={styles.sectionTitle}>Payout History</Text>
+          <View style={{ position: 'relative', zIndex: 100 }}>
+            <Pressable 
+                onPress={() => setIsFilterOpen(!isFilterOpen)} 
+                style={styles.dropdownBtn}
+            >
+                <Text style={styles.dropdownBtnText}>
+                    {filterType === 'all' ? 'All Types' : 
+                     filterType === 'commission' ? 'Commission' : 
+                     filterType === 'incentives' ? 'Incentives' : 
+                     filterType === 'Bonus' ? 'Bonus' : 'All Types'}
+                </Text>
+                <ChevronDown size={14} color="#64748b" />
+            </Pressable>
+
+            {isFilterOpen && (
+                <View style={styles.dropdownMenu}>
+                    {(['all', 'commission', 'incentives', 'Bonus'] as const).map((filter) => (
+                        <Pressable
+                            key={filter}
+                            onPress={() => {
+                                setFilterType(filter);
+                                setIsFilterOpen(false);
+                            }}
+                            style={[
+                                styles.dropdownItem,
+                                filterType === filter && { backgroundColor: (colorPalette?.primary || '#7c3aed') + '10' }
+                            ]}
+                        >
+                            <Text style={[
+                                styles.dropdownItemText,
+                                filterType === filter && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }
+                            ]}>
+                                {filter === 'all' ? 'All Types' : filter === 'commission' ? 'Commission' : filter === 'incentives' ? 'Incentives' : 'Bonus'}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </View>
+            )}
+          </View>
+        </View>
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* Title Header */}
-      <View style={styles.headerBar}>
-        <Text style={styles.headerTitle}>Commissions</Text>
-        <Pressable
-          onPress={() => fetchHistoryData(true)}
-          disabled={loading || refreshing}
-          style={({ pressed }) => [
-            styles.refreshButton,
-            { opacity: pressed ? 0.7 : 1 }
-          ]}
-        >
-          <RefreshCw size={20} color="#1e293b" />
-        </Pressable>
-      </View>
+
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -313,6 +357,7 @@ const Commission: React.FC = () => {
           keyExtractor={(item) => String(item.id)}
           renderItem={renderHistoryItem}
           ListHeaderComponent={renderHeader}
+          ListHeaderComponentStyle={{ zIndex: 1000, elevation: 1000 }}
           ListFooterComponent={renderFooter}
           contentContainerStyle={[
             styles.listContainer,
@@ -399,7 +444,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 60,
   },
   headerContainer: {
     marginBottom: 20,
@@ -580,6 +625,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#475569',
   },
+  sectionHeaderBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, zIndex: 10 },
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  dropdownBtnText: { fontSize: 12, color: '#64748b', fontWeight: '600' },
+  dropdownMenu: { position: 'absolute', top: 38, right: 0, backgroundColor: '#ffffff', borderRadius: 12, padding: 4, minWidth: 120, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5, zIndex: 1000, borderWidth: 1, borderColor: '#f1f5f9' },
+  dropdownItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  dropdownItemText: { fontSize: 12, color: '#64748b' },
 });
 
 export default Commission;
