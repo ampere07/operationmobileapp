@@ -58,3 +58,27 @@ export const fetchAgentCommissionTrend = async (filter: string): Promise<any> =>
     throw error;
   }
 };
+
+export const createApplication = async (applicationData: any): Promise<any> => {
+  try {
+    const response = await apiClient.post('/applications', applicationData);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating application:', error);
+    throw error;
+  }
+};
+
+export const uploadApplicationImages = async (id: number | string, formData: FormData): Promise<any> => {
+  try {
+    const response = await apiClient.post(`/applications/${id}/upload-images`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error uploading application images:', error);
+    throw error;
+  }
+};

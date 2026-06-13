@@ -798,7 +798,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       visitBy: 'Visit By',
       visitWith: 'Visit With',
       visitWithOther: 'Visit With Other',
-      onsiteStatus: isAgent ? 'Commission Status' : 'Onsite Status',
+      onsiteStatus: 'Onsite Status',
       createdBy: 'Created By',
       created_at: 'Created At',
       modifiedDate: 'Modified Date',
@@ -950,10 +950,8 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
     visitWith: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With || jobOrder.visit_with || 'None'}</Text>,
     visitWithOther: () => <Text style={valStyle} selectable={true}>{jobOrder.Visit_With_Other || jobOrder.visit_with_other || 'None'}</Text>,
     onsiteStatus: () => {
-      const displayStatus = isAgent 
-        ? (!jobOrder.commission_status || String(jobOrder.commission_status).toLowerCase() === 'null' ? 'Unpaid' : jobOrder.commission_status) 
-        : (jobOrder.Onsite_Status || jobOrder.onsite_status);
-      const displayType = isAgent ? 'billing' : 'onsite';
+      const displayStatus = jobOrder.Onsite_Status || jobOrder.onsite_status;
+      const displayType = 'onsite';
       return (
         <Text style={[st.statusCapitalize, { color: getStatusColor(displayStatus, displayType) }]} selectable={true}>
           {displayStatus === 'inprogress' ? 'In Progress' : (displayStatus || 'Not set')}
@@ -1073,7 +1071,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
         </View>
 
         <View style={st.headerActions}>
-          {!['failed', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
+          {!isAgent && !['failed', 'reschedule'].includes(jobOrder.Onsite_Status?.toLowerCase().trim() || '') && (
             <Pressable
               style={[st.iconBtn, { backgroundColor: '#f3f4f6' }]}
               onPress={() => {

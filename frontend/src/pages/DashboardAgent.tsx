@@ -285,18 +285,39 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                             colors={[colorPalette?.primary || '#ef4444', '#000000']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 28, paddingHorizontal: isMobile ? 20 : 28, alignItems: 'center', justifyContent: 'center' }]}
+                            style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 28, paddingHorizontal: isMobile ? 20 : 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
                         >
-                            <Text allowFontScaling={false} style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '600', marginBottom: 8 }}>Total Commission</Text>
-                            <Text
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.5}
-                                allowFontScaling={false}
-                                style={{ fontWeight: 'bold', color: '#ffffff', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
-                            >
-                                {formatCurrency(agentBalance)}
-                            </Text>
+                            <View style={{ flex: 1 }}>
+                                <Text allowFontScaling={false} style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '600', marginBottom: 8 }}>Total Commission</Text>
+                                <Text
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.5}
+                                    allowFontScaling={false}
+                                    style={{ fontWeight: 'bold', color: '#ffffff', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
+                                >
+                                    {formatCurrency(agentBalance)}
+                                </Text>
+                            </View>
+                            <Pressable onPress={() => onNavigate && onNavigate('Application')}>
+                                {({ pressed }) => (
+                                    <View style={[
+                                        { 
+                                            backgroundColor: 'transparent', 
+                                            paddingHorizontal: 16, 
+                                            paddingVertical: 10, 
+                                            borderRadius: 12,
+                                            borderWidth: 2,
+                                            borderColor: '#ffffff'
+                                        },
+                                        pressed && { opacity: 0.7, backgroundColor: 'rgba(255,255,255,0.1)' }
+                                    ]}>
+                                        <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>
+                                            Application Form
+                                        </Text>
+                                    </View>
+                                )}
+                            </Pressable>
                         </LinearGradient>
                     </View>
                 </View>

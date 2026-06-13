@@ -5,6 +5,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import dayjs from 'dayjs';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { fetchAgentCommissionHistory } from '../services/api';
+import { useJobOrderContext } from '../contexts/JobOrderContext';
+import { JobOrder } from '../types/jobOrder';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface CommissionHistoryItem {
   id: number;
@@ -38,11 +41,46 @@ const Commission: React.FC = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
+  const { jobOrders, refreshJobOrders } = useJobOrderContext();
+  const [userFullName, setUserFullName] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  useEffect(() => {
+    AsyncStorage.getItem('authData').then(data => {
+      if (data) {
+        try {
+          const ud = JSON.parse(data);
+          setUserFullName(ud.full_name || '');
+          setUserEmail(ud.email || '');
+        } catch (e) {}
+      }
+    });
+  }, []);
+
+  const agentJobOrders = useMemo(() => {
+    return jobOrders.filter(jo => {
+      const referredBy = (jo.Referred_By || jo.referred_by || '').toLowerCase();
+      const matchesAgent =
+        (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
+        (userEmail && referredBy.includes(userEmail.toLowerCase()));
+      
+      if (!matchesAgent) return false;
+
+      if (filterType !== 'all') {
+        const cStatus = (!jo.commission_status || String(jo.commission_status).toLowerCase() === 'null' ? 'unpaid' : String(jo.commission_status).toLowerCase().trim());
+        if (filterType === 'unpaid' && cStatus !== 'unpaid') return false;
+        if (filterType === 'paid' && cStatus !== 'paid' && cStatus !== 'done') return false;
+      }
+      return true;
+    }).sort((a, b) => (parseInt(String(b.id)) || 0) - (parseInt(String(a.id)) || 0));
+  }, [jobOrders, userFullName, userEmail, filterType]);
+
   const fetchHistoryData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     setError(null);
     try {
-      const response = await fetchAgentCommissionHistory(filterType);
+      // Fetch all commission history to populate the top stats correctly
+      const response = await fetchAgentCommissionHistory('all');
       if (response.success) {
         setHistory(response.data || []);
         setCurrentPage(1);
@@ -59,7 +97,7 @@ const Commission: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filterType]);
+  }, []);
 
   useEffect(() => {
     fetchHistoryData();
@@ -86,7 +124,8 @@ const Commission: React.FC = () => {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchHistoryData(true);
-  }, [fetchHistoryData]);
+    refreshJobOrders();
+  }, [fetchHistoryData, refreshJobOrders]);
 
   const formatCurrency = useCallback((amount: number | string) => {
     const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -102,13 +141,13 @@ const Commission: React.FC = () => {
   }, [history]);
 
   const totalPages = useMemo(() => {
-    return Math.ceil(history.length / 5);
-  }, [history.length]);
+    return Math.ceil(agentJobOrders.length / 5);
+  }, [agentJobOrders.length]);
 
-  const paginatedHistory = useMemo(() => {
+  const paginatedJobOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * 5;
-    return history.slice(startIndex, startIndex + 5);
-  }, [history, currentPage]);
+    return agentJobOrders.slice(startIndex, startIndex + 5);
+  }, [agentJobOrders, currentPage]);
 
   const handlePageChange = useCallback((newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -175,59 +214,112 @@ const Commission: React.FC = () => {
     }
   }, []);
 
-  const renderHistoryItem = ({ item }: { item: CommissionHistoryItem }) => {
+  const StatusText = React.memo(({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
+    if (!status) return <Text style={{ color: '#9ca3af' }}>-</Text>;
+    let textColor = '';
+    switch (status.toLowerCase().trim()) {
+      case 'done':
+      case 'active':
+      case 'completed':
+      case 'paid':
+      case 'collected':
+        textColor = '#4ade80';
+        break;
+      case 'pending':
+      case 'in progress':
+        textColor = '#fb923c';
+        break;
+      case 'suspended':
+      case 'overdue':
+      case 'unpaid':
+      case 'not collected':
+      case 'cancelled':
+        textColor = '#ef4444';
+        break;
+      default:
+        textColor = '#9ca3af';
+    }
     return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.refContainer}>
-            <Landmark size={18} color={colorPalette?.primary || '#7c3aed'} />
-            <Text style={styles.refText}>Ref: {item.ref_number}</Text>
-          </View>
-          <Text style={styles.amountText}>{formatCurrency(item.total_amount)}</Text>
-        </View>
+      <Text style={{ fontWeight: 'bold', textTransform: 'capitalize', color: textColor }}>
+        {status}
+      </Text>
+    );
+  });
 
-        <View style={styles.divider} />
+  const checkIsStarted = (time?: string | null) => {
+    if (!time) return false;
+    const lowerTime = String(time).toLowerCase().trim();
+    return !['0000-00-00 00:00:00', 'not set', '-', 'none', '', 'null', 'undefined'].includes(lowerTime);
+  };
 
-        <View style={styles.cardBody}>
-          <View style={styles.infoRow}>
-            <Calendar size={14} color="#64748b" />
-            <Text style={styles.infoValue}>
-              {dayjs(item.created_at).format('MMMM DD, YYYY hh:mm A')}
+  const isWorkStarted = (item: JobOrder) => {
+    const hasStart = checkIsStarted(item.start_time) || checkIsStarted(item.StartTimeStamp) || checkIsStarted(item.start_timestamp);
+    const hasEnd = checkIsStarted(item.end_time) || checkIsStarted(item.EndTimeStamp) || checkIsStarted(item.end_timestamp);
+    return hasStart && !hasEnd;
+  };
+
+  const getClientFullName = (jobOrder: JobOrder): string => {
+    return [
+      jobOrder.First_Name || jobOrder.first_name || '',
+      jobOrder.Middle_Initial || jobOrder.middle_initial ? (jobOrder.Middle_Initial || jobOrder.middle_initial) + '.' : '',
+      jobOrder.Last_Name || jobOrder.last_name || ''
+    ].filter(Boolean).join(' ').trim() || '-';
+  };
+
+  const getClientFullAddress = (jobOrder: JobOrder): string => {
+    const addressParts = [
+      jobOrder.Installation_Address || jobOrder.installation_address || jobOrder.Address || jobOrder.address,
+      jobOrder.Barangay || jobOrder.barangay,
+      jobOrder.City || jobOrder.city,
+      jobOrder.Region || jobOrder.region
+    ].filter(Boolean);
+    return addressParts.length > 0 ? addressParts.join(', ') : '-';
+  };
+
+  const formatDateVal = (dateStr?: string | null): string => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '-';
+      const datePart = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} ${timePart}`;
+    } catch (e) {
+      return '-';
+    }
+  };
+
+  const renderJobOrderItem = ({ item: jobOrder }: { item: JobOrder }) => {
+    const rawStatus = String(jobOrder.commission_status || '').toLowerCase().trim();
+    const displayStatus = (!jobOrder.commission_status || rawStatus === 'null' || rawStatus === 'unpaid' ? 'Not Collected' : 'Collected');
+    
+    return (
+      <View style={[styles.card, { padding: 0 }]}>
+        <View style={styles.joCardInner}>
+          <View style={styles.joCardLeft}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+              <Text style={[styles.joCardName, { color: '#111827', marginBottom: 0 }]}>
+                {getClientFullName(jobOrder)}
+              </Text>
+              {isWorkStarted(jobOrder) && (
+                <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ color: '#15803d', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    Work Started
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.joCardSub, { color: '#4b5563' }]} numberOfLines={2}>
+              {formatDateVal(jobOrder.Timestamp || jobOrder.timestamp)} | {getClientFullAddress(jobOrder)}
+            </Text>
+            <Text style={[styles.joCardSub, { color: '#6b7280', marginTop: 4 }]}>
+              Fee: {formatCurrency(jobOrder.Installation_Fee || jobOrder.installation_fee || 0)}
             </Text>
           </View>
-
-          {item.commission_id_list && (
-            <View style={[styles.infoRow, { marginTop: 6 }]}>
-              <FileText size={14} color="#64748b" />
-              <Text style={styles.infoValue} numberOfLines={2}>
-                Job Orders: {item.commission_id_list.split(',').map(id => `#${id.trim()}`).join(', ')}
-              </Text>
-            </View>
-          )}
-
-          {item.remarks && (
-            <View style={styles.remarksContainer}>
-              <Text style={styles.remarksLabel}>Remarks:</Text>
-              <Text style={styles.remarksText}>{item.remarks}</Text>
-            </View>
-          )}
-        </View>
-
-        {item.proof_of_payment && (
-          <View style={[styles.cardFooter, { justifyContent: 'flex-end' }]}>
-            <Pressable
-              onPress={() => handleOpenProof(item.proof_of_payment)}
-              style={({ pressed }) => [
-                styles.proofButton,
-                { opacity: pressed ? 0.7 : 1 }
-              ]}
-            >
-              <Text style={[styles.proofButtonText, { color: colorPalette?.primary || '#7c3aed' }]}>
-                View Proof
-              </Text>
-            </Pressable>
+          <View style={styles.joCardRight}>
+            <StatusText status={displayStatus} type="billing" />
           </View>
-        )}
+        </View>
       </View>
     );
   };
@@ -287,24 +379,23 @@ const Commission: React.FC = () => {
         </View>
 
         <View style={styles.sectionHeaderBetween}>
-          <Text style={styles.sectionTitle}>Payout History</Text>
+          <Text style={styles.sectionTitle}>Commission History</Text>
           <View style={{ position: 'relative', zIndex: 100 }}>
             <Pressable 
                 onPress={() => setIsFilterOpen(!isFilterOpen)} 
                 style={styles.dropdownBtn}
             >
                 <Text style={styles.dropdownBtnText}>
-                    {filterType === 'all' ? 'All Types' : 
-                     filterType === 'commission' ? 'Commission' : 
-                     filterType === 'incentives' ? 'Incentives' : 
-                     filterType === 'Bonus' ? 'Bonus' : 'All Types'}
+                    {filterType === 'all' ? 'All Status' : 
+                     filterType === 'unpaid' ? 'Not Collected' : 
+                     filterType === 'paid' ? 'Collected' : 'All Status'}
                 </Text>
                 <ChevronDown size={14} color="#64748b" />
             </Pressable>
 
             {isFilterOpen && (
                 <View style={styles.dropdownMenu}>
-                    {(['all', 'commission', 'incentives', 'Bonus'] as const).map((filter) => (
+                    {(['all', 'unpaid', 'paid'] as const).map((filter) => (
                         <Pressable
                             key={filter}
                             onPress={() => {
@@ -320,7 +411,7 @@ const Commission: React.FC = () => {
                                 styles.dropdownItemText,
                                 filterType === filter && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }
                             ]}>
-                                {filter === 'all' ? 'All Types' : filter === 'commission' ? 'Commission' : filter === 'incentives' ? 'Incentives' : 'Bonus'}
+                                {filter === 'all' ? 'All Status' : filter === 'unpaid' ? 'Not Collected' : 'Collected'}
                             </Text>
                         </Pressable>
                     ))}
@@ -353,9 +444,9 @@ const Commission: React.FC = () => {
         </View>
       ) : (
         <FlatList
-          data={paginatedHistory}
+          data={paginatedJobOrders}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderHistoryItem}
+          renderItem={renderJobOrderItem}
           ListHeaderComponent={renderHeader}
           ListHeaderComponentStyle={{ zIndex: 1000, elevation: 1000 }}
           ListFooterComponent={renderFooter}
@@ -631,6 +722,11 @@ const styles = StyleSheet.create({
   dropdownMenu: { position: 'absolute', top: 38, right: 0, backgroundColor: '#ffffff', borderRadius: 12, padding: 4, minWidth: 120, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 5, zIndex: 1000, borderWidth: 1, borderColor: '#f1f5f9' },
   dropdownItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   dropdownItemText: { fontSize: 12, color: '#64748b' },
+  joCardInner: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', padding: 16 },
+  joCardLeft: { flex: 1, minWidth: 0 },
+  joCardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
+  joCardSub: { fontSize: 12 },
+  joCardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
 });
 
 export default Commission;

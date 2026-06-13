@@ -71,6 +71,7 @@ import DashboardAgent from './DashboardAgent';
 import Commission from './Commission';
 import Bills from './Bills';
 import Menu from './Menu';
+import ApplicationForm from './ApplicationForm';
 import ReleaseNotes from './ReleaseNotes';
 import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -199,6 +200,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <Inventory />;
             case 'inventory-category-list':
                 return <InventoryCategoryList />;
+            case 'Application':
+                return <ApplicationForm onClose={() => handleSectionChange('agent-dashboard')} />;
             case 'menu':
                 return <Menu onLogout={onLogout} onSectionChange={handleSectionChange} />;
             case 'release-notes':
@@ -253,7 +256,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
 
     // Helper to determine if we should show sidebar
-    const showSidebar = userData !== null && activeSection !== 'release-notes' && !isTechModalOpen;
+    const showSidebar = userData !== null && activeSection !== 'release-notes' && activeSection !== 'Application' && !isTechModalOpen;
 
     if (isLoading) {
         return (
