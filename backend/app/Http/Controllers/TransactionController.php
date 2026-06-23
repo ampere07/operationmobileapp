@@ -1384,30 +1384,29 @@ class TransactionController extends Controller
     private function failPulloutServiceOrders(int $accountId, string $accountNo): void
     {
         try {
-            $updated = \App\Models\ServiceOrder::where('account_no', $accountNo)
+            $latestServiceOrder = \App\Models\ServiceOrder::where('account_no', $accountNo)
                 ->whereIn(DB::raw('LOWER(TRIM(Concern))'), ['pullout', 'for pullout'])
                 ->whereNotIn('Support_Status', ['Failed', 'Completed'])
                 ->whereNotIn('Visit_Status', ['Failed', 'Completed'])
-                ->get();
+                ->orderBy('id', 'desc')
+                ->first();
 
-            if ($updated->isEmpty()) {
+            if (!$latestServiceOrder) {
                 \Log::info('[PULLOUT CHECK] No open Pullout service orders found for account: ' . $accountNo);
                 return;
             }
 
-            foreach ($updated as $serviceOrder) {
-                $serviceOrder->Support_Status = 'Failed';
-                $serviceOrder->Visit_Status   = 'Failed';
-                $serviceOrder->Modified_By    = Auth::check() ? Auth::user()->email_address : 'System';
-                $serviceOrder->Modified_Date  = now();
-                $serviceOrder->save();
+            $latestServiceOrder->Support_Status = 'Failed';
+            $latestServiceOrder->Visit_Status   = 'Failed';
+            $latestServiceOrder->Modified_By    = Auth::check() ? Auth::user()->email_address : 'System';
+            $latestServiceOrder->Modified_Date  = now();
+            $latestServiceOrder->save();
 
-                \Log::info('[PULLOUT CHECK] Pullout service order marked Failed', [
-                    'service_order_id' => $serviceOrder->id,
-                    'ticket_id'        => $serviceOrder->ticket_id ?? $serviceOrder->Ticket_ID,
-                    'account_no'       => $accountNo,
-                ]);
-            }
+            \Log::info('[PULLOUT CHECK] Latest Pullout service order marked Failed', [
+                'service_order_id' => $latestServiceOrder->id,
+                'ticket_id'        => $latestServiceOrder->ticket_id ?? $latestServiceOrder->Ticket_ID,
+                'account_no'       => $accountNo,
+            ]);
         } catch (\Exception $e) {
             \Log::error('[PULLOUT CHECK EXCEPTION] Account: ' . $accountNo . ' - ' . $e->getMessage());
         }
@@ -1667,6 +1666,19 @@ class TransactionController extends Controller
             }
 
             $candidateGenerationDate = $candidateBillingDate->copy()->subDays($advanceGeneration);
+
+            // Check if an invoice for the expected generation date already exists
+            $existingInvoice = \Illuminate\Support\Facades\DB::table('invoices')
+                ->where('account_no', $accountNo)
+                ->whereDate('invoice_date', $candidateGenerationDate->format('Y-m-d'))
+                ->exists();
+
+            if ($existingInvoice) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An invoice for the expected generation date (' . $candidateGenerationDate->format('Y-m-d') . ') already exists. Skipping pro-rated generation.'
+                ], 200);
+            }
 
             if ($today->lessThanOrEqualTo($candidateGenerationDate)) {
                 return response()->json([

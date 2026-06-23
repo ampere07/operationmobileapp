@@ -6,7 +6,6 @@ import SignatureScreen from 'react-native-signature-canvas';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import { Settings, Camera, X, ChevronDown, Search, Check, ChevronLeft, MapPin, CheckCircle, AlertCircle, XCircle } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
@@ -62,6 +61,7 @@ import { settingsColorPaletteService, ColorPalette } from '../services/settingsC
 import LocationPicker from '../components/LocationPicker';
 import { pppoeService, UsernamePattern } from '../services/pppoeService';
 import ImagePreview from '../components/ImagePreview';
+import { SearchablePicker, SearchablePickerTrigger } from '../components/SearchablePicker';
 
 interface JobOrderDoneFormTechModalProps {
   isOpen: boolean;
@@ -307,6 +307,9 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
   const [usedPorts, setUsedPorts] = useState<Set<string>>(new Set());
 
+  const [isOnsiteStatusPickerOpen, setIsOnsiteStatusPickerOpen] = useState(false);
+  const [onsiteStatusSearch, setOnsiteStatusSearch] = useState('');
+  
   const [isLcpnapMiniModalVisible, setIsLcpnapMiniModalVisible] = useState(false);
   const [isUsageTypeMiniModalVisible, setIsUsageTypeMiniModalVisible] = useState(false);
   const [isPortMiniModalVisible, setIsPortMiniModalVisible] = useState(false);
@@ -1569,6 +1572,11 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
       .slice(0, 50);
   }, [routerModels, routerModelSearch]);
 
+  const onsiteStatuses = useMemo(() => ['In Progress', 'Done', 'Failed', 'Reschedule'], []);
+  const filteredOnsiteStatuses = useMemo(() => {
+    return onsiteStatuses.filter(s => s.toLowerCase().includes(onsiteStatusSearch.toLowerCase()));
+  }, [onsiteStatusSearch, onsiteStatuses]);
+
   const filteredLcpnaps = useMemo(() => {
     const query = (lcpnapSearch || '').toLowerCase();
     const safeLcpnaps = Array.isArray(lcpnaps) ? lcpnaps : [];
@@ -2202,6 +2210,25 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
         </Modal>
       )}
 
+      {/* ─── Onsite Status Mini Modal ───────────────────────────────── */}
+      <SearchablePicker
+        isOpen={isOnsiteStatusPickerOpen}
+        onClose={() => setIsOnsiteStatusPickerOpen(false)}
+        title="Select Onsite Status"
+        data={filteredOnsiteStatuses}
+        onSelect={(item) => {
+          handleInputChange('onsiteStatus', item);
+          setIsOnsiteStatusPickerOpen(false);
+        }}
+        keyExtractor={(item) => item}
+        searchValue={onsiteStatusSearch}
+        onSearchChange={setOnsiteStatusSearch}
+        placeholder="Search Status..."
+        isDarkMode={isDarkMode}
+        activeColor={colorPalette?.primary || '#7c3aed'}
+        selectedItemValue={formData.onsiteStatus}
+      />
+
       {/* ─── Usage Type Mini Modal ──────────────────────────────────── */}
       {isUsageTypeMiniModalVisible && (
         <Modal
@@ -2580,37 +2607,15 @@ const JobOrderDoneFormTechModal: React.FC<JobOrderDoneFormTechModalProps> = ({
                         )}
                       </View>
 
-                      <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>
-                          Onsite Status<Text style={styles.required}>*</Text>
-                        </Text>
-                        <View>
-                          <View style={[styles.pickerContainer, {
-                            borderColor: errors.onsiteStatus ? '#ef4444' : (isDarkMode ? '#374151' : '#d1d5db'),
-                            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff'
-                          }]}>
-                            <Picker
-                              selectedValue={formData.onsiteStatus}
-                              onValueChange={(value) => handleInputChange('onsiteStatus', value)}
-                              style={{ color: isDarkMode ? '#fff' : '#000' }}
-                              dropdownIconColor={isDarkMode ? '#fff' : '#000'}
-                            >
-                              <Picker.Item key="in-progress" label="In Progress" value="In Progress" />
-                              <Picker.Item key="done" label="Done" value="Done" />
-                              <Picker.Item key="failed" label="Failed" value="Failed" />
-                              <Picker.Item key="reschedule" label="Reschedule" value="Reschedule" />
-                            </Picker>
-                          </View>
-                        </View>
-                        {errors.onsiteStatus && (
-                          <View style={styles.errorContainer}>
-                            <View style={[styles.errorIcon, { backgroundColor: colorPalette?.primary || '#7c3aed' }]}>
-                              <Text style={styles.errorIconText}>!</Text>
-                            </View>
-                            <Text style={[styles.errorText, { color: colorPalette?.primary || '#7c3aed' }]}>{errors.onsiteStatus}</Text>
-                          </View>
-                        )}
-                      </View>
+                      <SearchablePickerTrigger
+                        label="Onsite Status"
+                        value={formData.onsiteStatus}
+                        onPress={() => setIsOnsiteStatusPickerOpen(true)}
+                        error={errors.onsiteStatus}
+                        isDarkMode={isDarkMode}
+                        required={true}
+                        placeholder="Select Onsite Status..."
+                      />
 
                       <View style={styles.inputGroup}>
                         <Text style={[styles.label, { color: isDarkMode ? '#d1d5db' : '#374151' }]}>Region</Text>

@@ -28,6 +28,32 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.48',
+            date: 'June 21, 2026',
+            title: 'Native Crash Fix & UI Optimization',
+            updates: [
+                { text: 'Onsite Status Optimization: Upgraded the Onsite Status dropdown in the Job Order completion form to a custom searchable modal. This resolves a native Android crash during status transitions and improves UI consistency.', visibility: 'technician' }
+            ]
+        },
+        {
+            version: '2.5.47',
+            date: 'June 20, 2026',
+            title: 'Customer Payment Session Management',
+            updates: [
+                { text: 'Cancel Pending Payments: Added a "Cancel Payment" button in the Pending Payment modal, allowing customers to easily void and clear any stuck or unwanted payment sessions directly from the dashboard.', visibility: 'customer' }
+            ]
+        },
+        {
+            version: '2.5.46',
+            date: 'June 15, 2026',
+            title: 'Agent Dashboard & Form Automation',
+            updates: [
+                { text: 'Auto-fill Referred By: The "Referred By" field in the application form now automatically populates with your full name.', visibility: 'agent' },
+                { text: 'Creator Tracking: Application submissions now securely record your User ID for accurate attribution.', visibility: 'agent' },
+                { text: 'Dashboard Referral Accuracy: Fixed a matching logic issue so your "In Progress" and "Onboarded" counts now perfectly mirror your actual Job Order statistics.', visibility: 'agent' }
+            ]
+        },
+        {
             version: '2.5.45',
             date: 'June 12, 2026',
             title: 'Agent Commission UI & Filters',

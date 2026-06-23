@@ -1149,6 +1149,16 @@ class EnhancedBillingGenerationServiceWithNotifications
         ];
 
         foreach ($invoices as $inv) {
+            // Skip accounts that are already Pullout or Disconnected
+            $billingAccount = \App\Models\BillingAccount::where('account_no', $inv->account_no)->first();
+            if ($billingAccount) {
+                $statusName = $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null;
+                if (in_array($statusName, ['Pullout', 'Disconnected', 'Pullout Restricted'])) {
+                    $this->log('info', "   Skipping Inv: {$inv->id} (Account status is {$statusName} - no notification)");
+                    continue;
+                }
+            }
+
             if (!$force) {
                 // Check if Overdue record exists
                 $exists = Overdue::where('invoice_id', $inv->id)->exists();
@@ -1226,6 +1236,16 @@ class EnhancedBillingGenerationServiceWithNotifications
         ];
 
         foreach ($invoices as $inv) {
+            // Skip accounts that are already Pullout or Disconnected
+            $billingAccount = \App\Models\BillingAccount::where('account_no', $inv->account_no)->first();
+            if ($billingAccount) {
+                $statusName = $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null;
+                if (in_array($statusName, ['Pullout', 'Disconnected', 'Pullout Restricted'])) {
+                    $this->log('info', "   Skipping Inv: {$inv->id} (Account status is {$statusName} - no DC notice)");
+                    continue;
+                }
+            }
+
             if (!$force) {
                 // Check if DC Notice record exists
                 $exists = DCNotice::where('invoice_id', $inv->id)->exists();

@@ -9,6 +9,7 @@ use App\Models\BillingConfig;
 use App\Models\SMSTemplate;
 use App\Models\EmailTemplate;
 use App\Services\EmailQueueService;
+use App\Services\RadiusQueueService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -235,10 +236,10 @@ class AutoDisconnectService
         }
 
         // Check if already inactive or pullout
-        $billingStatus = $billingAccount->billingStatus->status ?? '';
+        $billingStatus = $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : '';
         $this->writeLog("  [INFO] Current Status: {$billingStatus}");
         
-        if (in_array($billingStatus, ['Inactive', 'Pullout', 'Disconnected', 'Offline', 'Restricted'])) {
+        if (in_array($billingStatus, ['Inactive', 'Pullout', 'Disconnected', 'Offline', 'Restricted', 'Pullout Restricted'])) {
             $this->writeLog("  [SKIP] Status is already {$billingStatus}");
             return ['success' => false, 'reason' => "Already {$billingStatus}"];
         }
@@ -256,23 +257,47 @@ class AutoDisconnectService
         // Create transaction to ensure atomicity
         DB::beginTransaction();
         try {
-            // 1. Restrict via RADIUS first
+            // 1. Restrict via RADIUS first (retry 3 times, then queue)
             $this->writeLog("  [RADIUS] Initiating restriction...");
-            $restrictResult = $this->radiusService->restrictedUser([
+            $radiusParams = [
                 'username' => $username,
                 'accountNumber' => $accountNo,
                 'remarks' => 'Auto DC',
                 'updatedBy' => 'System'
-            ]);
-
-            if ($restrictResult['status'] !== 'success') {
-                $reason = $restrictResult['message'] ?? 'Unknown RADIUS error';
-                $this->writeLog("  [CRITICAL] RADIUS failure: {$reason}. STOPPING ENTIRE PROCESS.");
-                \Log::channel('radiusrelated')->error('[AUTO DC RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $reason);
-                DB::rollBack();
-                throw new Exception("CRITICAL RADIUS FAILURE: {$reason}");
+            ];
+            $radiusSuccess = false;
+            $lastRadiusError = '';
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                try {
+                    $restrictResult = $this->radiusService->restrictedUser($radiusParams);
+                    if (($restrictResult['status'] ?? '') === 'success') {
+                        $radiusSuccess = true;
+                        $this->writeLog("  [RADIUS] ✓ Successfully restricted on attempt {$attempt}");
+                        break;
+                    }
+                    $lastRadiusError = $restrictResult['message'] ?? 'Unknown RADIUS error';
+                    $this->writeLog("  [RADIUS] ✗ Attempt {$attempt}/3 failed: {$lastRadiusError}");
+                } catch (\Exception $radEx) {
+                    $lastRadiusError = $radEx->getMessage();
+                    $this->writeLog("  [RADIUS] ✗ Attempt {$attempt}/3 exception: {$lastRadiusError}");
+                }
+                if ($attempt < 3) sleep(2);
             }
-            $this->writeLog("  [RADIUS] ✓ Successfully restricted");
+
+            if (!$radiusSuccess) {
+                $this->writeLog("  [RADIUS] ✗ All 3 attempts failed. Queuing for retry.");
+                \Log::channel('radiusrelated')->error('[AUTO DC RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $lastRadiusError);
+                // We no longer throw an exception and rollback. We let the DB transaction commit so the user is marked as Inactive locally.
+                RadiusQueueService::queue([
+                    'source_type' => 'auto_disconnect',
+                    'source_id' => $invoice->id,
+                    'account_no' => $accountNo,
+                    'operation' => 'restricted_user',
+                    'params' => $radiusParams,
+                    'last_error' => $lastRadiusError,
+                    'created_by' => 'System',
+                ]);
+            }
 
             // 2. Apply disconnection fee if configured
             $config = BillingConfig::first();
@@ -496,6 +521,15 @@ class AutoDisconnectService
                         continue;
                     }
 
+                    // Check if account is already Pullout or Disconnected - skip entirely
+                    $statusName = $billingAccount->billingStatus ? $billingAccount->billingStatus->status_name : null;
+                    if (in_array($statusName, ['Pullout', 'Disconnected', 'Pullout Restricted'])) {
+                        $this->writeLog("  [SKIP] Account status is already {$statusName} - no action needed");
+                        $this->writeLog("[{$counter}/{$totalCount}] ⊘ SKIPPED");
+                        $skippedCount++;
+                        continue;
+                    }
+
                     // Get technical details for RADIUS username
                     $technicalDetail = $billingAccount->technicalDetails->first();
                     if (!$technicalDetail || empty($technicalDetail->username)) {
@@ -513,21 +547,45 @@ class AutoDisconnectService
                     $this->createPulloutRequest($billingAccount, $pulloutOffset);
                     $this->writeLog("  [CREATE] ✓ Pullout service order created");
 
-                    // 2. Restrict user via RADIUS (also creates disconnected_logs entry)
+                    // 2. Restrict user via RADIUS (retry 3 times, then queue)
                     $this->writeLog("  [RADIUS] Restricting user via RADIUS...");
-                    $restrictResult = $this->radiusService->restrictedUser([
+                    $radiusParams = [
                         'username' => $username,
                         'accountNumber' => $accountNo,
                         'remarks' => 'Pullout',
                         'updatedBy' => 'System'
-                    ]);
+                    ];
+                    $radiusSuccess = false;
+                    $lastRadiusError = '';
+                    for ($attempt = 1; $attempt <= 3; $attempt++) {
+                        try {
+                            $restrictResult = $this->radiusService->restrictedUser($radiusParams);
+                            if (($restrictResult['status'] ?? '') === 'success') {
+                                $radiusSuccess = true;
+                                $this->writeLog("  [RADIUS] ✓ Successfully restricted on attempt {$attempt}");
+                                break;
+                            }
+                            $lastRadiusError = $restrictResult['message'] ?? 'Unknown';
+                            $this->writeLog("  [RADIUS] ✗ Attempt {$attempt}/3 failed: {$lastRadiusError}");
+                        } catch (\Exception $radEx) {
+                            $lastRadiusError = $radEx->getMessage();
+                            $this->writeLog("  [RADIUS] ✗ Attempt {$attempt}/3 exception: {$lastRadiusError}");
+                        }
+                        if ($attempt < 3) sleep(2);
+                    }
 
-                    if ($restrictResult['status'] === 'success') {
-                        $this->writeLog("  [RADIUS] ✓ Successfully restricted");
-                    } else {
-                        $reason = $restrictResult['message'] ?? 'Unknown';
-                        $this->writeLog("  [RADIUS] ✗ Restrict failed: " . $reason);
-                        \Log::channel('radiusrelated')->error('[AUTO PULLOUT RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $reason);
+                    if (!$radiusSuccess) {
+                        $this->writeLog("  [RADIUS] ✗ All 3 attempts failed. Queuing for retry.");
+                        \Log::channel('radiusrelated')->error('[AUTO PULLOUT RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $lastRadiusError);
+                        RadiusQueueService::queue([
+                            'source_type' => 'auto_pullout',
+                            'source_id' => $billingAccount->id,
+                            'account_no' => $accountNo,
+                            'operation' => 'restricted_user',
+                            'params' => $radiusParams,
+                            'last_error' => $lastRadiusError,
+                            'created_by' => 'System',
+                        ]);
                     }
 
                     // 3. Update billing status to Inactive

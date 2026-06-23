@@ -484,6 +484,53 @@ class XenditPaymentController extends Controller
             ], 500);
         }
     }
+
+    public function cancelPayment(Request $request)
+    {
+        try {
+            $referenceNo = $request->input('reference_no');
+
+            if (!$referenceNo) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Reference number is required'
+                ], 400);
+            }
+
+            $updated = DB::table('pending_payments')
+                ->where('reference_no', $referenceNo)
+                ->where('status', 'PENDING')
+                ->update([
+                    'status' => 'FAILED',
+                    'updated_at' => now()
+                ]);
+
+            if ($updated) {
+                Log::info('Pending payment cancelled (marked FAILED)', [
+                    'reference_no' => $referenceNo
+                ]);
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Payment cancelled successfully'
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Pending payment not found or already processed'
+            ], 404);
+
+        } catch (Exception $e) {
+            Log::error('Cancel payment failed', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to cancel payment'
+            ], 500);
+        }
+    }
 }
 
 

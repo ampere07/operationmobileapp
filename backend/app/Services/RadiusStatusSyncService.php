@@ -37,11 +37,10 @@ class RadiusStatusSyncService
             if ($radiusConfigs->isEmpty()) {
                 throw new \Exception('RADIUS configuration not found');
             }
-            $radiusConfig = $radiusConfigs->first();
 
             // Step 2: Fetch RADIUS data (potentially slow I/O)
-            $radiusUsers = $this->fetchRadiusUsers($radiusConfig);
-            $radiusSessions = $this->fetchRadiusSessions($radiusConfig);
+            $radiusUsers = $this->fetchRadiusUsers($radiusConfigs);
+            $radiusSessions = $this->fetchRadiusSessions($radiusConfigs);
 
             // Anti-timeout: ensure DB connection is alive after API calls
             try {
@@ -61,7 +60,9 @@ class RadiusStatusSyncService
             $this->processAccounts($radiusUsers, $radiusSessions, $stats);
 
             // Update the radius config timestamp to reflect last sync
-            $radiusConfig->touch();
+            if ($radiusConfigs->first()) {
+                $radiusConfigs->first()->touch();
+            }
 
             DB::commit();
 
@@ -97,17 +98,10 @@ class RadiusStatusSyncService
         }
     }
 
-    private function fetchRadiusUsers(RadiusConfig $config): array
+    private function fetchRadiusUsers($radiusConfigs): array
     {
-        $url = sprintf(
-            '%s://%s:%s/rest/user-manage/user',
-            $config->ssl_type,
-            $config->ip,
-            $config->port
-        );
-
         $users = [];
-        $response = $this->callRadiusApi($url, 'GET', $config);
+        $response = $this->callRadiusApi('/rest/user-manage/user', 'GET', $radiusConfigs);
 
         if ($response && is_array($response)) {
             foreach ($response as $user) {
@@ -126,17 +120,10 @@ class RadiusStatusSyncService
         return $users;
     }
 
-    private function fetchRadiusSessions(RadiusConfig $config): array
+    private function fetchRadiusSessions($radiusConfigs): array
     {
-        $url = sprintf(
-            '%s://%s:%s/rest/user-manage/session',
-            $config->ssl_type,
-            $config->ip,
-            $config->port
-        );
-
         $sessions = [];
-        $response = $this->callRadiusApi($url, 'GET', $config);
+        $response = $this->callRadiusApi('/rest/user-manage/session', 'GET', $radiusConfigs);
 
         if ($response && is_array($response)) {
             foreach ($response as $session) {
@@ -272,42 +259,50 @@ class RadiusStatusSyncService
         $stats['synced'] = $stats['updated'];
     }
 
-    private function callRadiusApi(string $url, string $method, RadiusConfig $config): ?array
+    private function callRadiusApi(string $path, string $method, $radiusConfigs): ?array
     {
-        for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
-            try {
-                $response = Http::withBasicAuth($config->username, $config->password)
-                    ->withOptions([
-                        'verify' => false,
-                        'timeout' => 10,
-                    ])
-                    ->$method($url);
+        foreach ($radiusConfigs as $config) {
+            $protocols = ['https', 'http'];
 
-                if ($response->successful()) {
-                    return $response->json();
+            foreach ($protocols as $protocol) {
+                $url = sprintf('%s://%s:%s%s', $protocol, $config->ip, $config->port, $path);
+
+                for ($attempt = 1; $attempt <= self::MAX_RETRIES; $attempt++) {
+                    try {
+                        $response = Http::withBasicAuth($config->username, $config->password)
+                            ->withOptions([
+                                'verify' => false,
+                                'timeout' => 5,
+                            ])
+                            ->$method($url);
+
+                        if ($response->successful()) {
+                            return $response->json();
+                        }
+
+                        Log::warning('RADIUS API request failed', [
+                            'url' => $url,
+                            'attempt' => $attempt,
+                            'status' => $response->status(),
+                            'body' => $response->body()
+                        ]);
+
+                    } catch (\Exception $e) {
+                        Log::warning('RADIUS API request exception', [
+                            'url' => $url,
+                            'attempt' => $attempt,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+
+                    if ($attempt < self::MAX_RETRIES) {
+                        sleep(self::RETRY_DELAY);
+                    }
                 }
-
-                Log::warning('RADIUS API request failed', [
-                    'url' => $url,
-                    'attempt' => $attempt,
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-
-            } catch (\Exception $e) {
-                Log::warning('RADIUS API request exception', [
-                    'url' => $url,
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage()
-                ]);
-            }
-
-            if ($attempt < self::MAX_RETRIES) {
-                sleep(self::RETRY_DELAY);
             }
         }
 
-        $errorMsg = 'Failed to connect to RADIUS API after ' . self::MAX_RETRIES . ' attempts. URL: ' . $url;
+        $errorMsg = 'Failed to connect to RADIUS API after trying all configs and protocols. Path: ' . $path;
         \Log::channel('radiusrelated')->error('[STATUS SYNC API FAILED] ' . $errorMsg);
         throw new \RuntimeException($errorMsg);
     }

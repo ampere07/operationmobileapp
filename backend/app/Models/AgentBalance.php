@@ -25,3 +25,4 @@ class AgentBalance extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 }
+

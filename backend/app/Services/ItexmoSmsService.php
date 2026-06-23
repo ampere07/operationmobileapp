@@ -38,6 +38,12 @@ class ItexmoSmsService
             ];
         }
 
+        $provider = $this->config->provider ?? 'itexmo';
+
+        if ($provider === 'semaphore') {
+            return $this->sendSemaphore($contactNo, $message, $data);
+        }
+
         $payload = [
             'Email' => $this->config->email,
             'Password' => $this->config->password,
@@ -55,6 +61,8 @@ class ItexmoSmsService
                 'message_length' => strlen($message)
             ]);
 
+            $this->logSms($contactNo, $message, 'itexmo', $result, $data);
+
             return [
                 'success' => true,
                 'message' => 'SMS sent successfully',
@@ -63,6 +71,84 @@ class ItexmoSmsService
 
         } catch (Exception $e) {
             Log::error('SMS sending failed', [
+                'contact_no' => $contactNo,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    protected function sendSemaphore(string $contactNo, string $message, array $data = []): array
+    {
+        $payload = [
+            'apikey' => $this->config->code,
+            'number' => $contactNo,
+            'message' => $message,
+            'sendername' => $this->config->sender
+        ];
+
+        try {
+            $apiUrl = 'https://api.semaphore.co/api/v4/messages';
+            $attempt = 0;
+            $response = null;
+            $httpCode = 0;
+
+            do {
+                $attempt++;
+                try {
+                    $ch = curl_init();
+                    curl_setopt($ch, CURLOPT_URL, $apiUrl);
+                    curl_setopt($ch, CURLOPT_POST, 1);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeoutSeconds);
+                    
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode >= 200 && $httpCode < 300) {
+                        Log::info('Semaphore SMS sent successfully', [
+                            'contact_no' => $contactNo,
+                            'message_length' => strlen($message)
+                        ]);
+
+                        $this->logSms($contactNo, $message, 'semaphore', $response, $data);
+
+                        return [
+                            'success' => true,
+                            'message' => 'SMS sent successfully via Semaphore',
+                            'response' => $response
+                        ];
+                    }
+
+                    // Check for specific error message in response
+                    if ($response) {
+                        $responseData = json_decode($response, true);
+                        if (is_array($responseData) && isset($responseData['error'])) {
+                            throw new Exception($responseData['error']);
+                        }
+                    }
+
+                    if ($attempt < $this->maxRetries) {
+                        sleep(2);
+                    }
+                } catch (Exception $e) {
+                    if ($attempt >= $this->maxRetries) {
+                        throw $e;
+                    }
+                    sleep(2);
+                }
+            } while ($attempt < $this->maxRetries);
+
+            throw new Exception('Semaphore API returned HTTP ' . ($httpCode ?: 'unknown'));
+
+        } catch (Exception $e) {
+            Log::error('Semaphore SMS sending failed', [
                 'contact_no' => $contactNo,
                 'error' => $e->getMessage()
             ]);
@@ -224,6 +310,36 @@ class ItexmoSmsService
         }
 
         return $query->get();
+    }
+
+    protected function logSms(string $contactNo, string $message, string $provider, $response = null, array $data = []): void
+    {
+        try {
+            DB::table('sms_logs')->insert([
+                'organization_id'    => $this->config->organization_id ?? null,
+                'account_no'         => $data['account_no'] ?? null,
+                'contact_no'         => $contactNo,
+                'message'            => $message,
+                'message_length'     => strlen($message),
+                'provider'           => $provider,
+                'sender_id'          => $this->config->sender ?? null,
+                'status'             => 'sent',
+                'attempts'           => 1,
+                'error_message'      => null,
+                'provider_response'  => is_string($response) ? $response : json_encode($response),
+                'source'             => $data['source'] ?? null,
+                'reference_id'       => $data['reference_id'] ?? null,
+                'sent_at'            => now(),
+                'created_by_user_id' => auth()->id() ?? null,
+                'created_at'         => now(),
+                'updated_at'         => now(),
+            ]);
+        } catch (Exception $e) {
+            Log::error('Failed to log SMS', [
+                'contact_no' => $contactNo,
+                'error'      => $e->getMessage()
+            ]);
+        }
     }
 
     protected function logBlast(string $filterType, string $filterValue, string $message, int $messageCount): void

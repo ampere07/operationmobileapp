@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, ActivityIndicator, Alert, useWindowDimensions, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createApplication, uploadApplicationImages } from '../services/api';
 import { getRegions, getCities, getBoroughs, Region, City, Borough } from '../services/cityService';
 import { planService, Plan } from '../services/planService';
@@ -29,7 +30,8 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
         installation_address: '',
         landmark: '',
         referred_by: 'None / Walk-in',
-        desired_plan: ''
+        desired_plan: '',
+        created_by_user_id: null as number | null
     });
 
     const [documents, setDocuments] = useState({
@@ -59,6 +61,18 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
         
         const fetchData = async () => {
             try {
+                const authData = await AsyncStorage.getItem('authData');
+                if (authData) {
+                    const user = JSON.parse(authData);
+                    if (user) {
+                        setFormData(prev => ({
+                            ...prev,
+                            ...(user.full_name ? { referred_by: user.full_name } : {}),
+                            ...(user.id ? { created_by_user_id: user.id } : {})
+                        }));
+                    }
+                }
+
                 const [r, c, b, p] = await Promise.all([
                     getRegions(),
                     getCities(),
@@ -139,12 +153,12 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                 Alert.alert('Success', 'Application submitted successfully!');
                 
                 // Reset form
-                setFormData({
+                setFormData(prev => ({
                     email_address: '', first_name: '', middle_initial: '', last_name: '',
                     mobile_number: '', secondary_mobile_number: '', region: '', city: '',
-                    barangay: '', installation_address: '', landmark: '', referred_by: 'None / Walk-in',
-                    desired_plan: ''
-                });
+                    barangay: '', installation_address: '', landmark: '', referred_by: prev.referred_by,
+                    desired_plan: '', created_by_user_id: prev.created_by_user_id
+                }));
                 setDocuments({
                     proof_of_billing: null, government_valid_id: null,
                     secondary_government_valid_id: null, house_front_image: null
@@ -172,7 +186,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                 style={[styles.input, isMultiline && styles.textArea]}
                 placeholder={placeholder}
                 placeholderTextColor="#94a3b8"
-                value={formData[field]}
+                value={String(formData[field] || '')}
                 onChangeText={(val) => handleTextChange(field, val)}
                 multiline={isMultiline}
                 numberOfLines={isMultiline ? 4 : 1}

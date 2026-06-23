@@ -400,6 +400,22 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
         setPendingPayment(null);
     };
 
+    const handleDeletePendingPayment = async () => {
+        if (!pendingPayment?.reference_no) return;
+        
+        setIsPaymentProcessing(true);
+        try {
+            await paymentService.cancelPayment(pendingPayment.reference_no);
+            setShowPendingPaymentModal(false);
+            setPendingPayment(null);
+            Alert.alert("Success", "Pending payment cancelled successfully.");
+        } catch (error: any) {
+            Alert.alert("Error", error.message || "Failed to cancel payment.");
+        } finally {
+            setIsPaymentProcessing(false);
+        }
+    };
+
     return (
         <View style={styles.container}>
             <ScrollView
@@ -809,11 +825,23 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                 <Pressable
                                     onPress={handleResumePendingPayment}
                                     style={[styles.resumeBtn, { backgroundColor: colorPalette?.primary || '#0f172a' }]}
+                                    disabled={isPaymentProcessing}
                                 >
-                                    <Text style={styles.primaryBtnText}>Resume Payment</Text>
+                                    <Text style={styles.primaryBtnText}>{isPaymentProcessing ? 'Processing...' : 'Resume Payment'}</Text>
                                 </Pressable>
-                                <Pressable onPress={handleCancelPendingPayment} style={styles.cancelBtn}>
-                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                <Pressable 
+                                    onPress={handleDeletePendingPayment} 
+                                    style={[styles.cancelBtn, { backgroundColor: '#fee2e2' }]}
+                                    disabled={isPaymentProcessing}
+                                >
+                                    <Text style={[styles.cancelBtnText, { color: '#dc2626' }]}>Cancel Payment</Text>
+                                </Pressable>
+                                <Pressable 
+                                    onPress={handleCancelPendingPayment} 
+                                    style={styles.cancelBtn}
+                                    disabled={isPaymentProcessing}
+                                >
+                                    <Text style={styles.cancelBtnText}>Close</Text>
                                 </Pressable>
                             </View>
 

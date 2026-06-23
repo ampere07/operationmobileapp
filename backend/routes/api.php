@@ -103,7 +103,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/monitor/handle', [MonitorController::class , 'handle']);
     Route::get('/dashboard/counts', [\App\Http\Controllers\Api\DashboardController::class , 'getCounts']);
     Route::post('/monitor/handle', [MonitorController::class , 'handle']);
-    Route::post('/users/push-token', [UserController::class, 'updatePushToken']);
 });
 Route::get('/sms-blast', [SmsBlastController::class , 'index']);
 Route::post('/sms-blast', [SmsBlastController::class , 'store']);
@@ -1442,6 +1441,7 @@ Route::prefix('job-orders')->middleware(['auth:sanctum', 'ensure.database.tables
     Route::put('/{id}', [JobOrderController::class , 'update']);
     Route::delete('/{id}', [JobOrderController::class , 'destroy']);
     Route::post('/{id}/approve', [JobOrderController::class , 'approve']);
+    Route::post('/{id}/log-blocked-transfer', [JobOrderController::class , 'logBlockedTransfer']);
     Route::post('/{id}/create-radius-account', [JobOrderController::class , 'createRadiusAccount']);
     Route::post('/{id}/upload-images', [JobOrderController::class , 'uploadImages']);
 
@@ -2130,6 +2130,7 @@ Route::prefix('service-orders')->group(function () {
     Route::post('/broadcast-viewing', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'broadcastViewing']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'update']);
+    Route::post('/{id}/log-blocked-transfer', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'logBlockedTransfer']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'destroy']);
 });
 
@@ -2158,6 +2159,7 @@ Route::prefix('service_orders')->group(function () {
     Route::post('/broadcast-viewing', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'broadcastViewing']);
     Route::get('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'update']);
+    Route::post('/{id}/log-blocked-transfer', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'logBlockedTransfer']);
     Route::delete('/{id}', [\App\Http\Controllers\Api\ServiceOrderApiController::class , 'destroy']);
 });
 
@@ -2572,7 +2574,6 @@ Route::prefix('transactions')->group(function () {
     Route::post('/broadcast-viewing', [\App\Http\Controllers\TransactionController::class , 'broadcastViewing']);
     Route::post('/upload-images', [\App\Http\Controllers\TransactionController::class , 'uploadImages']);
     Route::post('/batch-approve', [\App\Http\Controllers\TransactionController::class , 'batchApprove']);
-    Route::post('/generate-installation-invoice', [\App\Http\Controllers\TransactionController::class , 'generateProRatedInstallationInvoice']);
     Route::get('/{id}', [\App\Http\Controllers\TransactionController::class , 'show']);
     Route::put('/{id}', [\App\Http\Controllers\TransactionController::class , 'update']);
     Route::post('/{id}/approve', [\App\Http\Controllers\TransactionController::class , 'approve']);
@@ -3104,6 +3105,7 @@ Route::prefix('billing-notifications')->group(function () {
 Route::prefix('sms')->group(function () {
     Route::post('/send', [\App\Http\Controllers\SmsController::class , 'sendSms']);
     Route::post('/blast', [\App\Http\Controllers\SmsController::class , 'sendBlast']);
+    Route::get('/logs', [\App\Http\Controllers\SmsController::class , 'smsLogs']);
 
     // GET test route for browser testing
     Route::get('/test', function () {
@@ -3559,6 +3561,7 @@ Route::get('/disconnected-logs/by-account/{accountNo}', [RelatedDataController::
 Route::get('/details-update-logs/by-account/{accountNo}', [RelatedDataController::class , 'getDetailsUpdateLogsByAccount']);
 Route::get('/audit-trail-logs/by-application/{applicationId}', [RelatedDataController::class , 'getAuditTrailLogsByApplication']);
 Route::get('/audit-trail-logs/by-job-order/{jobOrderId}', [RelatedDataController::class , 'getAuditTrailLogsByJobOrder']);
+Route::get('/details-update-logs/by-service-order/{serviceOrderId}', [RelatedDataController::class , 'getDetailsUpdateLogsByServiceOrder']);
 
 Route::get('/plan-change-logs/by-account/{accountNo}', [RelatedDataController::class , 'getPlanChangeLogsByAccount']);
 Route::get('/service-charge-logs/by-account/{accountNo}', [RelatedDataController::class , 'getServiceChargeLogsByAccount']);

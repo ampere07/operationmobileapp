@@ -1039,48 +1039,57 @@ class ManualRadiusOperationsService
         string $password,
         int $retries = 2
     ) {
-        for ($attempt = 1; $attempt <= $retries; $attempt++) {
-            try {
-                $this->writeLog("[API] Attempt $attempt/$retries: $method $url");
+        $parts = explode('://', $url, 2);
+        $basePath = count($parts) === 2 ? $parts[1] : $url;
+        $protocols = ['https', 'http'];
 
-                $response = Http::withBasicAuth($username, $password)
-                    ->timeout(5)
-                    ->withOptions(['verify' => false]);
+        foreach ($protocols as $protocol) {
+            $currentUrl = $protocol . '://' . $basePath;
 
-                switch (strtoupper($method)) {
-                    case 'GET':
-                        $response = $response->get($url);
-                        break;
-                    case 'POST':
-                        $response = $response->post($url, $payload);
-                        break;
-                    case 'PATCH':
-                        $response = $response->patch($url, $payload);
-                        break;
-                    case 'DELETE':
-                        $response = $response->delete($url);
-                        break;
-                    default:
-                        return false;
-                }
+            for ($attempt = 1; $attempt <= $retries; $attempt++) {
+                try {
+                    $this->writeLog("[API] Attempt $attempt/$retries via $protocol: $method $currentUrl");
 
-                if ($response->successful()) {
-                    $data = $response->json();
-                    return $data;
-                } else {
-                    $this->writeLog("[API] HTTP Error {$response->status()}: " . $response->body());
-                }
+                    $response = Http::withBasicAuth($username, $password)
+                        ->timeout(5)
+                        ->withOptions(['verify' => false]);
 
-            } catch (Exception $e) {
-                $this->writeLog("[API] Exception on attempt $attempt: " . $e->getMessage());
-                
-                if ($attempt < $retries) {
-                    sleep(1);
+                    switch (strtoupper($method)) {
+                        case 'GET':
+                            $response = $response->get($currentUrl);
+                            break;
+                        case 'POST':
+                            $response = $response->post($currentUrl, $payload);
+                            break;
+                        case 'PATCH':
+                            $response = $response->patch($currentUrl, $payload);
+                            break;
+                        case 'DELETE':
+                            $response = $response->delete($currentUrl);
+                            break;
+                        default:
+                            return false;
+                    }
+
+                    if ($response->successful()) {
+                        $data = $response->json();
+                        return $data;
+                    } else {
+                        $this->writeLog("[API] HTTP Error {$response->status()} via $protocol: " . $response->body());
+                    }
+
+                } catch (Exception $e) {
+                    $this->writeLog("[API] Exception on attempt $attempt via $protocol: " . $e->getMessage());
+                    
+                    if ($attempt < $retries) {
+                        sleep(1);
+                    }
                 }
             }
+            $this->writeLog("[API] Protocol $protocol failed after $retries attempts.");
         }
 
-        $this->writeLog("[API] Failed after $retries attempts");
+        $this->writeLog("[API] All protocols failed.");
         return false;
     }
 

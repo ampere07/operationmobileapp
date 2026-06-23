@@ -82,7 +82,7 @@ class PushNotificationService
             'channelId' => $channelId,
             'title' => $title,
             'body' => $body,
-            'data' => $data,
+            'data' => empty($data) ? new \stdClass() : (object) $data,
         ];
 
         try {
@@ -90,7 +90,7 @@ class PushNotificationService
                 'Accept' => 'application/json',
                 'Accept-encoding' => 'gzip, deflate',
                 'Content-Type' => 'application/json',
-            ])->post('https://exp.host/--/api/v2/push/send', $message);
+            ])->post('https://exp.host/--/api/v2/push/send', [$message]);
 
             if ($response->successful()) {
                 Log::info("Push notification sent successfully to {$expoPushToken}");

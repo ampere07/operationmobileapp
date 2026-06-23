@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { useApplicationContext } from '../contexts/ApplicationContext';
+import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { fetchAgentCommissionHistory, fetchAgentCommissionTrend } from '../services/api';
 
@@ -20,6 +21,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const isShort = height < 700;
     const { customerDetail, payments, isLoading: contextLoading, silentRefresh: customerRefresh } = useCustomerDataContext();
     const { applications, silentRefresh: applicationsRefresh } = useApplicationContext();
+    const { jobOrders, silentRefresh: jobOrdersRefresh } = useJobOrderContext();
     const [user, setUser] = useState<any>(null);
     const [cashouts, setCashouts] = useState<any[]>([]);
     const [trendData, setTrendData] = useState<{ points: number[], labels: string[] }>({ points: [0,0,0,0], labels: ['','','',''] });
@@ -89,22 +91,33 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const emailAddress = customerDetail?.emailAddress || user?.email || 'N/A';
     const balance = stats ? Number(stats.total.replace(/[^0-9.]/g, '')) : Number(customerDetail?.billingAccount?.accountBalance || 0);
 
-    const agentIdentifier = user?.email || user?.full_name || '';
+    const agentEmail = user?.email || '';
+    const agentName = user?.full_name || '';
 
     const { referredCount, onboardReferredCount } = useMemo(() => {
-        if (!agentIdentifier) return { referredCount: 0, onboardReferredCount: 0 };
+        if (!agentEmail && !agentName) return { referredCount: 0, onboardReferredCount: 0 };
 
-        const filtered = applications.filter(app =>
-            app.referred_by?.toLowerCase().includes(agentIdentifier.toLowerCase())
-        );
+        const filtered = jobOrders.filter(jo => {
+            const referredBy = (jo.Referred_By || jo.referred_by || '').toLowerCase();
+            return (agentEmail && referredBy.includes(agentEmail.toLowerCase())) || 
+                   (agentName && referredBy.includes(agentName.toLowerCase()));
+        });
 
-        const onboard = filtered.filter(app => app.status?.toLowerCase() === 'confirmed' || app.status?.toLowerCase() === 'done').length;
+        const inProgress = filtered.filter(jo => {
+            const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
+            return status === 'in progress' || status === 'inprogress' || status === 'in-progress';
+        }).length;
+
+        const onboard = filtered.filter(jo => {
+            const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
+            return status === 'done' || status === 'completed';
+        }).length;
 
         return {
-            referredCount: filtered.length - onboard,
+            referredCount: inProgress,
             onboardReferredCount: onboard
         };
-    }, [applications, agentIdentifier]);
+    }, [jobOrders, agentEmail, agentName]);
 
     const fetchHistory = useCallback(async () => {
         try {
@@ -139,6 +152,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
         loadUser();
         customerRefresh();
         applicationsRefresh();
+        jobOrdersRefresh();
         fetchHistory();
         fetchTrend();
     }, [fetchHistory, fetchTrend]);
@@ -164,13 +178,13 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
         try {
-            await Promise.all([customerRefresh(), applicationsRefresh(), fetchHistory(), fetchTrend()]);
+            await Promise.all([customerRefresh(), applicationsRefresh(), jobOrdersRefresh(), fetchHistory(), fetchTrend()]);
         } catch (error) {
             console.error('Refresh failed:', error);
         } finally {
             setRefreshing(false);
         }
-    }, [customerRefresh, applicationsRefresh, fetchHistory, fetchTrend]);
+    }, [customerRefresh, applicationsRefresh, jobOrdersRefresh, fetchHistory, fetchTrend]);
 
     const formatCurrency = useCallback((amount: number) => {
         const isNegative = amount < 0;

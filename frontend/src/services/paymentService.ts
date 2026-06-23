@@ -176,5 +176,35 @@ export const paymentService = {
       }
       throw new Error('Network error. Please check your connection.');
     }
+  },
+
+  cancelPayment: async (referenceNo: string): Promise<{ status: string; message?: string }> => {
+    try {
+      const authData = await AsyncStorage.getItem('authData');
+      let token = '';
+
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        token = parsed.token || '';
+      }
+
+      const response = await axios.post<{ status: string; message?: string }>(
+        `${API_BASE_URL}/payments/cancel`,
+        { reference_no: referenceNo },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : ''
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        throw new Error(error.response.data.message || 'Failed to cancel payment');
+      }
+      throw new Error('Network error. Please check your connection.');
+    }
   }
 };
