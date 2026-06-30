@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SmsLog;
 use App\Services\ItexmoSmsService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,52 @@ class SmsController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send SMS',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * List logged SMS messages (sms_logs table).
+     */
+    public function smsLogs(Request $request): JsonResponse
+    {
+        try {
+            $query = SmsLog::query();
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->filled('provider')) {
+                $query->where('provider', $request->provider);
+            }
+
+            if ($request->filled('account_no')) {
+                $query->where('account_no', $request->account_no);
+            }
+
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('contact_no', 'like', "%{$search}%")
+                      ->orWhere('account_no', 'like', "%{$search}%")
+                      ->orWhere('sender_id', 'like', "%{$search}%")
+                      ->orWhere('message', 'like', "%{$search}%");
+                });
+            }
+
+            $logs = $query->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 50));
+
+            return response()->json($logs);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch SMS logs', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch SMS logs',
                 'error' => $e->getMessage()
             ], 500);
         }

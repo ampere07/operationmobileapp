@@ -22,8 +22,7 @@ class RadiusQueueService
             $attempt = $data['attempts'] ?? 0;
             $maxAttempts = $data['max_attempts'] ?? 5;
 
-            $id = DB::table('radius_operation_queue')->insertGetId([
-                'organization_id' => $data['organization_id'] ?? null,
+            $insertData = [
                 'source_type'     => $data['source_type'],
                 'source_id'       => $data['source_id'],
                 'account_no'      => $data['account_no'] ?? null,
@@ -37,19 +36,30 @@ class RadiusQueueService
                 'created_by'      => $data['created_by'] ?? 'System',
                 'created_at'      => now(),
                 'updated_at'      => now(),
-            ]);
+            ];
 
-            // Static method can't use $this->writeLog, so write directly
-            $timestamp = Carbon::now()->format('Y-m-d H:i:s');
-            $logDir = storage_path('logs/radiusqueue');
-            $logFile = $logDir . '/radius_queue.log';
-            if (!file_exists($logDir)) {
-                mkdir($logDir, 0755, true);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('radius_operation_queue', 'organization_id')) {
+                $insertData['organization_id'] = $data['organization_id'] ?? null;
             }
-            $msg = "[{$timestamp}] [Radius_Queue] [QUEUED] ID: {$id} | Operation: {$data['operation']} | Source: {$data['source_type']}#{$data['source_id']} | Account: " . ($data['account_no'] ?? 'N/A');
-            file_put_contents($logFile, $msg . PHP_EOL, FILE_APPEND);
 
-            return $id;
+            // Use insert() instead of insertGetId() to avoid exceptions on tables without auto-increment IDs
+            $success = DB::table('radius_operation_queue')->insert($insertData);
+
+            if ($success) {
+                // Static method can't use $this->writeLog, so write directly
+                $timestamp = Carbon::now()->format('Y-m-d H:i:s');
+                $logDir = storage_path('logs/radiusqueue');
+                $logFile = $logDir . '/radius_queue.log';
+                if (!file_exists($logDir)) {
+                    mkdir($logDir, 0755, true);
+                }
+                $msg = "[{$timestamp}] [Radius_Queue] [QUEUED] Operation: {$data['operation']} | Source: {$data['source_type']}#{$data['source_id']} | Account: " . ($data['account_no'] ?? 'N/A');
+                file_put_contents($logFile, $msg . PHP_EOL, FILE_APPEND);
+
+                return 1; // Return a truthy integer to satisfy callers expecting an ID
+            }
+            
+            return null;
         } catch (\Exception $e) {
             Log::channel('radiusrelated')->error('[RADIUS QUEUE] Failed to queue operation: ' . $e->getMessage());
             return null;
@@ -117,7 +127,8 @@ class RadiusQueueService
                 $params = json_decode($item->params, true);
                 $this->writeLog("  [EXEC] Executing {$item->operation}...");
 
-                $success = $this->executeOperation($item->operation, $params);
+                $errorMessage = null;
+                $success = $this->executeOperation($item->operation, $params, $errorMessage);
 
                 if ($success) {
                     // Mark as success
@@ -132,9 +143,10 @@ class RadiusQueueService
                     $results['succeeded']++;
                     $this->writeLog("  [RESULT] ✓ SUCCESS");
                 } else {
-                    $this->markRetryOrFailed($item, 'Operation returned failure status');
+                    $errorMsg = $errorMessage ?? 'Operation returned failure status';
+                    $this->markRetryOrFailed($item, $errorMsg);
                     $results['failed']++;
-                    $this->writeLog("  [RESULT] ✗ FAILED - Operation returned failure status");
+                    $this->writeLog("  [RESULT] ✗ FAILED - " . $errorMsg);
                 }
             } catch (\Exception $e) {
                 $this->markRetryOrFailed($item, $e->getMessage());
@@ -163,37 +175,55 @@ class RadiusQueueService
         return $results;
     }
 
-    /**
-     * Execute a RADIUS operation by name
-     */
-    private function executeOperation(string $operation, array $params): bool
+    private function executeOperation(string $operation, array $params, &$errorMessage = null): bool
     {
         switch ($operation) {
             case 'create_user':
-                return $this->retryCreateUser($params);
+                $success = $this->retryCreateUser($params);
+                if (!$success) {
+                    $errorMessage = 'create_user failed on all endpoints.';
+                }
+                return $success;
 
             case 'reconnect_user':
                 $service = app(ManualRadiusOperationsService::class);
                 $result = $service->reconnectUser($params);
-                return ($result['status'] ?? '') === 'success';
+                if (($result['status'] ?? '') !== 'success') {
+                    $errorMessage = $result['message'] ?? 'Operation returned failure status';
+                    return false;
+                }
+                return true;
 
             case 'restricted_user':
                 $service = app(ManualRadiusOperationsService::class);
                 $result = $service->restrictedUser($params);
-                return ($result['status'] ?? '') === 'success';
+                if (($result['status'] ?? '') !== 'success') {
+                    $errorMessage = $result['message'] ?? 'Operation returned failure status';
+                    return false;
+                }
+                return true;
 
             case 'disconnect_user':
                 $service = app(ManualRadiusOperationsService::class);
                 $result = $service->disconnectUser($params);
-                return ($result['status'] ?? '') === 'success';
+                if (($result['status'] ?? '') !== 'success') {
+                    $errorMessage = $result['message'] ?? 'Operation returned failure status';
+                    return false;
+                }
+                return true;
 
             case 'update_credentials':
                 $service = app(ManualRadiusOperationsService::class);
                 $result = $service->updateCredentials($params);
-                return ($result['status'] ?? '') === 'success';
+                if (($result['status'] ?? '') !== 'success') {
+                    $errorMessage = $result['message'] ?? 'Operation returned failure status';
+                    return false;
+                }
+                return true;
 
             default:
-                $this->writeLog("  [ERROR] Unknown operation: {$operation}");
+                $errorMessage = "Unknown operation: {$operation}";
+                $this->writeLog("  [ERROR] " . $errorMessage);
                 return false;
         }
     }
@@ -337,3 +367,4 @@ class RadiusQueueService
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }
 }
+

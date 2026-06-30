@@ -5,22 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class AgentBalance extends Model
+class AgentAchievementClaim extends Model
 {
     use HasFactory;
 
-    protected $table = 'agent_balance';
-
     protected $fillable = [
         'agent_id',
-        'balance',
-        'commission',
-        'incentives',
-        'Bonus',
-        'bonus',
-        'quota',
-        'incentives_value',
-        'remarks',
+        'milestone',
+        'amount',
     ];
 
     public function agent()
@@ -28,4 +20,3 @@ class AgentBalance extends Model
         return $this->belongsTo(User::class, 'agent_id');
     }
 }
-

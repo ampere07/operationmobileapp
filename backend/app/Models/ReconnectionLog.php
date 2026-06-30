@@ -17,7 +17,16 @@ class ReconnectionLog extends Model
         'remarks',
         'created_by_user',
         'updated_by_user',
-        'organization_id'
+        'organization_id',
+        'pro_rate_applied',
+        'billing_status',
+        'pro_rate_invoice_id',
+        'pro_rate_billed_at'
+    ];
+
+    protected $casts = [
+        'pro_rate_applied' => 'boolean',
+        'pro_rate_billed_at' => 'datetime'
     ];
 
     public function billingAccount()

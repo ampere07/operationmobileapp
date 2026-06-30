@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Image, Alert, Modal, Platform } from 'react-native';
-import { Camera, X, Upload } from 'lucide-react-native';
+import { Camera, X, Upload, Image as ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
@@ -134,11 +134,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({
                 ) : (
                     <View className={`w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center ${isDarkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'
                         }`}>
-                        <Image
-                            source={require('../../assets/icon.png')}
-                            className="w-10 h-10 opacity-30"
-                            resizeMode="contain"
-                        />
+                        <ImageIcon size={40} color={isDarkMode ? '#4b5563' : '#9ca3af'} />
                     </View>
                 )}
 

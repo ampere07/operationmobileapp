@@ -69,6 +69,7 @@ import Support from './Support';
 import DashboardCustomer from './DashboardCustomer';
 import DashboardAgent from './DashboardAgent';
 import Commission from './Commission';
+import Achievement from './Achievement';
 import Bills from './Bills';
 import Menu from './Menu';
 import ApplicationForm from './ApplicationForm';
@@ -182,6 +183,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
             case 'commission':
                 return <Commission />;
+            case 'achievement':
+                return <Achievement />;
             case 'customer-bills':
                 return <Bills initialTab={billsInitialTab} />;
             case 'customer-support':

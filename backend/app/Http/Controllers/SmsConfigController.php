@@ -47,9 +47,10 @@ class SmsConfigController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
+                'provider' => 'nullable|string|in:itexmo,semaphore',
                 'code' => 'required|string|max:255',
-                'email' => 'required|email|max:255',
-                'password' => 'required|string|max:255',
+                'email' => 'required_if:provider,itexmo|nullable|email|max:255',
+                'password' => 'required_if:provider,itexmo|nullable|string|max:255',
                 'sender' => 'required|string|max:255',
                 'updated_by' => 'nullable|string|max:255'
             ]);
@@ -70,6 +71,7 @@ class SmsConfigController extends Controller
             ]);
 
             $config = SmsConfig::create([
+                'provider' => $request->input('provider', 'itexmo'),
                 'code' => $request->input('code'),
                 'email' => $request->input('email'),
                 'password' => $request->input('password'),
@@ -111,6 +113,7 @@ class SmsConfigController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
+                'provider' => 'nullable|string|in:itexmo,semaphore',
                 'code' => 'nullable|string|max:255',
                 'email' => 'nullable|email|max:255',
                 'password' => 'nullable|string|max:255',
@@ -135,6 +138,9 @@ class SmsConfigController extends Controller
 
             $updateData = ['updated_by' => $updatedBy];
 
+            if ($request->has('provider')) {
+                $updateData['provider'] = $request->input('provider');
+            }
             if ($request->has('code')) {
                 $updateData['code'] = $request->input('code');
             }

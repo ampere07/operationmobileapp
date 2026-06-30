@@ -56,7 +56,7 @@ class ManualRadiusOperationsService
             }
 
             // Perform RADIUS operations
-            $this->radiusOps(
+            $radiusApplied = $this->radiusOps(
                 $radiusEndpoints,
                 $username,
                 'Disconnected',
@@ -65,6 +65,10 @@ class ManualRadiusOperationsService
                 $accountNo,
                 $updatedBy
             );
+
+            if (!$radiusApplied) {
+                throw new Exception("Failed to connect to RADIUS server or apply disconnect for user '{$username}'");
+            }
 
             // LOG DISCONNECTION TO DATABASE
             try {
@@ -168,7 +172,7 @@ class ManualRadiusOperationsService
             }
 
             // Perform RADIUS operations
-            $this->radiusOps(
+            $radiusApplied = $this->radiusOps(
                 $radiusEndpoints,
                 $username,
                 'Restricted', // RADIUS profile group
@@ -177,6 +181,10 @@ class ManualRadiusOperationsService
                 $accountNo,
                 $updatedBy
             );
+
+            if (!$radiusApplied) {
+                throw new Exception("Failed to connect to RADIUS server or apply restrict for user '{$username}'");
+            }
 
             // LOG RESTRICTION TO DATABASE
             try {
@@ -340,7 +348,7 @@ class ManualRadiusOperationsService
                     ]);
                 }
 
-                $this->radiusOps(
+                $radiusApplied = $this->radiusOps(
                     $radiusEndpoints,
                     $username,
                     $cleanPlan,
@@ -349,9 +357,13 @@ class ManualRadiusOperationsService
                     $accountNo,
                     $updatedBy
                 );
+
+                if (!$radiusApplied) {
+                    throw new Exception("Failed to connect to RADIUS server or apply reconnect for user '{$username}'");
+                }
             } catch (Throwable $radiusEx) {
                 $this->writeLog("[RADIUS ERROR] Operation failed: " . $radiusEx->getMessage());
-                throw $radiusEx; // Re-throw to be caught by outer catch
+                throw $radiusEx; // Re-throw to be caught by outer catch (returns error status -> caller queues)
             }
 
             // NOTE: Email notification is handled by the calling controller (ServiceOrderController / ServiceOrderApiController)
@@ -486,8 +498,10 @@ class ManualRadiusOperationsService
             );
 
             if (!$radiusSuccess) {
-                $this->writeLog("[WARNING] Database was updated, but RADIUS update failed. Manual intervention may be needed.");
-                // We don't throw exception here to keep DB change, or we could roll back if needed
+                // DB username was already updated, but RADIUS could not be reached/updated.
+                // Report failure so the caller queues the RADIUS rename for automatic retry.
+                $this->writeLog("[WARNING] Database was updated, but RADIUS update failed. Will be queued for retry.");
+                throw new Exception("Failed to connect to RADIUS server or update credentials for user '{$oldUsername}'");
             }
 
             $this->writeLog("[SUCCESS] Credentials updated successfully");
@@ -805,12 +819,17 @@ class ManualRadiusOperationsService
         bool $isDisconnectAction,
         string $accountNo = '',
         string $updatedBy = 'System'
-    ): void {
+    ): bool {
         $this->writeLog("[RADIUS OPS] User: $username | Target: $targetGroup | isDC: " . ($isDisconnectAction ? 'Yes' : 'No'));
 
         $radiusId = null;
         $currentRadiusGroup = null;
         $userPath = "/rest/user-manage/user/" . urlencode($username);
+
+        // Whether the change was actually applied/confirmed on a live RADIUS server.
+        // Stays false when the server is unreachable so the caller can queue a retry
+        // instead of falsely reporting success.
+        $radiusApplied = false;
 
         // Find user in RADIUS servers
         foreach ($radiusEndpoints as $endpoint) {
@@ -835,7 +854,8 @@ class ManualRadiusOperationsService
             $patchHappened = false;
 
             // Check if group needs updating
-            if ($currentRadiusGroup !== $targetGroup) {
+            $needsPatch = ($currentRadiusGroup !== $targetGroup);
+            if ($needsPatch) {
                 $this->writeLog("[PATCH] Mismatch ($currentRadiusGroup != $targetGroup). Updating group...");
                 $payload = ['group' => $targetGroup];
 
@@ -861,6 +881,10 @@ class ManualRadiusOperationsService
                 }
             }
 
+            // The operation is considered applied if no patch was needed (already in the
+            // desired group) or the patch succeeded on at least one server.
+            $radiusApplied = $needsPatch ? $patchHappened : true;
+
             // Determine if session should be killed
             $shouldKill = $isDisconnectAction || $patchHappened;
 
@@ -871,11 +895,16 @@ class ManualRadiusOperationsService
                 $this->writeLog("[DECISION] No changes needed, keeping session");
             }
         } else {
-            $this->writeLog("[WARNING] User '$username' not found in RADIUS");
+            // User could not be located on ANY RADIUS server. This happens when every
+            // server is unreachable/timing out (connection error) or the user is missing.
+            // Either way the change was NOT applied — report failure so it gets queued.
+            $this->writeLog("[WARNING] User '$username' not found in RADIUS (server unreachable or user missing)");
         }
 
-        // Update database
+        // Update database (local status) regardless — the queue handles RADIUS retry.
         $this->updateDatabaseStatus($accountNo, $username, $dbStatus, $updatedBy);
+
+        return $radiusApplied;
     }
 
     /**
@@ -1030,6 +1059,7 @@ class ManualRadiusOperationsService
 
     /**
      * Call API with retry logic
+     * Tries both HTTPS and HTTP protocols per URL (same strategy as RadiusStatusSyncService)
      */
     private function callApiWithRetry(
         string $url,
@@ -1039,33 +1069,37 @@ class ManualRadiusOperationsService
         string $password,
         int $retries = 2
     ) {
-        $parts = explode('://', $url, 2);
-        $basePath = count($parts) === 2 ? $parts[1] : $url;
-        $protocols = ['https', 'http'];
+        // Build list of URLs to try: configured protocol first, then alternate
+        // This mirrors RadiusStatusSyncService which tries both protocols per config
+        $urlsToTry = [$url];
+        if (str_starts_with($url, 'https://')) {
+            $urlsToTry[] = str_replace('https://', 'http://', $url);
+        } elseif (str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            $urlsToTry[] = str_replace('http://', 'https://', $url);
+        }
 
-        foreach ($protocols as $protocol) {
-            $currentUrl = $protocol . '://' . $basePath;
-
+        foreach ($urlsToTry as $tryUrl) {
             for ($attempt = 1; $attempt <= $retries; $attempt++) {
                 try {
-                    $this->writeLog("[API] Attempt $attempt/$retries via $protocol: $method $currentUrl");
+                    $this->writeLog("[API] Attempt $attempt/$retries: $method $tryUrl");
 
                     $response = Http::withBasicAuth($username, $password)
+                        ->connectTimeout(3)
                         ->timeout(5)
                         ->withOptions(['verify' => false]);
 
                     switch (strtoupper($method)) {
                         case 'GET':
-                            $response = $response->get($currentUrl);
+                            $response = $response->get($tryUrl);
                             break;
                         case 'POST':
-                            $response = $response->post($currentUrl, $payload);
+                            $response = $response->post($tryUrl, $payload);
                             break;
                         case 'PATCH':
-                            $response = $response->patch($currentUrl, $payload);
+                            $response = $response->patch($tryUrl, $payload);
                             break;
                         case 'DELETE':
-                            $response = $response->delete($currentUrl);
+                            $response = $response->delete($tryUrl);
                             break;
                         default:
                             return false;
@@ -1075,21 +1109,20 @@ class ManualRadiusOperationsService
                         $data = $response->json();
                         return $data;
                     } else {
-                        $this->writeLog("[API] HTTP Error {$response->status()} via $protocol: " . $response->body());
+                        $this->writeLog("[API] HTTP Error {$response->status()}: " . $response->body());
                     }
 
                 } catch (Exception $e) {
-                    $this->writeLog("[API] Exception on attempt $attempt via $protocol: " . $e->getMessage());
-                    
+                    $this->writeLog("[API] Exception on attempt $attempt: " . $e->getMessage());
+
                     if ($attempt < $retries) {
                         sleep(1);
                     }
                 }
             }
-            $this->writeLog("[API] Protocol $protocol failed after $retries attempts.");
         }
 
-        $this->writeLog("[API] All protocols failed.");
+        $this->writeLog("[API] Request failed after trying all protocols and attempts.");
         return false;
     }
 
@@ -1175,6 +1208,7 @@ class ManualRadiusOperationsService
         }
     }
 }
+
 
 
 

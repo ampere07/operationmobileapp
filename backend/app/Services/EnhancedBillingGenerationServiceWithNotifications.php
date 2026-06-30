@@ -16,6 +16,7 @@ use App\Models\Barangay;
 use App\Models\BillingConfig;
 use App\Models\Overdue;
 use App\Models\DCNotice;
+use App\Models\ReconnectionLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -23,6 +24,15 @@ use Carbon\Carbon;
 class EnhancedBillingGenerationServiceWithNotifications
 {
     protected BillingNotificationService $notificationService;
+
+    /**
+     * Reconnection date of the pro-rate matched during the most recent
+     * calculateReconnectionProRate() call (null when no pro-rate applied).
+     * Used to populate pro_rate_start so the PDF coverage period reflects
+     * the actual reconnection day. Reset on every calculation.
+     */
+    protected ?Carbon $lastReconnectionProRateStart = null;
+
     protected const VAT_RATE = 0.12;
     protected const DAYS_IN_MONTH = 30;
     protected const DAYS_UNTIL_DUE = 7;
@@ -276,7 +286,14 @@ class EnhancedBillingGenerationServiceWithNotifications
             $prorateAmount = $this->calculateProrateAmount($account, $plan->price, $adjustedDate);
             $monthlyFeeGross = $prorateAmount / (1 + self::VAT_RATE);
             $vat = $monthlyFeeGross * self::VAT_RATE;
-            $monthlyServiceFee = $prorateAmount - $vat;
+
+            // Reconnection pro-rate for a customer skipped last cycle but reconnected
+            // inside the generation window. Added to the monthly service fee so it
+            // flows into amount_due / total_amount_due below.
+            $reconnectionProRate = $this->calculateReconnectionProRate($account, $plan->price, $statementDate);
+            $reconnectionProRateStart = $this->lastReconnectionProRateStart;
+
+            $monthlyServiceFee = ($prorateAmount - $vat) + $reconnectionProRate;
 
             // Use statement ID as the reference for charges
             $charges = $this->calculateChargesAndDeductions(
@@ -305,6 +322,8 @@ class EnhancedBillingGenerationServiceWithNotifications
                 'remaining_balance_previous' => round($remainingBalance, 2),
                 'monthly_service_fee' => round($monthlyServiceFee, 2),
                 'others_and_basic_charges' => round($othersAndBasicCharges, 2),
+                'pro_rate' => round($reconnectionProRate, 2),
+                'pro_rate_start' => $reconnectionProRateStart ? $reconnectionProRateStart->format('Y-m-d') : null,
                 'service_charge' => round($charges['service_fees'], 2),
                 'rebate' => round($charges['rebates'], 2),
                 'discounts' => round($charges['discounts'], 2),
@@ -407,27 +426,35 @@ class EnhancedBillingGenerationServiceWithNotifications
             ]);
             
             $prorateAmount = $this->calculateProrateAmount($account, $plan->price, $adjustedDate);
+
+            // Reconnection pro-rate for a customer skipped last cycle but reconnected
+            // inside the generation window. Added to invoice_balance and total_amount.
+            $reconnectionProRate = $this->calculateReconnectionProRate($account, $plan->price, $invoiceDate);
+            $reconnectionProRateStart = $this->lastReconnectionProRateStart;
+
             $charges = $this->calculateChargesAndDeductions(
-                $account, 
-                $invoiceDate, 
-                $userId, 
+                $account,
+                $invoiceDate,
+                $userId,
                 (string)$invoice->id,
                 $plan->price,
                 true,
                 true
             );
-            
+
             $othersBasicCharges = 0;
 
-            $totalAmount = $prorateAmount + $charges['staggered_install_fees'] + $charges['service_fees'] - $charges['rebates'] - $charges['discounts'] - $charges['advanced_payments'];
-            
+            $totalAmount = $prorateAmount + $reconnectionProRate + $charges['staggered_install_fees'] + $charges['service_fees'] - $charges['rebates'] - $charges['discounts'] - $charges['advanced_payments'];
+
             if ($account->account_balance < 0) {
                 $totalAmount += $account->account_balance;
             }
 
             $invoice->update([
-                'invoice_balance' => round($prorateAmount, 2),
+                'invoice_balance' => round($prorateAmount + $reconnectionProRate, 2),
                 'others_and_basic_charges' => round($othersBasicCharges, 2),
+                'pro_rate' => round($reconnectionProRate, 2),
+                'pro_rate_start' => $reconnectionProRateStart ? $reconnectionProRateStart->format('Y-m-d') : null,
                 'service_charge' => round($charges['service_fees'], 2),
                 'rebate' => round($charges['rebates'], 2),
                 'discounts' => round($charges['discounts'], 2),
@@ -460,6 +487,12 @@ class EnhancedBillingGenerationServiceWithNotifications
             $this->markRebatesAsUsed($account, $userId, (string)$invoice->id);
             $this->markPlanChangesAsUsed($account, $userId, (string)$invoice->id);
             $this->trackStaggeredInvoiceAssociation($account->account_no, $invoice->id);
+
+            // Consume the reconnection pro-rate (once, on the invoice) so it is not
+            // re-charged on a subsequent billing cycle. Only when actually charged.
+            if ($reconnectionProRate > 0) {
+                $this->markReconnectionProRateAsUsed($account, $userId, (string)$invoice->id, $invoiceDate);
+            }
 
             DB::commit();
             
@@ -572,6 +605,202 @@ class EnhancedBillingGenerationServiceWithNotifications
         }
 
         return $monthlyFee;
+    }
+
+    /**
+     * Calculate a pro-rate charge for a customer who was disconnected (and therefore
+     * skipped) during the previous billing run, but reconnected inside that previous
+     * cycle's generation window before their billing_day.
+     *
+     * The pro-rate window is bounded by BOTH billing_day AND advance_generation_day:
+     *   prevBillingDayDate  = previous cycle's billing_day date
+     *   prevGenerationDate  = prevBillingDayDate - advance_generation_day days
+     * If the customer reconnected between those two dates and never received a bill
+     * for that window, they owe a pro-rate for the days from reconnection -> billing_day.
+     *
+     * Example: billing_day=10, advance_generation_day=7, generation runs May 3 for the
+     * May 10 cycle. The next run (June 3, for the June 10 cycle) checks the May 3 -> May 10
+     * window. A reconnection on May 4 yields 6 days => (plan_price / 30) * 6.
+     *
+     * @param  Carbon  $generationDate  The date billing is being generated (today).
+     */
+    protected function calculateReconnectionProRate(BillingAccount $account, float $planPrice, Carbon $generationDate): float
+    {
+        // Reset carried state for every calculation so a previous account's match
+        // can never leak into this account's PDF coverage period.
+        $this->lastReconnectionProRateStart = null;
+
+        try {
+            $match = $this->findReconnectionForProRate($account, $generationDate);
+            if (!$match) {
+                return 0.0;
+            }
+
+            $reconnectionDate   = $match['reconnection_date'];
+            $prevGenerationDate = $match['prev_generation_date'];
+            $prevBillingDayDate = $match['prev_billing_day_date'];
+
+            // Days from the reconnection date up to the cycle's billing_day.
+            $proRateDays = (int) abs(
+                $reconnectionDate->copy()->startOfDay()
+                    ->diffInDays($prevBillingDayDate->copy()->startOfDay())
+            );
+
+            // Guard: nothing to charge if they reconnected on/after the billing day.
+            if ($proRateDays <= 0) {
+                return 0.0;
+            }
+
+            $proRateAmount = round(($planPrice / self::DAYS_IN_MONTH) * $proRateDays, 2);
+
+            // Carry the reconnection date so the billing document's coverage period
+            // (PDF Period_Start) can reflect the actual first billed day.
+            $this->lastReconnectionProRateStart = $reconnectionDate->copy();
+
+            $this->log('info', 'Reconnection pro-rate applied', [
+                'account_no'           => $account->account_no,
+                'reconnection_date'    => $reconnectionDate->format('Y-m-d'),
+                'prev_generation_date' => $prevGenerationDate->format('Y-m-d'),
+                'prev_billing_day'     => $prevBillingDayDate->format('Y-m-d'),
+                'pro_rate_days'        => $proRateDays,
+                'pro_rate_amount'      => $proRateAmount,
+            ]);
+
+            return $proRateAmount;
+        } catch (\Throwable $e) {
+            // Never let a pro-rate lookup break billing generation.
+            $this->log('error', 'Failed to calculate reconnection pro-rate', [
+                'account_no' => $account->account_no,
+                'error'      => $e->getMessage(),
+            ]);
+            return 0.0;
+        }
+    }
+
+    /**
+     * Locate the reconnection log (if any) that qualifies this account for a
+     * reconnection pro-rate on the current generation run, together with the
+     * previous-cycle window dates. Returns null when no pro-rate is owed.
+     *
+     * Guard conditions (any => null):
+     *   - A billing (invoice) already exists for the account inside the window
+     *     (the account was NOT skipped last cycle).
+     *   - No un-applied reconnection log exists inside the window.
+     *
+     * @return array{reconnection: ReconnectionLog, reconnection_date: Carbon, prev_generation_date: Carbon, prev_billing_day_date: Carbon}|null
+     */
+    protected function findReconnectionForProRate(BillingAccount $account, Carbon $generationDate): ?array
+    {
+        $advanceGenerationDay = $this->getAdvanceGenerationDay();
+
+        // Current cycle's billing_day date (already handles advance-generation
+        // month wrap-around, e.g. generating in advance for next month).
+        $adjustedBillingDate = $this->calculateAdjustedBillingDate($account, $generationDate);
+
+        // Previous billing cycle window.
+        $prevBillingDayDate = $adjustedBillingDate->copy()->subMonthNoOverflow()->startOfDay();
+
+        // For end-of-month accounts the previous billing day is the LAST day of the
+        // previous month (e.g. May 31). subMonthNoOverflow alone does not yield this
+        // when the current month is shorter (June 30 -> May 30), so re-snap to the
+        // end of the previous month to keep the window and day count correct.
+        if ((int) $account->billing_day === self::END_OF_MONTH_BILLING) {
+            $prevBillingDayDate = $prevBillingDayDate->endOfMonth()->startOfDay();
+        }
+
+        $prevGenerationDate = $prevBillingDayDate->copy()->subDays($advanceGenerationDay)->startOfDay();
+        $windowEnd          = $prevBillingDayDate->copy()->endOfDay();
+
+        // Guard: if the account already has an invoice dated inside the previous
+        // window, it was billed (not skipped) and no pro-rate is needed.
+        $billingExists = Invoice::where('account_no', $account->account_no)
+            ->whereBetween('invoice_date', [$prevGenerationDate, $windowEnd])
+            ->exists();
+
+        if ($billingExists) {
+            return null;
+        }
+
+        // Most recent reconnection inside the window that has not yet been billed
+        // a pro-rate (prevents double-charging on later cycles).
+        $reconnection = ReconnectionLog::where('account_id', $account->id)
+            ->whereBetween('created_at', [$prevGenerationDate, $windowEnd])
+            ->where(function ($q) {
+                $q->where('pro_rate_applied', false)
+                    ->orWhereNull('pro_rate_applied');
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$reconnection) {
+            return null;
+        }
+
+        return [
+            'reconnection'          => $reconnection,
+            'reconnection_date'     => Carbon::parse($reconnection->created_at)->startOfDay(),
+            'prev_generation_date'  => $prevGenerationDate,
+            'prev_billing_day_date' => $prevBillingDayDate,
+        ];
+    }
+
+    /**
+     * Mark the reconnection that drove a pro-rate as billed so it is never
+     * charged again on a subsequent cycle. Called once, from the invoice
+     * (the authoritative document that "consumes" one-time charges) so that
+     * the SOA and invoice for the same run both reflect the pro-rate first.
+     */
+    protected function markReconnectionProRateAsUsed(BillingAccount $account, int $userId, string $invoiceId, Carbon $generationDate): void
+    {
+        try {
+            $match = $this->findReconnectionForProRate($account, $generationDate);
+            if (!$match) {
+                return;
+            }
+
+            /** @var ReconnectionLog $reconnection */
+            $reconnection = $match['reconnection'];
+            $reconnection->update([
+                'pro_rate_applied'    => true,
+                'billing_status'      => 'Billed',
+                'pro_rate_invoice_id' => $invoiceId,
+                'pro_rate_billed_at'  => now(),
+                'updated_by_user'     => (string) $userId,
+            ]);
+
+            // Only the most recent reconnection in the window is charged (per spec).
+            // Mark any other un-applied reconnections in the same window as superseded
+            // so they are not left lingering as pending / re-evaluated later.
+            $superseded = ReconnectionLog::where('account_id', $account->id)
+                ->where('id', '!=', $reconnection->id)
+                ->whereBetween('created_at', [
+                    $match['prev_generation_date'],
+                    $match['prev_billing_day_date']->copy()->endOfDay(),
+                ])
+                ->where(function ($q) {
+                    $q->where('pro_rate_applied', false)
+                        ->orWhereNull('pro_rate_applied');
+                })
+                ->update([
+                    'pro_rate_applied'    => true,
+                    'billing_status'      => 'Superseded',
+                    'pro_rate_invoice_id' => $invoiceId,
+                    'pro_rate_billed_at'  => now(),
+                    'updated_by_user'     => (string) $userId,
+                ]);
+
+            $this->log('info', 'Reconnection marked as pro-rate applied', [
+                'account_no'        => $account->account_no,
+                'reconnection_id'   => $reconnection->id,
+                'invoice_id'        => $invoiceId,
+                'superseded_count'  => $superseded,
+            ]);
+        } catch (\Throwable $e) {
+            $this->log('error', 'Failed to mark reconnection pro-rate as applied', [
+                'account_no' => $account->account_no,
+                'error'      => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function getDaysBetweenDatesIncludingDueDate(Carbon $startDate, Carbon $endDate): int

@@ -602,24 +602,62 @@ class CustomerDetailUpdateController extends Controller
 
             // Execute RADIUS update as the absolute last step after database saving is complete
             $radiusMessage = null;
+            $radiusQueued = false;
+            $radiusQueueFailed = false;
             $oldUsername = $oldTechnicalDetails['username'] ?? null;
             $newUsername = $technicalDetail->username;
 
             if ($usernameChanged) {
+                // Snapshot of everything the RADIUS rename needs. This is also what gets
+                // persisted to the queue so the cron can replay the exact same operation.
+                $credParams = [
+                    'accountNumber' => $accountNo,
+                    'username'      => $oldUsername,       // RADIUS still has the OLD name
+                    'newUsername'   => $newUsernameInput,  // the target name
+                    'newPassword'   => null,               // username-only change, keep password
+                    'updatedBy'     => $request->input('updatedBy') ?: 'System',
+                ];
+
+                $radiusFailedError = null;
                 try {
                     $radiusService = app(\App\Services\ManualRadiusOperationsService::class);
-                    $radiusResult = $radiusService->updateCredentials([
-                        'accountNumber' => $accountNo,
-                        'username' => $oldUsername,
-                        'newUsername' => $newUsernameInput,
-                        // newPassword is NOT passed, so it will only update the username
-                        'updatedBy' => $request->input('updatedBy') ?: 'System'
-                    ]);
-                    $radiusMessage = $radiusResult['message'] ?? 'Radius and Database updated successfully';
+                    $radiusResult = $radiusService->updateCredentials($credParams);
+
+                    if (($radiusResult['status'] ?? '') === 'success') {
+                        $radiusMessage = $radiusResult['message'] ?? 'Radius and Database updated successfully';
+                    } else {
+                        $radiusFailedError = $radiusResult['message'] ?? 'RADIUS update returned failure';
+                    }
                 } catch (\Exception $e) {
+                    // updateCredentials normally returns a status, but stay defensive.
+                    $radiusFailedError = $e->getMessage();
                     Log::error('Radius username update failed', ['error' => $e->getMessage()]);
-                    \Log::channel('radiusrelated')->error('[CUSTOMER DETAIL RADIUS UPDATE FAILED] Account: ' . $accountNo . ' - Old User: ' . $oldUsername . ' - New User: ' . $newUsernameInput . ' - Error: ' . $e->getMessage());
-                    $radiusMessage = 'Radius update failed: ' . $e->getMessage();
+                }
+
+                // RADIUS could not be reached/applied (server offline/timeout/etc.). The DB
+                // rename is already committed, so queue the RADIUS rename for automatic retry
+                // instead of losing it. The Service Order / customer save is NOT rolled back.
+                if ($radiusFailedError !== null) {
+                    $queuedId = \App\Services\RadiusQueueService::queue([
+                        'organization_id' => $billingAccount->organization_id ?? null,
+                        'source_type'     => 'customer_detail_update',
+                        'source_id'       => $billingAccount->id,
+                        'account_no'      => $accountNo,
+                        'operation'       => 'update_credentials',
+                        'params'          => $credParams,
+                        'last_error'      => $radiusFailedError,
+                        'created_by'      => $credParams['updatedBy'],
+                    ]);
+
+                    \Log::channel('radiusrelated')->error('[CUSTOMER DETAIL RADIUS UPDATE FAILED - QUEUED] Account: ' . $accountNo . ' - Old User: ' . $oldUsername . ' - New User: ' . $newUsernameInput . ' - Error: ' . $radiusFailedError);
+
+                    if ($queuedId) {
+                        $radiusQueued = true;
+                        $radiusMessage = 'RADIUS username update has been queued and will be processed automatically.';
+                    } else {
+                        $radiusQueueFailed = true;
+                        $radiusMessage = 'RADIUS update failed and could not be queued. Please notify an administrator to retry it manually.';
+                    }
                 }
             }
 
@@ -627,7 +665,9 @@ class CustomerDetailUpdateController extends Controller
                 'success' => true,
                 'message' => 'Technical details updated successfully',
                 'data' => $technicalDetail->fresh(),
-                'radius_message' => $radiusMessage
+                'radius_message' => $radiusMessage,
+                'radius_queued' => $radiusQueued,
+                'radius_queue_failed' => $radiusQueueFailed
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {

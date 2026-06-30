@@ -288,7 +288,8 @@ class AutoDisconnectService
                 $this->writeLog("  [RADIUS] ✗ All 3 attempts failed. Queuing for retry.");
                 \Log::channel('radiusrelated')->error('[AUTO DC RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $lastRadiusError);
                 // We no longer throw an exception and rollback. We let the DB transaction commit so the user is marked as Inactive locally.
-                RadiusQueueService::queue([
+                $this->queueRadiusRetry([
+                    'organization_id' => $billingAccount->organization_id ?? null,
                     'source_type' => 'auto_disconnect',
                     'source_id' => $invoice->id,
                     'account_no' => $accountNo,
@@ -577,7 +578,8 @@ class AutoDisconnectService
                     if (!$radiusSuccess) {
                         $this->writeLog("  [RADIUS] ✗ All 3 attempts failed. Queuing for retry.");
                         \Log::channel('radiusrelated')->error('[AUTO PULLOUT RADIUS FAILURE] Account: ' . $accountNo . ' - Reason: ' . $lastRadiusError);
-                        RadiusQueueService::queue([
+                        $this->queueRadiusRetry([
+                            'organization_id' => $billingAccount->organization_id ?? null,
                             'source_type' => 'auto_pullout',
                             'source_id' => $billingAccount->id,
                             'account_no' => $accountNo,
@@ -880,6 +882,29 @@ class AutoDisconnectService
         if ($balance) $message = str_replace('{{balance}}', $balance, $message);
 
         return $message;
+    }
+
+    /**
+     * Queue a failed RADIUS operation for automatic retry.
+     *
+     * Wraps RadiusQueueService::queue so a failure of the FALLBACK itself (e.g. the
+     * insert silently failing) is logged loudly instead of disappearing — the queue is
+     * the last line of defense, so it must never fail quietly.
+     */
+    private function queueRadiusRetry(array $data): void
+    {
+        $queuedId = RadiusQueueService::queue($data);
+
+        if ($queuedId) {
+            $this->writeLog("  [QUEUE] ✓ RADIUS operation queued for retry (ID: {$queuedId}) for " . ($data['account_no'] ?? 'N/A'));
+        } else {
+            $this->writeLog("  [QUEUE] ✗ CRITICAL: RADIUS FAILED and could NOT be queued for " . ($data['account_no'] ?? 'N/A'));
+            \Log::channel('radiusrelated')->error('[AUTO DC/PULLOUT QUEUE FAILURE] RADIUS operation failed AND the queue insert also failed', [
+                'operation'   => $data['operation'] ?? null,
+                'account_no'  => $data['account_no'] ?? null,
+                'source_type' => $data['source_type'] ?? null,
+            ]);
+        }
     }
 
     /**

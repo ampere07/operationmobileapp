@@ -89,6 +89,9 @@ class UserController extends Controller
             'agent_id' => 'nullable|integer|exists:agents,id',
             'active' => 'sometimes|boolean',
             'commission' => 'nullable|numeric|min:0',
+            'quota' => 'nullable|numeric|min:0',
+            'incentives_value' => 'nullable|numeric|min:0',
+            'remarks' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -136,7 +139,10 @@ class UserController extends Controller
                     ['agent_id' => $user->id],
                     [
                         'balance' => 0.00,
-                        'commission' => $request->commission ?? 0.00
+                        'commission' => $request->commission ?? 0.00,
+                        'quota' => $request->quota ?? 0.00,
+                        'incentives_value' => $request->incentives_value ?? 0.00,
+                        'remarks' => $request->remarks ?? null,
                     ]
                 );
             }
@@ -235,6 +241,9 @@ class UserController extends Controller
             'agent_id' => 'sometimes|nullable|integer|exists:agents,id',
             'active' => 'sometimes|boolean',
             'commission' => 'sometimes|nullable|numeric|min:0',
+            'quota' => 'sometimes|nullable|numeric|min:0',
+            'incentives_value' => 'sometimes|nullable|numeric|min:0',
+            'remarks' => 'sometimes|nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -311,11 +320,26 @@ class UserController extends Controller
                 if ($request->has('commission')) {
                     $balanceData['commission'] = $request->commission;
                 }
+                if ($request->has('quota')) {
+                    $balanceData['quota'] = $request->quota;
+                }
+                if ($request->has('incentives_value')) {
+                    $balanceData['incentives_value'] = $request->incentives_value;
+                }
+                if ($request->has('remarks')) {
+                    $balanceData['remarks'] = $request->remarks;
+                }
                 // Check if record exists, if not, initialize balance to 0.00
                 if (!AgentBalance::where('agent_id', $user->id)->exists()) {
                     $balanceData['balance'] = 0.00;
                     if (!isset($balanceData['commission'])) {
                         $balanceData['commission'] = 0.00;
+                    }
+                    if (!isset($balanceData['quota'])) {
+                        $balanceData['quota'] = 0.00;
+                    }
+                    if (!isset($balanceData['incentives_value'])) {
+                        $balanceData['incentives_value'] = 0.00;
                     }
                 }
                 if (!empty($balanceData)) {

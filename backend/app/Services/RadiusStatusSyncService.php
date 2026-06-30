@@ -226,9 +226,9 @@ class RadiusStatusSyncService
 
                 DB::table('online_status')
                     ->updateOrInsert(
-                        ['account_no' => $accountNo],
+                        ['account_id' => $account->account_id],
                         [
-                            'account_id' => $account->account_id,
+                            'account_no' => $accountNo,
                             'username' => $username,
                             'session_status' => $status,
                             'session_group' => $group,
@@ -307,5 +307,6 @@ class RadiusStatusSyncService
         throw new \RuntimeException($errorMsg);
     }
 }
+
 
 

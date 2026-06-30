@@ -454,6 +454,12 @@ class GoogleDrivePdfGenerationService
                     : null;
             }
 
+            // If a reconnection pro-rate was applied, the coverage period begins on the
+            // reconnection date (the first actually-billed day), not the previous SOA date.
+            if (!empty($soa->pro_rate_start) && (float)($soa->pro_rate ?? 0) > 0) {
+                $periodStart = \Carbon\Carbon::parse($soa->pro_rate_start);
+            }
+
             $data = array_merge($data, [
                 'Statement_Date' => $soa->statement_date ? \Carbon\Carbon::parse($soa->statement_date)->format('F d, Y') : '-',
                 'SOA_No' => $soa->id,

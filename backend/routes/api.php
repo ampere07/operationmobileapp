@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Artisan;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\GroupController;
@@ -59,6 +60,20 @@ Route::get('/commissions/history', [CommissionController::class, 'getHistory']);
 Route::post('/commissions/history', [CommissionController::class, 'storeHistory']);
 Route::get('/commissions/trend', [CommissionController::class, 'getTrend']);
 Route::get('/commissions/agent-job-orders', [CommissionController::class, 'getJobOrdersByAgent']);
+Route::get('/commissions/incentive-history', [CommissionController::class, 'getIncentiveHistory']);
+Route::get('/commissions/achievements', [CommissionController::class, 'getAchievements']);
+Route::post('/commissions/achievements', [CommissionController::class, 'storeAchievement']);
+
+// Temporary route to run migrations on the live server
+Route::get('/run-migrations-db', function () {
+    try {
+        Artisan::call('migrate', ['--force' => true]);
+        return response()->json(['success' => true, 'message' => 'Migrations run successfully', 'output' => Artisan::output()]);
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
 Route::post('/reports', [ReportController::class , 'store']);
 Route::get('/reports-migrate-pdf', function () {
     $reports = \App\Models\Report::all();
@@ -3549,6 +3564,8 @@ Route::get('/transactions/by-account/{accountNo}', [RelatedDataController::class
 Route::get('/staggered-installations/by-account/{accountNo}', [RelatedDataController::class , 'getStaggeredByAccount']);
 Route::get('/discounts/by-account/{accountNo}', [RelatedDataController::class , 'getDiscountsByAccount']);
 Route::get('/service-orders/by-account/{accountNo}', [RelatedDataController::class , 'getServiceOrdersByAccount']);
+Route::get('/job-orders/by-account/{accountNo}', [RelatedDataController::class , 'getJobOrdersByAccount']);
+Route::get('/applications/by-account/{accountNo}', [RelatedDataController::class , 'getApplicationsByAccount']);
 
 // Service Order Items Routes
 Route::get('/service-order-items/{serviceOrderId}', [ServiceOrderItemApiController::class, 'getByServiceOrderId']);

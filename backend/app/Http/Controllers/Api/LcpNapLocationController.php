@@ -196,24 +196,25 @@ class LcpNapLocationController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'lcpnap_name' => 'required|string|max:255',
-                'street' => 'required|string|max:255',
-                'region' => 'required|string|max:255',
-                'city' => 'required|string|max:255',
-                'barangay' => 'required|string|max:255',
-                'lcp_id' => 'required|string|max:255',
-                'nap_id' => 'required|string|max:255',
+                'street' => 'nullable|string|max:255',
+                'region' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:255',
+                'barangay' => 'nullable|string|max:255',
+                'lcp_id' => 'nullable|string|max:255',
+                'nap_id' => 'nullable|string|max:255',
                 'port_total' => 'required|integer|min:1',
                 'coordinates' => 'nullable|string|max:255',
                 'reading_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'modified_by' => 'required|string|max:255',
+                'modified_by' => 'nullable|string|max:255',
                 'organization_id' => 'nullable|integer',
                 'lcp_name' => 'nullable|string|max:255',
                 'nap_name' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
+                Log::error('LCPNAP Store Validation Failed', $validator->errors()->toArray());
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -355,24 +356,25 @@ class LcpNapLocationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'lcpnap_name' => 'required|string|max:255',
-                'street' => 'required|string|max:255',
-                'region' => 'required|string|max:255',
-                'city' => 'required|string|max:255',
-                'barangay' => 'required|string|max:255',
-                'lcp_id' => 'required|string|max:255',
-                'nap_id' => 'required|string|max:255',
+                'street' => 'nullable|string|max:255',
+                'region' => 'nullable|string|max:255',
+                'city' => 'nullable|string|max:255',
+                'barangay' => 'nullable|string|max:255',
+                'lcp_id' => 'nullable|string|max:255',
+                'nap_id' => 'nullable|string|max:255',
                 'port_total' => 'required|integer|min:1',
                 'coordinates' => 'nullable|string|max:255',
                 'reading_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'image_2' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
-                'modified_by' => 'required|string|max:255',
+                'modified_by' => 'nullable|string|max:255',
                 'organization_id' => 'nullable|integer',
                 'lcp_name' => 'nullable|string|max:255',
                 'nap_name' => 'nullable|string|max:255'
             ]);
 
             if ($validator->fails()) {
+                Log::error('LCPNAP Update Validation Failed', $validator->errors()->toArray());
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',

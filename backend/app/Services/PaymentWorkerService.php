@@ -49,14 +49,18 @@ class PaymentWorkerService
                                 ->orWhere('callback_payload', 'LIKE', '%PAYMENT_SUCCESS%');
                           });
                 })
-                // FAILED rows (e.g. customer-cancelled) are reprocessed only once a
-                // payment callback has populated callback_payload. processPayment()
-                // then decides the outcome from the payload (PAID, or kept FAILED).
-                // FAILED rows with no payload are ignored by the worker entirely.
+                // FAILED rows (e.g. customer-cancelled) are only reprocessed once a
+                // payment callback arrives. FAILED rows with no payload are ignored.
+                // Restricted to paid-looking payloads so genuinely-failed webhook
+                // payloads (status FAILED/PAYMENT_FAILED) don't get reprocessed every run.
                 ->orWhere(function($query) {
                     $query->where('status', 'FAILED')
                           ->whereNotNull('callback_payload')
-                          ->where('callback_payload', '!=', '');
+                          ->where('callback_payload', '!=', '')
+                          ->where(function($q) {
+                              $q->where('callback_payload', 'LIKE', '%PAID%')
+                                ->orWhere('callback_payload', 'LIKE', '%PAYMENT_SUCCESS%');
+                          });
                 })
                 ->limit(20)
                 ->get();
@@ -606,8 +610,19 @@ class PaymentWorkerService
      */
     private function failPulloutServiceOrders(string $accountNo): void
     {
-        \Illuminate\Support\Facades\Log::channel('sofailingauto')->info('[RUNNING] Starting pullout service order check for account: ' . $accountNo);
+        $this->soFailLog('[RUNNING] Starting pullout service order check for account: ' . $accountNo);
         try {
+            // Balance guard: only auto-fail when the account is fully paid (balance <= 0)
+            $balance = floatval(DB::table('billing_accounts')
+                ->where('account_no', $accountNo)
+                ->value('account_balance') ?? 0);
+
+            if ($balance > 0) {
+                $this->soFailLog('[SKIP] Account balance still positive (₱' . number_format($balance, 2) . ') - skipping pullout fail for account: ' . $accountNo);
+                $this->soFailLog('[DONE] Completed pullout service order check for account: ' . $accountNo);
+                return;
+            }
+
             $order = DB::table('service_orders')
                 ->where('account_no', $accountNo)
                 ->whereIn(DB::raw('LOWER(TRIM(concern))'), ['pullout', 'for pullout'])
@@ -617,28 +632,48 @@ class PaymentWorkerService
                 ->first();
 
             if (!$order) {
-                $this->workerLog('[PULLOUT CHECK] No open Pullout service orders found for account: ' . $accountNo);
-                \Illuminate\Support\Facades\Log::channel('sofailingauto')->info('[SUCCESS] No open Pullout service orders found for account: ' . $accountNo);
+                $this->soFailLog('[SKIP] No open Pullout service orders found for account: ' . $accountNo);
+                $this->soFailLog('[DONE] Completed pullout service order check for account: ' . $accountNo);
                 return;
             }
+
+            $this->soFailLog('[FOUND] Pullout service order matched - ID: ' . $order->id . ', Account: ' . $accountNo);
 
             DB::table('service_orders')
                 ->where('id', $order->id)
                 ->update([
                     'support_status'  => 'Failed',
                     'visit_status'    => 'Failed',
-                    'updated_by_user' => 'System Auto Failed',
+                    'support_remarks' => 'auto failed due to client reconnected',
+                    'updated_by_user' => 'System',
                     'updated_at'      => now(),
                 ]);
 
-            $this->workerLog('[PULLOUT CHECK] Pullout service order marked Failed - ID: ' . $order->id . ', Account: ' . $accountNo);
-            \Illuminate\Support\Facades\Log::channel('sofailingauto')->info('[SUCCESS] Pullout service order marked Failed', [
-                'service_order_id' => $order->id,
-                'account_no'       => $accountNo,
-            ]);
+            $this->soFailLog('[SUCCESS] Pullout service order marked Failed - ID: ' . $order->id . ', Account: ' . $accountNo);
+            $this->soFailLog('[DONE] Completed pullout service order check for account: ' . $accountNo);
         } catch (Exception $e) {
-            $this->workerLog('[PULLOUT CHECK EXCEPTION] Account: ' . $accountNo . ' - ' . $e->getMessage());
-            \Illuminate\Support\Facades\Log::channel('sofailingauto')->error('[FAILED] Account: ' . $accountNo . ' - Error: ' . $e->getMessage());
+            $this->soFailLog('[FAILED] Account: ' . $accountNo . ' - Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Write a timestamped line to the dedicated sofailingauto.log file, mirror it to
+     * the default Laravel log and the worker log. Wrapped in try/catch so that logging
+     * can never break the calling flow.
+     */
+    private function soFailLog(string $message): void
+    {
+        try {
+            $timestamp = now()->format('Y-m-d H:i:s');
+            $line = "[{$timestamp}] [SO Failing Auto] {$message}";
+
+            file_put_contents(storage_path('logs/sofailingauto.log'), $line . PHP_EOL, FILE_APPEND);
+
+            // Mirror to the default Laravel log and the existing worker log.
+            Log::channel('single')->info('[SO Failing Auto] ' . $message);
+            $this->workerLog('[SO Failing Auto] ' . $message);
+        } catch (\Throwable $e) {
+            // Logging must never break the flow.
         }
     }
 

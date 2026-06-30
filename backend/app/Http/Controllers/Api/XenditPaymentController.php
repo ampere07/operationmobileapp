@@ -506,7 +506,7 @@ class XenditPaymentController extends Controller
                 ]);
 
             if ($updated) {
-                Log::info('Pending payment cancelled (marked FAILED)', [
+                Log::info('Pending payment cancelled (status set to FAILED)', [
                     'reference_no' => $referenceNo
                 ]);
                 return response()->json([

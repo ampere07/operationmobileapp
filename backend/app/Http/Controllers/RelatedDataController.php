@@ -1590,7 +1590,156 @@ class RelatedDataController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get related details update logs by service order ID
+     *
+     * Service order edits are logged into details_update_logs with a JSON
+     * payload containing a "service_order_id" key (types: service_order_details
+     * and service_order_related_tables).
+     */
+    public function getDetailsUpdateLogsByServiceOrder(string $serviceOrderId): JsonResponse
+    {
+        try {
+            $logs = DB::table('details_update_logs')
+                ->leftJoin('users as created_user', 'details_update_logs.created_by_user_id', '=', 'created_user.id')
+                ->leftJoin('users as updated_user', 'details_update_logs.updated_by_user_id', '=', 'updated_user.id')
+                ->where(function ($query) use ($serviceOrderId) {
+                    $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(details_update_logs.new_details, '$.service_order_id')) = ?", [$serviceOrderId])
+                          ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(details_update_logs.old_details, '$.service_order_id')) = ?", [$serviceOrderId]);
+                })
+                ->select([
+                    'details_update_logs.*',
+                    'created_user.email_address as created_by_user',
+                    'updated_user.email_address as updated_by_user',
+                ])
+                ->orderBy('details_update_logs.updated_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $logs,
+                'count' => $logs->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching details update logs for service order: ' . $serviceOrderId, [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch details update logs',
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0
+            ], 500);
+        }
+    }
+
+    /**
+     * Get related job orders by account number
+     */
+    public function getJobOrdersByAccount(string $accountNo): JsonResponse
+    {
+        try {
+            // First find the numeric account ID from the account number
+            $billingAccount = DB::table('billing_accounts')
+                ->where('account_no', $accountNo)
+                ->first();
+            
+            if (!$billingAccount) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                    'count' => 0
+                ]);
+            }
+
+            $jobOrders = DB::table('job_orders')
+                ->where('account_id', $billingAccount->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $jobOrders,
+                'count' => $jobOrders->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching job orders for account: ' . $accountNo, [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch job orders',
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0
+            ], 500);
+        }
+    }
+
+    /**
+     * Get related applications by account number
+     */
+    public function getApplicationsByAccount(string $accountNo): JsonResponse
+    {
+        try {
+            // First find the numeric account ID from the account number
+            $billingAccount = DB::table('billing_accounts')
+                ->where('account_no', $accountNo)
+                ->first();
+            
+            if (!$billingAccount) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                    'count' => 0
+                ]);
+            }
+
+            $applicationIds = DB::table('job_orders')
+                ->where('account_id', $billingAccount->id)
+                ->whereNotNull('application_id')
+                ->pluck('application_id')
+                ->unique()
+                ->toArray();
+
+            if (empty($applicationIds)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                    'count' => 0
+                ]);
+            }
+
+            $applications = DB::table('applications')
+                ->whereIn('id', $applicationIds)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $applications,
+                'count' => $applications->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching applications for account: ' . $accountNo, [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch applications',
+                'error' => $e->getMessage(),
+                'data' => [],
+                'count' => 0
+            ], 500);
+        }
+    }
 }
+
 
 
 

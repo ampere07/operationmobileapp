@@ -1983,6 +1983,73 @@ class JobOrderController extends Controller
     }
 
     /**
+     * Record an audit trail entry when a blocked technician reassignment is attempted.
+     *
+     * Fired by the front-end Job Order Done form when an admin tries to reassign the
+     * technician after the job has already been started (start_time is set).
+     */
+    public function logBlockedTransfer(Request $request, $id): JsonResponse
+    {
+        try {
+            $performedBy = $request->input('performed_by')
+                ?? optional($request->user())->email_address
+                ?? optional($request->user())->email
+                ?? 'System';
+
+            $originalTechName  = $request->input('original_technician_name');
+            $originalTechEmail = $request->input('original_technician_email');
+            $newTechName       = $request->input('new_technician_name');
+            $newTechEmail      = $request->input('new_technician_email');
+            $startTime         = $request->input('start_time');
+
+            $description = $request->input('description')
+                ?? "Save blocked — Technician reassignment attempted on Job Order #{$id} by {$performedBy}. "
+                 . "The original technician " . ($originalTechName ?: $originalTechEmail ?: 'Unknown')
+                 . " has already started the job (start_time: " . ($startTime ?: 'N/A') . "). Transfer not allowed.";
+
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type'                   => 'joborders',
+                    'id'                     => $id,
+                    'action'                 => 'technician_reassignment_blocked',
+                    'module'                 => 'Job Orders',
+                    'description'            => $description,
+                    'performed_by'           => $performedBy,
+                    'job_order_id'           => $id,
+                    'start_time'             => $startTime,
+                    'original_technician'    => [
+                        'name'  => $originalTechName,
+                        'email' => $originalTechEmail,
+                    ],
+                    'attempted_technician'   => [
+                        'name'  => $newTechName,
+                        'email' => $newTechEmail,
+                    ],
+                ],
+                'created_by_user' => $performedBy,
+                'updated_by_user' => $performedBy,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Blocked transfer logged'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to log blocked technician transfer', [
+                'job_order_id' => $id,
+                'error'        => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to log blocked transfer',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Validate Modem Router SN for duplicates
      */
     public function validateModemRouterSN(Request $request): JsonResponse

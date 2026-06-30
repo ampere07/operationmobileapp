@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Animated, useWindowDimensions } from 'react-native';
-import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List, ClipboardCheck } from 'lucide-react-native';
+import { FileCheck, Wrench, MapPinned, Settings, LayoutDashboard, ReceiptText, LifeBuoy, Menu as MenuIcon, Package, List, ClipboardCheck, Award } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 
@@ -42,6 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
   const menuItems: MenuItem[] = [
     { id: 'agent-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['agent'] },
     { id: 'commission', label: 'Commission', icon: ReceiptText, allowedRoles: ['agent'], allowedRoleIds: [4, '4'] },
+    { id: 'achievement', label: 'Achievement', icon: Award, allowedRoles: ['agent'], allowedRoleIds: [4, '4'] },
     { id: 'customer-dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['customer'] },
     { id: 'application-management', label: 'Application', icon: FileCheck, allowedRoles: ['administrator'] },
     { id: 'job-order', label: 'Job Order', icon: Wrench, allowedRoles: ['administrator', 'technician', 'agent'], allowedRoleIds: [4, '4'] },

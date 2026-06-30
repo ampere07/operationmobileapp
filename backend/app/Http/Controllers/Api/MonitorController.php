@@ -784,7 +784,11 @@ class MonitorController extends Controller
                         ->select('id', 'start_time', 'end_time', 'work_status as status', DB::raw("NULL as technicians"), DB::raw("'wo' as task_type"), 'work_category as concern')
                         ->get();
 
-                    $allTasks = $dailyJOs->concat($dailySOs)->concat($dailyWOs)->sortBy('start_time');
+                    $allTasks = $dailyJOs->concat($dailySOs)->concat($dailyWOs)
+                        ->filter(function($t) {
+                            return strtolower(trim($t->status ?? '')) !== 'failed';
+                        })
+                        ->sortBy('start_time');
 
                     // 2. Timeline Calculation: Flattened to avoid double-counting overlapping tasks
                     $totalWorkingSeconds = 0;

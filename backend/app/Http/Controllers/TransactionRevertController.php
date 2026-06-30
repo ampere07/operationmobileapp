@@ -313,7 +313,7 @@ class TransactionRevertController extends Controller
 
                         // Also clear transaction_id from any invoice that still references this transaction
                         // but was NOT in the snapshot (edge-case guard)
-                        \App\Models\Invoice::where('transaction_id', $transactionId)
+                        \App\Models\Invoice::where('transaction_id', (string)$transactionId)
                             ->whereNotIn('id', $invoiceSnapshots->pluck('invoice_id')->toArray())
                             ->update(['transaction_id' => null, 'updated_at' => $currentTime]);
 
@@ -428,7 +428,7 @@ class TransactionRevertController extends Controller
 
                                 $billingAccount->save();
 
-                                $invoices = \App\Models\Invoice::where('transaction_id', $transactionId)
+                                $invoices = \App\Models\Invoice::where('transaction_id', (string)$transactionId)
                                     ->orderBy('invoice_date', 'desc')
                                     ->get();
 

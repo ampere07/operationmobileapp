@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\JobOrder;
 use App\Models\AgentCommissionHistory;
+use App\Models\AgentAchievementClaim;
 use App\Models\AgentBalance;
 use App\Models\BillingConfig;
 use App\Models\User;
+use App\Models\AuditTrailLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -175,18 +177,10 @@ class CommissionController extends Controller
                 ];
             });
 
-            $agentBalanceRecord = AgentBalance::where('agent_id', $agentId)->first();
-            $balance = $agentBalanceRecord ? (float)$agentBalanceRecord->balance : 0;
-            $incentives = $agentBalanceRecord ? (float)$agentBalanceRecord->incentives : 0;
-            $bonus = $agentBalanceRecord ? (float)($agentBalanceRecord->bonus ?? $agentBalanceRecord->Bonus ?? 0) : 0;
-
             return response()->json([
                 'success' => true,
                 'data' => $data,
-                'total' => $total,
-                'balance' => $balance,
-                'incentives' => $incentives,
-                'bonus' => $bonus
+                'total' => $total
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -236,6 +230,19 @@ class CommissionController extends Controller
 
             $history = AgentCommissionHistory::create($validated);
 
+            // Audit Trail Log
+            $userEmail = $user->email_address ?? $user->email ?? 'System';
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type' => 'agent_commission_histories',
+                    'id' => $history->id,
+                    'data' => $history->toArray()
+                ],
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
+
             // Mark all referenced job orders as commission paid
             if (!empty($jobOrderIds)) {
                 JobOrder::whereIn('id', $jobOrderIds)
@@ -261,19 +268,24 @@ class CommissionController extends Controller
                     ]);
                 } elseif ($validated['type'] === 'Bonus') {
                     $newBalance = (float)$agentBalance->balance + (float)$validated['total_amount'];
-                    $newBonus = (float)($agentBalance->bonus ?? $agentBalance->Bonus ?? 0) + (float)$validated['total_amount'];
+                    $newBonus = (float)($agentBalance->bonus ?? 0) + (float)$validated['total_amount'];
                     $agentBalance->update([
                         'balance' => $newBalance,
-                        'bonus' => $newBonus,
-                        'Bonus' => $newBonus // Sets both, Laravel will ignore the one that doesn't exist if strict mode is off, but just in case we only need the valid column
+                        'bonus' => $newBonus
                     ]);
                 } elseif ($validated['type'] === 'Bonus_payout') {
                     $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
-                    $newBonus = max(0, (float)($agentBalance->bonus ?? $agentBalance->Bonus ?? 0) - (float)$validated['total_amount']);
+                    $newBonus = max(0, (float)($agentBalance->bonus ?? 0) - (float)$validated['total_amount']);
                     $agentBalance->update([
                         'balance' => $newBalance,
-                        'bonus' => $newBonus,
-                        'Bonus' => $newBonus
+                        'bonus' => $newBonus
+                    ]);
+                } elseif ($validated['type'] === 'all') {
+                    $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
+                    $agentBalance->update([
+                        'balance' => $newBalance,
+                        'incentives' => 0,
+                        'bonus' => 0
                     ]);
                 } else {
                     $newBalance = max(0, (float)$agentBalance->balance - (float)$validated['total_amount']);
@@ -412,6 +424,8 @@ class CommissionController extends Controller
 
             $agentId   = $request->input('agent_id');
             $agentName = trim($request->input('agent_name', ''));
+            $startDate = $request->input('start_date');
+            $endDate   = $request->input('end_date');
 
             if (!$agentId && !$agentName) {
                 return response()->json(['success' => false, 'message' => 'agent_id or agent_name is required'], 422);
@@ -459,8 +473,16 @@ class CommissionController extends Controller
             ->where(function ($q) {
                 $q->whereNull('commission_status')
                   ->orWhere(DB::raw('LOWER(commission_status)'), '!=', 'paid');
-            })
-            ->with('application')
+            });
+
+            if ($startDate) {
+                $query->whereDate('date_installed', '>=', $startDate);
+            }
+            if ($endDate) {
+                $query->whereDate('date_installed', '<=', $endDate);
+            }
+
+            $query->with('application')
             ->orderBy('id', 'asc');
 
             $jobOrders = $query->get(['id', 'application_id']);
@@ -492,5 +514,225 @@ class CommissionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * List the auto-awarded quota incentives from agent_incentive_history.
+     *
+     * This is the data the AgentIncentiveService cron writes — one row per
+     * Job Order that contributed toward a quota incentive award. Used by the
+     * "Incentives History" tab on the frontend.
+     */
+    public function getIncentiveHistory(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 401);
+            }
+
+            $agentId   = $request->input('agent_id');
+            $userRole  = strtolower($user->role->role_name ?? '');
+
+            // Non-admins can only see their own incentive history.
+            if (!in_array($userRole, ['admin', 'billing', 'superadmin'])) {
+                $agentId = $user->id;
+            }
+
+            $limit        = (int) $request->input('limit', 2000);
+            $offset       = (int) $request->input('offset', 0);
+            $updatedAfter = $request->input('updated_after');
+
+            $base = DB::table('agent_incentive_history as aih')
+                ->leftJoin('users as u', 'aih.agent_id', '=', 'u.id');
+
+            if ($agentId) {
+                $base->where('aih.agent_id', $agentId);
+            }
+
+            if ($updatedAfter) {
+                $base->where('aih.updated_at', '>=', $updatedAfter);
+            }
+
+            $total = (clone $base)->count();
+
+            $rows = (clone $base)
+                ->select(
+                    'aih.id',
+                    'aih.agent_id',
+                    'aih.job_order_id',
+                    'aih.quota_reached',
+                    'aih.incentive_value',
+                    'aih.organization_id',
+                    'aih.processed_at',
+                    'aih.created_at',
+                    'aih.updated_at',
+                    DB::raw("TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as agent_name")
+                )
+                ->orderBy('aih.processed_at', 'desc')
+                ->orderBy('aih.id', 'desc')
+                ->offset($offset)
+                ->limit($limit)
+                ->get();
+
+            $data = $rows->map(function ($r) {
+                return [
+                    'id'              => $r->id,
+                    'agent_id'        => $r->agent_id,
+                    'agent_name'      => ($r->agent_name !== null && trim($r->agent_name) !== '') ? trim($r->agent_name) : 'Unknown',
+                    'job_order_id'    => $r->job_order_id,
+                    'quota_reached'   => $r->quota_reached,
+                    'incentive_value' => $r->incentive_value,
+                    'organization_id' => $r->organization_id,
+                    'processed_at'    => $r->processed_at,
+                    'created_at'      => $r->created_at,
+                    'updated_at'      => $r->updated_at,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data'    => $data,
+                'total'   => $total,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch incentive history',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getAchievements(Request $request)
+    {
+        try {
+            // Ensure table exists (temporary fail-safe for deployed server)
+            if (!\Illuminate\Support\Facades\Schema::hasTable('agent_achievement_claims')) {
+                \Illuminate\Support\Facades\Schema::create('agent_achievement_claims', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('agent_id')->constrained('users')->onDelete('cascade');
+                    $table->integer('milestone');
+                    $table->decimal('amount', 10, 2)->default(1500.00);
+                    $table->timestamps();
+                });
+            }
+
+            $agentId = $request->input('agent_id');
+            if (!$agentId) {
+                return response()->json(['success' => false, 'message' => 'Agent ID required'], 400);
+            }
+
+            $claims = AgentAchievementClaim::where('agent_id', $agentId)->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $claims
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch achievements',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function storeAchievement(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $validated = $request->validate([
+                'agent_id'      => 'required|integer',
+                'milestone'     => 'required|integer',
+                'amount'        => 'required|numeric|min:0',
+            ]);
+
+            // Check if already claimed
+            $exists = AgentAchievementClaim::where('agent_id', $validated['agent_id'])
+                ->where('milestone', $validated['milestone'])
+                ->exists();
+                
+            if ($exists) {
+                return response()->json(['success' => false, 'message' => 'Milestone already claimed'], 400);
+            }
+
+            // Start transaction
+            DB::beginTransaction();
+
+            // 1. Record the achievement claim
+            $claim = AgentAchievementClaim::create($validated);
+
+            // 2. Add to agent balance via AgentCommissionHistory logic
+            $historyPayload = [
+                'agent_id'      => $validated['agent_id'],
+                'ref_number'    => 'ACHIEVEMENT-ONBOARD-' . $validated['milestone'],
+                'total_amount'  => $validated['amount'],
+                'remarks'       => "Achievement Reward for {$validated['milestone']} Onboards",
+                'proof_of_payment' => 'System Auto Reward',
+                'type'          => 'incentives',
+                'created_by'    => $user->full_name ?? $user->email_address ?? 'System',
+                'organization_id' => $user->organization_id ?? null,
+            ];
+
+            $history = AgentCommissionHistory::create($historyPayload);
+
+            // Update agent balances table
+            $agentBalance = DB::table('agent_balances')->where('agent_id', $validated['agent_id'])->first();
+            if ($agentBalance) {
+                $newIncentives = (float)$agentBalance->incentives + (float)$validated['amount'];
+                DB::table('agent_balances')
+                    ->where('agent_id', $validated['agent_id'])
+                    ->update([
+                        'incentives' => $newIncentives,
+                        'updated_at' => now()
+                    ]);
+            } else {
+                DB::table('agent_balances')->insert([
+                    'agent_id' => $validated['agent_id'],
+                    'commission' => 0,
+                    'incentives' => (float)$validated['amount'],
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            // Audit Trail
+            $userEmail = $user->email_address ?? $user->email ?? 'System';
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type' => 'agent_achievement_claims',
+                    'id' => $claim->id,
+                    'data' => $claim->toArray()
+                ],
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Achievement claimed successfully',
+                'data' => $claim
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to store achievement',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
+
 

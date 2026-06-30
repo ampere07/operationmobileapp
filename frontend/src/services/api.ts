@@ -47,6 +47,38 @@ export const fetchAgentCommissionHistory = async (type?: string): Promise<any> =
   }
 };
 
+export const storeAgentCommissionHistory = async (data: any): Promise<any> => {
+  try {
+    const response = await apiClient.post('/commissions/history', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error storing agent commission history:', error);
+    throw error;
+  }
+};
+
+export const fetchAgentAchievements = async (agentId: string | number): Promise<any> => {
+  try {
+    const response = await apiClient.get('/commissions/achievements', {
+      params: { agent_id: agentId }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching agent achievements:', error);
+    throw error;
+  }
+};
+
+export const claimAgentAchievement = async (data: any): Promise<any> => {
+  try {
+    const response = await apiClient.post('/commissions/achievements', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error claiming agent achievement:', error);
+    throw error;
+  }
+};
+
 export const fetchAgentCommissionTrend = async (filter: string): Promise<any> => {
   try {
     const response = await apiClient.get('/commissions/trend', {
