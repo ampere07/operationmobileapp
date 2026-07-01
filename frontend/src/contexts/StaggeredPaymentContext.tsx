@@ -51,6 +51,7 @@ interface StaggeredPaymentContextType {
     refreshStaggeredRecords: () => Promise<void>;
     silentRefresh: () => Promise<void>;
     lastUpdated: Date | null;
+    isFullyLoaded: boolean;
 }
 
 const StaggeredPaymentContext = createContext<StaggeredPaymentContextType | undefined>(undefined);
@@ -72,6 +73,7 @@ export const StaggeredPaymentProvider: React.FC<StaggeredPaymentProviderProps> =
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [isFullyLoaded, setIsFullyLoaded] = useState<boolean>(false);
 
     const fetchStaggeredRecords = useCallback(async (force = false, silent = false) => {
         // If we have data and not forced, skip fetching
@@ -90,6 +92,7 @@ export const StaggeredPaymentProvider: React.FC<StaggeredPaymentProviderProps> =
             if (result.success && result.data) {
                 setStaggeredRecords(result.data);
                 setLastUpdated(new Date());
+                setIsFullyLoaded(true);
                 setError(null);
                 console.log('Staggered installations loaded:', result.data.length);
             } else {
@@ -133,7 +136,8 @@ export const StaggeredPaymentProvider: React.FC<StaggeredPaymentProviderProps> =
                 error,
                 refreshStaggeredRecords,
                 silentRefresh,
-                lastUpdated
+                lastUpdated,
+                isFullyLoaded
             }}
         >
             {children}

@@ -8,6 +8,41 @@ import {
     LogOut,
     Info,
     Clock,
+    CreditCard,
+    Gauge,
+    Tags,
+    MessageSquare,
+    Router,
+    Layers,
+    Ticket,
+    AlertCircle,
+    Server,
+    Wifi,
+    Send,
+    Router as RouterIcon,
+    Receipt,
+    Network,
+    Cable,
+    MapPin,
+    AlertTriangle,
+    FileWarning,
+    Mail,
+    MessageSquareText,
+    FileText,
+    Wallet,
+    Database,
+    BarChart2,
+    Users,
+    RefreshCw,
+    Zap,
+    ScrollText,
+    HardDrive,
+    TestTube2,
+    Tag,
+    Coins,
+    Activity,
+    ClipboardList,
+    MapPinCheck,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -45,7 +80,7 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
 
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
-        const apiUrl = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+        const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
         return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
     };
 
@@ -80,7 +115,9 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
         initialize();
     }, []);
 
-    const isTechnician = (typeof userData?.role === 'string' ? userData.role.toLowerCase() : userData?.role?.name?.toLowerCase()) === 'technician' || userData?.role_id === 2;
+    const normalizedRole = (typeof userData?.role === 'string' ? userData.role : userData?.role?.name)?.toLowerCase() || '';
+    const isTechnician = normalizedRole === 'technician' || userData?.role_id === 2;
+    const isAdmin = normalizedRole === 'administrator' || String(userData?.role_id) === '1';
 
     const menuGroups = [
         {
@@ -91,7 +128,55 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                 { id: 'about', label: 'About App', icon: Info },
                 { id: 'release-notes', label: 'Release Notes', icon: Clock },
             ]
-        }
+        },
+        // Configuration group — grows as admin/config pages are migrated to RN.
+        ...(isAdmin ? [{
+            title: 'Configuration',
+            items: [
+                { id: 'payment-method-list', label: 'Payment Methods', icon: CreditCard },
+                { id: 'usage-type-list', label: 'Usage Types', icon: Gauge },
+                { id: 'work-category-list', label: 'Work Categories', icon: Tags },
+                { id: 'status-remarks-list', label: 'Status Remarks', icon: MessageSquare },
+                { id: 'router-model-list', label: 'Router Models', icon: Router },
+                { id: 'plan-list', label: 'Plans', icon: Layers },
+                { id: 'promo-list', label: 'Promos', icon: Ticket },
+                { id: 'concern-config', label: 'Concerns', icon: AlertCircle },
+                { id: 'smart-olt-config', label: 'SmartOLT', icon: Server },
+                { id: 'radius-config', label: 'RADIUS', icon: Wifi },
+                { id: 'sms-config', label: 'SMS Config', icon: Send },
+                { id: 'pppoe-setup', label: 'PPPoE Setup', icon: RouterIcon },
+                { id: 'billing-config', label: 'Billing Config', icon: Receipt },
+                { id: 'lcp-list', label: 'LCP', icon: Network },
+                { id: 'nap-list', label: 'NAP', icon: Network },
+                { id: 'ports', label: 'Ports', icon: Cable },
+                { id: 'location-list', label: 'Locations', icon: MapPin },
+                { id: 'overdue', label: 'Overdue', icon: AlertTriangle },
+                { id: 'dc-notice', label: 'DC Notice', icon: FileWarning },
+                { id: 'sms-template', label: 'SMS Templates', icon: MessageSquare },
+                { id: 'email-templates', label: 'Email Templates', icon: Mail },
+                { id: 'activity-logs', label: 'Activity Logs', icon: Activity },
+                { id: 'email-logs', label: 'Email Logs', icon: Mail },
+                { id: 'sms-logs', label: 'SMS Logs', icon: MessageSquareText },
+                { id: 'file-log-viewer', label: 'File Logs', icon: FileText },
+                { id: 'expenses-log', label: 'Expenses', icon: Wallet },
+                { id: 'data-logs', label: 'Data Logs', icon: Database },
+                { id: 'reports', label: 'Reports', icon: BarChart2 },
+                { id: 'sms-blast', label: 'SMS Blast', icon: Zap },
+                { id: 'sms-blast-logs', label: 'SMS Blast Logs', icon: ScrollText },
+                { id: 'group-management', label: 'Affiliates', icon: Users },
+                { id: 'user-management', label: 'User Management', icon: Users },
+                { id: 'transactions-revert', label: 'Transaction Reverts', icon: RefreshCw },
+                { id: 'database-setup', label: 'Database Setup', icon: HardDrive },
+                { id: 'database-test', label: 'Database Test', icon: TestTube2 },
+                { id: 'discounts', label: 'Discounts', icon: Tag },
+                { id: 'billing', label: 'Billing List', icon: CreditCard },
+                { id: 'rebate', label: 'Rebate', icon: Coins },
+                { id: 'staggered-payment', label: 'Staggered Payment', icon: CreditCard },
+                { id: 'live-monitor', label: 'Live Monitor', icon: Activity },
+                { id: 'applicationManagement', label: 'Applications', icon: ClipboardList },
+                { id: 'applicationVisit', label: 'App Visits', icon: MapPinCheck },
+            ]
+        }] : []),
     ];
 
     const displayName = customerDetail?.fullName || userData?.full_name || userData?.name || 'User Name';
@@ -166,6 +251,9 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                                                 if (onSectionChange) onSectionChange('release-notes');
                                             } else if (item.id === 'time-in-out') {
                                                 setShowTimeInOutModal(true);
+                                            } else if (onSectionChange) {
+                                                // Configuration pages route through the Dashboard section switch.
+                                                onSectionChange(item.id);
                                             }
                                         }}
                                         style={({ pressed }) => [
@@ -265,7 +353,6 @@ const s = StyleSheet.create({
     logoLetter: { fontWeight: 'bold', fontSize: 24 },
     logoText: { color: '#ffffff', fontWeight: 'bold', fontSize: 28, letterSpacing: 0.5 },
     logoTextBold: { fontWeight: '800', color: '#ffffff' },
-    profileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     avatarCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ffffff', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ffffff' },
     profileInfo: { marginLeft: 20 },
     profileName: { fontSize: 22, fontWeight: 'bold', color: '#ffffff' },

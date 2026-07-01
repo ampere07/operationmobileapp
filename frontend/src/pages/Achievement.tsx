@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, DeviceEventEmitter, Pressable, ActivityIndicator, Alert, Animated } from 'react-native';
 import { CheckCircle } from 'lucide-react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
@@ -8,6 +9,8 @@ import {
     fetchAgentAchievements, 
     claimAgentAchievement 
 } from '../services/api';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const Achievement: React.FC = () => {
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
@@ -124,32 +127,32 @@ const Achievement: React.FC = () => {
     const progress = pendingMilestone ? target : (onboardReferredCount % target);
     const isAchieved = !!pendingMilestone;
 
-    // Animation for speedometer needle
+    // Animation for speedometer gauge
     const animValue = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         if (!loading) {
             Animated.timing(animValue, {
                 toValue: progress,
                 duration: 1200,
-                useNativeDriver: true,
+                useNativeDriver: false, // Must be false for SVG attributes
             }).start();
         }
     }, [progress, loading]);
 
-    const spin = animValue.interpolate({
-        inputRange: [0, target],
-        outputRange: ['-135deg', '135deg'],
-        extrapolate: 'clamp'
-    });
-
     // Speedometer layout values
     const containerWidth = 280;
     const containerHeight = 240; // Crop the bottom a bit
-    const cx = containerWidth / 2;
-    const cy = containerWidth / 2; // Center is at 140
-    const labelRadius = 90; // Distance of labels from center
+    const r = (containerWidth - 30) / 2; // Radius
+    const cx = containerWidth / 2; // Center X
+    const cy = containerWidth / 2; // Center Y
+    const circumference = 2 * Math.PI * r;
+    const arcLength = circumference * 0.75; // 270 degrees
 
-    const labels = [0, 5, 10, 15, 20, 25, 30];
+    const strokeDashoffset = animValue.interpolate({
+        inputRange: [0, target],
+        outputRange: [arcLength, 0],
+        extrapolate: 'clamp'
+    });
 
     if (loading) {
         return (
@@ -177,21 +180,33 @@ const Achievement: React.FC = () => {
                     {/* Speedometer Gauge */}
                     <View style={styles.gaugeWrapper}>
                         <View style={{ width: containerWidth, height: containerHeight, position: 'relative' }}>
-                            {/* Track arc */}
-                            <View style={{ 
-                                width: containerWidth, 
-                                height: containerWidth, 
-                                borderRadius: containerWidth / 2, 
-                                borderWidth: 30, 
-                                borderColor: '#e2e8f0', // Light track
-                                borderBottomColor: 'transparent', // Creates the gap at the bottom
-                                position: 'absolute', 
-                                top: 0, 
-                                left: 0 
-                            }} />
-                            
-                            {/* Number labels removed as requested */}
-                            {/* Needle removed as requested */}
+                            <Svg width={containerWidth} height={containerWidth} viewBox={`0 0 ${containerWidth} ${containerWidth}`}>
+                                <G rotation="135" origin={`${cx}, ${cy}`}>
+                                    {/* Background Track */}
+                                    <Circle
+                                        cx={cx}
+                                        cy={cy}
+                                        r={r}
+                                        stroke="#e2e8f0"
+                                        strokeWidth={30}
+                                        strokeDasharray={`${arcLength}, ${circumference}`}
+                                        fill="none"
+                                        strokeLinecap="round"
+                                    />
+                                    {/* Foreground Progress */}
+                                    <AnimatedCircle
+                                        cx={cx}
+                                        cy={cy}
+                                        r={r}
+                                        stroke={colorPalette?.primary || '#7c3aed'}
+                                        strokeWidth={30}
+                                        strokeDasharray={`${arcLength}, ${circumference}`}
+                                        strokeDashoffset={strokeDashoffset}
+                                        fill="none"
+                                        strokeLinecap="round"
+                                    />
+                                </G>
+                            </Svg>
 
                             {/* Value Display (Inside the gap) */}
                             <View style={{

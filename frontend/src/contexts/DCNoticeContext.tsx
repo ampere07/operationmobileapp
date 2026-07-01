@@ -8,6 +8,7 @@ interface DCNoticeContextType {
     refreshDCNoticeRecords: () => Promise<void>;
     silentRefresh: () => Promise<void>;
     lastUpdated: Date | null;
+    isFullyLoaded: boolean;
 }
 
 const DCNoticeContext = createContext<DCNoticeContextType | undefined>(undefined);
@@ -29,6 +30,7 @@ export const DCNoticeProvider: React.FC<DCNoticeProviderProps> = ({ children }) 
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [isFullyLoaded, setIsFullyLoaded] = useState<boolean>(false);
 
     const fetchDCNoticeRecords = useCallback(async (force = false, silent = false) => {
         // If we have data and not forced, skip fetching
@@ -63,6 +65,7 @@ export const DCNoticeProvider: React.FC<DCNoticeProviderProps> = ({ children }) 
                             fullRecords.sort((a, b) => b.id - a.id);
                             setDCNoticeRecords(fullRecords);
                             setLastUpdated(new Date());
+                            setIsFullyLoaded(true);
                         }
                     } catch (bgError) {
                         console.warn('Background full data load failed:', bgError);
@@ -113,7 +116,8 @@ export const DCNoticeProvider: React.FC<DCNoticeProviderProps> = ({ children }) 
                 error,
                 refreshDCNoticeRecords,
                 silentRefresh,
-                lastUpdated
+                lastUpdated,
+                isFullyLoaded
             }}
         >
             {children}

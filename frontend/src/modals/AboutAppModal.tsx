@@ -17,7 +17,7 @@ const AboutAppModal: React.FC<AboutAppModalProps> = ({ visible, onClose }) => {
 
     const convertGoogleDriveUrl = (url: string): string => {
         if (!url) return '';
-        const apiUrl = 'https://backend.atssfiber.ph/api';
+        const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
         return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
     };
 

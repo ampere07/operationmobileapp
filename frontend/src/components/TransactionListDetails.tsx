@@ -1,15 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ArrowLeft, ArrowRight, Maximize2, X, Phone, MessageSquare, Info,
-  ExternalLink, Mail, Edit, Trash2, Receipt, RefreshCw, CheckCircle,
-  ChevronDown, ChevronRight
-} from 'lucide-react';
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import {
+  X,
+  Info,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react-native';
 import { transactionService } from '../services/transactionService';
 import { relatedDataService } from '../services/relatedDataService';
-import LoadingModal from './LoadingModal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import RelatedDataTable from './RelatedDataTable';
-import { relatedDataColumns } from '../config/relatedDataColumns';
+import LoadingModalGlobal from './common/LoadingModalGlobal';
 
 interface Transaction {
   id: string;
@@ -19,7 +28,7 @@ interface Transaction {
   payment_date: string;
   date_processed: string;
   processed_by_user: string;
-  payment_method: string;
+  payment_method: string | number | null;
   reference_no: string;
   or_no: string;
   remarks: string;
@@ -27,20 +36,23 @@ interface Transaction {
   image_url: string | null;
   created_at: string;
   updated_at: string;
+  approved_by?: string;
   account?: {
     id: number;
     account_no: string;
-    customer: {
-      full_name: string;
-      contact_number_primary: string;
-      barangay: string;
-      city: string;
-      desired_plan: string;
-      address: string;
-      region: string;
+    customer?: {
+      full_name?: string;
+      contact_number_primary?: string;
+      barangay?: string;
+      city?: string;
+      desired_plan?: string;
+      address?: string;
+      region?: string;
     };
-    account_balance: number;
+    account_balance?: number;
   };
+  payment_method_info?: { payment_method: string };
+  processor?: { email_address?: string };
 }
 
 interface TransactionListDetailsProps {
@@ -48,506 +60,360 @@ interface TransactionListDetailsProps {
   onClose: () => void;
   onNavigate?: (section: string, extra?: string) => void;
   onViewCustomer?: (accountNo: string) => void;
+  onApprovalSuccess?: () => void;
+  paymentMethods?: Array<{ id: number | string; payment_method: string }>;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }
 
-const TransactionListDetails: React.FC<TransactionListDetailsProps> = ({ transaction, onClose, onNavigate, onViewCustomer }) => {
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
+const isDarkMode = false;
+
+const TransactionListDetails: React.FC<TransactionListDetailsProps> = ({
+  transaction,
+  onClose,
+  onNavigate,
+  onViewCustomer,
+  onApprovalSuccess,
+  paymentMethods = [],
+  onPrevious,
+  onNext,
+}) => {
   const [loading, setLoading] = useState(false);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-
-  // Related invoices state
   const [expandedInvoices, setExpandedInvoices] = useState(false);
   const [relatedInvoices, setRelatedInvoices] = useState<any[]>([]);
-  const [fullRelatedInvoices, setFullRelatedInvoices] = useState<any[]>([]);
   const [invoicesCount, setInvoicesCount] = useState(0);
-  const [expandedModalSection, setExpandedModalSection] = useState<string | null>(null);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    settingsColorPaletteService.getActive().then(setColorPalette).catch(() => {});
   }, []);
 
+  const accountNo = transaction.account?.account_no || transaction.account_no || '';
+
   useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-
-    fetchColorPalette();
-  }, []);
-
-  // Fetch related invoices when account number changes
-  useEffect(() => {
-    const fetchRelatedInvoices = async () => {
-      if (!transaction.account_no) {
-        console.log('❌ No account_no found in transaction');
-        return;
-      }
-
-      const accountNo = transaction.account_no;
-      console.log('🔍 Fetching related invoices for account:', accountNo);
-
-      try {
-        const result = await relatedDataService.getRelatedInvoices(accountNo);
-        console.log('✅ Invoices fetched:', { count: result.count || 0, hasData: (result.data || []).length > 0 });
-        // Store full data for modal view
-        setFullRelatedInvoices(result.data || []);
-        // Limit to 5 latest items for dropdown display
+    if (!accountNo) return;
+    relatedDataService.getRelatedInvoices(accountNo)
+      .then((result) => {
         setRelatedInvoices((result.data || []).slice(0, 5));
         setInvoicesCount(result.count || 0);
-      } catch (error) {
-        console.error('❌ Error fetching invoices:', error);
+      })
+      .catch(() => {
         setRelatedInvoices([]);
-        setFullRelatedInvoices([]);
         setInvoicesCount(0);
-      }
-    };
+      });
+  }, [accountNo]);
 
-    fetchRelatedInvoices();
-  }, [transaction.account_no]);
+  const primary = colorPalette?.primary || '#7c3aed';
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
-
-  const formatCurrency = (amount: number | string) => {
-    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return `₱${numAmount.toFixed(2)}`;
+  const formatCurrency = (amount: number | string | null | undefined): string => {
+    if (amount === null || amount === undefined || amount === '') return '₱0.00';
+    const n = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(n)) return '₱0.00';
+    return `₱${n.toFixed(2)}`;
   };
 
   const formatDate = (dateStr?: string): string => {
     if (!dateStr) return 'No date';
     try {
       const date = new Date(dateStr);
-      return date.toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      });
-    } catch (e) {
+      if (isNaN(date.getTime())) return dateStr;
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      let hours = date.getHours();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      const min = String(date.getMinutes()).padStart(2, '0');
+      const sec = String(date.getSeconds()).padStart(2, '0');
+      return `${mm}/${dd}/${yyyy} ${hours}:${min}:${sec} ${ampm}`;
+    } catch {
       return dateStr;
     }
   };
 
-  const handleApproveTransaction = async () => {
-    if (!window.confirm('Are you sure you want to approve this transaction?')) {
-      return;
+  const getPaymentMethodName = (): string => {
+    if (transaction.payment_method_info?.payment_method) {
+      return transaction.payment_method_info.payment_method;
     }
-
-    try {
-      setLoading(true);
-      setLoadingPercentage(0);
-      setError(null);
-
-      setLoadingPercentage(20);
-
-      const result = await transactionService.approveTransaction(transaction.id);
-
-      setLoadingPercentage(60);
-
-      if (result.success) {
-        setLoadingPercentage(100);
-
-        const status = result.data?.status || 'Done';
-        transaction.status = status;
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        setSuccessMessage(`Transaction approved successfully. Status: ${status}`);
-        setShowSuccessModal(true);
-      } else {
-        setError(result.message || 'Failed to approve transaction');
-      }
-    } catch (err: any) {
-      setError(`Failed to approve transaction: ${err.message}`);
-      console.error('Approve transaction error:', err);
-    } finally {
-      setLoading(false);
-      setLoadingPercentage(0);
-    }
+    if (!transaction.payment_method) return '-';
+    const pm = paymentMethods.find(m => String(m.id) === String(transaction.payment_method));
+    return pm ? pm.payment_method : String(transaction.payment_method);
   };
 
-  const getAccountDisplayText = () => {
-    const accountNo = transaction.account?.account_no || '-';
-    const fullName = transaction.account?.customer?.full_name || '-';
-    const address = transaction.account?.customer?.address || '';
-    const barangay = transaction.account?.customer?.barangay || '';
-    const city = transaction.account?.customer?.city || '';
-    const region = transaction.account?.customer?.region || '';
-
-    const location = [address, barangay, city, region].filter(Boolean).join(', ');
-    return `${accountNo} | ${fullName}${location ? ` | ${location}` : ''}`;
+  const handleApprove = () => {
+    Alert.alert(
+      'Confirm Approval',
+      'Are you sure you want to approve this transaction?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              setLoadingPercentage(30);
+              const result = await transactionService.approveTransaction(transaction.id);
+              setLoadingPercentage(80);
+              if (result.success) {
+                setLoadingPercentage(100);
+                setTimeout(() => {
+                  setLoading(false);
+                  Alert.alert('Success', `Transaction approved. Status: ${result.data?.status || 'Done'}`);
+                  onApprovalSuccess?.();
+                }, 400);
+              } else {
+                setLoading(false);
+                Alert.alert('Error', result.message || 'Failed to approve transaction');
+              }
+            } catch (err: any) {
+              setLoading(false);
+              Alert.alert('Error', `Failed to approve: ${err.message}`);
+            }
+          },
+        },
+      ]
+    );
   };
 
-  const renderField = (label: string, value: any, hasInfo: boolean = false, isBold: boolean = false) => (
-    <div className={`flex py-2 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-      }`}>
-      <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-        }`}>{label}</div>
-      <div className={`flex-1 flex items-center ${isBold ? 'font-bold text-lg' : ''} ${isDarkMode ? 'text-white' : 'text-gray-900'
-        }`}>
-        {value || '-'}
-        {hasInfo && (
-          <button className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}>
-            <Info size={16} />
-          </button>
-        )}
-      </div>
-    </div>
+  const statusLower = (transaction.status || '').toLowerCase();
+  const statusColor =
+    statusLower === 'done' || statusLower === 'completed' ? '#22c55e' :
+    statusLower === 'pending' ? '#eab308' :
+    statusLower === 'processing' ? '#3b82f6' :
+    statusLower === 'failed' || statusLower === 'cancelled' ? '#ef4444' :
+    '#6b7280';
+
+  const renderField = (label: string, value: string | React.ReactNode, bold = false) => (
+    <View
+      style={{
+        flexDirection: 'row',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+        alignItems: 'flex-start',
+      }}
+    >
+      <Text style={{ width: 140, fontSize: 13, color: '#6b7280', flexShrink: 0 }}>{label}</Text>
+      {typeof value === 'string' ? (
+        <Text style={{ flex: 1, fontSize: 13, color: '#111827', fontWeight: bold ? '700' : '400' }}>
+          {value || '-'}
+        </Text>
+      ) : (
+        <View style={{ flex: 1 }}>{value}</View>
+      )}
+    </View>
   );
 
-  const handleExpandModalOpen = (sectionKey: string) => {
-    setExpandedModalSection(sectionKey);
-  };
-
-  const handleExpandModalClose = () => {
-    setExpandedModalSection(null);
-  };
-
   return (
-    <>
-      <LoadingModal
-        isOpen={loading}
-        message="Approving transaction..."
-        percentage={loadingPercentage}
-      />
-
-      <div className={`flex flex-col overflow-hidden border-l relative ${isDarkMode
-        ? 'bg-gray-950 border-white border-opacity-30'
-        : 'bg-white border-gray-300'
-        }`} style={{ width: `${detailsWidth}px`, height: '100%' }}>
-        <div
-          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+        {/* Header */}
+        <View
           style={{
-            backgroundColor: isResizing ? (colorPalette?.primary || '#7c3aed') : 'transparent'
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingTop: 60,
+            paddingBottom: 12,
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e5e7eb',
+            gap: 8,
           }}
-          onMouseEnter={(e) => {
-            if (!isResizing) {
-              e.currentTarget.style.backgroundColor = colorPalette?.accent || '#7c3aed';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizing) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-          onMouseDown={handleMouseDownResize}
-        />
-        <div className={`p-3 flex items-center justify-between border-b ${isDarkMode
-          ? 'bg-gray-800 border-gray-700'
-          : 'bg-gray-100 border-gray-200'
-          }`}>
-          <div className="flex items-center min-w-0 flex-1">
-            <h2 className={`font-medium truncate pr-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>{getAccountDisplayText()}</h2>
-            {loading && <div className="ml-3 animate-pulse text-orange-500 text-sm flex-shrink-0">Loading...</div>}
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {transaction.status.toLowerCase() === 'pending' && (
-              <button
-                onClick={handleApproveTransaction}
-                disabled={loading}
-                className="flex items-center space-x-2 text-white px-3 py-1.5 rounded text-sm transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
-                style={{
-                  backgroundColor: loading ? '#4b5563' : (colorPalette?.primary || '#22c55e')
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading && colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                <CheckCircle size={16} />
-                <span>{loading ? 'Approving...' : 'Approve'}</span>
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-              aria-label="Close"
+        >
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+            <X size={20} color="#374151" />
+          </TouchableOpacity>
+          {onPrevious && (
+            <TouchableOpacity
+              onPress={onPrevious}
+              style={{ padding: 4, marginLeft: 4 }}
             >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
+              <ChevronRight size={18} color="#374151" style={{ transform: [{ rotate: '180deg' }] }} />
+            </TouchableOpacity>
+          )}
+          {onNext && (
+            <TouchableOpacity onPress={onNext} style={{ padding: 4 }}>
+              <ChevronRight size={18} color="#374151" />
+            </TouchableOpacity>
+          )}
+          <Text
+            style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#111827' }}
+            numberOfLines={1}
+          >
+            {accountNo} | {transaction.account?.customer?.full_name || '-'}
+          </Text>
+          {statusLower === 'pending' && (
+            <TouchableOpacity
+              onPress={handleApprove}
+              disabled={loading}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: primary,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 6,
+                gap: 4,
+              }}
+            >
+              <CheckCircle size={14} color="#ffffff" />
+              <Text style={{ color: '#ffffff', fontSize: 13 }}>Approve</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-        {error && (
-          <div className={`border p-3 m-3 rounded ${isDarkMode
-            ? 'bg-red-900 bg-opacity-20 border-red-700 text-red-400'
-            : 'bg-red-100 border-red-300 text-red-900'
-            }`}>
-            {error}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto">
-          <div className={`mx-auto py-1 px-4 ${isDarkMode ? 'bg-gray-950' : 'bg-white'
-            }`}>
-            <div className="space-y-1">
-              {renderField('Transaction ID', transaction.id)}
-
-              <div className={`flex py-2 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Account No.</div>
-                <div className="text-red-400 flex-1 font-medium flex items-center">
-                  {transaction.account?.account_no || '-'}
-                  <button
-                    onClick={() => {
-                      if (onViewCustomer && transaction.account?.account_no) {
-                        onViewCustomer(transaction.account.account_no);
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16 }}
+        >
+          <View
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 10,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: '#e5e7eb',
+              marginBottom: 16,
+            }}
+          >
+            {renderField('Transaction ID', String(transaction.id))}
+            {renderField(
+              'Account No.',
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: '#ef4444', fontWeight: '500', fontSize: 13 }}>
+                  {accountNo || '-'}
+                </Text>
+                {accountNo ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (onViewCustomer && accountNo) {
+                        onViewCustomer(accountNo);
                       } else {
-                        onNavigate?.('customer', transaction.account?.account_no);
+                        onNavigate?.('customer', accountNo);
                       }
                     }}
-                    className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}
+                    style={{ marginLeft: 8 }}
                   >
-                    <Info size={16} />
-                  </button>
-                </div>
-              </div>
+                    <Info size={14} color="#6b7280" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
+            {renderField('Full Name', transaction.account?.customer?.full_name || '-')}
+            {renderField('Contact No.', transaction.account?.customer?.contact_number_primary || '-')}
+            {renderField('Transaction Type', transaction.transaction_type || '-')}
+            {renderField(
+              'Received Payment',
+              formatCurrency(transaction.received_payment),
+              true
+            )}
+            {renderField('Payment Date', formatDate(transaction.payment_date))}
+            {renderField('Date Processed', formatDate(transaction.date_processed))}
+            {renderField(
+              'Processed By',
+              transaction.processor?.email_address || transaction.processed_by_user || '-'
+            )}
+            {renderField('Payment Method', getPaymentMethodName())}
+            {renderField('Reference No.', transaction.reference_no || '-')}
+            {renderField('OR No.', transaction.or_no || '-')}
+            {renderField('Remarks', transaction.remarks || 'No remarks')}
+            {renderField(
+              'Status',
+              <Text
+                style={{ fontSize: 13, color: statusColor, textTransform: 'capitalize' }}
+              >
+                {transaction.status || 'Unknown'}
+              </Text>
+            )}
+            {renderField('Barangay', transaction.account?.customer?.barangay || '-')}
+            {renderField('City', transaction.account?.customer?.city || '-')}
+            {renderField('Region', transaction.account?.customer?.region || '-')}
+            {renderField('Plan', transaction.account?.customer?.desired_plan || '-')}
+            {renderField('Account Balance', formatCurrency(transaction.account?.account_balance || 0))}
+            {renderField('Approved By', transaction.approved_by || '-')}
+            {renderField('Created At', formatDate(transaction.created_at))}
+            {renderField('Updated At', formatDate(transaction.updated_at))}
+          </View>
 
-              {renderField('Full Name', transaction.account?.customer?.full_name)}
-              {renderField('Contact No.', transaction.account?.customer?.contact_number_primary)}
-              {renderField('Transaction Type', transaction.transaction_type)}
-              {renderField('Received Payment', formatCurrency(transaction.received_payment), false, true)}
-              {renderField('Payment Date', formatDate(transaction.payment_date))}
-              {renderField('Date Processed', formatDate(transaction.date_processed))}
-              {renderField('Processed By', transaction.processed_by_user, true)}
-              {renderField('Payment Method', transaction.payment_method, true)}
-              {renderField('Reference No.', transaction.reference_no)}
-              {renderField('OR No.', transaction.or_no)}
-              {renderField('Remarks', transaction.remarks || 'No remarks')}
+          {/* Related Invoices */}
+          <View
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: '#e5e7eb',
+              marginBottom: 24,
+              overflow: 'hidden',
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => setExpandedInvoices(v => !v)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontWeight: '600', fontSize: 14, color: '#111827' }}>
+                  Related Invoices
+                </Text>
+                <View style={{ backgroundColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 12, color: '#374151' }}>{invoicesCount}</Text>
+                </View>
+              </View>
+              {expandedInvoices
+                ? <ChevronDown size={18} color="#6b7280" />
+                : <ChevronRight size={18} color="#6b7280" />}
+            </TouchableOpacity>
 
-              <div className={`flex py-2 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-                }`}>
-                <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Status</div>
-                <div className="flex-1">
-                  <div className={`capitalize ${transaction.status.toLowerCase() === 'done' ? 'text-green-500' :
-                    transaction.status.toLowerCase() === 'pending' ? 'text-yellow-500' :
-                      transaction.status.toLowerCase() === 'processing' ? 'text-blue-500' :
-                        'text-gray-400'
-                    }`}>
-                    {transaction.status}
-                  </div>
-                </div>
-              </div>
-
-              {renderField('Barangay', transaction.account?.customer?.barangay, true)}
-              {renderField('City', transaction.account?.customer?.city)}
-              {renderField('Region', transaction.account?.customer?.region)}
-              {renderField('Plan', transaction.account?.customer?.desired_plan, true)}
-              {renderField('Account Balance', formatCurrency(transaction.account?.account_balance || 0))}
-
-              {transaction.image_url && (
-                <div className={`flex py-2 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-                  }`}>
-                  <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>Payment Proof</div>
-                  <div className={isDarkMode ? 'text-white flex-1' : 'text-gray-900 flex-1'}>
-                    <a
-                      href={transaction.image_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-orange-500 hover:text-orange-400 flex items-center"
+            {expandedInvoices && (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                {relatedInvoices.length === 0 ? (
+                  <Text style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', paddingVertical: 8 }}>
+                    No related invoices found
+                  </Text>
+                ) : (
+                  relatedInvoices.map((inv: any, idx: number) => (
+                    <View
+                      key={idx}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        paddingVertical: 8,
+                        borderBottomWidth: idx < relatedInvoices.length - 1 ? 1 : 0,
+                        borderBottomColor: '#e5e7eb',
+                      }}
                     >
-                      View Image <ExternalLink size={14} className="ml-1" />
-                    </a>
-                  </div>
-                </div>
-              )}
+                      <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                        {inv.invoice_date || inv.created_at ? formatDate(inv.invoice_date || inv.created_at) : `Invoice ${idx + 1}`}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#111827', fontWeight: '500' }}>
+                        {formatCurrency(inv.amount || inv.total_amount || 0)}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+        </ScrollView>
 
-              {renderField('Created At', formatDate(transaction.created_at))}
-              {renderField('Updated At', formatDate(transaction.updated_at))}
-            </div>
-          </div>
-
-          <div className={`mx-auto px-4 mt-4 ${isDarkMode ? 'bg-gray-950' : 'bg-white'
-            }`}>
-            <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-              <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                }`}>
-                <div className="flex items-center space-x-2">
-                  <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                    }`}>Related Invoices</span>
-                  <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                    ? 'bg-gray-600 text-white'
-                    : 'bg-gray-300 text-gray-900'
-                    }`}>{invoicesCount}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleExpandModalOpen('invoices');
-                    }}
-                    className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
-                      }`}
-                  >
-                    {expandedInvoices ? 'Collapse' : 'Expand'}
-                  </button>
-                  <button
-                    onClick={() => setExpandedInvoices(!expandedInvoices)}
-                    className="flex items-center"
-                  >
-                    {expandedInvoices ? (
-                      <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                    ) : (
-                      <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {expandedInvoices && (
-                <div className="px-6 pb-4">
-                  <RelatedDataTable
-                    data={relatedInvoices}
-                    columns={relatedDataColumns.invoices}
-                    isDarkMode={isDarkMode}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Expanded Modal for Related Data */}
-        {expandedModalSection && (
-          <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 9999 }}>
-            {/* Modal Header */}
-            <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-              }`}>
-              <div className="flex items-center space-x-3">
-                <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
-                  All Related Invoices
-                </h2>
-                <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-                  }`}>
-                  {invoicesCount} items
-                </span>
-              </div>
-              <button
-                onClick={handleExpandModalClose}
-                className={`p-2 rounded transition-colors ${isDarkMode
-                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-                  }`}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <RelatedDataTable
-                data={fullRelatedInvoices}
-                columns={relatedDataColumns.invoices}
-                isDarkMode={isDarkMode}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-300'
-            }`}>
-            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Success</h3>
-            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>{successMessage}</p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  if (onClose) {
-                    onClose();
-                  }
-                }}
-                className="text-white px-6 py-2 rounded transition-colors"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#22c55e'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+        <LoadingModalGlobal
+          isOpen={loading}
+          type="loading"
+          title="Approving"
+          message="Approving transaction..."
+          loadingPercentage={loadingPercentage}
+          isDarkMode={false}
+          colorPalette={colorPalette}
+        />
+      </View>
+    </Modal>
   );
 };
 

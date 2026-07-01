@@ -1,320 +1,384 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  useWindowDimensions,
+  Alert,
+  Linking,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Calendar,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Filter,
+  RefreshCw,
+  X,
+} from 'lucide-react-native';
+import GlobalSearch from './globalfunctions/GlobalSearch';
 import SOADetails from '../components/SOADetails';
-import { soaService, SOARecord } from '../services/soaService';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { paymentService, PendingPayment } from '../services/paymentService';
-import { useSOAContext, SOARecordUI } from '../contexts/SOAContext';
+import { useSOAStore, SOARecordUI } from '../store/soaStore';
 import BillingDetails from '../components/CustomerDetails';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { BillingDetailRecord } from '../types/billing';
+import { exportToCSV } from '../utils/exportUtils';
 
-// Removed local SOARecordUI interface
+// ─── Constants ──────────────────────────────────────────────────────────────
+const isDarkMode = false;
+const BG = '#f9fafb';
+const CARD = '#ffffff';
+const TEXT = '#111827';
+const MUTED = '#6b7280';
+const BORDER = '#e5e7eb';
+const ITEMS_PER_PAGE = 25;
 
-// Removed local SOARecordUI interface
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => ({
+  id: customerData.billingAccount?.accountNo || '',
+  applicationId: customerData.billingAccount?.accountNo || '',
+  customerName: customerData.fullName,
+  address: customerData.address,
+  status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
+  balance: customerData.billingAccount?.accountBalance || 0,
+  onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
+  cityId: null,
+  regionId: null,
+  timestamp: customerData.updatedAt || '',
+  billingStatus: customerData.billingAccount?.billingStatusId
+    ? ({ 1: 'In Progress', 2: 'Active', 3: 'Suspended', 4: 'Cancelled', 5: 'Overdue', 6: 'Service Account' }[customerData.billingAccount.billingStatusId] || `Status ${customerData.billingAccount.billingStatusId}`)
+    : '',
+  dateInstalled: customerData.billingAccount?.dateInstalled || '',
+  contactNumber: customerData.contactNumberPrimary,
+  secondContactNumber: customerData.contactNumberSecondary || '',
+  emailAddress: customerData.emailAddress || '',
+  plan: customerData.desiredPlan || '',
+  username: customerData.technicalDetails?.username || '',
+  connectionType: customerData.technicalDetails?.connectionType || '',
+  routerModel: customerData.technicalDetails?.routerModel || '',
+  routerModemSN: customerData.technicalDetails?.routerModemSn || '',
+  lcpnap: customerData.technicalDetails?.lcpnap || '',
+  port: customerData.technicalDetails?.port || '',
+  vlan: customerData.technicalDetails?.vlan || '',
+  billingDay: customerData.billingAccount?.billingDay || 0,
+  totalPaid: 0,
+  provider: '',
+  lcp: customerData.technicalDetails?.lcp || '',
+  nap: customerData.technicalDetails?.nap || '',
+  modifiedBy: '',
+  modifiedDate: customerData.updatedAt || '',
+  barangay: customerData.barangay || '',
+  city: customerData.city || '',
+  region: customerData.region || '',
+  usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
+  referredBy: customerData.referredBy || '',
+  referralContactNo: '',
+  groupName: customerData.groupName || '',
+  mikrotikId: '',
+  sessionIp: customerData.technicalDetails?.ipAddress || '',
+  houseFrontPicture: customerData.houseFrontPictureUrl || '',
+  accountBalance: customerData.billingAccount?.accountBalance || 0,
+  housingStatus: customerData.housingStatus || '',
+  addressCoordinates: customerData.addressCoordinates || '',
+  vip_expiration: (customerData.billingAccount as any)?.vip_expiration || '',
+  vip_remarks: (customerData.billingAccount as any)?.vip_remarks || '',
+});
 
-const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => {
-  return {
-    id: customerData.billingAccount?.accountNo || '',
-    applicationId: customerData.billingAccount?.accountNo || '',
-    customerName: customerData.fullName,
-    address: customerData.address,
-    status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
-    balance: customerData.billingAccount?.accountBalance || 0,
-    onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
-    cityId: null,
-    regionId: null,
-    timestamp: customerData.updatedAt || '',
-    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
-    dateInstalled: customerData.billingAccount?.dateInstalled || '',
-    contactNumber: customerData.contactNumberPrimary,
-    secondContactNumber: customerData.contactNumberSecondary || '',
-    emailAddress: customerData.emailAddress || '',
-    plan: customerData.desiredPlan || '',
-    username: customerData.technicalDetails?.username || '',
-    connectionType: customerData.technicalDetails?.connectionType || '',
-    routerModel: customerData.technicalDetails?.routerModel || '',
-    routerModemSN: customerData.technicalDetails?.routerModemSn || '',
-    lcpnap: customerData.technicalDetails?.lcpnap || '',
-    port: customerData.technicalDetails?.port || '',
-    vlan: customerData.technicalDetails?.vlan || '',
-    billingDay: customerData.billingAccount?.billingDay || 0,
-    totalPaid: 0,
-    provider: '',
-    lcp: customerData.technicalDetails?.lcp || '',
-    nap: customerData.technicalDetails?.nap || '',
-    modifiedBy: '',
-    modifiedDate: customerData.updatedAt || '',
-    barangay: customerData.barangay || '',
-    city: customerData.city || '',
-    region: customerData.region || '',
-
-    usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
-    referredBy: customerData.referredBy || '',
-    referralContactNo: '',
-    groupName: customerData.groupName || '',
-    mikrotikId: '',
-    sessionIp: customerData.technicalDetails?.ipAddress || '',
-    houseFrontPicture: customerData.houseFrontPictureUrl || '',
-    accountBalance: customerData.billingAccount?.accountBalance || 0,
-    housingStatus: customerData.housingStatus || '',
-    location: customerData.location || '',
-    addressCoordinates: customerData.addressCoordinates || '',
-  };
+const formatDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  } catch {
+    return dateString;
+  }
 };
 
+const fmt = (amount: number) => `₱ ${(amount ?? 0).toFixed(2)}`;
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const SOA: React.FC = () => {
-  const { soaRecords, isLoading, error, silentRefresh, refreshSOARecords } = useSOAContext();
-  const isDarkMode = false; // Forced light mode as per user request
-  const [selectedDate, setSelectedDate] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sidebarWidth, setSidebarWidth] = useState<number>(256);
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
-  const sidebarStartXRef = useRef<number>(0);
-  const sidebarStartWidthRef = useRef<number>(0);
-  const [selectedRecord, setSelectedRecord] = useState<SOARecordUI | null>(null);
-  // Removed local soaRecords, isLoading, error state
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const { soaRecords, totalCount, isLoading, error, fetchSOARecords, refreshSOARecords, pollLatestUpdates } = useSOAStore();
+  const isFullyLoaded = totalCount === 0 || soaRecords.length >= totalCount;
+
+  // ── State ──
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [userRole, setUserRole] = useState<string>('');
   const [accountNo, setAccountNo] = useState<string>('');
+  const [fullName, setFullName] = useState<string>('');
   const [accountBalance, setAccountBalance] = useState<number>(0);
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('All');
+  const [statementDateFrom, setStatementDateFrom] = useState<string>('');
+  const [statementDateTo, setStatementDateTo] = useState<string>('');
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState<boolean>(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState<boolean>(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortColumn, setSortColumn] = useState<string | null>('id');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
+
+  const [isRefreshingManual, setIsRefreshingManual] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Payment state
   const [isPaymentProcessing, setIsPaymentProcessing] = useState<boolean>(false);
   const [showPaymentVerifyModal, setShowPaymentVerifyModal] = useState<boolean>(false);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  const [fullName, setFullName] = useState<string>('');
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState<boolean>(false);
   const [paymentLinkData, setPaymentLinkData] = useState<{ referenceNo: string; amount: number; paymentUrl: string } | null>(null);
   const [showPendingPaymentModal, setShowPendingPaymentModal] = useState<boolean>(false);
   const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [paymentInput, setPaymentInput] = useState<string>('');
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const primary = colorPalette?.primary || '#7c3aed';
 
-  const allColumns = [
-    { key: 'id', label: 'ID', width: 'min-w-20' },
-    { key: 'accountNo', label: 'Account Number', width: 'min-w-36' },
-    { key: 'statementDate', label: 'Statement Date', width: 'min-w-36' },
-    { key: 'balanceFromPreviousBill', label: 'Balance from Previous Bill', width: 'min-w-48' },
-    { key: 'paymentReceivedPrevious', label: 'Payment Received Previous', width: 'min-w-48' },
-    { key: 'remainingBalancePrevious', label: 'Remaining Balance Previous', width: 'min-w-48' },
-    { key: 'monthlyServiceFee', label: 'Monthly Service Fee', width: 'min-w-40' },
-    { key: 'serviceCharge', label: 'Service Charge', width: 'min-w-36' },
-    { key: 'rebate', label: 'Rebate', width: 'min-w-28' },
-    { key: 'discounts', label: 'Discounts', width: 'min-w-28' },
-    { key: 'staggered', label: 'Staggered', width: 'min-w-28' },
-    { key: 'vat', label: 'VAT', width: 'min-w-28' },
-    { key: 'dueDate', label: 'Due Date', width: 'min-w-32' },
-    { key: 'amountDue', label: 'Amount Due', width: 'min-w-32' },
-    { key: 'totalAmountDue', label: 'Total Amount Due', width: 'min-w-36' },
-    { key: 'printLink', label: 'Print Link', width: 'min-w-28' },
-    { key: 'createdAt', label: 'Created At', width: 'min-w-40' },
-    { key: 'createdBy', label: 'Created By', width: 'min-w-32' },
-    { key: 'updatedAt', label: 'Updated At', width: 'min-w-40' },
-    { key: 'updatedBy', label: 'Updated By', width: 'min-w-32' },
-    { key: 'fullName', label: 'Full Name', width: 'min-w-40' },
-    { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-    { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-    { key: 'address', label: 'Address', width: 'min-w-56' },
-    { key: 'plan', label: 'Plan', width: 'min-w-32' },
-    { key: 'dateInstalled', label: 'Date Installed', width: 'min-w-32' },
-    { key: 'barangay', label: 'Barangay', width: 'min-w-32' },
-    { key: 'city', label: 'City', width: 'min-w-32' },
-    { key: 'region', label: 'Region', width: 'min-w-32' },
-  ];
+  // ── Init ──
+  useEffect(() => { fetchSOARecords(); }, [fetchSOARecords]);
 
-  const customerColumns = [
-    { key: 'statementDate', label: 'Statement Date', width: 'min-w-36' },
-    { key: 'id', label: 'ID', width: 'min-w-20' },
-    { key: 'action', label: 'Action', width: 'min-w-32' },
-  ];
+  useEffect(() => {
+    settingsColorPaletteService.getActive().then(setColorPalette).catch(() => {});
+  }, []);
 
-  const displayColumns = userRole === 'customer' ? customerColumns : allColumns;
+  useEffect(() => {
+    AsyncStorage.getItem('authData').then(raw => {
+      if (!raw) return;
+      try {
+        const user = JSON.parse(raw);
+        setUserRole(user.role?.toLowerCase() || '');
+        setAccountNo(user.username || '');
+        const bal = parseFloat(user.account_balance || '0');
+        setAccountBalance(bal);
+        setPaymentAmount(bal > 0 ? bal : 100);
+        setPaymentInput(String(bal > 0 ? bal : 100));
+        setFullName(user.full_name || '');
+      } catch {}
+    });
+  }, []);
 
-  // Derive date items from context data instead of fetching separately or static
-  const dateItems: Array<{ date: string; id: string }> = useMemo(() => {
-    const dates = new Set<string>();
-    soaRecords.forEach(record => {
-      if (record.statementDate) {
-        dates.add(record.statementDate);
+  // 15-min interval refresh (replaces pusher + idle logic)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      pollLatestUpdates().catch(() => {});
+    }, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [pollLatestUpdates]);
+
+  // ── Derived data ──
+  const userOrgId = useMemo(() => {
+    // org filter is async — we read synchronously from store, org filtering handled via records
+    // For simplicity we allow all records to show (org filtered server-side)
+    return null;
+  }, []);
+
+  const globalFilteredRecords = useMemo(() => {
+    let filtered = soaRecords.filter((record: SOARecordUI) => {
+      const normalizedQuery = searchQuery.toLowerCase().replace(/\s+/g, '');
+      if (searchQuery === '') return true;
+      const checkValue = (val: any): boolean => {
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') return Object.values(val).some(v => checkValue(v));
+        return String(val).toLowerCase().replace(/\s+/g, '').includes(normalizedQuery);
+      };
+      return checkValue(record);
+    });
+
+    // Date range filter
+    if (statementDateFrom || statementDateTo) {
+      filtered = filtered.filter(record => {
+        const dateStr = record.statementDateRaw || record.statementDate;
+        if (!dateStr) return false;
+        const dateValue = new Date(dateStr).getTime();
+        if (isNaN(dateValue)) return false;
+        if (statementDateFrom) {
+          const from = new Date(statementDateFrom);
+          from.setHours(0, 0, 0, 0);
+          if (dateValue < from.getTime()) return false;
+        }
+        if (statementDateTo) {
+          const to = new Date(statementDateTo);
+          to.setHours(23, 59, 59, 999);
+          if (dateValue > to.getTime()) return false;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [soaRecords, searchQuery, statementDateFrom, statementDateTo]);
+
+  const dateItems = useMemo(() => {
+    const dateCounts: Record<string, number> = {};
+    const dates = new Map<string, string>();
+    globalFilteredRecords.forEach((record: SOARecordUI) => {
+      if (record.statementDate && record.statementDate !== 'N/A') {
+        dateCounts[record.statementDate] = (dateCounts[record.statementDate] || 0) + 1;
+        dates.set(record.statementDate, record.statementDateRaw || record.statementDate);
       }
     });
-    return [{ date: 'All', id: '' }, ...Array.from(dates).sort().reverse().map(d => ({ date: d, id: d }))];
-  }, [soaRecords]);
-
-
-
-  useEffect(() => {
-    const authData = localStorage.getItem('authData');
-    if (authData) {
-      try {
-        const user = JSON.parse(authData);
-        setUserRole(user.role?.toLowerCase() || '');
-        setAccountNo(user.username || ''); // username IS the account_no
-        const balance = parseFloat(user.account_balance || '0');
-        setAccountBalance(balance);
-        setPaymentAmount(balance > 0 ? balance : 100); // Default to 100 if no balance
-        setFullName(user.full_name || '');
-      } catch (error) {
-        console.error('Error parsing auth data:', error);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-
-    fetchColorPalette();
-  }, []);
-
-  useEffect(() => {
-    silentRefresh();
-    // Only run once on mount to avoid potential re-render loops with context functions
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+    const sortedDates = Array.from(dates.entries())
+      .sort((a, b) => new Date(b[1]).getTime() - new Date(a[1]).getTime())
+      .map(([formatted]) => ({ date: formatted, count: dateCounts[formatted] }));
+    return { all: globalFilteredRecords.length, dates: sortedDates };
+  }, [globalFilteredRecords]);
 
   const filteredRecords = useMemo(() => {
-    return soaRecords.filter(record => {
-      const matchesDate = selectedDate === 'All' || record.statementDate === selectedDate;
-      const matchesSearch = searchQuery === '' ||
-        record.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.accountNo.includes(searchQuery) ||
-        record.id.includes(searchQuery);
+    let filtered = globalFilteredRecords.filter((r: SOARecordUI) =>
+      selectedDate === 'All' || r.statementDate === selectedDate
+    );
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        const numericCols = ['balanceFromPreviousBill','paymentReceivedPrevious','remainingBalancePrevious','monthlyServiceFee','serviceCharge','rebate','discounts','staggered','vat','amountDue','totalAmountDue'];
+        let aVal: any = (a as any)[sortColumn] || '';
+        let bVal: any = (b as any)[sortColumn] || '';
+        if (numericCols.includes(sortColumn)) {
+          aVal = Number(aVal) || 0;
+          bVal = Number(bVal) || 0;
+        } else if (['statementDate','dueDate','createdAt','updatedAt'].includes(sortColumn)) {
+          aVal = sortColumn === 'statementDate' ? (a.statementDateRaw || a.statementDate || '') : aVal;
+          bVal = sortColumn === 'statementDate' ? (b.statementDateRaw || b.statementDate || '') : bVal;
+          aVal = new Date(aVal).getTime() || 0;
+          bVal = new Date(bVal).getTime() || 0;
+        } else {
+          aVal = String(aVal).toLowerCase();
+          bVal = String(bVal).toLowerCase();
+        }
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [globalFilteredRecords, selectedDate, sortColumn, sortDirection]);
 
-      return matchesDate && matchesSearch;
-    });
-  }, [soaRecords, selectedDate, searchQuery]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedDate, searchQuery]);
+  const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE);
 
   const paginatedRecords = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredRecords.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredRecords, currentPage]);
 
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+  const currentSOAIndex = useMemo(() => {
+    if (!selectedRecordId) return -1;
+    return filteredRecords.findIndex(r => r.id === selectedRecordId);
+  }, [filteredRecords, selectedRecordId]);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  };
+  const selectedRecord = useMemo(() => {
+    if (!selectedRecordId) return null;
+    return soaRecords.find(r => r.id === selectedRecordId) || null;
+  }, [soaRecords, selectedRecordId]);
 
-  const PaginationControls = () => {
-    if (totalPages <= 1) return null;
+  // Reset page on filter change
+  useEffect(() => { setCurrentPage(1); }, [selectedDate, searchQuery, statementDateFrom, statementDateTo]);
 
-    return (
-      <div className={`flex items-center justify-between px-4 py-3 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-        <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRecords.length)}</span> of <span className="font-medium">{filteredRecords.length}</span> results
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === 1
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            {"<"}
-          </button>
-
-          <div className="flex items-center space-x-1">
-            <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Page {currentPage} of {totalPages}
-            </span>
-          </div>
-
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === totalPages
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            {">"}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const handleRowClick = (record: SOARecordUI) => {
-    if (userRole !== 'customer') {
-      setSelectedRecord(record);
-      setSelectedCustomer(null); // Clear customer view when switching records
-    }
-  };
-
-  const handleViewCustomer = async (accountNo: string) => {
-    setIsLoadingDetails(true);
-    try {
-      const detail = await getCustomerDetail(accountNo);
-      if (detail) {
-        setSelectedCustomer(detail);
-      }
-    } catch (err) {
-      console.error('Error fetching customer details:', err);
-    } finally {
-      setIsLoadingDetails(false);
-    }
-  };
-
-  const handleCloseDetails = () => {
-    setSelectedRecord(null);
-  };
+  // ── Handlers ──
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await pollLatestUpdates(); } finally { setRefreshing(false); }
+  }, [pollLatestUpdates]);
 
   const handleRefresh = async () => {
-    await refreshSOARecords();
+    setIsRefreshingManual(true);
+    try { await pollLatestUpdates(); } finally { setIsRefreshingManual(false); }
   };
 
+  const handleRowPress = (record: SOARecordUI) => {
+    if (userRole !== 'customer') {
+      setSelectedRecordId(record.id);
+      setSelectedCustomer(null);
+    }
+  };
+
+  const handleViewCustomer = async (accNo: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const detail = await getCustomerDetail(accNo);
+      if (detail) setSelectedCustomer(detail);
+    } catch {}
+    finally { setIsLoadingDetails(false); }
+  };
+
+  const handlePreviousRecord = () => {
+    if (currentSOAIndex > 0) setSelectedRecordId(filteredRecords[currentSOAIndex - 1].id);
+  };
+
+  const handleNextRecord = () => {
+    if (currentSOAIndex >= 0 && currentSOAIndex < filteredRecords.length - 1)
+      setSelectedRecordId(filteredRecords[currentSOAIndex + 1].id);
+  };
+
+  const handleDownloadPDF = (printLink?: string) => {
+    if (printLink) Linking.openURL(printLink).catch(() => {});
+  };
+
+  const handleExport = async () => {
+    if (!filteredRecords.length) return;
+    const cols = [
+      { key: 'statementDate', label: 'Statement Date' },
+      { key: 'accountNo', label: 'Account No' },
+      { key: 'fullName', label: 'Full Name' },
+      { key: 'plan', label: 'Plan' },
+      { key: 'amountDue', label: 'Amount Due' },
+      { key: 'totalAmountDue', label: 'Total Amount Due' },
+      { key: 'dueDate', label: 'Due Date' },
+      { key: 'printLink', label: 'Print Link' },
+    ];
+    const getValue = (record: SOARecordUI, key: string) => {
+      if (key === 'amountDue') return fmt(record.amountDue);
+      if (key === 'totalAmountDue') return fmt(record.totalAmountDue);
+      return (record as any)[key] || '-';
+    };
+    await exportToCSV('soa_records_export', cols, filteredRecords, getValue);
+  };
+
+  // Payment handlers
   const handlePayNow = async () => {
     setErrorMessage('');
     setIsPaymentProcessing(true);
-
     try {
-      // Fetch current account balance from database
       const currentBalance = await paymentService.getAccountBalance(accountNo);
       setAccountBalance(currentBalance);
-
       const pending = await paymentService.checkPendingPayment(accountNo);
-
       if (pending && pending.payment_url) {
         setPendingPayment(pending);
         setShowPendingPaymentModal(true);
       } else {
-        setPaymentAmount(currentBalance > 0 ? currentBalance : 100);
+        const amt = currentBalance > 0 ? currentBalance : 100;
+        setPaymentAmount(amt);
+        setPaymentInput(String(amt));
         setShowPaymentVerifyModal(true);
       }
-    } catch (error: any) {
-      console.error('Error checking pending payment:', error);
-      setPaymentAmount(accountBalance > 0 ? accountBalance : 100);
+    } catch {
+      const amt = accountBalance > 0 ? accountBalance : 100;
+      setPaymentAmount(amt);
+      setPaymentInput(String(amt));
       setShowPaymentVerifyModal(true);
     } finally {
       setIsPaymentProcessing(false);
     }
-  };
-
-  const handleCloseVerifyModal = () => {
-    setShowPaymentVerifyModal(false);
-    setPaymentAmount(accountBalance);
   };
 
   const handleProceedToCheckout = async () => {
@@ -322,31 +386,24 @@ const SOA: React.FC = () => {
       setErrorMessage('Payment amount must be at least ₱1.00');
       return;
     }
-
-    if (isPaymentProcessing) {
-      return;
-    }
-
+    if (isPaymentProcessing) return;
     setIsPaymentProcessing(true);
     setErrorMessage('');
-
     try {
       const response = await paymentService.createPayment(accountNo, paymentAmount);
-
       if (response.status === 'success' && response.payment_url) {
         setShowPaymentVerifyModal(false);
         setPaymentLinkData({
           referenceNo: response.reference_no || '',
           amount: response.amount || paymentAmount,
-          paymentUrl: response.payment_url
+          paymentUrl: response.payment_url,
         });
         setShowPaymentLinkModal(true);
       } else {
         throw new Error(response.message || 'Failed to create payment link');
       }
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      setErrorMessage(error.message || 'Failed to create payment. Please try again.');
+    } catch (e: any) {
+      setErrorMessage(e.message || 'Failed to create payment. Please try again.');
     } finally {
       setIsPaymentProcessing(false);
     }
@@ -354,644 +411,817 @@ const SOA: React.FC = () => {
 
   const handleOpenPaymentLink = () => {
     if (paymentLinkData?.paymentUrl) {
-      window.open(paymentLinkData.paymentUrl, '_blank');
+      Linking.openURL(paymentLinkData.paymentUrl).catch(() => {});
       setShowPaymentLinkModal(false);
       setPaymentLinkData(null);
     }
   };
 
-  const handleCancelPaymentLink = () => {
-    setShowPaymentLinkModal(false);
-    setPaymentLinkData(null);
-  };
-
   const handleResumePendingPayment = () => {
-    if (pendingPayment && pendingPayment.payment_url) {
-      window.open(pendingPayment.payment_url, '_blank');
+    if (pendingPayment?.payment_url) {
+      Linking.openURL(pendingPayment.payment_url).catch(() => {});
       setShowPendingPaymentModal(false);
       setPendingPayment(null);
     }
   };
 
-  const handleCancelPendingPayment = () => {
-    setShowPendingPaymentModal(false);
-    setPendingPayment(null);
-  };
+  // ── Render item ──
+  const renderSOACard = ({ item }: { item: SOARecordUI }) => {
+    const isSelected = item.id === selectedRecordId;
+    return (
+      <TouchableOpacity
+        onPress={() => handleRowPress(item)}
+        style={[
+          styles.card,
+          isSelected && { borderLeftWidth: 3, borderLeftColor: primary },
+        ]}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>{item.fullName}</Text>
+            <Text style={[styles.cardSub, { color: '#ef4444' }]}>{item.accountNo}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[styles.cardAmount, { color: primary }]}>{fmt(item.totalAmountDue)}</Text>
+            <Text style={styles.cardDate}>{item.statementDate}</Text>
+          </View>
+        </View>
 
-  useEffect(() => {
-    if (!isResizingSidebar) return;
+        <View style={styles.cardRow}>
+          <Text style={styles.cardRowLabel}>Plan</Text>
+          <Text style={styles.cardRowValue}>{item.plan || '-'}</Text>
+        </View>
+        <View style={styles.cardRow}>
+          <Text style={styles.cardRowLabel}>Due Date</Text>
+          <Text style={styles.cardRowValue}>{item.dueDate || '-'}</Text>
+        </View>
+        <View style={styles.cardRow}>
+          <Text style={styles.cardRowLabel}>Amount Due</Text>
+          <Text style={styles.cardRowValue}>{fmt(item.amountDue)}</Text>
+        </View>
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
-  const handleDownloadPDF = (printLink: string | undefined) => {
-    if (printLink) {
-      window.open(printLink, '_blank');
-    }
-  };
-
-  const renderCellValue = (record: SOARecordUI, columnKey: string) => {
-    switch (columnKey) {
-      case 'id':
-        return record.id;
-      case 'accountNo':
-        return <span className="text-red-400">{record.accountNo}</span>;
-      case 'statementDate':
-        return record.statementDate;
-      case 'action':
-        return (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownloadPDF(record.printLink);
-            }}
-            disabled={!record.printLink}
-            className="px-3 py-1 rounded text-sm text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: record.printLink ? (colorPalette?.primary || '#7c3aed') : '#6b7280'
-            }}
-            onMouseEnter={(e) => {
-              if (record.printLink && colorPalette?.accent) {
-                e.currentTarget.style.backgroundColor = colorPalette.accent;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (record.printLink && colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
+        {item.printLink ? (
+          <TouchableOpacity
+            onPress={() => handleDownloadPDF(item.printLink)}
+            style={[styles.pdfBtn, { borderColor: primary }]}
           >
-            Download PDF
-          </button>
-        );
-      case 'balanceFromPreviousBill':
-        return `₱ ${(record.balanceFromPreviousBill ?? 0).toFixed(2)}`;
-      case 'paymentReceivedPrevious':
-        return `₱ ${(record.paymentReceivedPrevious ?? 0).toFixed(2)}`;
-      case 'remainingBalancePrevious':
-        return `₱ ${(record.remainingBalancePrevious ?? 0).toFixed(2)}`;
-      case 'monthlyServiceFee':
-        return `₱ ${(record.monthlyServiceFee ?? 0).toFixed(2)}`;
-      case 'serviceCharge':
-        return `₱ ${(record.serviceCharge ?? 0).toFixed(2)}`;
-      case 'rebate':
-        return `₱ ${(record.rebate ?? 0).toFixed(2)}`;
-      case 'discounts':
-        return `₱ ${(record.discounts ?? 0).toFixed(2)}`;
-      case 'staggered':
-        return `₱ ${(record.staggered ?? 0).toFixed(2)}`;
-      case 'vat':
-        return `₱ ${(record.vat ?? 0).toFixed(2)}`;
-      case 'dueDate':
-        return record.dueDate || '-';
-      case 'amountDue':
-        return `₱ ${(record.amountDue ?? 0).toFixed(2)}`;
-      case 'totalAmountDue':
-        return `₱ ${(record.totalAmountDue ?? 0).toFixed(2)}`;
-      case 'printLink':
-        return record.printLink || 'NULL';
-      case 'createdAt':
-        return record.createdAt || '-';
-      case 'createdBy':
-        return record.createdBy || '-';
-      case 'updatedAt':
-        return record.updatedAt || '-';
-      case 'updatedBy':
-        return record.updatedBy || '-';
-      case 'fullName':
-        return record.fullName || '-';
-      case 'contactNumber':
-        return record.contactNumber || '-';
-      case 'emailAddress':
-        return record.emailAddress || '-';
-      case 'address':
-        return <span title={record.address}>{record.address || '-'}</span>;
-      case 'plan':
-        return record.plan || '-';
-      case 'dateInstalled':
-        return record.dateInstalled || '-';
-      case 'barangay':
-        return record.barangay || '-';
-      case 'city':
-        return record.city || '-';
-      case 'region':
-        return record.region || '-';
-      default:
-        return '-';
-    }
+            <Download size={14} color={primary} />
+            <Text style={[styles.pdfBtnText, { color: primary }]}>Download PDF</Text>
+          </TouchableOpacity>
+        ) : null}
+      </TouchableOpacity>
+    );
   };
 
-  return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-      {userRole !== 'customer' && (
-        <div className={`hidden md:flex border-r flex-shrink-0 flex flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`} style={{ width: `${sidebarWidth}px` }}>
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-            <div className="flex items-center justify-between mb-1">
-              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>SOA</h2>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {dateItems.map((item, index) => (
-              <button
-                key={index}
-                onClick={() => setSelectedDate(item.date)}
-                className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                  } ${selectedDate === item.date
-                    ? ''
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
-                style={selectedDate === item.date ? {
-                  backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                  color: colorPalette?.primary || '#fb923c'
-                } : {}}
-              >
-                <span className="text-sm font-medium flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                  </svg>
-                  {item.date}
-                </span>
-              </button>
-            ))}
-          </div>
+  // ── Sidebar ──
+  const SidebarContent = () => (
+    <ScrollView style={{ flex: 1 }}>
+      {/* Date range */}
+      <View style={styles.sidebarSection}>
+        <View style={styles.sidebarSectionHeader}>
+          <Text style={styles.sidebarSectionLabel}>STATEMENT DATE RANGE</Text>
+          {(statementDateFrom || statementDateTo) && (
+            <TouchableOpacity onPress={() => { setStatementDateFrom(''); setStatementDateTo(''); }}>
+              <Text style={[styles.clearText, { color: primary }]}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.dateLabel}>From</Text>
+        <TextInput
+          style={[styles.dateInput, statementDateFrom ? { borderColor: primary } : {}]}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={MUTED}
+          value={statementDateFrom}
+          onChangeText={setStatementDateFrom}
+        />
+        <Text style={[styles.dateLabel, { marginTop: 8 }]}>To</Text>
+        <TextInput
+          style={[styles.dateInput, statementDateTo ? { borderColor: primary } : {}]}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={MUTED}
+          value={statementDateTo}
+          onChangeText={setStatementDateTo}
+        />
+      </View>
 
-          <div
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
-            style={{
-              backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#7c3aed') : 'transparent'
-            }}
-            onMouseEnter={(e) => {
-              if (!isResizingSidebar && colorPalette?.primary) {
-                e.currentTarget.style.backgroundColor = colorPalette.primary;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isResizingSidebar) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }
-            }}
-            onMouseDown={handleMouseDownSidebarResize}
+      {/* All records button */}
+      <TouchableOpacity
+        onPress={() => setSelectedDate('All')}
+        style={[
+          styles.dateItem,
+          selectedDate === 'All' && { backgroundColor: `${primary}22` },
+        ]}
+      >
+        <Text style={[styles.dateItemText, selectedDate === 'All' && { color: primary, fontWeight: '600' }]}>
+          All Records
+        </Text>
+        <View style={[styles.badge, selectedDate === 'All' ? { backgroundColor: primary } : {}]}>
+          <Text style={[styles.badgeText, selectedDate === 'All' ? { color: '#fff' } : {}]}>
+            {dateItems.all}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Statement month accordion */}
+      <TouchableOpacity
+        style={styles.accordionHeader}
+        onPress={() => setIsDateDropdownOpen(v => !v)}
+      >
+        <Text style={styles.accordionLabel}>Statement Month</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{dateItems.dates.length}</Text>
+          </View>
+          <ChevronDown
+            size={16}
+            color={MUTED}
+            style={{ transform: [{ rotate: isDateDropdownOpen ? '180deg' : '0deg' }] }}
           />
-        </div>
-      )}
+        </View>
+      </TouchableOpacity>
 
-      <div className={`flex-1 overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-        }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search SOA records..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${isDarkMode
-                    ? 'bg-gray-800 text-white border border-gray-700'
-                    : 'bg-white text-gray-900 border border-gray-300'
-                    }`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                  }}
-                />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-              </div>
-              {userRole === 'customer' && (
-                <button
-                  onClick={handlePayNow}
-                  disabled={isPaymentProcessing}
-                  className="text-white px-4 py-2 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    backgroundColor: isPaymentProcessing ? '#6b7280' : (colorPalette?.primary || '#7c3aed')
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isPaymentProcessing && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isPaymentProcessing && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                >
-                  {isPaymentProcessing ? 'Processing...' : 'Pay Now'}
-                </button>
-              )}
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="text-white px-4 py-2 rounded text-sm transition-colors disabled:bg-gray-600"
-                style={{
-                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading && colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
+      {isDateDropdownOpen && dateItems.dates.map((item, idx) => (
+        <TouchableOpacity
+          key={idx}
+          onPress={() => { setSelectedDate(item.date); setIsSidebarVisible(false); }}
+          style={[
+            styles.dateSubItem,
+            selectedDate === item.date && { backgroundColor: `${primary}22` },
+          ]}
+        >
+          <Calendar size={14} color={selectedDate === item.date ? primary : MUTED} style={{ marginRight: 8 }} />
+          <Text style={[styles.dateSubText, selectedDate === item.date && { color: primary, fontWeight: '500' }]}>
+            {item.date}
+          </Text>
+          <View style={[styles.badge, { marginLeft: 'auto' }, selectedDate === item.date ? { backgroundColor: primary } : {}]}>
+            <Text style={[styles.badgeText, selectedDate === item.date ? { color: '#fff' } : {}]}>
+              {item.count}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ))}
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              {isLoading ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                  </div>
-                  <p className="mt-4">Loading SOA records...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
-                  }`}>
-                  <p>{error}</p>
-                  <button
-                    onClick={handleRefresh}
-                    className={`mt-4 px-4 py-2 rounded ${isDarkMode
-                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                      }`}>
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="overflow-x-auto overflow-y-hidden">
-                    <table className="w-max min-w-full text-sm border-separate border-spacing-0">
-                      <thead>
-                        <tr className={`border-b sticky top-0 z-10 ${isDarkMode
-                          ? 'border-gray-700 bg-gray-800'
-                          : 'border-gray-200 bg-gray-100'
-                          }`}>
-                          {displayColumns.map((column, index) => (
-                            <th
-                              key={column.key}
-                              className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-100'
-                                } ${index < displayColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200') : ''
-                                }`}
-                            >
-                              {column.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedRecords.length > 0 ? (
-                          paginatedRecords.map((record) => (
-                            <tr
-                              key={record.id}
-                              className={`border-b cursor-pointer transition-colors ${isDarkMode
-                                ? 'border-gray-800 hover:bg-gray-900'
-                                : 'border-gray-200 hover:bg-gray-50'
-                                } ${selectedRecord?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''
-                                } ${userRole === 'customer' ? '' : 'cursor-pointer'
-                                }`}
-                              onClick={() => handleRowClick(record)}
-                            >
-                              {displayColumns.map((column, index) => (
-                                <td
-                                  key={column.key}
-                                  className={`py-4 px-3 whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                    } ${index < displayColumns.length - 1 ? (isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200') : ''
-                                    }`}
-                                >
-                                  {renderCellValue(record, column.key)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={displayColumns.length} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                              }`}>
-                              No SOA records found matching your filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-            {!isLoading && !error && filteredRecords.length > 0 && <PaginationControls />}
-          </div>
-        </div>
-      </div>
-
-      {selectedRecord && userRole !== 'customer' && (
-        <div className="flex-shrink-0 overflow-hidden">
-          <SOADetails
-            soaRecord={selectedRecord}
-            onViewCustomer={handleViewCustomer}
-            onClose={handleCloseDetails}
-          />
-        </div>
-      )}
-
-      {(selectedCustomer || isLoadingDetails) && (
-        <div className="flex-shrink-0 overflow-hidden">
-          {isLoadingDetails ? (
-            <div className={`w-[600px] h-full flex items-center justify-center border-l ${isDarkMode
-              ? 'bg-gray-900 text-white border-white border-opacity-30'
-              : 'bg-white text-gray-900 border-gray-300'
-              }`}>
-              <div className="text-center">
-                <div
-                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#7c3aed' }}
-                ></div>
-                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
-              </div>
-            </div>
-          ) : selectedCustomer ? (
-            <BillingDetails
-              billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
-              onlineStatusRecords={[]}
-              onClose={() => setSelectedCustomer(null)}
-            />
-          ) : null}
-        </div>
-      )}
-
-      {showPaymentVerifyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'
-              }`}
-          >
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-              }`}>
-              <h3 className="text-xl font-bold text-center">Confirm Payment</h3>
-            </div>
-
-            <div className="p-6">
-              <div className={`p-4 rounded mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                }`}>
-                <div className="flex justify-between mb-2">
-                  <span>Account:</span>
-                  <span className="font-bold">{fullName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Current Balance:</span>
-                  <span className={`font-bold ${accountBalance > 0 ? 'text-red-500' : 'text-green-500'
-                    }`}>₱{accountBalance.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {errorMessage && (
-                <div className={`p-3 rounded mb-4 ${isDarkMode ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'
-                  }`}>
-                  <p className="text-red-500 text-sm text-center">{errorMessage}</p>
-                </div>
-              )}
-
-              <div className="mb-4">
-                <label className="block font-bold mb-2">Payment Amount</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={paymentAmount || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow empty, numbers, and decimal point
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      setPaymentAmount(value === '' ? 0 : parseFloat(value) || 0);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    // Format to 2 decimal places on blur if there's a value
-                    const value = parseFloat(e.target.value);
-                    if (!isNaN(value) && value > 0) {
-                      setPaymentAmount(parseFloat(value.toFixed(2)));
-                    } else {
-                      setPaymentAmount(0);
-                    }
-                  }}
-                  placeholder="100"
-                  className={`w-full px-4 py-3 rounded text-lg font-bold ${isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                    } border focus:outline-none focus:ring-2`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
-                  } as React.CSSProperties}
-                />
-                <div className={`text-sm text-right mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  {accountBalance > 0 ? (
-                    <span>Outstanding balance: ₱{accountBalance.toFixed(2)}</span>
-                  ) : (
-                    <span>Minimum: ₱1.00</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCloseVerifyModal}
-                  disabled={isPaymentProcessing}
-                  className={`flex-1 px-4 py-3 rounded font-bold transition-colors ${isDarkMode
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleProceedToCheckout}
-                  disabled={isPaymentProcessing || paymentAmount < 1}
-                  className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    backgroundColor: (isPaymentProcessing || paymentAmount < 1)
-                      ? '#6b7280'
-                      : (colorPalette?.primary || '#7c3aed')
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isPaymentProcessing && paymentAmount >= 1 && colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isPaymentProcessing && paymentAmount >= 1 && colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                >
-                  {isPaymentProcessing ? (
-                    <span className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Processing...
-                    </span>
-                  ) : (
-                    'PROCEED TO CHECKOUT →'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showPendingPaymentModal && pendingPayment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
-          >
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className="text-xl font-bold text-center">Transaction In Progress</h3>
-            </div>
-
-            <div className="p-6">
-              <div className={`p-4 rounded mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <p className="text-center mb-4">
-                  You have a pending payment (<b>{pendingPayment.reference_no}</b>).
-                  <br />The link is still active.
-                </p>
-                <div className="flex justify-between mt-4">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#7c3aed' }}>
-                    ₱{pendingPayment.amount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCancelPendingPayment}
-                  className={`flex-1 px-4 py-3 rounded font-bold transition-colors ${isDarkMode
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-                    }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleResumePendingPayment}
-                  className="flex-1 px-4 py-3 rounded font-bold text-white transition-colors"
-                  style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}
-                  onMouseEnter={(e) => {
-                    if (colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.backgroundColor = colorPalette.primary;
-                    }
-                  }}
-                >
-                  Pay Now →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showPaymentLinkModal && paymentLinkData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div
-            className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}
-          >
-            <div className={`p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h3 className="text-xl font-bold text-center">Proceed to Payment Portal</h3>
-            </div>
-
-            <div className="p-6">
-              <div className={`p-4 rounded mb-6 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <div className="flex justify-between mb-3">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Reference:</span>
-                  <span className="font-mono font-bold">{paymentLinkData.referenceNo}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Amount:</span>
-                  <span className="font-bold text-lg" style={{ color: colorPalette?.primary || '#7c3aed' }}>
-                    ₱{paymentLinkData.amount.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleOpenPaymentLink}
-                className="w-full px-4 py-3 rounded font-bold text-white transition-colors"
-                style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                PROCEED
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {/* View Records button on mobile */}
+      <View style={{ padding: 16 }}>
+        <TouchableOpacity
+          style={[styles.viewRecordsBtn, { backgroundColor: primary }]}
+          onPress={() => setIsSidebarVisible(false)}
+        >
+          <Text style={styles.viewRecordsBtnText}>View Records</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
+
+  // ── Main render ──
+  return (
+    <View style={{ flex: 1, backgroundColor: BG, paddingTop: isTablet ? 16 : 60 }}>
+      {/* Header toolbar */}
+      <View style={styles.toolbar}>
+        <View style={{ flex: 1 }}>
+          <GlobalSearch
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDarkMode={isDarkMode}
+            colorPalette={colorPalette}
+            placeholder="Search SOA records..."
+          />
+        </View>
+
+        {/* Filter (sidebar) toggle */}
+        {userRole !== 'customer' && (
+          <TouchableOpacity
+            style={styles.toolBtn}
+            onPress={() => setIsSidebarVisible(true)}
+          >
+            <Filter size={18} color={TEXT} />
+          </TouchableOpacity>
+        )}
+
+        {/* Pay Now for customers */}
+        {userRole === 'customer' && (
+          <TouchableOpacity
+            style={[styles.payBtn, { backgroundColor: isPaymentProcessing ? '#6b7280' : primary }]}
+            onPress={handlePayNow}
+            disabled={isPaymentProcessing}
+          >
+            <Text style={styles.payBtnText}>{isPaymentProcessing ? 'Processing...' : 'Pay Now'}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Export */}
+        <TouchableOpacity
+          style={[styles.toolBtn, { borderColor: primary }]}
+          onPress={handleExport}
+          disabled={isLoading || filteredRecords.length === 0}
+        >
+          <Download size={18} color={primary} />
+        </TouchableOpacity>
+
+        {/* Refresh */}
+        <TouchableOpacity
+          style={[styles.toolBtn, { borderColor: primary }]}
+          onPress={handleRefresh}
+          disabled={isLoading || isRefreshingManual}
+        >
+          {(isLoading || isRefreshingManual) ? (
+            <ActivityIndicator size="small" color={primary} />
+          ) : (
+            <RefreshCw size={18} color={primary} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Pagination info */}
+      {filteredRecords.length > 0 && (
+        <View style={styles.paginationBar}>
+          <Text style={styles.paginationText}>
+            Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredRecords.length)} of {filteredRecords.length}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={[styles.pageBtn, currentPage === 1 && { opacity: 0.4 }]}
+            >
+              <ChevronLeft size={16} color={TEXT} />
+            </TouchableOpacity>
+            <Text style={styles.paginationText}>
+              {currentPage}/{totalPages || 1}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              style={[styles.pageBtn, currentPage >= totalPages && { opacity: 0.4 }]}
+            >
+              <ChevronRight size={16} color={TEXT} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* List */}
+      {isLoading && soaRecords.length === 0 ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={primary} />
+          <Text style={styles.centerText}>Loading SOA records...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={{ color: '#ef4444', marginBottom: 12 }}>{error}</Text>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: primary }]} onPress={() => fetchSOARecords(true)}>
+            <Text style={{ color: '#fff' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={paginatedRecords}
+          keyExtractor={item => item.id}
+          renderItem={renderSOACard}
+          contentContainerStyle={{ padding: 12, paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primary} />
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.centerText}>No SOA records found</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Sidebar modal (filter) */}
+      <Modal
+        visible={isSidebarVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsSidebarVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.sidebarOverlay}
+          activeOpacity={1}
+          onPress={() => setIsSidebarVisible(false)}
+        />
+        <View style={styles.sidebarDrawer}>
+          <View style={styles.sidebarDrawerHeader}>
+            <Text style={styles.sidebarDrawerTitle}>Statements</Text>
+            <TouchableOpacity onPress={() => setIsSidebarVisible(false)}>
+              <X size={20} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+          <SidebarContent />
+        </View>
+      </Modal>
+
+      {/* SOA Detail modal */}
+      {selectedRecord && userRole !== 'customer' && (
+        <SOADetails
+          soaRecord={selectedRecord as any}
+          onViewCustomer={handleViewCustomer}
+          onClose={() => setSelectedRecordId(null)}
+          onPrevious={currentSOAIndex > 0 ? handlePreviousRecord : undefined}
+          onNext={currentSOAIndex < filteredRecords.length - 1 ? handleNextRecord : undefined}
+        />
+      )}
+
+      {/* Customer details modal */}
+      {(selectedCustomer || isLoadingDetails) && (
+        isLoadingDetails ? (
+          <Modal visible animationType="slide" onRequestClose={() => setIsLoadingDetails(false)}>
+            <View style={[styles.center, { flex: 1, backgroundColor: CARD }]}>
+              <ActivityIndicator size="large" color={primary} />
+              <Text style={[styles.centerText, { marginTop: 12 }]}>Loading details...</Text>
+            </View>
+          </Modal>
+        ) : selectedCustomer ? (
+          <BillingDetails
+            billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
+            onlineStatusRecords={[]}
+            onClose={() => setSelectedCustomer(null)}
+          />
+        ) : null
+      )}
+
+      {/* Payment Verify Modal */}
+      <Modal visible={showPaymentVerifyModal} transparent animationType="fade" onRequestClose={() => setShowPaymentVerifyModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Confirm Payment</Text>
+            <View style={styles.modalInfoBox}>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalRowLabel}>Account:</Text>
+                <Text style={styles.modalRowValue}>{fullName}</Text>
+              </View>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalRowLabel}>Current Balance:</Text>
+                <Text style={[styles.modalRowValue, { color: accountBalance > 0 ? '#ef4444' : '#10b981' }]}>
+                  ₱{accountBalance.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+            {errorMessage ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.modalFieldLabel}>Payment Amount</Text>
+            <TextInput
+              style={styles.modalInput}
+              keyboardType="decimal-pad"
+              value={paymentInput}
+              onChangeText={text => {
+                if (text === '' || /^\d*\.?\d*$/.test(text)) {
+                  setPaymentInput(text);
+                  setPaymentAmount(text === '' ? 0 : parseFloat(text) || 0);
+                }
+              }}
+              placeholder="100"
+              placeholderTextColor={MUTED}
+            />
+            <Text style={styles.modalHint}>
+              {accountBalance > 0 ? `Outstanding: ₱${accountBalance.toFixed(2)}` : 'Minimum: ₱1.00'}
+            </Text>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowPaymentVerifyModal(false)}
+                disabled={isPaymentProcessing}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.proceedBtn, { backgroundColor: (isPaymentProcessing || paymentAmount < 1) ? '#6b7280' : primary }]}
+                onPress={handleProceedToCheckout}
+                disabled={isPaymentProcessing || paymentAmount < 1}
+              >
+                {isPaymentProcessing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.proceedBtnText}>PROCEED TO CHECKOUT</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pending Payment Modal */}
+      <Modal visible={showPendingPaymentModal && !!pendingPayment} transparent animationType="fade" onRequestClose={() => setShowPendingPaymentModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Transaction In Progress</Text>
+            <View style={styles.modalInfoBox}>
+              <Text style={{ textAlign: 'center', marginBottom: 8 }}>
+                You have a pending payment ({pendingPayment?.reference_no}).{'\n'}The link is still active.
+              </Text>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalRowLabel}>Amount:</Text>
+                <Text style={[styles.modalRowValue, { color: primary }]}>
+                  ₱{pendingPayment?.amount.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowPendingPaymentModal(false); setPendingPayment(null); }}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.proceedBtn, { backgroundColor: primary }]} onPress={handleResumePendingPayment}>
+                <Text style={styles.proceedBtnText}>Pay Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Payment Link Modal */}
+      <Modal visible={showPaymentLinkModal && !!paymentLinkData} transparent animationType="fade" onRequestClose={() => setShowPaymentLinkModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Proceed to Payment Portal</Text>
+            <View style={styles.modalInfoBox}>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalRowLabel}>Reference:</Text>
+                <Text style={[styles.modalRowValue, { fontFamily: 'monospace' }]}>{paymentLinkData?.referenceNo}</Text>
+              </View>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalRowLabel}>Amount:</Text>
+                <Text style={[styles.modalRowValue, { color: primary }]}>₱{paymentLinkData?.amount.toFixed(2)}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={[styles.proceedBtn, { backgroundColor: primary, marginTop: 8 }]} onPress={handleOpenPaymentLink}>
+              <Text style={styles.proceedBtnText}>PROCEED</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const styles = {
+  toolbar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: CARD,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    gap: 8,
+  },
+  toolBtn: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: CARD,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  payBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  payBtnText: {
+    color: '#fff',
+    fontWeight: '600' as const,
+    fontSize: 13,
+  },
+  paginationBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: CARD,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  paginationText: {
+    fontSize: 12,
+    color: MUTED,
+  },
+  pageBtn: {
+    padding: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  card: {
+    backgroundColor: CARD,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: TEXT,
+  },
+  cardSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cardAmount: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+  },
+  cardDate: {
+    fontSize: 11,
+    color: MUTED,
+    marginTop: 2,
+  },
+  cardRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 3,
+  },
+  cardRowLabel: {
+    fontSize: 12,
+    color: MUTED,
+  },
+  cardRowValue: {
+    fontSize: 12,
+    color: TEXT,
+    fontWeight: '500' as const,
+  },
+  pdfBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  pdfBtnText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    padding: 32,
+  },
+  centerText: {
+    marginTop: 8,
+    color: MUTED,
+    fontSize: 14,
+  },
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  // Sidebar
+  sidebarOverlay: {
+    position: 'absolute' as const,
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  sidebarDrawer: {
+    position: 'absolute' as const,
+    left: 0, top: 0, bottom: 0,
+    width: 300,
+    backgroundColor: CARD,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    paddingTop: 60,
+  },
+  sidebarDrawerHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  sidebarDrawerTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: TEXT,
+  },
+  sidebarSection: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  sidebarSectionHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 8,
+  },
+  sidebarSectionLabel: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: MUTED,
+    letterSpacing: 0.8,
+  },
+  clearText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+  },
+  dateLabel: {
+    fontSize: 10,
+    color: MUTED,
+    marginBottom: 4,
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: TEXT,
+    backgroundColor: '#f9fafb',
+  },
+  dateItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dateItemText: {
+    fontSize: 13,
+    color: TEXT,
+  },
+  badge: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    fontSize: 11,
+    color: MUTED,
+  },
+  accordionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  accordionLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: TEXT,
+  },
+  dateSubItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  dateSubText: {
+    fontSize: 13,
+    color: MUTED,
+    flex: 1,
+  },
+  viewRecordsBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+  },
+  viewRecordsBtnText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+    fontSize: 13,
+  },
+  // Modals
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: CARD,
+    borderRadius: 12,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    textAlign: 'center' as const,
+    marginBottom: 16,
+    color: TEXT,
+  },
+  modalInfoBox: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  modalRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 4,
+  },
+  modalRowLabel: {
+    fontSize: 13,
+    color: MUTED,
+  },
+  modalRowValue: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: TEXT,
+  },
+  errorBox: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    textAlign: 'center' as const,
+  },
+  modalFieldLabel: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: TEXT,
+    marginBottom: 6,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: TEXT,
+    backgroundColor: CARD,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: MUTED,
+    textAlign: 'right' as const,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  modalBtnRow: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center' as const,
+  },
+  cancelBtnText: {
+    fontWeight: '700' as const,
+    color: TEXT,
+    fontSize: 14,
+  },
+  proceedBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  proceedBtnText: {
+    fontWeight: '700' as const,
+    color: '#fff',
+    fontSize: 13,
+  },
 };
 
 export default SOA;

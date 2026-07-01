@@ -1,9 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ExternalLink, X, Info, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+  ActivityIndicator,
+} from 'react-native';
+import { X, Info, ChevronDown, ChevronRight } from 'lucide-react-native';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { relatedDataService } from '../services/relatedDataService';
-import RelatedDataTable from './RelatedDataTable';
-import { relatedDataColumns } from '../config/relatedDataColumns';
+
+const isDarkMode = false;
 
 interface InvoiceRecord {
   id: string;
@@ -40,371 +48,354 @@ interface InvoiceDetailsProps {
   invoiceRecord: InvoiceRecord;
   onViewCustomer?: (accountNo: string) => void;
   onClose?: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }
 
-const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoiceRecord, onViewCustomer, onClose }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
+interface StaggeredPayment {
+  id: string | number;
+  amount?: number;
+  status?: string;
+  due_date?: string;
+  [key: string]: any;
+}
+
+const Row: React.FC<{ label: string; value: string | React.ReactNode; valueColor?: string }> = ({
+  label,
+  value,
+  valueColor,
+}) => (
+  <View
+    style={{
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f3f4f6',
+    }}
+  >
+    <Text style={{ color: '#6b7280', fontSize: 13, flex: 1 }}>{label}</Text>
+    {typeof value === 'string' ? (
+      <Text
+        style={{
+          color: valueColor || '#111827',
+          fontSize: 13,
+          fontWeight: '500',
+          flex: 1,
+          textAlign: 'right',
+        }}
+        numberOfLines={2}
+      >
+        {value}
+      </Text>
+    ) : (
+      <View style={{ flex: 1, alignItems: 'flex-end' }}>{value}</View>
+    )}
+  </View>
+);
+
+const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({
+  invoiceRecord,
+  onViewCustomer,
+  onClose,
+  onPrevious,
+  onNext,
+}) => {
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-
-  // Related staggered payments state
   const [expandedStaggered, setExpandedStaggered] = useState(false);
-  const [relatedStaggered, setRelatedStaggered] = useState<any[]>([]);
-  const [fullRelatedStaggered, setFullRelatedStaggered] = useState<any[]>([]);
+  const [relatedStaggered, setRelatedStaggered] = useState<StaggeredPayment[]>([]);
   const [staggeredCount, setStaggeredCount] = useState(0);
-  const [expandedModalSection, setExpandedModalSection] = useState<string | null>(null);
+  const [expandedModal, setExpandedModal] = useState(false);
+  const [fullRelatedStaggered, setFullRelatedStaggered] = useState<StaggeredPayment[]>([]);
+  const [loadingStaggered, setLoadingStaggered] = useState(false);
+
+  const primary = colorPalette?.primary || '#7c3aed';
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
+    settingsColorPaletteService.getActive().then(setColorPalette).catch(() => {});
   }, []);
 
   useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-
-    fetchColorPalette();
-  }, []);
-
-  // Fetch related staggered payments when account number changes
-  useEffect(() => {
-    const fetchRelatedStaggered = async () => {
-      if (!invoiceRecord.accountNo) {
-        console.log('❌ No accountNo found in invoice record');
-        return;
-      }
-
-      const accountNo = invoiceRecord.accountNo;
-      console.log('🔍 Fetching related staggered payments for account:', accountNo);
-
-      try {
-        const result = await relatedDataService.getRelatedStaggered(accountNo);
-        console.log('✅ Staggered payments fetched:', { count: result.count || 0, hasData: (result.data || []).length > 0 });
-        // Store full data for modal view
-        setFullRelatedStaggered(result.data || []);
-        // Limit to 5 latest items for dropdown display
-        setRelatedStaggered((result.data || []).slice(0, 5));
+    if (!invoiceRecord.accountNo) return;
+    setLoadingStaggered(true);
+    relatedDataService
+      .getRelatedStaggered(invoiceRecord.accountNo)
+      .then((result: any) => {
+        const data = result.data || [];
+        setFullRelatedStaggered(data);
+        setRelatedStaggered(data.slice(0, 5));
         setStaggeredCount(result.count || 0);
-      } catch (error) {
-        console.error('❌ Error fetching staggered payments:', error);
+      })
+      .catch(() => {
         setRelatedStaggered([]);
         setFullRelatedStaggered([]);
         setStaggeredCount(0);
-      }
-    };
-
-    fetchRelatedStaggered();
+      })
+      .finally(() => setLoadingStaggered(false));
   }, [invoiceRecord.accountNo]);
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
-
-  const handleExpandModalOpen = (sectionKey: string) => {
-    setExpandedModalSection(sectionKey);
-  };
-
-  const handleExpandModalClose = () => {
-    setExpandedModalSection(null);
-  };
+  const statusColor =
+    invoiceRecord.invoiceStatus === 'Paid'
+      ? '#22c55e'
+      : invoiceRecord.invoiceStatus === 'Unpaid'
+      ? '#ef4444'
+      : '#f59e0b';
 
   return (
-    <div className={`h-full flex flex-col border-l relative ${isDarkMode
-      ? 'bg-gray-900 text-white border-white border-opacity-30'
-      : 'bg-white text-gray-900 border-gray-300'
-      }`} style={{ width: `${detailsWidth}px` }}>
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
+    <View style={{ flex: 1, backgroundColor: '#ffffff', borderLeftWidth: 1, borderLeftColor: '#e5e7eb' }}>
+      {/* Header */}
+      <View
         style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#7c3aed') : 'transparent'
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          backgroundColor: '#f9fafb',
+          borderBottomWidth: 1,
+          borderBottomColor: '#e5e7eb',
         }}
-        onMouseEnter={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#7c3aed';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
-        onMouseDown={handleMouseDownResize}
-      />
-      {/* Header with Invoice No and Actions */}
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDarkMode
-        ? 'bg-gray-800 border-gray-700'
-        : 'bg-gray-100 border-gray-200'
-        }`}>
-        <h1 className={`text-lg font-semibold truncate pr-4 min-w-0 flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>
-          {invoiceRecord.invoiceNo || '2508182' + invoiceRecord.id}
-        </h1>
-        <div className="flex items-center space-x-2 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className={`p-2 rounded transition-colors ${isDarkMode
-              ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-              }`}>
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className={`divide-y ${isDarkMode ? 'divide-gray-800' : 'divide-gray-200'
-          }`}>
-          {/* Invoice Info */}
-          <div className="px-5 py-4">
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice No.</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.invoiceNo || '2508182' + invoiceRecord.id}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Account No.</span>
-              <div className="flex items-center">
-                <span className="text-red-500">
-                  {invoiceRecord.accountNo} | {invoiceRecord.fullName} | {invoiceRecord.address}
-                </span>
-                <button
-                  onClick={() => onViewCustomer?.(invoiceRecord.accountNo)}
-                  className={`ml-2 p-1 rounded transition-colors ${isDarkMode ? 'text-gray-500 hover:text-white hover:bg-gray-700' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-200'
-                    }`}
-                  title="View Customer Details"
-                >
-                  <Info size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Full Name</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.fullName}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Date</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.invoiceDate}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Contact Number</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.contactNumber}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Email Address</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.emailAddress}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Plan</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.plan}</span>
-                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                  }`} />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Provider</span>
-              <div className="flex items-center">
-                <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.provider || 'SWITCH'}</span>
-                <Info size={16} className={`ml-2 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                  }`} />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Remarks</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.remarks || 'System Generated'}</span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Balance</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{invoiceRecord.invoiceBalance?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Status</span>
-              <span className={`${invoiceRecord.invoiceStatus === 'Unpaid' ? 'text-red-500' : 'text-green-500'}`}>
-                {invoiceRecord.invoiceStatus || 'Unpaid'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Others and Basic Charges</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{invoiceRecord.otherCharges?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Total Amount</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{invoiceRecord.totalAmountDue?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Invoice Payment</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>
-                ₱{invoiceRecord.invoicePayment?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-2">
-              <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Due Date</span>
-              <span className={isDarkMode ? 'text-white' : 'text-gray-900'}>{invoiceRecord.dueDate || '9/30/2025'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Related Staggered Payments Section */}
-      <div className={`mt-auto border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'
-        }`}>
-        <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-          <div className={`w-full px-5 py-3 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-            }`}>
-            <div className="flex items-center space-x-2">
-              <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Related Staggered Payments</span>
-              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                ? 'bg-gray-600 text-white'
-                : 'bg-gray-300 text-gray-900'
-                }`}>{staggeredCount}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleExpandModalOpen('staggered');
-                }}
-                className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
-                  }`}
-              >
-                {expandedStaggered ? 'Collapse' : 'Expand'}
-              </button>
-              <button
-                onClick={() => setExpandedStaggered(!expandedStaggered)}
-                className="flex items-center"
-              >
-                {expandedStaggered ? (
-                  <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                ) : (
-                  <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {expandedStaggered && (
-            <div className="px-5 pb-4">
-              <RelatedDataTable
-                data={relatedStaggered}
-                columns={relatedDataColumns.staggered}
-                isDarkMode={isDarkMode}
-              />
-            </div>
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {onPrevious && (
+            <TouchableOpacity onPress={onPrevious} style={{ padding: 4 }}>
+              <ChevronRight size={18} color="#6b7280" style={{ transform: [{ rotate: '180deg' }] }} />
+            </TouchableOpacity>
           )}
-        </div>
-      </div>
+          {onNext && (
+            <TouchableOpacity onPress={onNext} style={{ padding: 4 }}>
+              <ChevronRight size={18} color="#6b7280" />
+            </TouchableOpacity>
+          )}
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>
+            {invoiceRecord.invoiceNo || invoiceRecord.id}
+          </Text>
+        </View>
+        {onClose && (
+          <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+            <X size={18} color="#6b7280" />
+          </TouchableOpacity>
+        )}
+      </View>
 
-      {/* Expanded Modal for Related Data */}
-      {expandedModalSection && (
-        <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 9999 }}>
-          {/* Modal Header */}
-          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                All Related Staggered Payments
-              </h2>
-              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                ? 'bg-gray-600 text-white'
-                : 'bg-gray-300 text-gray-900'
-                }`}>
-                {staggeredCount} items
-              </span>
-            </div>
-            <button
-              onClick={handleExpandModalClose}
-              className={`p-2 rounded transition-colors ${isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-                }`}
-            >
-              <X size={20} />
-            </button>
-          </div>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        {/* Invoice Info */}
+        <Row label="Invoice No." value={invoiceRecord.invoiceNo || invoiceRecord.id} />
 
-          {/* Modal Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <RelatedDataTable
-              data={fullRelatedStaggered}
-              columns={relatedDataColumns.staggered}
-              isDarkMode={isDarkMode}
-            />
-          </div>
-        </div>
-      )}
-    </div>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingVertical: 8,
+            borderBottomWidth: 1,
+            borderBottomColor: '#f3f4f6',
+          }}
+        >
+          <Text style={{ color: '#6b7280', fontSize: 13, flex: 1 }}>Account No.</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'flex-end' }}>
+            <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '500', flexShrink: 1 }} numberOfLines={2}>
+              {invoiceRecord.accountNo} | {invoiceRecord.fullName}
+            </Text>
+            {onViewCustomer && (
+              <TouchableOpacity
+                onPress={() => onViewCustomer(invoiceRecord.accountNo)}
+                style={{ marginLeft: 6, padding: 4 }}
+              >
+                <Info size={16} color="#9ca3af" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <Row label="Full Name" value={invoiceRecord.fullName} />
+        <Row label="Invoice Date" value={invoiceRecord.invoiceDate} />
+        <Row label="Contact Number" value={invoiceRecord.contactNumber} />
+        <Row label="Email Address" value={invoiceRecord.emailAddress} />
+        <Row label="Plan" value={invoiceRecord.plan} />
+        <Row label="Provider" value={invoiceRecord.provider || 'SWITCH'} />
+        <Row label="Remarks" value={invoiceRecord.remarks || 'System Generated'} />
+        <Row
+          label="Invoice Balance"
+          value={`₱${(invoiceRecord.invoiceBalance ?? 0).toFixed(2)}`}
+        />
+        <Row
+          label="Invoice Status"
+          value={
+            <Text style={{ color: statusColor, fontSize: 13, fontWeight: '600' }}>
+              {invoiceRecord.invoiceStatus || 'Unpaid'}
+            </Text>
+          }
+        />
+        <Row
+          label="Others and Basic Charges"
+          value={`₱${(invoiceRecord.otherCharges ?? 0).toFixed(2)}`}
+        />
+        <Row
+          label="Total Amount"
+          value={`₱${(invoiceRecord.totalAmountDue ?? 0).toFixed(2)}`}
+        />
+        <Row
+          label="Invoice Payment"
+          value={`₱${(invoiceRecord.invoicePayment ?? 0).toFixed(2)}`}
+        />
+        <Row label="Due Date" value={invoiceRecord.dueDate || '-'} />
+
+        {/* Related Staggered Payments */}
+        <View
+          style={{
+            marginTop: 16,
+            borderWidth: 1,
+            borderColor: '#e5e7eb',
+            borderRadius: 8,
+            overflow: 'hidden',
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => setExpandedStaggered(!expandedStaggered)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: 12,
+              backgroundColor: '#f9fafb',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>
+                Related Staggered Payments
+              </Text>
+              <View
+                style={{
+                  backgroundColor: '#e5e7eb',
+                  borderRadius: 10,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text style={{ fontSize: 11, color: '#374151', fontWeight: '600' }}>{staggeredCount}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {staggeredCount > 0 && (
+                <TouchableOpacity onPress={() => setExpandedModal(true)}>
+                  <Text style={{ fontSize: 12, color: primary }}>View All</Text>
+                </TouchableOpacity>
+              )}
+              {expandedStaggered ? (
+                <ChevronDown size={18} color="#6b7280" />
+              ) : (
+                <ChevronRight size={18} color="#6b7280" />
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {loadingStaggered && (
+            <View style={{ padding: 12, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={primary} />
+            </View>
+          )}
+
+          {expandedStaggered && !loadingStaggered && (
+            <View style={{ padding: 12 }}>
+              {relatedStaggered.length === 0 ? (
+                <Text style={{ color: '#6b7280', fontSize: 12, textAlign: 'center' }}>
+                  No staggered payments found
+                </Text>
+              ) : (
+                relatedStaggered.map((item, idx) => (
+                  <View
+                    key={item.id ?? idx}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      paddingVertical: 6,
+                      borderBottomWidth: idx < relatedStaggered.length - 1 ? 1 : 0,
+                      borderBottomColor: '#f3f4f6',
+                    }}
+                  >
+                    <Text style={{ color: '#6b7280', fontSize: 12 }}>
+                      #{item.id} — {item.due_date || '-'}
+                    </Text>
+                    <Text style={{ color: '#111827', fontSize: 12, fontWeight: '500' }}>
+                      {item.amount != null ? `₱${Number(item.amount).toFixed(2)}` : '-'}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: item.status === 'Paid' ? '#22c55e' : '#ef4444',
+                      }}
+                    >
+                      {item.status || '-'}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Expanded Staggered Modal */}
+      <Modal visible={expandedModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: '#e5e7eb',
+              backgroundColor: '#f9fafb',
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+              All Related Staggered Payments ({staggeredCount})
+            </Text>
+            <TouchableOpacity onPress={() => setExpandedModal(false)} style={{ padding: 6 }}>
+              <X size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            {fullRelatedStaggered.length === 0 ? (
+              <Text style={{ color: '#6b7280', textAlign: 'center', marginTop: 32 }}>
+                No staggered payments found
+              </Text>
+            ) : (
+              fullRelatedStaggered.map((item, idx) => (
+                <View
+                  key={item.id ?? idx}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#f3f4f6',
+                  }}
+                >
+                  <Text style={{ color: '#6b7280', fontSize: 13 }}>
+                    #{item.id} — {item.due_date || '-'}
+                  </Text>
+                  <Text style={{ color: '#111827', fontSize: 13, fontWeight: '500' }}>
+                    {item.amount != null ? `₱${Number(item.amount).toFixed(2)}` : '-'}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: item.status === 'Paid' ? '#22c55e' : '#ef4444',
+                    }}
+                  >
+                    {item.status || '-'}
+                  </Text>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+    </View>
   );
 };
 

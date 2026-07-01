@@ -5,19 +5,19 @@ import * as WebBrowser from 'expo-web-browser';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 // import { InvoiceProvider } from '../contexts/InvoiceContext';
 // import { OverdueProvider } from '../contexts/OverdueContext';
-// import { DCNoticeProvider } from '../contexts/DCNoticeContext';
-// import { StaggeredPaymentProvider } from '../contexts/StaggeredPaymentContext';
+import { DCNoticeProvider } from '../contexts/DCNoticeContext';
+import { StaggeredPaymentProvider } from '../contexts/StaggeredPaymentContext';
 // import { DiscountProvider } from '../contexts/DiscountContext';
 import { ApplicationProvider } from '../contexts/ApplicationContext';
 // import { ApplicationVisitProvider } from '../contexts/ApplicationVisitContext';
 import { JobOrderProvider } from '../contexts/JobOrderContext';
 import { InventoryProvider } from '../contexts/InventoryContext';
 import { ServiceOrderProvider } from '../contexts/ServiceOrderContext';
-// import DCNotice from './DCNotice';
-// import Discounts from './Discounts';
+import DCNotice from './DCNotice';
+import Discounts from './Discounts';
 // import Overdue from './Overdue';
-// import StaggeredPayment from './StaggeredPayment';
-// import MassRebate from './Rebate';
+import StaggeredPayment from './StaggeredPayment';
+import MassRebate from './Rebate';
 // import SMSBlast from './SMSBlast';
 // import SMSBlastLogs from './SMSBlastLogs';
 // import DisconnectionLogs from './DisconnectionLogs';
@@ -31,14 +31,14 @@ import DashboardContent from '../components/DashboardContent';
 // import { PaymentPortalProvider } from '../contexts/PaymentPortalContext';
 // import { SOAProvider } from '../contexts/SOAContext';
 // import GroupManagement from './GroupManagement';
-// import ApplicationManagement from './ApplicationManagement';
+import ApplicationManagement from './ApplicationManagement';
 // import Customer from './Customer';
-// import BillingListView from './BillingListView';
+import BillingListView from './BillingListView';
 // import TransactionList from './TransactionList';
 // import PaymentPortal from './PaymentPortal';
 import JobOrder from './JobOrder';
 import ServiceOrder from './ServiceOrder';
-// import ApplicationVisit from './ApplicationVisit';
+import ApplicationVisit from './ApplicationVisit';
 // import LocationList from './LocationList';
 // import PlanList from './PlanList';
 // import PromoList from './PromoList';
@@ -47,7 +47,7 @@ import ServiceOrder from './ServiceOrder';
 // import NapList from './NapList';
 import Inventory from './Inventory';
 // import ExpensesLog from './ExpensesLog';
-// import Logs from './Logs';
+import Logs from './Logs';
 // import SOA from './SOA';
 // import Invoice from './Invoice';
 import InventoryCategoryList from './InventoryCategoryList';
@@ -56,15 +56,46 @@ import InventoryCategoryList from './InventoryCategoryList';
 // import Ports from './Ports';
 // import StatusRemarksList from './StatusRemarksList';
 // import Settings from './Settings';
+import PaymentMethodList from './PaymentMethodList';
+import UsageTypeList from './UsageTypeList';
+import WorkCategoryList from './WorkCategoryList';
+import StatusRemarksList from './StatusRemarksList';
+import RouterModelList from './RouterModelList';
+import PlanList from './PlanList';
+import PromoList from './PromoList';
+import ConcernConfig from './ConcernConfig';
+import SmartOltConfig from './SmartOltConfig';
+import RadiusConfig from './RadiusConfig';
+import SmsConfig from './SmsConfig';
+import PPPoESetup from './PPPoESetup';
+import BillingConfig from './BillingConfig';
+import LcpList from './LcpList';
+import NapList from './NapList';
+import Ports from './Ports';
+import LocationList from './LocationList';
+import Overdue from './Overdue';
+import EmailLogs from './EmailLogs';
+import SmsLogs from './SmsLogs';
+import FileLogViewer from './FileLogViewer';
+import ExpensesLog from './ExpensesLog';
+import DataLogs from './DataLogs';
+import Reports from './Reports';
+import SMSBlast from './SMSBlast';
+import SMSBlastLogs from './SMSBlastLogs';
+import GroupManagement from './GroupManagement';
+import UserManagement from './UserManagement';
+import TransactionsRevert from './TransactionsRevert';
+import DatabaseSetup from './DatabaseSetup';
+import DatabaseTest from './DatabaseTest';
 import LcpNapLocation from './LcpNapLocation';
 import WorkOrder from './WorkOrder';
 // import RadiusConfig from './RadiusConfig';
 // import SmsConfig from './SmsConfig';
-// import SMSTemplate from './SMSTemplate';
-// import EmailTemplates from './EmailTemplates';
+import SMSTemplate from './SMSTemplate';
+import EmailTemplates from './EmailTemplates';
 // import PPPoESetup from './PPPoESetup';
 import Support from './Support';
-// import LiveMonitor from './LiveMonitor';
+import LiveMonitor from './LiveMonitor';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
 import DashboardAgent from './DashboardAgent';
@@ -203,6 +234,90 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <Inventory />;
             case 'inventory-category-list':
                 return <InventoryCategoryList />;
+            case 'payment-method-list':
+                return <PaymentMethodList />;
+            case 'usage-type-list':
+                return <UsageTypeList />;
+            case 'work-category-list':
+                return <WorkCategoryList />;
+            case 'status-remarks-list':
+                return <StatusRemarksList />;
+            case 'router-model-list':
+                return <RouterModelList />;
+            case 'plan-list':
+                return <PlanList onNavigate={handleSectionChange} />;
+            case 'promo-list':
+                return <PromoList />;
+            case 'concern-config':
+                return <ConcernConfig />;
+            case 'smart-olt-config':
+                return <SmartOltConfig />;
+            case 'radius-config':
+                return <RadiusConfig />;
+            case 'sms-config':
+                return <SmsConfig />;
+            case 'pppoe-setup':
+                return <PPPoESetup />;
+            case 'billing-config':
+                return <BillingConfig />;
+            case 'lcp-list':
+                return <LcpList />;
+            case 'nap-list':
+                return <NapList />;
+            case 'ports':
+                return <Ports />;
+            case 'location-list':
+                return <LocationList onNavigate={handleSectionChange} />;
+            case 'overdue':
+                return <Overdue />;
+            case 'dc-notice':
+                return <DCNoticeProvider><DCNotice /></DCNoticeProvider>;
+            case 'discounts':
+                return <Discounts />;
+            case 'billing':
+                return <BillingListView />;
+            case 'rebate':
+                return <MassRebate />;
+            case 'staggered-payment':
+                return <StaggeredPaymentProvider><StaggeredPayment /></StaggeredPaymentProvider>;
+            case 'sms-template':
+                return <SMSTemplate />;
+            case 'email-templates':
+                return <EmailTemplates />;
+            case 'live-monitor':
+                return <LiveMonitor />;
+            case 'applicationManagement':
+                return <ApplicationManagement />;
+            case 'applicationVisit':
+                return <ApplicationVisit />;
+            case 'activity-logs':
+                return <Logs />;
+            case 'email-logs':
+                return <EmailLogs />;
+            case 'sms-logs':
+                return <SmsLogs />;
+            case 'file-log-viewer':
+                return <FileLogViewer type="smartolt" title="SmartOLT Logs" />;
+            case 'expenses-log':
+                return <ExpensesLog />;
+            case 'data-logs':
+                return <DataLogs />;
+            case 'reports':
+                return <Reports />;
+            case 'sms-blast':
+                return <SMSBlast />;
+            case 'sms-blast-logs':
+                return <SMSBlastLogs />;
+            case 'group-management':
+                return <GroupManagement />;
+            case 'user-management':
+                return <UserManagement />;
+            case 'transactions-revert':
+                return <TransactionsRevert />;
+            case 'database-setup':
+                return <DatabaseSetup />;
+            case 'database-test':
+                return <DatabaseTest />;
             case 'Application':
                 return <ApplicationForm onClose={() => handleSectionChange('agent-dashboard')} />;
             case 'menu':

@@ -1,7 +1,5 @@
-import { Layout } from 'react-grid-layout';
-
 export type ViewType = 'bar' | 'line' | 'pie' | 'doughnut' | 'list' | 'grid' | 'table';
-export type ScopeType = 'overall' | 'today' | 'custom';
+export type ScopeType = 'overall' | 'today' | 'weekly' | '3weeks' | 'monthly' | '3months' | 'yearly' | 'custom';
 
 export interface WidgetData {
   label: string;
@@ -24,8 +22,12 @@ export interface WidgetState {
   startDate?: string; // YYYY-MM-DD
   endDate?: string;   // YYYY-MM-DD
   visible: boolean;
-  layout?: Layout;
   fontSize?: number; // per-widget font size
+  paymentMode?: 'type' | 'months';
+  customStartTime?: string; // HH:MM for tech_availability
+  gridCols?: number;
+  gridRows?: number;
+  isEditingGrid?: boolean;
 }
 
 export type FilterType =
@@ -45,6 +47,7 @@ export interface WidgetConfig {
 
   // UI sizing
   w: number;
+  h?: number;
 
   // filters
   hasFilters?: boolean;
@@ -92,6 +95,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'billing_status',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'bgy_only',
   },
@@ -100,6 +104,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'online_status',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: false,
     filterType: 'none',
   },
@@ -108,6 +113,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'app_status',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date_bgy',
   },
@@ -116,6 +122,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'jo_status',
     param: 'onsite',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
@@ -124,6 +131,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'so_status',
     param: 'visit',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date_bgy',
   },
@@ -132,6 +140,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'queue_mon',
     param: 'jo',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date_bgy',
   },
@@ -140,6 +149,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'queue_mon',
     param: 'so',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date_bgy',
   },
@@ -148,6 +158,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'tech_mon_jo',
     param: '',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
@@ -156,16 +167,16 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'tech_mon_so',
     param: '',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
-
-  // Yearly stacked charts (count)
   invoice_mon_count: {
     title: 'Invoices (Yearly Count)',
     api: 'invoice_mon',
     param: 'count',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
@@ -174,6 +185,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'transactions_mon',
     param: 'count',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
@@ -182,16 +194,16 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'portal_mon',
     param: 'count',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
-
-  // Yearly stacked charts (amount)
   invoice_mon_amount: {
     title: 'Invoices (Yearly Amount)',
     api: 'invoice_mon',
     param: 'amount',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
@@ -200,6 +212,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'transactions_mon',
     param: 'amount',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
@@ -208,15 +221,16 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'portal_mon',
     param: 'amount',
     w: 6,
+    h: 6,
     hasFilters: true,
     filterType: 'year',
   },
-
   expenses_mon: {
     title: 'Expenses by Category',
     api: 'expenses_mon',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
@@ -225,6 +239,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'pay_method_mon',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
@@ -233,6 +248,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'jo_refer_rank',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: true,
     filterType: 'date',
   },
@@ -241,6 +257,7 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     api: 'invoice_overall',
     param: '',
     w: 4,
+    h: 6,
     hasFilters: false,
     filterType: 'none',
   },
@@ -248,7 +265,8 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     title: 'Technician Availability',
     api: 'technician_availability',
     param: '',
-    w: 12, // Full width
+    w: 12,
+    h: 10,
     hasFilters: false,
     filterType: 'none',
   },
@@ -256,7 +274,17 @@ export const WIDGETS: Record<string, WidgetConfig> = {
     title: 'Team Detailed Queue',
     api: 'team_detailed_queue',
     param: '',
-    w: 12, // Full width table
+    w: 12,
+    h: 10,
+    hasFilters: false,
+    filterType: 'none',
+  },
+  agent_detailed_queue: {
+    title: 'Agent Detailed Queue',
+    api: 'agent_detailed_queue',
+    param: '',
+    w: 12,
+    h: 10,
     hasFilters: false,
     filterType: 'none',
   },

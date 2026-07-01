@@ -118,7 +118,7 @@ const jo = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 48 },
   // Pagination
   paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  paginationInfo: { fontSize: 14 },
+  paginationInfo: { fontSize: 12 },
   bold500: { fontWeight: '500' },
   paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pageBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
@@ -483,8 +483,12 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       if (!matchesSearch) return false;
 
+      const isSuperUser = 
+        userRoleId === 1 || userRoleId === 7 || userRoleId === 8 ||
+        userRole.toLowerCase() === 'superadmin' || userRole.toLowerCase() === 'administrator' || userRole.toLowerCase() === 'headtech';
+
       // Role-based filtering: Agents (role_id 4) only see their own referrals
-      if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+      if (!isSuperUser && (userRole.toLowerCase() === 'agent' || userRoleId === 4)) {
         const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
         // Only match if referredBy contains user's full name or email
         const matchesAgent =
@@ -496,7 +500,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       // Hide job orders with onsite status "done", "completed", or "failed" after 1 day
       // Only applicable for technicians
-      if (debouncedSearch === '') {
+      if (!isSuperUser && debouncedSearch === '') {
         const isTechnician = userRole.toLowerCase() === 'technician' || userRoleId === 2;
         if (isTechnician) {
           const onsiteStatus = (jobOrder.Onsite_Status || jobOrder.onsite_status || '').toLowerCase().trim();
@@ -574,7 +578,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
     });
   }, [filteredJobOrders]);
 
-  const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
+  const shouldPaginate = true; // Consistently paginate for all roles to prevent UI jumping
 
   const paginatedJobOrders = useMemo(() => {
     if (!shouldPaginate) return sortedJobOrders;
@@ -770,8 +774,11 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
             )}
           </View>
 
-          {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && totalPages > 1 && (
+          {!isLoading && shouldPaginate && sortedJobOrders.length > 0 && (
             <View style={[jo.paginationBar, {
+              flexDirection: isTablet ? 'row' : 'column',
+              justifyContent: isTablet ? 'space-between' : 'center',
+              gap: isTablet ? 0 : 12,
               backgroundColor: '#ffffff',
               borderColor: '#e5e7eb',
               paddingBottom: !isTablet ? 110 : 16

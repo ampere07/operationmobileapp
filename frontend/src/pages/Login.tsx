@@ -48,7 +48,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const convertGoogleDriveUrl = (url: string): string => {
     if (!url) return '';
     // Use the native environment variable logic or fallback
-    const apiUrl = 'https://backend.atssfiber.ph/api';
+    const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
     return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
   };
 

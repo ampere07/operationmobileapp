@@ -133,6 +133,7 @@ export interface CreateUserRequest {
   password: string;
   organization_id?: number;
   role_id?: number;
+  agent_id?: number | null;
 }
 
 export interface UpdateUserRequest {
@@ -146,6 +147,17 @@ export interface UpdateUserRequest {
   password?: string;
   organization_id?: number | null | undefined;
   role_id?: number | null | undefined;
+  agent_id?: number | null;
+}
+
+export interface Technician {
+  id: number;
+  first_name: string;
+  middle_initial?: string | null;
+  last_name: string;
+  updated_at?: string;
+  updated_by?: string;
+  organization_id?: number | null;
 }
 
 export interface ApiResponse<T> {
@@ -189,4 +201,12 @@ export interface SalesAgent {
   commission_rate?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Agent {
+  id: number;
+  team_name: string;
+  created_by: string;
+  created_at: string;
+  organization_id?: number | null;
 }

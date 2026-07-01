@@ -1,239 +1,532 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Globe, Search, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  RefreshControl,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Globe,
+  ChevronDown,
+  ChevronRight,
+  Filter,
+  RefreshCw,
+  Download,
+  X,
+} from 'lucide-react-native';
+import GlobalSearch from './globalfunctions/GlobalSearch';
 import PaymentPortalDetails from '../components/PaymentPortalDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { paymentPortalLogsService, PaymentPortalLog } from '../services/paymentPortalLogsService';
-import { usePaymentPortalContext, PaymentPortalRecord } from '../contexts/PaymentPortalContext';
+import { usePaymentPortalStore } from '../store/paymentPortalStore';
+import { PaymentPortalLog as PaymentPortalRecord } from '../services/paymentPortalLogsService';
 import BillingDetails from '../components/CustomerDetails';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
+import { getCities, City } from '../services/cityService';
+import { getRegions, Region } from '../services/regionService';
+import { barangayService, Barangay } from '../services/barangayService';
 import { BillingDetailRecord } from '../types/billing';
+import { paymentMethodService, PaymentMethod } from '../services/paymentMethodService';
+import PaymentPortalFunnelFilter, { FilterValues, allColumns as filterColumns } from '../filter/PaymentPortalFunnelFilter';
+import { exportToCSV } from '../utils/exportUtils';
 
-// Interfaces for payment portal data (PaymentPortalRecord is imported now)
-// Removed local PaymentPortalRecord interface
+const { width } = Dimensions.get('window');
+const isTablet = width >= 768;
 
-interface LocationItem {
-  id: string;
-  name: string;
-  count: number;
-}
+const isDarkMode = false;
 
-const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => {
-  return {
-    id: customerData.billingAccount?.accountNo || '',
-    applicationId: customerData.billingAccount?.accountNo || '',
-    customerName: customerData.fullName,
-    address: customerData.address,
-    status: customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive',
-    balance: customerData.billingAccount?.accountBalance || 0,
-    onlineStatus: customerData.billingAccount?.billingStatusId === 2 ? 'Online' : 'Offline',
-    cityId: null,
-    regionId: null,
-    timestamp: customerData.updatedAt || '',
-    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
-    dateInstalled: customerData.billingAccount?.dateInstalled || '',
-    contactNumber: customerData.contactNumberPrimary,
-    secondContactNumber: customerData.contactNumberSecondary || '',
-    emailAddress: customerData.emailAddress || '',
-    plan: customerData.desiredPlan || '',
-    username: customerData.technicalDetails?.username || '',
-    connectionType: customerData.technicalDetails?.connectionType || '',
-    routerModel: customerData.technicalDetails?.routerModel || '',
-    routerModemSN: customerData.technicalDetails?.routerModemSn || '',
-    lcpnap: customerData.technicalDetails?.lcpnap || '',
-    port: customerData.technicalDetails?.port || '',
-    vlan: customerData.technicalDetails?.vlan || '',
-    billingDay: customerData.billingAccount?.billingDay || 0,
-    totalPaid: 0,
-    provider: '',
-    lcp: customerData.technicalDetails?.lcp || '',
-    nap: customerData.technicalDetails?.nap || '',
-    modifiedBy: '',
-    modifiedDate: customerData.updatedAt || '',
-    barangay: customerData.barangay || '',
-    city: customerData.city || '',
-    region: customerData.region || '',
+// ─── Colors ──────────────────────────────────────────────────────────────────
 
-    usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
-    referredBy: customerData.referredBy || '',
-    referralContactNo: '',
-    groupName: customerData.groupName || '',
-    mikrotikId: '',
-    sessionIp: customerData.technicalDetails?.ipAddress || '',
-    houseFrontPicture: customerData.houseFrontPictureUrl || '',
-    accountBalance: customerData.billingAccount?.accountBalance || 0,
-    housingStatus: customerData.housingStatus || '',
-    location: customerData.location || '',
-    addressCoordinates: customerData.addressCoordinates || '',
-  };
+const COLORS = {
+  bg: '#f9fafb',
+  card: '#ffffff',
+  text: '#111827',
+  muted: '#6b7280',
+  border: '#e5e7eb',
+  subBg: '#f3f4f6',
 };
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const formatCurrency = (amount: number) => `₱${Number(amount || 0).toFixed(2)}`;
+
+const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => ({
+  id: customerData.billingAccount?.accountNo || '',
+  applicationId: customerData.billingAccount?.accountNo || '',
+  accountNo: customerData.billingAccount?.accountNo || '',
+  account_no: customerData.billingAccount?.accountNo || '',
+  customerName: customerData.fullName,
+  firstName: customerData.firstName,
+  lastName: customerData.lastName,
+  middleInitial: customerData.middleInitial,
+  address: customerData.address,
+  status: customerData.billingAccount?.billingStatusName ||
+    (customerData.billingAccount?.billingStatusId === 2 ? 'Active' : 'Inactive'),
+  balance: customerData.billingAccount?.accountBalance || 0,
+  onlineStatus: customerData.onlineSessionStatus || 'Empty',
+  cityId: null,
+  regionId: null,
+  timestamp: customerData.updatedAt || '',
+  billingStatus: customerData.billingAccount?.billingStatusName ||
+    (customerData.billingAccount?.billingStatusId
+      ? (({ 1: 'In Progress', 2: 'Active', 3: 'Suspended', 4: 'Cancelled', 5: 'Overdue', 6: 'Service Account' } as Record<number, string>)[customerData.billingAccount.billingStatusId] || `Status ${customerData.billingAccount.billingStatusId}`)
+      : ''),
+  dateInstalled: customerData.billingAccount?.dateInstalled || '',
+  contactNumber: customerData.contactNumberPrimary,
+  secondContactNumber: customerData.contactNumberSecondary || '',
+  emailAddress: customerData.emailAddress || '',
+  email: customerData.emailAddress || '',
+  plan: customerData.desiredPlan || '',
+  username: customerData.technicalDetails?.username || '',
+  connectionType: customerData.technicalDetails?.connectionType || '',
+  routerModel: customerData.technicalDetails?.routerModel || '',
+  routerModemSN: customerData.technicalDetails?.routerModemSn || '',
+  lcpnap: customerData.technicalDetails?.lcpnap || '',
+  port: customerData.technicalDetails?.port || '',
+  vlan: customerData.technicalDetails?.vlan || '',
+  billingDay: customerData.billingAccount?.billingDay || 0,
+  totalPaid: 0,
+  provider: '',
+  lcp: customerData.technicalDetails?.lcp || '',
+  nap: customerData.technicalDetails?.nap || '',
+  modifiedBy: '',
+  modifiedDate: customerData.updatedAt || '',
+  barangay: customerData.barangay || '',
+  city: customerData.city || '',
+  region: customerData.region || '',
+  usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
+  referredBy: customerData.referredBy || '',
+  referralContactNo: '',
+  groupName: customerData.groupName || '',
+  mikrotikId: '',
+  sessionIp: customerData.technicalDetails?.ipAddress || '',
+  houseFrontPicture: customerData.houseFrontPictureUrl || '',
+  accountBalance: customerData.billingAccount?.accountBalance || 0,
+  housingStatus: customerData.housingStatus || '',
+  addressCoordinates: customerData.addressCoordinates || '',
+  accountNoCustomer: customerData.accountNoCustomer,
+  proofOfBillingUrl: customerData.proofOfBillingUrl,
+  governmentValidIdUrl: customerData.governmentValidIdUrl,
+  secondGovernmentValidIdUrl: customerData.secondGovernmentValidIdUrl,
+  documentAttachmentUrl: customerData.documentAttachmentUrl,
+  otherIspBillUrl: customerData.otherIspBillUrl,
+  customerCreatedAt: customerData.createdAt,
+  customerUpdatedAt: customerData.updatedAt,
+  customerUpdatedBy: customerData.updatedBy,
+  billingAccountCreatedAt: customerData.billingAccount?.createdAt,
+  billingAccountUpdatedAt: customerData.billingAccount?.updatedAt,
+  billingAccountCreatedBy: customerData.billingAccount?.createdBy,
+  billingAccountUpdatedBy: customerData.billingAccount?.updatedBy,
+  balanceUpdateDate: customerData.billingAccount?.balanceUpdateDate,
+  techCreatedAt: customerData.technicalDetails?.createdAt,
+  techUpdatedAt: customerData.technicalDetails?.updatedAt,
+  techCreatedBy: customerData.technicalDetails?.createdBy,
+  techUpdatedBy: customerData.technicalDetails?.updatedBy,
+  usernameStatus: customerData.technicalDetails?.usernameStatus,
+  vip_expiration: (customerData.billingAccount as any)?.vip_expiration || '',
+  vip_remarks: (customerData.billingAccount as any)?.vip_remarks || '',
+});
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const s = (status || '').toLowerCase();
+  let bg = '#e5e7eb';
+  let color = '#6b7280';
+  if (s === 'completed' || s === 'success' || s === 'paid') { bg = '#dcfce7'; color = '#16a34a'; }
+  else if (s === 'pending' || s === 'processing' || s === 'queued') { bg = '#fef9c3'; color = '#ca8a04'; }
+  else if (s === 'failed' || s === 'cancelled') { bg = '#fee2e2'; color = '#dc2626'; }
+
+  return (
+    <View style={{ backgroundColor: bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+      <Text style={{ fontSize: 12, fontWeight: '600', color, textTransform: 'capitalize' }}>
+        {status || 'N/A'}
+      </Text>
+    </View>
+  );
+};
+
+// ─── Record card ──────────────────────────────────────────────────────────────
+
+interface RecordCardProps {
+  record: PaymentPortalRecord;
+  onPress: () => void;
+  isSelected: boolean;
+  primaryColor: string;
+}
+
+const RecordCard: React.FC<RecordCardProps> = ({ record, onPress, isSelected, primaryColor }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={{
+      backgroundColor: isSelected ? `${primaryColor}14` : COLORS.card,
+      marginHorizontal: 12,
+      marginVertical: 4,
+      borderRadius: 10,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: isSelected ? primaryColor : COLORS.border,
+    }}
+  >
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.text }} numberOfLines={1}>
+          {record.fullName || 'Unknown'}
+        </Text>
+        <Text style={{ fontSize: 13, color: '#ef4444', fontWeight: '600', marginTop: 2 }}>
+          {record.accountNo || record.account_id || 'N/A'}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: primaryColor }}>
+          {formatCurrency(record.total_amount || 0)}
+        </Text>
+      </View>
+    </View>
+
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+      <StatusBadge status={record.status || 'N/A'} />
+      {record.transaction_status && record.transaction_status !== record.status && (
+        <StatusBadge status={record.transaction_status} />
+      )}
+    </View>
+
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <Text style={{ fontSize: 12, color: COLORS.muted }}>
+        {record.payment_channel || record.provider || 'N/A'}
+      </Text>
+      <Text style={{ fontSize: 12, color: COLORS.muted }}>
+        {record.date_time ? new Date(record.date_time).toLocaleDateString() : 'N/A'}
+      </Text>
+    </View>
+
+    {record.reference_no ? (
+      <Text style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }} numberOfLines={1}>
+        Ref: {record.reference_no}
+      </Text>
+    ) : null}
+  </TouchableOpacity>
+);
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 const PaymentPortal: React.FC = () => {
-  const { paymentPortalRecords: records, isLoading: loading, error, silentRefresh } = usePaymentPortalContext();
-  const isDarkMode = false; // Forced light mode as per user request
-  const [selectedLocation, setSelectedLocation] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedRecord, setSelectedRecord] = useState<PaymentPortalRecord | null>(null);
-  // Removed local records, loading, error state
+  const {
+    paymentPortalRecords: records,
+    totalCount,
+    isLoading: loading,
+    error,
+    fetchPaymentPortalRecords,
+    refreshPaymentPortalRecords,
+    fetchUpdates,
+  } = usePaymentPortalStore();
+
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('all');
+  const [selectedRecord, setSelectedRecord] = useState<PaymentPortalRecord | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
-  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isRefreshingManual, setIsRefreshingManual] = useState(false);
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [cities, setCities] = useState<City[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [barangays, setBarangays] = useState<Barangay[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
-  // Format date function
-  const formatDate = (dateStr?: string): string => {
-    if (!dateStr) return 'No date';
-    try {
-      return new Date(dateStr).toLocaleString();
-    } catch (e) {
-      return dateStr;
-    }
-  };
+  const [isFunnelFilterOpen, setIsFunnelFilterOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<FilterValues>({});
+  const [locationSidebarVisible, setLocationSidebarVisible] = useState(false);
 
-  // Format currency function
-  const formatCurrency = (amount: number) => {
-    return `₱${amount.toFixed(2)}`;
-  };
+  const [dateTimeFrom, setDateTimeFrom] = useState('');
+  const [dateTimeTo, setDateTimeTo] = useState('');
 
-  // Fetch data from API (placeholder for now)
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
+  // ─── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const fetchColorPalette = async () => {
+    const loadPalette = async () => {
       try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
+        const p = await settingsColorPaletteService.getActive();
+        setColorPalette(p);
+      } catch {}
     };
-
-    fetchColorPalette();
+    loadPalette();
   }, []);
 
   useEffect(() => {
-    silentRefresh();
-  }, [silentRefresh]);
+    fetchPaymentPortalRecords();
+  }, [fetchPaymentPortalRecords]);
 
+  useEffect(() => {
+    const loadFilters = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('paymentPortalFunnelFilters');
+        if (saved) setActiveFilters(JSON.parse(saved));
+      } catch {}
+    };
+    loadFilters();
+  }, []);
 
-  // Generate location items with counts based on real data
-  const locationItems: LocationItem[] = [
-    {
-      id: 'all',
-      name: 'All',
-      count: records.length
+  useEffect(() => {
+    const loadLookupData = async () => {
+      try {
+        const [citiesData, regionsData, barangaysRes] = await Promise.all([
+          getCities(),
+          getRegions(),
+          barangayService.getAll(),
+        ]);
+        setCities(citiesData || []);
+        setRegions(regionsData || []);
+        setBarangays(barangaysRes.success ? barangaysRes.data : []);
+      } catch {}
+    };
+    loadLookupData();
+  }, []);
+
+  useEffect(() => {
+    const loadPaymentMethods = async () => {
+      try {
+        const res = await paymentMethodService.getAll();
+        if (res.success) setPaymentMethods(res.data);
+      } catch {}
+    };
+    loadPaymentMethods();
+  }, []);
+
+  // 15-minute auto-refresh interval
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try { await fetchUpdates(); } catch {}
+    }, 15 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [fetchUpdates]);
+
+  // Keep selectedRecord fresh as records update
+  const selectedRecordRef = useRef<PaymentPortalRecord | null>(null);
+  useEffect(() => { selectedRecordRef.current = selectedRecord; }, [selectedRecord]);
+  useEffect(() => {
+    if (selectedRecordRef.current && records.length > 0) {
+      const updated = records.find(r => r.id === selectedRecordRef.current?.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(selectedRecordRef.current)) {
+        setSelectedRecord(updated);
+      }
     }
-  ];
+  }, [records]);
 
-  // Add unique locations from the data
-  const locationSet = new Set<string>();
-  records.forEach(record => {
-    const location = record.city?.toLowerCase();
-    if (location) {
-      locationSet.add(location);
+  // ─── userOrgId ────────────────────────────────────────────────────────────────
+
+  const [userOrgId, setUserOrgId] = useState<number | null>(null);
+  useEffect(() => {
+    const loadOrgId = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('authData');
+        if (raw) {
+          const d = JSON.parse(raw);
+          setUserOrgId(d.organization_id || d.user?.organization_id || d.organization?.id || d.user?.organization?.id || null);
+        }
+      } catch {}
+    };
+    loadOrgId();
+  }, []);
+
+  // ─── Filtering ────────────────────────────────────────────────────────────────
+
+  const globalFilteredRecords = useMemo(() => {
+    const q = searchQuery.toLowerCase().replace(/\s+/g, '');
+
+    let filtered = records.filter(record => {
+      if (userOrgId) {
+        if ((record as any).organization_id !== userOrgId) return false;
+      } else {
+        if ((record as any).organization_id) return false;
+      }
+
+      const checkValue = (val: any): boolean => {
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') return Object.values(val).some(v => checkValue(v));
+        return String(val).toLowerCase().replace(/\s+/g, '').includes(q);
+      };
+
+      return searchQuery === '' || checkValue(record);
+    });
+
+    if (Object.keys(activeFilters).length > 0) {
+      filtered = filtered.filter((record: any) =>
+        Object.entries(activeFilters).every(([key, filter]: [string, any]) => {
+          const getVal = (item: any, k: string) => {
+            switch (k) {
+              case 'fullName': return item.fullName ?? item.full_name;
+              case 'accountNo': return item.accountNo ?? item.account_no;
+              case 'reference_no': return item.reference_no ?? item.referenceNo;
+              case 'payment_method': {
+                const channel = item.payment_channel;
+                if (!channel) return null;
+                const pm = paymentMethods.find(m => m.payment_method.toLowerCase().trim() === channel.toLowerCase().trim());
+                return pm ? String(pm.id) : channel;
+              }
+              default: return item[k];
+            }
+          };
+
+          const val = getVal(record, key);
+
+          if (filter.type === 'checklist') {
+            if (!filter.value || !Array.isArray(filter.value) || filter.value.length === 0) return true;
+            const valStr = String(val || '').toLowerCase().trim();
+            if (key === 'barangay' || key === 'city' || key === 'region') {
+              const directVal = String(record[key] || '').toLowerCase().trim();
+              const address = String(record.address || '').toLowerCase();
+              return (filter.value as string[]).some(opt => {
+                const o = opt.toLowerCase().trim();
+                return directVal === o || address.includes(o);
+              });
+            }
+            return (filter.value as string[]).some(opt => valStr === opt.toLowerCase().trim());
+          }
+
+          if (filter.type === 'text') {
+            if (!filter.value) return true;
+            return String(val || '').toLowerCase().includes(String(filter.value).toLowerCase());
+          }
+
+          if (filter.type === 'number') {
+            const n = Number(val);
+            if (isNaN(n)) return false;
+            if (filter.from !== undefined && filter.from !== '' && n < Number(filter.from)) return false;
+            if (filter.to !== undefined && filter.to !== '' && n > Number(filter.to)) return false;
+            return true;
+          }
+
+          if (filter.type === 'date') {
+            if (!val) return false;
+            const dt = new Date(val).getTime();
+            if (isNaN(dt)) return false;
+            if (filter.from && dt < new Date(filter.from).getTime()) return false;
+            if (filter.to) {
+              const toDate = new Date(filter.to);
+              toDate.setHours(23, 59, 59, 999);
+              if (dt > toDate.getTime()) return false;
+            }
+            return true;
+          }
+
+          return true;
+        })
+      );
     }
-  });
-  const uniqueLocations = Array.from(locationSet);
 
-  uniqueLocations.forEach(location => {
-    if (location) {
-      locationItems.push({
-        id: location,
-        name: location.charAt(0).toUpperCase() + location.slice(1),
-        count: records.filter(record =>
-          record.city?.toLowerCase() === location).length
+    if (dateTimeFrom || dateTimeTo) {
+      filtered = filtered.filter(record => {
+        if (!record.date_time) return false;
+        const dt = new Date(record.date_time).getTime();
+        if (isNaN(dt)) return false;
+        if (dateTimeFrom) {
+          const from = new Date(dateTimeFrom);
+          from.setHours(0, 0, 0, 0);
+          if (dt < from.getTime()) return false;
+        }
+        if (dateTimeTo) {
+          const to = new Date(dateTimeTo);
+          to.setHours(23, 59, 59, 999);
+          if (dt > to.getTime()) return false;
+        }
+        return true;
       });
     }
-  });
 
-  // Filter records based on location and search query
-  const filteredRecords = useMemo(() => {
-    return records.filter(record => {
-      const recordLocation = record.city?.toLowerCase();
-      const matchesLocation = selectedLocation === 'all' || recordLocation === selectedLocation;
+    return filtered;
+  }, [records, searchQuery, activeFilters, dateTimeFrom, dateTimeTo, userOrgId, paymentMethods]);
 
-      const matchesSearch = searchQuery === '' ||
-        record.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (record.accountNo || record.account_id?.toString()).toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.reference_no?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Location counts
+  const locationItems = useMemo(() => {
+    const regionCounts: Record<string, number> = {};
+    const cityCounts: Record<string, number> = {};
+    const barangayCounts: Record<string, number> = {};
 
-      return matchesLocation && matchesSearch;
+    regions.forEach(r => { regionCounts[r.name] = 0; });
+    cities.forEach(c => { cityCounts[`${c.region_id}_${c.name}`] = 0; });
+    barangays.forEach(b => { barangayCounts[`${b.city_id}_${b.barangay}`] = 0; });
+
+    globalFilteredRecords.forEach(record => {
+      const city = record.city;
+      const barangay = record.barangay;
+      const matchedCity = cities.find(c => c.name === city);
+      if (matchedCity) {
+        const matchedRegion = regions.find(r => r.id === matchedCity.region_id);
+        if (matchedRegion) regionCounts[matchedRegion.name] = (regionCounts[matchedRegion.name] || 0) + 1;
+        cityCounts[`${matchedCity.region_id}_${matchedCity.name}`] = (cityCounts[`${matchedCity.region_id}_${matchedCity.name}`] || 0) + 1;
+      }
+      if (barangay) {
+        const matchedBarangay = barangays.find(b => b.barangay === barangay && (!city || cities.find(c => c.id === b.city_id)?.name === city));
+        if (matchedBarangay) {
+          barangayCounts[`${matchedBarangay.city_id}_${matchedBarangay.barangay}`] = (barangayCounts[`${matchedBarangay.city_id}_${matchedBarangay.barangay}`] || 0) + 1;
+        }
+      }
     });
-  }, [records, selectedLocation, searchQuery]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedLocation, searchQuery]);
+    return {
+      regions: regions.map(r => ({
+        id: `reg:${r.name}`,
+        name: r.name,
+        count: regionCounts[r.name] || 0,
+        cities: cities.filter(c => c.region_id === r.id).map(c => ({
+          id: `city:${c.name}`,
+          name: c.name,
+          count: cityCounts[`${r.id}_${c.name}`] || 0,
+          barangays: barangays.filter(b => b.city_id === c.id).map(b => ({
+            id: `brgy:${b.barangay}`,
+            name: b.barangay,
+            count: barangayCounts[`${c.id}_${b.barangay}`] || 0,
+          })),
+        })),
+      })),
+      total: globalFilteredRecords.length,
+    };
+  }, [regions, cities, barangays, globalFilteredRecords]);
 
-  const paginatedRecords = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredRecords, currentPage]);
+  const filteredRecords = useMemo(() => {
+    return globalFilteredRecords.filter(record => {
+      if (selectedLocation === 'all') return true;
+      if (selectedLocation.startsWith('reg:')) {
+        const regionName = selectedLocation.substring(4);
+        const matchedCity = cities.find(c => c.name === record.city);
+        const matchedRegion = regions.find(r => r.id === matchedCity?.region_id);
+        return matchedRegion?.name === regionName;
+      }
+      if (selectedLocation.startsWith('city:')) return record.city === selectedLocation.substring(5);
+      if (selectedLocation.startsWith('brgy:')) return record.barangay === selectedLocation.substring(5);
+      return true;
+    });
+  }, [globalFilteredRecords, selectedLocation, cities, regions]);
 
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+  // ─── Actions ──────────────────────────────────────────────────────────────────
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try { await refreshPaymentPortalRecords(); } finally { setRefreshing(false); }
   };
 
-  const PaginationControls = () => {
-    if (totalPages <= 1) return null;
-
-    return (
-      <div className={`flex items-center justify-between px-4 py-3 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-        <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredRecords.length)}</span> of <span className="font-medium">{filteredRecords.length}</span> results
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === 1
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            Previous
-          </button>
-
-          <div className="flex items-center space-x-1">
-            <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Page {currentPage} of {totalPages}
-            </span>
-          </div>
-
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={`px-3 py-1 rounded text-sm transition-colors ${currentPage === totalPages
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const handleRowClick = (record: PaymentPortalRecord) => {
-    setSelectedRecord(record);
-    setSelectedCustomer(null); // Clear customer view when switching records
+  const handleManualRefresh = async () => {
+    setIsRefreshingManual(true);
+    try { await fetchUpdates(); } finally { setIsRefreshingManual(false); }
   };
 
   const handleViewCustomer = async (accountNo: string) => {
     setIsLoadingDetails(true);
     try {
       const detail = await getCustomerDetail(accountNo);
-      if (detail) {
-        setSelectedCustomer(detail);
-      }
+      if (detail) setSelectedCustomer(detail);
     } catch (err) {
       console.error('Error fetching customer details:', err);
     } finally {
@@ -241,303 +534,477 @@ const PaymentPortal: React.FC = () => {
     }
   };
 
-  // Status text color component
-  const StatusText = ({ status }: { status: string }) => {
-    let textColor = '';
-
-    switch (status.toLowerCase()) {
-      case 'completed':
-      case 'success':
-      case 'paid':
-        textColor = 'text-green-500';
-        break;
-      case 'pending':
-      case 'processing':
-      case 'queued':
-        textColor = 'text-yellow-500';
-        break;
-      case 'failed':
-      case 'cancelled':
-        textColor = 'text-red-500';
-        break;
-      default:
-        textColor = 'text-gray-400';
+  const handleExport = async () => {
+    if (!filteredRecords || filteredRecords.length === 0) {
+      Alert.alert('No data', 'No records to export.');
+      return;
     }
-
-    return (
-      <span className={`${textColor} capitalize`}>
-        {status}
-      </span>
-    );
+    const exportCols = [
+      { key: 'date_time', label: 'Date Time' },
+      { key: 'accountNo', label: 'Account No' },
+      { key: 'fullName', label: 'Full Name' },
+      { key: 'total_amount', label: 'Total Amount' },
+      { key: 'status', label: 'Status' },
+      { key: 'reference_no', label: 'Reference No' },
+      { key: 'contactNo', label: 'Contact Number' },
+      { key: 'accountBalance', label: 'Account Balance' },
+      { key: 'checkout_id', label: 'Checkout ID' },
+      { key: 'transaction_status', label: 'Transaction Status' },
+      { key: 'payment_channel', label: 'Payment Channel' },
+    ];
+    const getVal = (record: PaymentPortalRecord, key: string) => {
+      switch (key) {
+        case 'accountNo': return record.accountNo || (record as any).account_id || '-';
+        case 'total_amount': return formatCurrency(record.total_amount || 0);
+        case 'accountBalance': return formatCurrency(record.accountBalance || 0);
+        default: return (record as any)[key] || '-';
+      }
+    };
+    try {
+      await exportToCSV('payment_portal_export', exportCols, filteredRecords, getVal);
+    } catch (e) {
+      Alert.alert('Export failed', String(e));
+    }
   };
 
-  return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-      {/* Location Sidebar Container */}
-      <div className={`hidden md:flex w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-        <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Payment Portal</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {locationItems.map((location) => (
-            <button
-              key={location.id}
-              onClick={() => {
-                setSelectedLocation(location.id);
+  const removeFilter = async (key: string) => {
+    const next = { ...activeFilters };
+    delete next[key];
+    setActiveFilters(next);
+    try { await AsyncStorage.setItem('paymentPortalFunnelFilters', JSON.stringify(next)); } catch {}
+  };
+
+  const toggleLocationExpansion = (locationId: string) => {
+    setExpandedLocations(prev => {
+      const next = new Set(prev);
+      if (next.has(locationId)) next.delete(locationId);
+      else next.add(locationId);
+      return next;
+    });
+  };
+
+  const currentRecordIndex = selectedRecord
+    ? filteredRecords.findIndex(r => r.id === selectedRecord.id)
+    : -1;
+
+  const handlePreviousRecord = () => {
+    if (currentRecordIndex > 0) setSelectedRecord(filteredRecords[currentRecordIndex - 1]);
+  };
+
+  const handleNextRecord = () => {
+    if (currentRecordIndex !== -1 && currentRecordIndex < filteredRecords.length - 1)
+      setSelectedRecord(filteredRecords[currentRecordIndex + 1]);
+  };
+
+  const currentCustomerIndex = selectedCustomer?.billingAccount?.accountNo
+    ? filteredRecords.findIndex(r => r.accountNo === selectedCustomer.billingAccount!.accountNo || (r as any).account_id === selectedCustomer.billingAccount!.accountNo)
+    : -1;
+
+  const handlePreviousCustomer = () => {
+    if (currentCustomerIndex > 0) {
+      const prev = filteredRecords[currentCustomerIndex - 1];
+      const acc = prev.accountNo || (prev as any).account_id;
+      if (acc) handleViewCustomer(String(acc));
+    }
+  };
+
+  const handleNextCustomer = () => {
+    if (currentCustomerIndex !== -1 && currentCustomerIndex < filteredRecords.length - 1) {
+      const next = filteredRecords[currentCustomerIndex + 1];
+      const acc = next.accountNo || (next as any).account_id;
+      if (acc) handleViewCustomer(String(acc));
+    }
+  };
+
+  // ─── Location Sidebar Modal ───────────────────────────────────────────────────
+
+  const renderLocationSidebar = () => (
+    <Modal
+      visible={locationSidebarVisible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => setLocationSidebarVisible(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setLocationSidebarVisible(false)} />
+        <View style={{ height: '80%', backgroundColor: COLORS.card, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
+          <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: COLORS.text }}>Locations</Text>
+            <TouchableOpacity onPress={() => setLocationSidebarVisible(false)}>
+              <X size={20} color={COLORS.muted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Date range */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 1 }}>Date Range</Text>
+              {(dateTimeFrom || dateTimeTo) && (
+                <TouchableOpacity onPress={() => { setDateTimeFrom(''); setDateTimeTo(''); }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <Text style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>From</Text>
+            <TextInput
+              value={dateTimeFrom}
+              onChangeText={setDateTimeFrom}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+              style={{
+                borderWidth: 1, borderColor: dateTimeFrom ? primaryColor : COLORS.border,
+                borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+                fontSize: 12, color: COLORS.text, backgroundColor: COLORS.card, marginBottom: 8,
               }}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                } ${selectedLocation === location.id
-                  ? ''
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}
-              style={selectedLocation === location.id ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c'
-              } : {}}
+            />
+            <Text style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>To</Text>
+            <TextInput
+              value={dateTimeTo}
+              onChangeText={setDateTimeTo}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+              style={{
+                borderWidth: 1, borderColor: dateTimeTo ? primaryColor : COLORS.border,
+                borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6,
+                fontSize: 12, color: COLORS.text, backgroundColor: COLORS.card,
+              }}
+            />
+          </View>
+
+          <ScrollView style={{ flex: 1 }}>
+            {/* All */}
+            <TouchableOpacity
+              onPress={() => { setSelectedLocation('all'); setLocationSidebarVisible(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 16, paddingVertical: 12,
+                backgroundColor: selectedLocation === 'all' ? `${primaryColor}1a` : 'transparent',
+              }}
             >
-              <div className="flex items-center">
-                <Globe className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
-              {location.count > 0 && (
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
-                    ? 'text-white'
-                    : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                    }`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#7c3aed'
-                  } : {}}
-                >
-                  {location.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+              <Text style={{ fontSize: 14, color: selectedLocation === 'all' ? primaryColor : COLORS.text, fontWeight: selectedLocation === 'all' ? '700' : '400' }}>All Records</Text>
+              <View style={{ backgroundColor: selectedLocation === 'all' ? primaryColor : COLORS.subBg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 12, color: selectedLocation === 'all' ? '#ffffff' : COLORS.muted }}>{locationItems.total}</Text>
+              </View>
+            </TouchableOpacity>
 
-      {/* Payment Portal Records List - Shrinks when detail view is shown */}
-      <div className={`overflow-hidden flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-        }`}>
-        <div className="flex flex-col h-full">
-          {/* Search Bar */}
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search payment portal records..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${isDarkMode
-                    ? 'bg-gray-800 text-white border border-gray-700'
-                    : 'bg-white text-gray-900 border border-gray-300'
-                    }`}
+            {locationItems.regions.map((region: any) => (
+              <View key={region.id}>
+                <TouchableOpacity
+                  onPress={() => { setSelectedLocation(region.id); setLocationSidebarVisible(false); }}
                   style={{
-                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    paddingHorizontal: 16, paddingVertical: 12,
+                    backgroundColor: selectedLocation === region.id ? `${primaryColor}1a` : 'transparent',
                   }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                  }}
-                />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-              </div>
-              <button className={`px-4 py-2 rounded flex items-center ${isDarkMode
-                ? 'bg-gray-800 text-white border border-gray-700'
-                : 'bg-gray-200 text-gray-900 border border-gray-300'
-                }`}>
-                <span className="mr-2">Filter</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <TouchableOpacity onPress={() => toggleLocationExpansion(region.id)} style={{ padding: 4, marginRight: 4 }}>
+                      {expandedLocations.has(region.id)
+                        ? <ChevronDown size={16} color={selectedLocation === region.id ? primaryColor : COLORS.muted} />
+                        : <ChevronRight size={16} color={selectedLocation === region.id ? primaryColor : COLORS.muted} />
+                      }
+                    </TouchableOpacity>
+                    <Globe size={14} color={selectedLocation === region.id ? primaryColor : COLORS.muted} style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 14, color: selectedLocation === region.id ? primaryColor : COLORS.text, fontWeight: selectedLocation === region.id ? '700' : '400' }}>
+                      {region.name}
+                    </Text>
+                  </View>
+                  {region.count > 0 && (
+                    <View style={{ backgroundColor: selectedLocation === region.id ? primaryColor : COLORS.subBg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 12, color: selectedLocation === region.id ? '#ffffff' : COLORS.muted }}>{region.count}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-          {/* Table Container */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-x-auto overflow-y-auto">
-              {loading ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                  </div>
-                  <p className="mt-4">Loading payment portal records...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                  <p>{error}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
-                  }`}>
-                  <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                    }`}>
-                    <tr>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Date Time
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Status
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Transaction Status
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Account No
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Received Payment
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Reference No
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Contact No
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Account Balance
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Checkout ID
-                      </th>
-                      <th scope="col" className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Provider
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
-                    }`}>
-                    {paginatedRecords.length > 0 ? (
-                      paginatedRecords.map((record) => (
-                        <tr
-                          key={record.id}
-                          className={`cursor-pointer ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                            } ${selectedRecord?.id === record.id ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100') : ''}`}
-                          onClick={() => handleRowClick(record)}
-                        >
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {record.date_time || 'N/A'}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">
-                            {record.accountNo || record.account_id}
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
-                            {formatCurrency(record.total_amount || 0)}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <StatusText status={record.status || 'N/A'} />
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {record.reference_no || 'N/A'}
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {record.contactNo || 'N/A'}
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {formatCurrency(record.accountBalance || 0)}
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {record.checkout_id || 'N/A'}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <StatusText status={record.transaction_status || 'N/A'} />
-                          </td>
-                          <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}>
-                            {record.provider || 'N/A'}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={10} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                          {records.length > 0
-                            ? 'No payment portal records found matching your filters'
-                            : 'No payment portal records found.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <PaginationControls />
-          </div>
-        </div>
-      </div>
+                {expandedLocations.has(region.id) && region.cities.map((city: any) => (
+                  <View key={city.id}>
+                    <TouchableOpacity
+                      onPress={() => { setSelectedLocation(city.id); setLocationSidebarVisible(false); }}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                        paddingLeft: 40, paddingRight: 16, paddingVertical: 10,
+                        backgroundColor: selectedLocation === city.id ? `${primaryColor}12` : 'transparent',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <TouchableOpacity onPress={() => toggleLocationExpansion(city.id)} style={{ padding: 4, marginRight: 4 }}>
+                          {expandedLocations.has(city.id)
+                            ? <ChevronDown size={14} color={COLORS.muted} />
+                            : <ChevronRight size={14} color={COLORS.muted} />
+                          }
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 13, color: selectedLocation === city.id ? primaryColor : COLORS.muted }}>
+                          {city.name}
+                        </Text>
+                      </View>
+                      {city.count > 0 && (
+                        <Text style={{ fontSize: 12, color: COLORS.muted }}>{city.count}</Text>
+                      )}
+                    </TouchableOpacity>
 
-      {/* Payment Portal Detail View - Only visible when a record is selected */}
-      {selectedRecord && (
-        <div className="flex-shrink-0 overflow-hidden">
-          <PaymentPortalDetails
-            record={selectedRecord}
-            onClose={() => setSelectedRecord(null)}
-            onViewCustomer={handleViewCustomer}
+                    {expandedLocations.has(city.id) && city.barangays.map((brgy: any) => (
+                      <TouchableOpacity
+                        key={brgy.id}
+                        onPress={() => { setSelectedLocation(brgy.id); setLocationSidebarVisible(false); }}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                          paddingLeft: 64, paddingRight: 16, paddingVertical: 8,
+                          backgroundColor: selectedLocation === brgy.id ? `${primaryColor}0a` : 'transparent',
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: selectedLocation === brgy.id ? primaryColor : COLORS.muted, marginRight: 8, opacity: 0.6 }} />
+                          <Text style={{ fontSize: 12, color: selectedLocation === brgy.id ? primaryColor : COLORS.muted, fontWeight: selectedLocation === brgy.id ? '700' : '400' }}>
+                            {brgy.name}
+                          </Text>
+                        </View>
+                        {brgy.count > 0 && (
+                          <Text style={{ fontSize: 11, color: COLORS.muted, opacity: 0.6 }}>{brgy.count}</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            ))}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
+
+  return (
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      {/* Header */}
+      <View style={{
+        backgroundColor: COLORS.card,
+        paddingTop: isTablet ? 16 : 60,
+        paddingBottom: 8,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+      }}>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: COLORS.text, marginBottom: 10 }}>
+          Payment Portal
+        </Text>
+
+        {/* Search row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <GlobalSearch
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDarkMode={isDarkMode}
+            colorPalette={colorPalette}
+            placeholder="Search payment portal records..."
           />
-        </div>
+
+          {/* Location filter button */}
+          <TouchableOpacity
+            onPress={() => setLocationSidebarVisible(true)}
+            style={{
+              paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6,
+              borderWidth: 1, borderColor: selectedLocation !== 'all' ? primaryColor : COLORS.border,
+              backgroundColor: selectedLocation !== 'all' ? `${primaryColor}14` : COLORS.card,
+            }}
+          >
+            <Globe size={18} color={selectedLocation !== 'all' ? primaryColor : COLORS.muted} />
+          </TouchableOpacity>
+
+          {/* Funnel filter */}
+          <TouchableOpacity
+            onPress={() => setIsFunnelFilterOpen(true)}
+            style={{
+              paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6,
+              borderWidth: 1, borderColor: Object.keys(activeFilters).length > 0 ? '#ef4444' : COLORS.border,
+              backgroundColor: COLORS.card,
+            }}
+          >
+            <Filter size={18} color={Object.keys(activeFilters).length > 0 ? '#ef4444' : COLORS.muted} />
+          </TouchableOpacity>
+
+          {/* Export */}
+          <TouchableOpacity
+            onPress={handleExport}
+            disabled={loading || filteredRecords.length === 0}
+            style={{
+              paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6,
+              borderWidth: 1, borderColor: primaryColor,
+              backgroundColor: COLORS.card, opacity: (loading || filteredRecords.length === 0) ? 0.4 : 1,
+            }}
+          >
+            <Download size={18} color={primaryColor} />
+          </TouchableOpacity>
+
+          {/* Manual refresh */}
+          <TouchableOpacity
+            onPress={handleManualRefresh}
+            disabled={loading || isRefreshingManual}
+            style={{
+              paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6,
+              borderWidth: 1, borderColor: primaryColor,
+              backgroundColor: COLORS.card, opacity: (loading || isRefreshingManual) ? 0.4 : 1,
+            }}
+          >
+            <RefreshCw size={18} color={primaryColor} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Active filters row */}
+        {Object.keys(activeFilters).length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+            {Object.entries(activeFilters).map(([key, filter]: [string, any]) => {
+              const col = filterColumns.find(c => (c as any).key === key);
+              const label = col?.label || key;
+              let display = '';
+              if (filter.type === 'text' || filter.type === 'boolean') display = String(filter.value);
+              else if (filter.type === 'checklist') display = Array.isArray(filter.value) ? filter.value.join(', ') : String(filter.value || '');
+              else if (filter.type === 'number' || filter.type === 'date') {
+                if (filter.from && filter.to) display = `${filter.from} - ${filter.to}`;
+                else if (filter.from) display = `> ${filter.from}`;
+                else if (filter.to) display = `< ${filter.to}`;
+              }
+              return (
+                <View
+                  key={key}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: `${primaryColor}14`,
+                    borderWidth: 1, borderColor: `${primaryColor}33`,
+                    borderRadius: 999, paddingLeft: 10, paddingRight: 4,
+                    paddingVertical: 3, marginRight: 6,
+                  }}
+                >
+                  <Text style={{ fontSize: 12, color: primaryColor, maxWidth: 120 }} numberOfLines={1}>
+                    {label}: {display}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeFilter(key)} style={{ marginLeft: 4, padding: 2 }}>
+                    <X size={12} color={primaryColor} />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+            <TouchableOpacity
+              onPress={async () => {
+                setActiveFilters({});
+                try { await AsyncStorage.removeItem('paymentPortalFunnelFilters'); } catch {}
+              }}
+              style={{ paddingHorizontal: 8, paddingVertical: 4, justifyContent: 'center' }}
+            >
+              <Text style={{ fontSize: 12, color: primaryColor, fontWeight: '700' }}>Clear all</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+
+        {/* Count */}
+        <Text style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>
+          {filteredRecords.length} of {Math.max(totalCount, records.length)} records
+        </Text>
+      </View>
+
+      {/* List */}
+      {loading && records.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <Text style={{ marginTop: 12, color: COLORS.muted }}>Loading payment portal records...</Text>
+        </View>
+      ) : error ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={{ color: '#ef4444', textAlign: 'center', marginBottom: 12 }}>{error}</Text>
+          <TouchableOpacity
+            onPress={() => fetchPaymentPortalRecords(true)}
+            style={{ backgroundColor: primaryColor, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredRecords}
+          keyExtractor={item => String(item.id)}
+          renderItem={({ item }) => (
+            <RecordCard
+              record={item}
+              onPress={() => setSelectedRecord(item)}
+              isSelected={selectedRecord?.id === item.id}
+              primaryColor={primaryColor}
+            />
+          )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[primaryColor]}
+              tintColor={primaryColor}
+            />
+          }
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', padding: 40 }}>
+              <Text style={{ color: COLORS.muted, textAlign: 'center' }}>
+                {records.length > 0
+                  ? 'No records matching your filters.'
+                  : 'No payment portal records found.'}
+              </Text>
+            </View>
+          }
+          contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        />
       )}
 
+      {/* Detail Modal */}
+      {selectedRecord && (
+        <PaymentPortalDetails
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+          onViewCustomer={handleViewCustomer}
+          onPrevious={currentRecordIndex > 0 ? handlePreviousRecord : undefined}
+          onNext={currentRecordIndex !== -1 && currentRecordIndex < filteredRecords.length - 1 ? handleNextRecord : undefined}
+        />
+      )}
+
+      {/* Customer Detail Modal */}
       {(selectedCustomer || isLoadingDetails) && (
-        <div className="flex-shrink-0 overflow-hidden">
+        <Modal
+          visible
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => { setSelectedCustomer(null); setIsLoadingDetails(false); }}
+        >
           {isLoadingDetails ? (
-            <div className={`w-[600px] h-full flex items-center justify-center border-l ${isDarkMode
-              ? 'bg-gray-900 text-white border-white border-opacity-30'
-              : 'bg-white text-gray-900 border-gray-300'
-              }`}>
-              <div className="text-center">
-                <div
-                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#7c3aed' }}
-                ></div>
-                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
-              </div>
-            </div>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg, paddingTop: 60 }}>
+              <ActivityIndicator size="large" color={primaryColor} />
+              <Text style={{ marginTop: 12, color: COLORS.muted }}>Loading details...</Text>
+            </View>
           ) : selectedCustomer ? (
             <BillingDetails
               billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
               onlineStatusRecords={[]}
               onClose={() => setSelectedCustomer(null)}
+              onPrevious={currentCustomerIndex > 0 ? handlePreviousCustomer : undefined}
+              onNext={currentCustomerIndex !== -1 && currentCustomerIndex < filteredRecords.length - 1 ? handleNextCustomer : undefined}
             />
           ) : null}
-        </div>
+        </Modal>
       )}
-    </div>
+
+      {/* Location Sidebar Modal */}
+      {renderLocationSidebar()}
+
+      {/* Funnel Filter */}
+      <PaymentPortalFunnelFilter
+        isOpen={isFunnelFilterOpen}
+        onClose={() => setIsFunnelFilterOpen(false)}
+        onApplyFilters={async (filters) => {
+          setActiveFilters(filters);
+          try { await AsyncStorage.setItem('paymentPortalFunnelFilters', JSON.stringify(filters)); } catch {}
+          setIsFunnelFilterOpen(false);
+        }}
+        currentFilters={activeFilters}
+      />
+    </View>
   );
 };
 

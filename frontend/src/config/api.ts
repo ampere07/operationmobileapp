@@ -37,8 +37,7 @@ const getCookie = (name: string): string | null => {
 // Fallback or explicit definition for React Native environment
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
-  process.env.REACT_APP_API_BASE_URL ||
-  'https://backend.atssfiber.ph/api';
+  process.env.REACT_APP_API_BASE_URL || '';
 
 if (!API_BASE_URL) {
   console.warn('API_BASE_URL is not defined in any environment variable, using default.');
@@ -105,8 +104,13 @@ apiClient.interceptors.request.use(
     }
 
     // Set Origin to ensure Sanctum triggers stateful middleware if needed
-    if (!config.headers.Origin && !config.headers.origin) {
-      config.headers.Origin = 'https://backend.atssfiber.ph';
+    if (!config.headers.Origin && !config.headers.origin && API_BASE_URL) {
+      try {
+        const url = new URL(API_BASE_URL);
+        config.headers.Origin = url.origin;
+      } catch {
+        // Skip if URL parsing fails
+      }
     }
 
     // Manually attach Bearer token

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
+import { View, Text, TextInput } from 'react-native';
+import ModalUITemplate, { useModalTheme } from './ui-modal/ModalUITemplate';
 
 interface LocationItem {
   id: number;
@@ -23,326 +23,98 @@ interface EditLocationModalProps {
   onSelectLocation?: (location: LocationItem) => void;
 }
 
-const EditLocationModal: React.FC<EditLocationModalProps> = ({
-  isOpen,
-  location,
-  allLocations = [],
-  onClose,
-  onEdit,
-  onDelete,
-  onSelectLocation
-}) => {
+const typeLabel = (type: string): string =>
+  ({ city: 'City', region: 'Region', borough: 'Barangay', location: 'Location' } as Record<string, string>)[type] || type;
+
+const parentLabel = (type: string): string =>
+  ({ city: 'Region', borough: 'City', location: 'Barangay' } as Record<string, string>)[type] || 'Parent';
+
+const EditLocationModal: React.FC<EditLocationModalProps> = ({ isOpen, location, onClose, onEdit }) => {
   const [editedName, setEditedName] = useState('');
-  const [barangayName, setBarangayName] = useState('');
-  const [cityName, setCityName] = useState('');
-  const [regionName, setRegionName] = useState('');
-  const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(localStorage.getItem('theme') === 'dark');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-    fetchColorPalette();
-  }, []);
 
   useEffect(() => {
     if (location && isOpen) {
       setEditedName(location.name);
-      
-      console.log('=== EDIT LOCATION MODAL DEBUG ===');
-      console.log('Location data:', location);
-      console.log('All locations count:', allLocations.length);
-      console.log('All locations:', allLocations);
-      
-      // For locations, get the barangay, city, and region names from allLocations
-      if (location.type === 'location') {
-        console.log('--- Location Lookup ---');
-        console.log('Location boroughId:', location.boroughId);
-        console.log('Location parentId:', location.parentId);
-        
-        // Get Barangay name
-        if (location.boroughId || location.parentId) {
-          const barangayId = location.boroughId || location.parentId;
-          console.log('Looking for barangay with ID:', barangayId);
-          
-          const barangay = allLocations.find(loc => {
-            console.log(`Checking location: type=${loc.type}, id=${loc.id}`);
-            return loc.type === 'borough' && loc.id === barangayId;
-          });
-          
-          console.log('Found barangay:', barangay);
-          
-          if (barangay) {
-            setBarangayName(barangay.name);
-            console.log('Set barangay name to:', barangay.name);
-            
-            // Get City name using barangay's cityId
-            if (barangay.cityId) {
-              console.log('Looking for city with ID:', barangay.cityId);
-              const city = allLocations.find(loc => loc.type === 'city' && loc.id === barangay.cityId);
-              console.log('Found city:', city);
-              
-              if (city) {
-                setCityName(city.name);
-                console.log('Set city name to:', city.name);
-                
-                // Get Region name using city's regionId
-                if (city.regionId) {
-                  console.log('Looking for region with ID:', city.regionId);
-                  const region = allLocations.find(loc => loc.type === 'region' && loc.id === city.regionId);
-                  console.log('Found region:', region);
-                  
-                  if (region) {
-                    setRegionName(region.name);
-                    console.log('Set region name to:', region.name);
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        // Alternative: use parentName if available
-        if (!barangayName && location.parentName) {
-          console.log('Using parentName for barangay:', location.parentName);
-          setBarangayName(location.parentName);
-        }
-        
-        // Alternative: use direct cityId if available
-        if (!cityName && location.cityId) {
-          console.log('Using direct cityId:', location.cityId);
-          const city = allLocations.find(loc => loc.type === 'city' && loc.id === location.cityId);
-          if (city) {
-            setCityName(city.name);
-          }
-        }
-        
-        // Alternative: use direct regionId if available
-        if (!regionName && location.regionId) {
-          console.log('Using direct regionId:', location.regionId);
-          const region = allLocations.find(loc => loc.type === 'region' && loc.id === location.regionId);
-          if (region) {
-            setRegionName(region.name);
-          }
-        }
-      }
-      
-      console.log('=== END DEBUG ===');
     }
-  }, [location, isOpen, allLocations]);
-
-  if (!isOpen || !location) return null;
-
-  const getLocationTypeLabel = (type: string): string => {
-    const labels: Record<string, string> = {
-      city: 'City',
-      region: 'Region',
-      borough: 'Barangay',
-      location: 'Location'
-    };
-    return labels[type] || type;
-  };
+  }, [location, isOpen]);
 
   const handleSave = () => {
-    const updatedLocation = { ...location, name: editedName };
-    onEdit(updatedLocation);
+    if (!location) return;
+    onEdit({ ...location, name: editedName });
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
-      <div className={`h-full w-full max-w-2xl shadow-2xl transform transition-transform duration-300 ease-in-out translate-x-0 flex flex-col overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
-        {/* Header */}
-        <div className={`px-6 py-4 flex items-center justify-between border-b flex-shrink-0 ${
-          isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-gray-100 border-gray-300'
-        }`}>
-          <h2 className={`text-xl font-semibold ${
-            isDarkMode ? 'text-white' : 'text-gray-900'
-          }`}>Edit {getLocationTypeLabel(location.type)}</h2>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={onClose}
-              className={`px-4 py-2 rounded text-sm transition-colors ${
-                isDarkMode
-                  ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-              }`}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 text-white rounded text-sm transition-colors"
-              style={{
-                backgroundColor: colorPalette?.primary || '#7c3aed'
-              }}
-              onMouseEnter={(e) => {
-                if (colorPalette?.accent) {
-                  e.currentTarget.style.backgroundColor = colorPalette.accent;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-              }}
-            >
-              Save
-            </button>
-            <button
-              onClick={onClose}
-              className={isDarkMode ? 'text-gray-400 hover:text-white transition-colors' : 'text-gray-600 hover:text-gray-900 transition-colors'}
-            >
-              <X size={24} />
-            </button>
-          </div>
-        </div>
+    <ModalUITemplate
+      isOpen={isOpen && !!location}
+      onClose={onClose}
+      title={location ? `Edit ${typeLabel(location.type)}` : 'Edit Location'}
+      primaryAction={{ label: 'Save', onClick: handleSave }}
+      secondaryActionLabel="Cancel"
+    >
+      {location && <EditLocationContent location={location} editedName={editedName} setEditedName={setEditedName} />}
+    </ModalUITemplate>
+  );
+};
 
-        {/* Form Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl space-y-6">
-            {/* Name Field */}
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Name<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:border-orange-500 ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-white'
-                    : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              />
-            </div>
+const EditLocationContent: React.FC<{
+  location: LocationItem;
+  editedName: string;
+  setEditedName: (v: string) => void;
+}> = ({ location, editedName, setEditedName }) => {
+  const { isDarkMode, colorPalette } = useModalTheme();
+  const [isFocused, setIsFocused] = useState(false);
 
-            {/* Barangay Field (for Locations) */}
-            {location.type === 'location' && (
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Barangay<span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={barangayName}
-                  disabled
-                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-500'
-                      : 'bg-gray-100 border-gray-300 text-gray-500'
-                  }`}
-                />
-              </div>
-            )}
+  const labelColor = isDarkMode ? '#d1d5db' : '#374151';
+  const readOnlyStyle = {
+    width: '100%' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 6,
+    opacity: 0.6,
+    borderColor: isDarkMode ? '#1f2937' : '#e5e7eb',
+    color: isDarkMode ? '#9ca3af' : '#6b7280',
+  };
 
-            {/* City Field (for Locations) */}
-            {location.type === 'location' && (
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  City<span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={cityName}
-                  disabled
-                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-500'
-                      : 'bg-gray-100 border-gray-300 text-gray-500'
-                  }`}
-                />
-              </div>
-            )}
+  const ReadOnly: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontSize: 14, fontWeight: '500', color: labelColor }}>{label}</Text>
+      <TextInput value={value} editable={false} style={readOnlyStyle} />
+    </View>
+  );
 
-            {/* Region Field (for Locations) */}
-            {location.type === 'location' && (
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Region<span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={regionName}
-                  disabled
-                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-500'
-                      : 'bg-gray-100 border-gray-300 text-gray-500'
-                  }`}
-                />
-              </div>
-            )}
+  return (
+    <View style={{ gap: 16 }}>
+      <View style={{ gap: 8 }}>
+        <Text style={{ fontSize: 14, fontWeight: '500', color: labelColor }}>
+          Name<Text style={{ color: '#ef4444' }}> *</Text>
+        </Text>
+        <TextInput
+          value={editedName}
+          onChangeText={setEditedName}
+          placeholder="Enter name"
+          placeholderTextColor="#9ca3af"
+          autoFocus
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          style={{
+            width: '100%',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderWidth: 1,
+            borderRadius: 6,
+            borderColor: isFocused ? (colorPalette?.primary || '#7c3aed') : (isDarkMode ? '#374151' : '#d1d5db'),
+            color: isDarkMode ? '#ffffff' : '#111827',
+          }}
+        />
+      </View>
 
-            {/* Parent Field (for City and Barangay) */}
-            {location.type !== 'location' && location.type !== 'region' && location.parentName && (
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  {location.type === 'city' ? 'Region' : 
-                   location.type === 'borough' ? 'City' : 'Parent'}
-                  <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={location.parentName}
-                  disabled
-                  className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                    isDarkMode
-                      ? 'bg-gray-800 border-gray-700 text-gray-500'
-                      : 'bg-gray-100 border-gray-300 text-gray-500'
-                  }`}
-                />
-              </div>
-            )}
-
-            {/* ID Field */}
-            <div>
-              <label className={`block text-sm font-medium mb-2 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                id<span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={location.id}
-                disabled
-                className={`w-full px-3 py-2 border rounded cursor-not-allowed ${
-                  isDarkMode
-                    ? 'bg-gray-800 border-gray-700 text-gray-500'
-                    : 'bg-gray-100 border-gray-300 text-gray-500'
-                }`}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <ReadOnly label="Type" value={typeLabel(location.type)} />
+      {location.type !== 'region' && !!location.parentName && (
+        <ReadOnly label={parentLabel(location.type)} value={location.parentName} />
+      )}
+      <ReadOnly label="ID" value={String(location.id)} />
+    </View>
   );
 };
 

@@ -1,20 +1,50 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Receipt, Search, ChevronDown, CheckCheck, X, Check } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  RefreshControl,
+  Modal,
+  ScrollView,
+  Alert,
+  Dimensions,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  Receipt,
+  CheckCheck,
+  X,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Download,
+  Filter,
+} from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import GlobalSearch from './globalfunctions/GlobalSearch';
 import TransactionListDetails from '../components/TransactionListDetails';
 import { transactionService } from '../services/transactionService';
-import LoadingModal from '../components/LoadingModal';
+import { getCities, City } from '../services/cityService';
+import { getRegions, Region } from '../services/regionService';
+import { barangayService, Barangay } from '../services/barangayService';
+import LoadingModalGlobal from '../components/common/LoadingModalGlobal';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { useTransactionContext } from '../contexts/TransactionContext';
+import { useTransactionStore } from '../store/transactionStore';
 import { Transaction } from '../types/transaction';
+import { paymentMethodService, PaymentMethod } from '../services/paymentMethodService';
 import BillingDetails from '../components/CustomerDetails';
 import { getCustomerDetail, CustomerDetailData } from '../services/customerDetailService';
 import { BillingDetailRecord } from '../types/billing';
+import { exportToCSV } from '../utils/exportUtils';
 
-interface LocationItem {
-  id: string;
-  name: string;
-  count: number;
-}
+// ─── Constants ─────────────────────────────────────────────────────────────
+const isDarkMode = false;
+const { width } = Dimensions.get('window');
+const isTablet = width >= 768;
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): BillingDetailRecord => {
   return {
@@ -28,7 +58,9 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
     cityId: null,
     regionId: null,
     timestamp: customerData.updatedAt || '',
-    billingStatus: customerData.billingAccount?.billingStatusId ? `Status ${customerData.billingAccount.billingStatusId}` : '',
+    billingStatus: customerData.billingAccount?.billingStatusId
+      ? (({ 1: 'In Progress', 2: 'Active', 3: 'Suspended', 4: 'Cancelled', 5: 'Overdue', 6: 'Service Account' } as Record<number, string>)[customerData.billingAccount.billingStatusId] || `Status ${customerData.billingAccount.billingStatusId}`)
+      : '',
     dateInstalled: customerData.billingAccount?.dateInstalled || '',
     contactNumber: customerData.contactNumberPrimary,
     secondContactNumber: customerData.contactNumberSecondary || '',
@@ -51,7 +83,6 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
     barangay: customerData.barangay || '',
     city: customerData.city || '',
     region: customerData.region || '',
-
     usageType: customerData.technicalDetails?.usageTypeId ? `Type ${customerData.technicalDetails.usageTypeId}` : '',
     referredBy: customerData.referredBy || '',
     referralContactNo: '',
@@ -61,238 +92,466 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
     houseFrontPicture: customerData.houseFrontPictureUrl || '',
     accountBalance: customerData.billingAccount?.accountBalance || 0,
     housingStatus: customerData.housingStatus || '',
-    location: customerData.location || '',
     addressCoordinates: customerData.addressCoordinates || '',
+    vip_expiration: (customerData.billingAccount as any)?.vip_expiration || '',
+    vip_remarks: (customerData.billingAccount as any)?.vip_remarks || '',
   };
 };
+
+const formatDate = (dateStr?: string, includeTime = false): string => {
+  if (!dateStr) return 'No date';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    if (!includeTime) return `${mm}/${dd}/${yyyy}`;
+    let hours = date.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${mm}/${dd}/${yyyy} ${hours}:${minutes}:${seconds} ${ampm}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+const formatCurrency = (amount: number | string | null | undefined): string => {
+  if (amount === null || amount === undefined || amount === '') return '₱0.00';
+  const n = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(n)) return '₱0.00';
+  return `₱${n.toFixed(2)}`;
+};
+
+// ─── Status Badge ────────────────────────────────────────────────────────────
+
+const StatusBadge: React.FC<{ status?: string | null }> = ({ status }) => {
+  const s = (status || '').toLowerCase();
+  const color =
+    s === 'done' || s === 'completed' ? '#22c55e' :
+    s === 'pending' ? '#eab308' :
+    s === 'processing' ? '#3b82f6' :
+    s === 'failed' || s === 'cancelled' ? '#ef4444' :
+    '#6b7280';
+  return (
+    <Text style={{ color, textTransform: 'capitalize', fontSize: 12, fontWeight: '500' }}>
+      {status || 'Unknown'}
+    </Text>
+  );
+};
+
+// ─── Transaction Card ────────────────────────────────────────────────────────
+
+interface TransactionCardProps {
+  transaction: Transaction;
+  isSelected: boolean;
+  isBatchMode: boolean;
+  isPending: boolean;
+  isSelectedBatch: boolean;
+  onPress: () => void;
+  onToggle: () => void;
+  primary: string;
+  paymentMethods: PaymentMethod[];
+}
+
+const TransactionCard: React.FC<TransactionCardProps> = ({
+  transaction,
+  isSelected,
+  isBatchMode,
+  isPending,
+  isSelectedBatch,
+  onPress,
+  onToggle,
+  primary,
+  paymentMethods,
+}) => {
+  const getPaymentMethodName = (pmId: string | number | null | undefined): string => {
+    if (!pmId) return '-';
+    const pm = paymentMethods.find(m => String(m.id) === String(pmId));
+    return pm ? pm.payment_method : String(pmId);
+  };
+
+  const paymentMethod =
+    transaction.payment_method_info?.payment_method ||
+    getPaymentMethodName(transaction.payment_method) || '-';
+
+  const bgColor = isSelected
+    ? '#f3f4f6'
+    : isSelectedBatch
+    ? `${primary}22`
+    : '#ffffff';
+
+  return (
+    <TouchableOpacity
+      onPress={isBatchMode ? (isPending ? onToggle : undefined) : onPress}
+      style={{
+        backgroundColor: bgColor,
+        marginHorizontal: 12,
+        marginVertical: 4,
+        borderRadius: 10,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: isSelected ? primary : isSelectedBatch ? primary : '#e5e7eb',
+        flexDirection: 'row',
+        gap: 10,
+      }}
+      activeOpacity={0.7}
+    >
+      {isBatchMode && (
+        <View style={{ justifyContent: 'center', paddingRight: 4 }}>
+          <View
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: 4,
+              borderWidth: 2,
+              borderColor: isPending ? primary : '#d1d5db',
+              backgroundColor: isSelectedBatch ? primary : '#ffffff',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {isSelectedBatch && <Check size={12} color="#ffffff" />}
+          </View>
+        </View>
+      )}
+      <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#ef4444' }}>
+              {transaction.account?.account_no || '-'}
+            </Text>
+            <Text style={{ fontSize: 13, color: '#111827', marginTop: 1 }}>
+              {transaction.account?.customer?.full_name || '-'}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827' }}>
+              {formatCurrency(transaction.received_payment)}
+            </Text>
+            <StatusBadge status={transaction.status} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+          <Text style={{ fontSize: 11, color: '#6b7280', flex: 1 }}>
+            {formatDate(transaction.date_processed, true)}
+          </Text>
+          <Text style={{ fontSize: 11, color: '#6b7280' }}>{paymentMethod}</Text>
+        </View>
+        {transaction.remarks ? (
+          <Text style={{ fontSize: 11, color: '#6b7280' }} numberOfLines={1}>
+            {transaction.remarks}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 interface TransactionListProps {
   onNavigate?: (section: string, extra?: string) => void;
 }
 
 const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
-  const { transactions, isLoading: loading, error, silentRefresh } = useTransactionContext();
-  const isDarkMode = false; // Forced light mode as per user request
-  const [selectedLocation, setSelectedLocation] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sidebarWidth, setSidebarWidth] = useState<number>(256);
-  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
-  const sidebarStartXRef = useRef<number>(0);
-  const sidebarStartWidthRef = useRef<number>(0);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const {
+    transactions,
+    totalCount,
+    isLoading: loading,
+    error,
+    fetchTransactions,
+    fetchUpdates,
+  } = useTransactionStore();
 
-  // Local state for batch approval (kept local as it's UI functionality)
-  const [isBatchApproveMode, setIsBatchApproveMode] = useState<boolean>(false);
-  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
-  const [isApproving, setIsApproving] = useState<boolean>(false);
-  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
-  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
-  const [showFailedModal, setShowFailedModal] = useState<boolean>(false);
-  const [approvalMessage, setApprovalMessage] = useState<string>('');
-  const [approvalDetails, setApprovalDetails] = useState<any>(null);
+  const [userRole, setUserRole] = useState('');
+  const [roleId, setRoleId] = useState<number | null>(null);
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('all');
+  const [processedDateFrom, setProcessedDateFrom] = useState('');
+  const [processedDateTo, setProcessedDateTo] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailData | null>(null);
-  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [customerRefreshKey, setCustomerRefreshKey] = useState(0);
 
-  // Pagination State
+  const [isBatchApproveMode, setIsBatchApproveMode] = useState(false);
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([]);
+  const [isApproving, setIsApproving] = useState(false);
+
+  const [sortColumn, setSortColumn] = useState<string | null>('date_processed');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
+  const [itemsPerPage] = useState(50);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const [locationFilterVisible, setLocationFilterVisible] = useState(false);
 
+  const [cities, setCities] = useState<City[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [barangays, setBarangays] = useState<Barangay[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
-  // Dark mode synchronization logic
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const primary = colorPalette?.primary || '#7c3aed';
 
-  // Fetch color palette
+  // ─── Init ──────────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    const fetchThemeData = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
-    };
-
-    fetchThemeData();
+    if (transactions.length === 0) {
+      fetchTransactions();
+    }
   }, []);
 
-  const formatDate = (dateStr?: string): string => {
-    if (!dateStr) return 'No date';
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
+  useEffect(() => {
+    settingsColorPaletteService.getActive().then(setColorPalette).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem('authData').then(raw => {
+      if (!raw) return;
+      try {
+        const userData = JSON.parse(raw);
+        setUserRole(userData.role || '');
+        setRoleId(userData.role_id || null);
+        let perms: string[] = [];
+        if (userData.permissions) {
+          if (Array.isArray(userData.permissions)) {
+            perms = userData.permissions;
+          } else if (typeof userData.permissions === 'string') {
+            try { perms = JSON.parse(userData.permissions); } catch { perms = userData.permissions.split(',').map((p: string) => p.trim()).filter(Boolean); }
+          }
+        }
+        setUserPermissions(perms);
+      } catch {}
+    });
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      getCities(),
+      getRegions(),
+      barangayService.getAll(),
+      paymentMethodService.getAll(),
+    ]).then(([citiesData, regionsData, barangaysRes, pmRes]) => {
+      setCities(citiesData || []);
+      setRegions(regionsData || []);
+      setBarangays(barangaysRes.success ? barangaysRes.data : []);
+      if (pmRes.success) setPaymentMethods(pmRes.data);
+    }).catch(() => {});
+  }, []);
+
+  // 15-minute polling instead of Pusher
+  useEffect(() => {
+    pollRef.current = setInterval(async () => {
+      try { await fetchUpdates(); } catch {}
+    }, 15 * 60 * 1000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchUpdates]);
+
+  // ─── Permissions ───────────────────────────────────────────────────────────
+
+  const hasPermission = useCallback((permission: string): boolean => {
+    const lowerRole = (userRole || '').toLowerCase().trim();
+    if (lowerRole === 'administrator' || lowerRole === 'superadmin' || roleId === 1 || roleId === 7) return true;
+    return userPermissions.includes(permission);
+  }, [userRole, roleId, userPermissions]);
+
+  // ─── User org ──────────────────────────────────────────────────────────────
+
+  const [userOrgId, setUserOrgId] = useState<any>(null);
+  useEffect(() => {
+    AsyncStorage.getItem('authData').then(raw => {
+      if (!raw) return;
+      try {
+        const d = JSON.parse(raw);
+        setUserOrgId(d.organization_id || d.user?.organization_id || d.organization?.id || d.user?.organization?.id || null);
+      } catch {}
+    });
+  }, []);
+
+  // ─── Location items ────────────────────────────────────────────────────────
+
+  const globalFilteredTransactions = useMemo(() => {
+    const normalizedQuery = searchQuery.toLowerCase().replace(/\s+/g, '');
+    let filtered = transactions.filter(t => {
+      if (userOrgId) {
+        if ((t as any).organization_id !== userOrgId) return false;
+      }
+      if (searchQuery === '') return true;
+      const checkValue = (val: any): boolean => {
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') return Object.values(val).some(v => checkValue(v));
+        return String(val).toLowerCase().replace(/\s+/g, '').includes(normalizedQuery);
+      };
+      return checkValue(t);
+    });
+
+    if (processedDateFrom || processedDateTo) {
+      filtered = filtered.filter(t => {
+        if (!t.date_processed) return false;
+        const dateValue = new Date(t.date_processed).getTime();
+        if (isNaN(dateValue)) return false;
+        if (processedDateFrom) {
+          const from = new Date(processedDateFrom);
+          from.setHours(0, 0, 0, 0);
+          if (dateValue < from.getTime()) return false;
+        }
+        if (processedDateTo) {
+          const to = new Date(processedDateTo);
+          to.setHours(23, 59, 59, 999);
+          if (dateValue > to.getTime()) return false;
+        }
+        return true;
       });
-    } catch (e) {
-      return dateStr;
     }
-  };
 
-  const formatCurrency = (amount: number | string) => {
-    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return `₱${numAmount.toFixed(2)}`;
-  };
+    return filtered;
+  }, [transactions, searchQuery, userOrgId, processedDateFrom, processedDateTo]);
 
+  const locationItems = useMemo(() => {
+    const regionCounts: Record<string, number> = {};
+    const cityCounts: Record<string, number> = {};
+    const barangayCounts: Record<string, number> = {};
 
-  const locationItems: LocationItem[] = [
-    {
-      id: 'all',
-      name: 'All',
-      count: transactions.length
-    }
-  ];
+    regions.forEach(r => { regionCounts[r.name] = 0; });
+    cities.forEach(c => { cityCounts[`${c.region_id}_${c.name}`] = 0; });
+    barangays.forEach(b => { barangayCounts[`${b.city_id}_${b.barangay}`] = 0; });
 
-  const locationSet = new Set<string>();
-  transactions.forEach(transaction => {
-    const location = transaction.account?.customer?.city?.toLowerCase();
-    if (location) {
-      locationSet.add(location);
-    }
-  });
-  const uniqueLocations = Array.from(locationSet);
+    globalFilteredTransactions.forEach(t => {
+      const region = (t.account as any)?.customer?.region;
+      const city = (t.account as any)?.customer?.city;
+      const barangay = (t.account as any)?.customer?.barangay;
+      if (region) regionCounts[region] = (regionCounts[region] || 0) + 1;
+      if (city) {
+        const mc = cities.find(c => c.name === city);
+        if (mc) cityCounts[`${mc.region_id}_${mc.name}`] = (cityCounts[`${mc.region_id}_${mc.name}`] || 0) + 1;
+      }
+      if (barangay) {
+        const mb = barangays.find(b => b.barangay === barangay && (!city || cities.find(c => c.id === b.city_id)?.name === city));
+        if (mb) barangayCounts[`${mb.city_id}_${mb.barangay}`] = (barangayCounts[`${mb.city_id}_${mb.barangay}`] || 0) + 1;
+      }
+    });
 
-  uniqueLocations.forEach(location => {
-    if (location) {
-      locationItems.push({
-        id: location,
-        name: location.charAt(0).toUpperCase() + location.slice(1),
-        count: transactions.filter(t =>
-          t.account?.customer?.city?.toLowerCase() === location).length
-      });
-    }
-  });
+    return {
+      regions: regions.map(r => ({
+        id: `reg:${r.name}`,
+        name: r.name,
+        count: regionCounts[r.name] || 0,
+        cities: cities.filter(c => c.region_id === r.id).map(c => ({
+          id: `city:${c.name}`,
+          name: c.name,
+          count: cityCounts[`${r.id}_${c.name}`] || 0,
+          barangays: barangays.filter(b => b.city_id === c.id).map(b => ({
+            id: `brgy:${b.barangay}`,
+            name: b.barangay,
+            count: barangayCounts[`${c.id}_${b.barangay}`] || 0,
+          })),
+        })),
+      })),
+      total: globalFilteredTransactions.length,
+    };
+  }, [regions, cities, barangays, globalFilteredTransactions]);
+
+  // ─── Filtered + sorted ────────────────────────────────────────────────────
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(transaction => {
-      const transactionLocation = transaction.account?.customer?.city?.toLowerCase();
-      const matchesLocation = selectedLocation === 'all' || transactionLocation === selectedLocation;
-
-      const matchesSearch = searchQuery === '' ||
-        transaction.account?.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        transaction.account?.account_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        transaction.reference_no?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      return matchesLocation && matchesSearch;
+    let filtered = globalFilteredTransactions.filter(t => {
+      if (selectedLocation === 'all') return true;
+      const customer = (t.account as any)?.customer;
+      if (selectedLocation.startsWith('reg:')) return customer?.region === selectedLocation.substring(4);
+      if (selectedLocation.startsWith('city:')) return customer?.city === selectedLocation.substring(5);
+      if (selectedLocation.startsWith('brgy:')) return customer?.barangay === selectedLocation.substring(5);
+      return true;
     });
-  }, [transactions, selectedLocation, searchQuery]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedLocation, searchQuery]);
+    if (sortColumn) {
+      const dateCols = ['date_processed', 'created_at', 'updated_at', 'payment_date'];
+      const numericCols = ['received_payment', 'account_balance', 'id'];
+      filtered = [...filtered].sort((a, b) => {
+        const getVal = (t: any) => {
+          switch (sortColumn) {
+            case 'date_processed': return t.date_processed;
+            case 'created_at': return t.created_at;
+            case 'account_no': return t.account?.account_no || '';
+            case 'received_payment': return Number(t.received_payment) || 0;
+            case 'payment_method': return t.payment_method_info?.payment_method || String(t.payment_method || '');
+            case 'processed_by': return t.processor?.email_address || t.processed_by_user || '';
+            case 'full_name': return t.account?.customer?.full_name || '';
+            case 'status': return t.status || '';
+            case 'id': return Number(t.id) || 0;
+            case 'account_balance': return Number(t.account?.account_balance) || 0;
+            default: return t[sortColumn] || '';
+          }
+        };
+        let aVal = getVal(a);
+        let bVal = getVal(b);
+        if (dateCols.includes(sortColumn)) {
+          aVal = new Date(aVal || '').getTime() || 0;
+          bVal = new Date(bVal || '').getTime() || 0;
+        } else if (!numericCols.includes(sortColumn)) {
+          aVal = String(aVal).toLowerCase();
+          bVal = String(bVal).toLowerCase();
+        }
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [globalFilteredTransactions, selectedLocation, sortColumn, sortDirection]);
 
   const paginatedTransactions = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredTransactions, currentPage]);
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTransactions.slice(start, start + itemsPerPage);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
+  // ─── Pull to refresh ──────────────────────────────────────────────────────
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try { await fetchUpdates(); } finally { setRefreshing(false); }
   };
 
-  const PaginationControls = () => {
-    if (totalPages <= 1) return null;
+  // ─── Transaction actions ──────────────────────────────────────────────────
 
-    return (
-      <div className={`flex items-center justify-between px-4 py-3 border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}`}>
-        <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredTransactions.length)}</span> of <span className="font-medium">{filteredTransactions.length}</span> results
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === 1
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            {"<"}
-          </button>
-
-          <div className="flex items-center space-x-1">
-            <span className={`px-2 text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Page {currentPage} of {totalPages}
-            </span>
-          </div>
-
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className={`px-3 py-1 rounded text-lg font-bold transition-colors min-w-[40px] flex items-center justify-center ${currentPage === totalPages
-              ? (isDarkMode ? 'text-gray-600 bg-gray-800 cursor-not-allowed' : 'text-gray-400 bg-gray-100 cursor-not-allowed')
-              : (isDarkMode ? 'text-white bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300')
-              }`}
-          >
-            {">"}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const handleRowClick = (transaction: Transaction) => {
+  const handleRowPress = (transaction: Transaction) => {
     if (isBatchApproveMode) {
-      if (transaction.status.toLowerCase() === 'pending') {
+      if ((transaction.status || '').toLowerCase() === 'pending') {
         toggleTransactionSelection(transaction.id);
       }
     } else {
-      console.log('Transaction clicked:', transaction);
-      console.log('Customer data:', transaction.account?.customer);
-      console.log('Full name:', transaction.account?.customer?.full_name);
       setSelectedTransaction(transaction);
-      setSelectedCustomer(null); // Clear customer view when switching transactions
+      setSelectedCustomer(null);
     }
   };
 
-  const handleViewCustomer = async (accountNo: string) => {
-    setIsLoadingDetails(true);
-    try {
-      const detail = await getCustomerDetail(accountNo);
-      if (detail) {
-        setSelectedCustomer(detail);
-      }
-    } catch (err) {
-      console.error('Error fetching customer details:', err);
-    } finally {
-      setIsLoadingDetails(false);
-    }
-  };
-
-  const toggleTransactionSelection = (transactionId: string) => {
-    const transaction = transactions.find(t => t.id === transactionId);
-    if (!transaction || transaction.status.toLowerCase() !== 'pending') {
-      return;
-    }
-
-    setSelectedTransactionIds(prev => {
-      if (prev.includes(transactionId)) {
-        return prev.filter(id => id !== transactionId);
-      } else {
-        return [...prev, transactionId];
-      }
-    });
+  const toggleTransactionSelection = (id: string) => {
+    const t = transactions.find(tx => tx.id === id);
+    if (!t || (t.status || '').toLowerCase() !== 'pending') return;
+    setSelectedTransactionIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
   const toggleSelectAll = () => {
-    const pendingTransactions = filteredTransactions.filter(t => t.status.toLowerCase() === 'pending');
-    const pendingTransactionIds = pendingTransactions.map(t => t.id);
-
-    if (selectedTransactionIds.length === pendingTransactionIds.length && pendingTransactionIds.length > 0) {
+    const pendingIds = filteredTransactions.filter(t => (t.status || '').toLowerCase() === 'pending').map(t => t.id);
+    if (selectedTransactionIds.length === pendingIds.length && pendingIds.length > 0) {
       setSelectedTransactionIds([]);
     } else {
-      setSelectedTransactionIds(pendingTransactionIds);
+      setSelectedTransactionIds(pendingIds);
     }
   };
 
@@ -301,606 +560,613 @@ const TransactionList: React.FC<TransactionListProps> = ({ onNavigate }) => {
     setSelectedTransactionIds([]);
   };
 
-  const handleBatchApprove = async () => {
-    if (selectedTransactionIds.length === 0) {
-      return;
-    }
-
-    setShowConfirmModal(true);
-  };
-
-  const confirmBatchApproval = async () => {
-    setShowConfirmModal(false);
-
-    try {
-      setIsApproving(true);
-      // Removed setError(null) as error is now managed by context primarily, though local error handling for this action would be ideal.
-      // We'll rely on global error or modal for now.
-
-      const result = await transactionService.batchApproveTransactions(selectedTransactionIds);
-
-      if (result.success) {
-        const successCount = result.data?.success?.length || 0;
-        const failedCount = result.data?.failed?.length || 0;
-
-        setApprovalDetails(result.data);
-
-        if (failedCount > 0) {
-          setApprovalMessage(
-            `Batch approval completed with some failures: ${successCount} successful, ${failedCount} failed`
-          );
-          setShowFailedModal(true);
-        } else {
-          setApprovalMessage(
-            `Successfully approved ${successCount} transaction(s)`
-          );
-          setShowSuccessModal(true);
-        }
-
-        setIsBatchApproveMode(false);
-        setSelectedTransactionIds([]);
-
-        // Refresh transactions using context
-        await silentRefresh();
-      } else {
-        setApprovalMessage(result.message || 'Failed to approve transactions');
-        setShowFailedModal(true);
-      }
-    } catch (err: any) {
-      console.error('Batch approval error:', err);
-      setApprovalMessage(`Failed to approve transactions: ${err.message}`);
-      setShowFailedModal(true);
-    } finally {
-      setIsApproving(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isResizingSidebar) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingSidebar) return;
-
-      const diff = e.clientX - sidebarStartXRef.current;
-      const newWidth = Math.max(200, Math.min(500, sidebarStartWidthRef.current + diff));
-
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSidebar]);
-
-  const handleMouseDownSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingSidebar(true);
-    sidebarStartXRef.current = e.clientX;
-    sidebarStartWidthRef.current = sidebarWidth;
-  };
-
-  const StatusText = ({ status }: { status: string }) => {
-    let textColor = '';
-
-    switch (status.toLowerCase()) {
-      case 'done':
-      case 'completed':
-        textColor = 'text-green-500';
-        break;
-      case 'pending':
-        textColor = 'text-yellow-500';
-        break;
-      case 'processing':
-        textColor = 'text-blue-500';
-        break;
-      case 'failed':
-      case 'cancelled':
-        textColor = 'text-red-500';
-        break;
-      default:
-        textColor = 'text-gray-400';
-    }
-
-    return (
-      <span className={`${textColor} capitalize`}>
-        {status}
-      </span>
+  const handleBatchApprove = () => {
+    if (selectedTransactionIds.length === 0) return;
+    Alert.alert(
+      'Confirm Batch Approval',
+      `Are you sure you want to approve ${selectedTransactionIds.length} transaction(s)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve',
+          onPress: async () => {
+            setIsApproving(true);
+            try {
+              const result = await transactionService.batchApproveTransactions(selectedTransactionIds);
+              if (result.success) {
+                const successCount = result.data?.success?.length || 0;
+                const failedCount = result.data?.failed?.length || 0;
+                Alert.alert(
+                  failedCount > 0 ? 'Partial Success' : 'Success',
+                  failedCount > 0
+                    ? `${successCount} approved, ${failedCount} failed`
+                    : `Successfully approved ${successCount} transaction(s)`
+                );
+                setIsBatchApproveMode(false);
+                setSelectedTransactionIds([]);
+                await fetchUpdates();
+              } else {
+                Alert.alert('Error', result.message || 'Failed to approve transactions');
+              }
+            } catch (err: any) {
+              Alert.alert('Error', `Failed to approve: ${err.message}`);
+            } finally {
+              setIsApproving(false);
+            }
+          },
+        },
+      ]
     );
   };
 
-  return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-      <div className={`hidden md:flex border-r flex-shrink-0 flex-col relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`} style={{ width: `${sidebarWidth}px` }}>
-        <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Transactions</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {locationItems.map((location) => (
-            <button
-              key={location.id}
-              onClick={() => setSelectedLocation(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-                } ${selectedLocation === location.id
-                  ? ''
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}
-              style={selectedLocation === location.id ? {
-                backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)',
-                color: colorPalette?.primary || '#fb923c'
-              } : {}}
-            >
-              <div className="flex items-center">
-                <Receipt className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
-              {location.count > 0 && (
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
-                    ? 'text-white'
-                    : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                    }`}
-                  style={selectedLocation === location.id ? {
-                    backgroundColor: colorPalette?.primary || '#7c3aed'
-                  } : {}}
-                >
-                  {location.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+  // ─── Customer detail ──────────────────────────────────────────────────────
 
-        <div
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-10"
+  const handleViewCustomer = async (accountNo: string) => {
+    setIsLoadingDetails(true);
+    try {
+      const detail = await getCustomerDetail(accountNo);
+      if (detail) setSelectedCustomer(detail);
+    } catch {}
+    finally { setIsLoadingDetails(false); }
+  };
+
+  const refreshCustomerDetails = async (accountNo: string) => {
+    try {
+      const detail = await getCustomerDetail(accountNo);
+      if (detail) { setSelectedCustomer(detail); setCustomerRefreshKey(k => k + 1); }
+    } catch {}
+  };
+
+  const handleApprovalSuccess = async () => {
+    await fetchUpdates();
+    if (selectedTransaction) {
+      const updated = useTransactionStore.getState().transactions.find(t => t.id === selectedTransaction.id);
+      if (updated) setSelectedTransaction(updated);
+    }
+    if (selectedCustomer?.billingAccount?.accountNo) {
+      await refreshCustomerDetails(selectedCustomer.billingAccount.accountNo);
+    }
+  };
+
+  // ─── Export ───────────────────────────────────────────────────────────────
+
+  const handleExport = () => {
+    if (!filteredTransactions.length) return;
+    const columns = [
+      { key: 'date_processed', label: 'Date Processed' },
+      { key: 'account_no', label: 'Account No.' },
+      { key: 'received_payment', label: 'Received Payment' },
+      { key: 'payment_method', label: 'Payment Method' },
+      { key: 'processed_by', label: 'Processed By' },
+      { key: 'full_name', label: 'Full Name' },
+      { key: 'or_no', label: 'OR No.' },
+      { key: 'reference_no', label: 'Reference No.' },
+      { key: 'status', label: 'Status' },
+      { key: 'transaction_type', label: 'Transaction Type' },
+    ];
+    const getVal = (t: any, key: string) => {
+      switch (key) {
+        case 'date_processed': return formatDate(t.date_processed, true);
+        case 'account_no': return t.account?.account_no || '-';
+        case 'received_payment': return formatCurrency(t.received_payment);
+        case 'payment_method': return t.payment_method_info?.payment_method || String(t.payment_method || '-');
+        case 'processed_by': return t.processor?.email_address || t.processed_by_user || '-';
+        case 'full_name': return t.account?.customer?.full_name || '-';
+        case 'or_no': return t.or_no || '-';
+        case 'reference_no': return t.reference_no || '-';
+        case 'status': return t.status || '-';
+        case 'transaction_type': return t.transaction_type || '-';
+        default: return '-';
+      }
+    };
+    exportToCSV('transactions_export', columns, filteredTransactions, getVal);
+  };
+
+  // ─── Sort label ───────────────────────────────────────────────────────────
+
+  const sortOptions = [
+    { key: 'date_processed', label: 'Date Processed' },
+    { key: 'received_payment', label: 'Amount' },
+    { key: 'status', label: 'Status' },
+    { key: 'full_name', label: 'Name' },
+  ];
+
+  // ─── Location Filter Modal ────────────────────────────────────────────────
+
+  const renderLocationFilterModal = () => (
+    <Modal visible={locationFilterVisible} animationType="slide" onRequestClose={() => setLocationFilterVisible(false)}>
+      <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+        <View
           style={{
-            backgroundColor: isResizingSidebar ? (colorPalette?.primary || '#7c3aed') : 'transparent'
+            paddingTop: isTablet ? 16 : 60,
+            paddingHorizontal: 16,
+            paddingBottom: 12,
+            backgroundColor: '#ffffff',
+            borderBottomWidth: 1,
+            borderBottomColor: '#e5e7eb',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
-          onMouseEnter={(e) => {
-            if (!isResizingSidebar && colorPalette?.primary) {
-              e.currentTarget.style.backgroundColor = colorPalette.primary;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizingSidebar) {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }
-          }}
-          onMouseDown={handleMouseDownSidebarResize}
-        />
-      </div>
+        >
+          <Text style={{ fontSize: 17, fontWeight: '700', color: '#111827' }}>Filter Location</Text>
+          <TouchableOpacity onPress={() => setLocationFilterVisible(false)}>
+            <X size={20} color="#374151" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={{ flex: 1, paddingTop: 8 }}>
+          {/* All */}
+          <TouchableOpacity
+            onPress={() => { setSelectedLocation('all'); setLocationFilterVisible(false); }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              backgroundColor: selectedLocation === 'all' ? `${primary}15` : '#ffffff',
+              marginBottom: 1,
+            }}
+          >
+            <Text style={{ fontSize: 14, color: selectedLocation === 'all' ? primary : '#111827', fontWeight: selectedLocation === 'all' ? '600' : '400' }}>
+              All Transactions
+            </Text>
+            <View style={{
+              backgroundColor: selectedLocation === 'all' ? primary : '#e5e7eb',
+              borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2,
+            }}>
+              <Text style={{ fontSize: 12, color: selectedLocation === 'all' ? '#ffffff' : '#374151' }}>
+                {locationItems.total}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-      <div className={`overflow-hidden flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-        }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:border ${isDarkMode
-                    ? 'bg-gray-800 text-white border border-gray-700'
-                    : 'bg-white text-gray-900 border border-gray-300'
-                    }`}
-                  style={{
-                    '--tw-ring-color': colorPalette?.primary || '#7c3aed'
-                  } as React.CSSProperties}
-                  onFocus={(e) => {
-                    if (colorPalette?.primary) {
-                      e.currentTarget.style.borderColor = colorPalette.primary;
-                    }
+          {/* Regions */}
+          {locationItems.regions.map((region) => (
+            <View key={region.id}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff', marginBottom: 1 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const next = new Set(expandedLocations);
+                    next.has(region.id) ? next.delete(region.id) : next.add(region.id);
+                    setExpandedLocations(next);
                   }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode ? '#374151' : '#d1d5db';
-                  }}
-                />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-              </div>
-              <button
-                onClick={() => isBatchApproveMode ? handleCancelApprove() : setIsBatchApproveMode(true)}
-                className="px-4 py-2 rounded flex items-center transition-colors text-white"
-                style={{
-                  backgroundColor: isBatchApproveMode ? '#dc2626' : (colorPalette?.primary || '#7c3aed')
-                }}
-                onMouseEnter={(e) => {
-                  if (isBatchApproveMode) {
-                    e.currentTarget.style.backgroundColor = '#b91c1c';
-                  } else if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (isBatchApproveMode) {
-                    e.currentTarget.style.backgroundColor = '#dc2626';
-                  } else if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                {isBatchApproveMode ? (
-                  <>
-                    <X className="h-4 w-4 mr-2" />
-                    <span>Cancel Approve</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCheck className="h-4 w-4 mr-2" />
-                    <span>Batch Approve</span>
-                  </>
-                )}
-              </button>
-              {isBatchApproveMode && (
-                <button
-                  onClick={handleBatchApprove}
-                  disabled={selectedTransactionIds.length === 0 || isApproving}
-                  className={`px-4 py-2 rounded flex items-center transition-colors ${selectedTransactionIds.length === 0 || isApproving
-                    ? isDarkMode
-                      ? 'bg-gray-700 text-gray-500 border border-gray-600 cursor-not-allowed'
-                      : 'bg-gray-300 text-gray-500 border border-gray-400 cursor-not-allowed'
-                    : isDarkMode
-                      ? 'bg-green-600 text-white border border-green-700 hover:bg-green-700'
-                      : 'bg-green-500 text-white border border-green-600 hover:bg-green-600'
-                    }`}
+                  style={{ paddingLeft: 16, paddingVertical: 14, paddingRight: 4 }}
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  <span>{isApproving ? 'Approving...' : `Approve (${selectedTransactionIds.length})`}</span>
-                </button>
-              )}
-              <button className={`px-4 py-2 rounded flex items-center ${isDarkMode
-                ? 'bg-gray-800 text-white border border-gray-700'
-                : 'bg-gray-200 text-gray-900 border border-gray-300'
-                }`}>
-                <span className="mr-2">Filter</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+                  {expandedLocations.has(region.id)
+                    ? <ChevronDown size={16} color="#6b7280" />
+                    : <ChevronRight size={16} color="#6b7280" />}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setSelectedLocation(region.id); setLocationFilterVisible(false); }}
+                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 16, paddingVertical: 14 }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Receipt size={14} color={selectedLocation === region.id ? primary : '#6b7280'} />
+                    <Text style={{ fontSize: 14, color: selectedLocation === region.id ? primary : '#111827', fontWeight: selectedLocation === region.id ? '600' : '400' }}>
+                      {region.name}
+                    </Text>
+                  </View>
+                  {region.count > 0 && (
+                    <Text style={{ fontSize: 12, color: '#6b7280' }}>{region.count}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-x-auto overflow-y-auto">
-              {loading ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                  </div>
-                  <p className="mt-4">Loading transactions...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                  <p>{error}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className={`mt-4 px-4 py-2 rounded text-white ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <table className={`min-w-full text-sm ${isDarkMode ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'
-                  }`}>
-                  <thead className={`sticky top-0 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                    }`}>
-                    <tr>
-                      {isBatchApproveMode && (
-                        <th className={`px-4 py-3 text-left ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                          <input
-                            type="checkbox"
-                            checked={
-                              selectedTransactionIds.length > 0 &&
-                              selectedTransactionIds.length === filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length &&
-                              filteredTransactions.filter(t => t.status.toLowerCase() === 'pending').length > 0
-                            }
-                            onChange={toggleSelectAll}
-                            className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                            style={{
-                              accentColor: colorPalette?.primary || '#7c3aed'
-                            }}
-                          />
-                        </th>
-                      )}
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Date Processed</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Status</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Account No.</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Received Payment</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Payment Method</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Processed By</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Full Name</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>OR No.</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Reference No.</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Remarks</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Transaction Type</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Image</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Barangay</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Contact No</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Payment Date</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>City</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Plan</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Account Balance</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Created At</th>
-                      <th className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>Updated At</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`${isDarkMode ? 'bg-gray-900 divide-y divide-gray-800' : 'bg-white divide-y divide-gray-200'
-                    }`}>
-                    {paginatedTransactions.length > 0 ? (
-                      paginatedTransactions.map((transaction) => {
-                        const isSelected = selectedTransactionIds.includes(transaction.id);
-                        const isPending = transaction.status.toLowerCase() === 'pending';
-                        const canSelect = isBatchApproveMode && isPending;
+              {expandedLocations.has(region.id) && region.cities.map((city) => (
+                <View key={city.id}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fafafa', marginBottom: 1 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const next = new Set(expandedLocations);
+                        next.has(city.id) ? next.delete(city.id) : next.add(city.id);
+                        setExpandedLocations(next);
+                      }}
+                      style={{ paddingLeft: 36, paddingVertical: 10, paddingRight: 4 }}
+                    >
+                      {expandedLocations.has(city.id)
+                        ? <ChevronDown size={14} color="#9ca3af" />
+                        : <ChevronRight size={14} color="#9ca3af" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => { setSelectedLocation(city.id); setLocationFilterVisible(false); }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 16, paddingVertical: 10 }}
+                    >
+                      <Text style={{ fontSize: 13, color: selectedLocation === city.id ? primary : '#374151' }}>{city.name}</Text>
+                      {city.count > 0 && <Text style={{ fontSize: 11, color: '#9ca3af' }}>{city.count}</Text>}
+                    </TouchableOpacity>
+                  </View>
 
-                        return (
-                          <tr
-                            key={transaction.id}
-                            className={`${canSelect ? 'cursor-pointer' : isBatchApproveMode ? 'cursor-not-allowed' : 'cursor-pointer'
-                              } ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                              } ${!isSelected && selectedTransaction?.id === transaction.id
-                                ? (isDarkMode ? 'bg-gray-800' : 'bg-gray-100')
-                                : !isSelected && isBatchApproveMode && !isPending
-                                  ? (isDarkMode ? 'bg-gray-800 opacity-50' : 'bg-gray-200 opacity-50')
-                                  : ''
-                              }`}
-                            style={isSelected ? {
-                              backgroundColor: colorPalette?.primary ? `${colorPalette.primary}33` : 'rgba(249, 115, 22, 0.2)'
-                            } : {}}
-                            onClick={() => handleRowClick(transaction)}
-                          >
-                            {isBatchApproveMode && (
-                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggleTransactionSelection(transaction.id)}
-                                  disabled={!isPending}
-                                  className={`w-4 h-4 rounded border-gray-300 ${isPending ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                                    }`}
-                                  style={{
-                                    accentColor: colorPalette?.primary || '#7c3aed'
-                                  }}
-                                />
-                              </td>
-                            )}
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{formatDate(transaction.date_processed)}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-red-400 font-medium">{transaction.account?.account_no || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                              }`}>{formatCurrency(transaction.received_payment)}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.payment_method}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.processed_by_user || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.account?.customer?.full_name || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.or_no}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.reference_no}</td>
-                            <td className={`px-4 py-3 max-w-xs truncate ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.remarks || 'No remarks'}</td>
-                            <td className="px-4 py-3 whitespace-nowrap"><StatusText status={transaction.status} /></td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.transaction_type}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.image_url ? 'Yes' : '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.account?.customer?.barangay || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.account?.customer?.contact_number_primary || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{formatDate(transaction.payment_date)}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.account?.customer?.city || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{transaction.account?.customer?.desired_plan || '-'}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{formatCurrency(transaction.account?.account_balance || 0)}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{formatDate(transaction.created_at)}</td>
-                            <td className={`px-4 py-3 whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}>{formatDate(transaction.updated_at)}</td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={isBatchApproveMode ? 21 : 20} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                          {transactions.length > 0
-                            ? 'No transactions found matching your filters'
-                            : 'No transactions found.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <PaginationControls />
-          </div>
-        </div>
-      </div>
-
-      {selectedTransaction && (
-        <div className="flex-shrink-0 overflow-hidden">
-          <TransactionListDetails
-            transaction={selectedTransaction}
-            onClose={() => setSelectedTransaction(null)}
-            onNavigate={onNavigate}
-            onViewCustomer={handleViewCustomer}
-          />
-        </div>)}
-
-      {(selectedCustomer || isLoadingDetails) && (
-        <div className="flex-shrink-0 overflow-hidden">
-          {isLoadingDetails ? (
-            <div className={`w-[600px] h-full flex items-center justify-center border-l ${isDarkMode
-              ? 'bg-gray-900 text-white border-white border-opacity-30'
-              : 'bg-white text-gray-900 border-gray-300'
-              }`}>
-              <div className="text-center">
-                <div
-                  className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4"
-                  style={{ borderBottomColor: colorPalette?.primary || '#7c3aed' }}
-                ></div>
-                <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Loading details...</p>
-              </div>
-            </div>
-          ) : selectedCustomer ? (
-            <BillingDetails
-              billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
-              onlineStatusRecords={[]}
-              onClose={() => setSelectedCustomer(null)}
-            />
-          ) : null}
-        </div>
-      )}
-
-      <LoadingModal
-        isOpen={isApproving}
-        message="Approving transactions..."
-        percentage={50}
-      />
-
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-300'
-            }`}>
-            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Confirm Batch Approval</h3>
-            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-              Are you sure you want to approve {selectedTransactionIds.length} transaction(s)? This will update account balances and apply payments to invoices.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBatchApproval}
-                className="text-white px-6 py-2 rounded transition-colors"
-                style={{
-                  backgroundColor: colorPalette?.primary || '#22c55e'
-                }}
-                onMouseEnter={(e) => {
-                  if (colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (colorPalette?.primary) {
-                    e.currentTarget.style.backgroundColor = colorPalette.primary;
-                  }
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-md w-full mx-4 border ${isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-300'
-            }`}>
-            <h3 className={`text-xl font-semibold mb-4 text-green-500`}>Success</h3>
-            <p className={`mb-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>{approvalMessage}</p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded transition-colors"
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showFailedModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className={`rounded-lg p-6 max-w-2xl w-full mx-4 border ${isDarkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-300'
-            }`}>
-            <h3 className={`text-xl font-semibold mb-4 text-red-500`}>Batch Approval Results</h3>
-            <p className={`mb-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>{approvalMessage}</p>
-
-            {approvalDetails && approvalDetails.failed && approvalDetails.failed.length > 0 && (
-              <div className={`mb-6 p-4 rounded max-h-96 overflow-y-auto ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                }`}>
-                <h4 className={`font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Failed Transactions:</h4>
-                <ul className="space-y-2">
-                  {approvalDetails.failed.map((fail: any, index: number) => (
-                    <li key={index} className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
-                      <span className="font-medium">ID: {fail.transaction_id}</span> - {fail.reason}
-                    </li>
+                  {expandedLocations.has(city.id) && city.barangays.map((brgy: any) => (
+                    <TouchableOpacity
+                      key={brgy.id}
+                      onPress={() => { setSelectedLocation(brgy.id); setLocationFilterVisible(false); }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingLeft: 56,
+                        paddingRight: 16,
+                        paddingVertical: 8,
+                        backgroundColor: '#fafafa',
+                        marginBottom: 1,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: selectedLocation === brgy.id ? primary : '#d1d5db' }} />
+                        <Text style={{ fontSize: 12, color: selectedLocation === brgy.id ? primary : '#6b7280', fontWeight: selectedLocation === brgy.id ? '600' : '400' }}>
+                          {brgy.name}
+                        </Text>
+                      </View>
+                      {brgy.count > 0 && <Text style={{ fontSize: 11, color: '#9ca3af' }}>{brgy.count}</Text>}
+                    </TouchableOpacity>
                   ))}
-                </ul>
-              </div>
-            )}
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
 
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowFailedModal(false)}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded transition-colors"
+  // ─── Item renderer ────────────────────────────────────────────────────────
+
+  const renderItem = useCallback(({ item }: { item: Transaction }) => {
+    const isSelected = selectedTransaction?.id === item.id;
+    const isSelectedBatch = selectedTransactionIds.includes(item.id);
+    const isPending = (item.status || '').toLowerCase() === 'pending';
+    return (
+      <TransactionCard
+        transaction={item}
+        isSelected={isSelected}
+        isBatchMode={isBatchApproveMode}
+        isPending={isPending}
+        isSelectedBatch={isSelectedBatch}
+        onPress={() => handleRowPress(item)}
+        onToggle={() => toggleTransactionSelection(item.id)}
+        primary={primary}
+        paymentMethods={paymentMethods}
+      />
+    );
+  }, [selectedTransaction, selectedTransactionIds, isBatchApproveMode, primary, paymentMethods]);
+
+  const currentTransactionIndex = selectedTransaction
+    ? filteredTransactions.findIndex(t => t.id === selectedTransaction.id)
+    : -1;
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+      {/* Header */}
+      <View
+        style={{
+          paddingTop: isTablet ? 16 : 60,
+          paddingHorizontal: 16,
+          paddingBottom: 10,
+          backgroundColor: '#ffffff',
+          borderBottomWidth: 1,
+          borderBottomColor: '#e5e7eb',
+          gap: 10,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <GlobalSearch
+              searchQuery={searchQuery}
+              setSearchQuery={(q) => { setSearchQuery(q); setCurrentPage(1); }}
+              isDarkMode={false}
+              colorPalette={colorPalette}
+              placeholder="Search transactions..."
+            />
+          </View>
+          {/* Location filter button */}
+          <TouchableOpacity
+            onPress={() => setLocationFilterVisible(true)}
+            style={{
+              padding: 9,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: selectedLocation !== 'all' ? primary : '#e5e7eb',
+              backgroundColor: '#ffffff',
+            }}
+          >
+            <Filter size={18} color={selectedLocation !== 'all' ? primary : '#6b7280'} />
+          </TouchableOpacity>
+          {/* Export */}
+          <TouchableOpacity
+            onPress={handleExport}
+            disabled={filteredTransactions.length === 0}
+            style={{
+              padding: 9,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: primary,
+              backgroundColor: '#ffffff',
+              opacity: filteredTransactions.length === 0 ? 0.4 : 1,
+            }}
+          >
+            <Download size={18} color={primary} />
+          </TouchableOpacity>
+          {/* Refresh */}
+          <TouchableOpacity
+            onPress={handleRefresh}
+            style={{
+              padding: 9,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: primary,
+              backgroundColor: '#ffffff',
+            }}
+          >
+            <RefreshCw size={18} color={primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Batch approve row */}
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {hasPermission('transaction-list.batch-approve') && (
+            <TouchableOpacity
+              onPress={() => isBatchApproveMode ? handleCancelApprove() : setIsBatchApproveMode(true)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: isBatchApproveMode ? '#dc2626' : primary,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 8,
+                gap: 6,
+              }}
+            >
+              {isBatchApproveMode
+                ? <X size={15} color="#ffffff" />
+                : <CheckCheck size={15} color="#ffffff" />}
+              <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '500' }}>
+                {isBatchApproveMode ? 'Cancel' : 'Batch Approve'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isBatchApproveMode && (
+            <>
+              <TouchableOpacity
+                onPress={toggleSelectAll}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: primary,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  gap: 4,
+                }}
               >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+                <Text style={{ color: primary, fontSize: 13 }}>All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBatchApprove}
+                disabled={selectedTransactionIds.length === 0 || isApproving}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: selectedTransactionIds.length === 0 ? '#d1d5db' : '#22c55e',
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  gap: 6,
+                  opacity: isApproving ? 0.6 : 1,
+                }}
+              >
+                <Check size={15} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '500' }}>
+                  {isApproving ? 'Approving...' : `Approve (${selectedTransactionIds.length})`}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Active filter chips */}
+          {selectedLocation !== 'all' && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 4,
+              backgroundColor: `${primary}15`, paddingHorizontal: 8,
+              paddingVertical: 4, borderRadius: 12,
+            }}>
+              <Text style={{ fontSize: 11, color: primary }}>
+                {selectedLocation.startsWith('reg:') ? selectedLocation.substring(4) :
+                 selectedLocation.startsWith('city:') ? selectedLocation.substring(5) :
+                 selectedLocation.startsWith('brgy:') ? selectedLocation.substring(5) : selectedLocation}
+              </Text>
+              <TouchableOpacity onPress={() => setSelectedLocation('all')}>
+                <X size={12} color={primary} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Sort row */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 2 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {sortOptions.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => {
+                  if (sortColumn === opt.key) {
+                    setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                  } else {
+                    setSortColumn(opt.key);
+                    setSortDirection('desc');
+                  }
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 12,
+                  backgroundColor: sortColumn === opt.key ? `${primary}15` : '#f3f4f6',
+                  gap: 4,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: sortColumn === opt.key ? primary : '#6b7280', fontWeight: sortColumn === opt.key ? '600' : '400' }}>
+                  {opt.label}
+                </Text>
+                {sortColumn === opt.key && (
+                  <Text style={{ fontSize: 10, color: primary }}>{sortDirection === 'asc' ? '↑' : '↓'}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* List */}
+      {loading && transactions.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color={primary} />
+          <Text style={{ color: '#6b7280', fontSize: 14 }}>Loading transactions...</Text>
+        </View>
+      ) : error && transactions.length === 0 ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <Text style={{ color: '#ef4444', fontSize: 14 }}>{error}</Text>
+          <TouchableOpacity
+            onPress={() => fetchTransactions(true)}
+            style={{ backgroundColor: primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={paginatedTransactions}
+          keyExtractor={item => String(item.id)}
+          renderItem={renderItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[primary]}
+              tintColor={primary}
+            />
+          }
+          contentContainerStyle={{ paddingVertical: 8, paddingBottom: 80 }}
+          ListEmptyComponent={
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: '#6b7280', fontSize: 14 }}>
+                {transactions.length > 0 ? 'No transactions found matching your filters' : 'No transactions found.'}
+              </Text>
+            </View>
+          }
+          ListFooterComponent={
+            totalPages > 1 ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: '#e5e7eb',
+                  backgroundColor: '#ffffff',
+                  marginTop: 4,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                  {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: currentPage === 1 ? '#e5e7eb' : primary,
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                    }}
+                  >
+                    <Text style={{ color: currentPage === 1 ? '#9ca3af' : primary, fontSize: 13 }}>Prev</Text>
+                  </TouchableOpacity>
+                  <Text style={{ alignSelf: 'center', fontSize: 12, color: '#374151' }}>
+                    {currentPage} / {totalPages}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: currentPage === totalPages ? '#e5e7eb' : primary,
+                      opacity: currentPage === totalPages ? 0.4 : 1,
+                    }}
+                  >
+                    <Text style={{ color: currentPage === totalPages ? '#9ca3af' : primary, fontSize: 13 }}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null
+          }
+        />
       )}
-    </div>
+
+      {/* Location filter modal */}
+      {renderLocationFilterModal()}
+
+      {/* Transaction detail modal */}
+      {selectedTransaction && (
+        <TransactionListDetails
+          transaction={selectedTransaction as any}
+          onClose={() => setSelectedTransaction(null)}
+          onNavigate={onNavigate}
+          onViewCustomer={handleViewCustomer}
+          onApprovalSuccess={handleApprovalSuccess}
+          paymentMethods={paymentMethods}
+          onPrevious={currentTransactionIndex > 0 ? () => setSelectedTransaction(filteredTransactions[currentTransactionIndex - 1]) : undefined}
+          onNext={currentTransactionIndex !== -1 && currentTransactionIndex < filteredTransactions.length - 1 ? () => setSelectedTransaction(filteredTransactions[currentTransactionIndex + 1]) : undefined}
+        />
+      )}
+
+      {/* Customer detail modal */}
+      {(selectedCustomer || isLoadingDetails) && (
+        isLoadingDetails ? (
+          <Modal visible animationType="fade" transparent>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator size="large" color={primary} />
+              <Text style={{ color: '#ffffff', marginTop: 12 }}>Loading details...</Text>
+            </View>
+          </Modal>
+        ) : selectedCustomer ? (
+          <BillingDetails
+            billingRecord={convertCustomerDataToBillingDetail(selectedCustomer)}
+            onlineStatusRecords={[]}
+            onClose={() => setSelectedCustomer(null)}
+            onRefresh={async () => {
+              const accountNo = selectedCustomer.billingAccount?.accountNo;
+              if (accountNo) await refreshCustomerDetails(accountNo);
+            }}
+            refreshKey={customerRefreshKey}
+          />
+        ) : null
+      )}
+
+      {/* Approving loading modal */}
+      <LoadingModalGlobal
+        isOpen={isApproving}
+        type="loading"
+        title="Approving"
+        message="Approving transactions..."
+        loadingPercentage={50}
+        isDarkMode={false}
+        colorPalette={colorPalette}
+      />
+    </View>
   );
 };
 

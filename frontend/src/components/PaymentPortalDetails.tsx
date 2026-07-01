@@ -1,13 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ArrowLeft, ArrowRight, Maximize2, X, Phone, MessageSquare, Info,
-  ExternalLink, Mail, Edit, Trash2, Globe, RefreshCw, CheckCircle,
-  ChevronDown, ChevronRight
-} from 'lucide-react';
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Modal,
+  ActivityIndicator,
+} from 'react-native';
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  ChevronDown,
+} from 'lucide-react-native';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { relatedDataService } from '../services/relatedDataService';
-import RelatedDataTable from './RelatedDataTable';
-import { relatedDataColumns } from '../config/relatedDataColumns';
 
 interface PaymentPortalDetailsProps {
   record: {
@@ -27,7 +35,6 @@ interface PaymentPortalDetailsProps {
     callback_payload?: string;
     created_at?: string;
     updated_at?: string;
-    // Additional fields from join with accounts table
     accountNo?: string;
     fullName?: string;
     contactNo?: string;
@@ -35,466 +42,246 @@ interface PaymentPortalDetailsProps {
     provider?: string;
     city?: string;
     barangay?: string;
+    address?: string;
     plan?: string;
     [key: string]: any;
   };
   onClose: () => void;
   onViewCustomer?: (accountNo: string) => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
 }
 
-const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({ record, onClose, onViewCustomer }) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [detailsWidth, setDetailsWidth] = useState<number>(600);
-  const [isResizing, setIsResizing] = useState<boolean>(false);
-  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
+const isDarkMode = false;
 
-  // Related invoices state
+const formatCurrency = (amount: number) => `₱${Number(amount || 0).toFixed(2)}`;
+
+const getStatusColor = (status: string): string => {
+  const s = (status || '').toLowerCase();
+  if (s === 'completed' || s === 'success' || s === 'approved' || s === 'paid') return '#22c55e';
+  if (s === 'pending') return '#eab308';
+  if (s === 'processing') return '#3b82f6';
+  if (s === 'failed' || s === 'cancelled') return '#ef4444';
+  return '#6b7280';
+};
+
+const ROW_BORDER = '#e5e7eb';
+const LABEL_COLOR = '#6b7280';
+const VALUE_COLOR = '#111827';
+const BG = '#ffffff';
+
+interface DetailRowProps {
+  label: string;
+  value?: string | null;
+  valueColor?: string;
+  action?: React.ReactNode;
+}
+
+const DetailRow: React.FC<DetailRowProps> = ({ label, value, valueColor, action }) => (
+  <View style={{
+    flexDirection: 'row', paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: ROW_BORDER,
+    alignItems: 'flex-start',
+  }}>
+    <Text style={{ width: 140, fontSize: 14, color: LABEL_COLOR }}>{label}</Text>
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+      <Text style={{ fontSize: 14, color: valueColor || VALUE_COLOR, flexShrink: 1 }}>
+        {value || 'N/A'}
+      </Text>
+      {action}
+    </View>
+  </View>
+);
+
+const PaymentPortalDetails: React.FC<PaymentPortalDetailsProps> = ({
+  record,
+  onClose,
+  onViewCustomer,
+  onPrevious,
+  onNext,
+}) => {
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
   const [expandedInvoices, setExpandedInvoices] = useState(false);
   const [relatedInvoices, setRelatedInvoices] = useState<any[]>([]);
-  const [fullRelatedInvoices, setFullRelatedInvoices] = useState<any[]>([]);
   const [invoicesCount, setInvoicesCount] = useState(0);
-  const [expandedModalSection, setExpandedModalSection] = useState<string | null>(null);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const fetchColorPalette = async () => {
+    const loadPalette = async () => {
       try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
-      }
+        const p = await settingsColorPaletteService.getActive();
+        setColorPalette(p);
+      } catch {}
     };
-
-    fetchColorPalette();
+    loadPalette();
   }, []);
 
-  // Fetch related invoices when account number changes
   useEffect(() => {
-    const fetchRelatedInvoices = async () => {
+    const fetchInvoices = async () => {
       const accountNo = record.accountNo || record.account_id;
-      if (!accountNo) {
-        console.log('❌ No accountNo or account_id found in payment portal record');
-        return;
-      }
-
-      console.log('🔍 Fetching related invoices for account:', accountNo);
-
+      if (!accountNo) return;
+      setInvoicesLoading(true);
       try {
         const result = await relatedDataService.getRelatedInvoices(String(accountNo));
-        console.log('✅ Invoices fetched:', { count: result.count || 0, hasData: (result.data || []).length > 0 });
-        // Store full data for modal view
-        setFullRelatedInvoices(result.data || []);
-        // Limit to 5 latest items for dropdown display
         setRelatedInvoices((result.data || []).slice(0, 5));
         setInvoicesCount(result.count || 0);
-      } catch (error) {
-        console.error('❌ Error fetching invoices:', error);
+      } catch {
         setRelatedInvoices([]);
-        setFullRelatedInvoices([]);
         setInvoicesCount(0);
+      } finally {
+        setInvoicesLoading(false);
       }
     };
-
-    fetchRelatedInvoices();
+    fetchInvoices();
   }, [record.accountNo, record.account_id]);
 
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const diff = startXRef.current - e.clientX;
-      const newWidth = Math.max(600, Math.min(1200, startWidthRef.current + diff));
-
-      setDetailsWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = detailsWidth;
-  };
-
-  const formatCurrency = (amount: number) => {
-    return `₱${amount.toFixed(2)}`;
-  };
-
-  const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    if (statusLower === 'completed' || statusLower === 'success' || statusLower === 'approved' || statusLower === 'paid') return 'text-green-500';
-    if (statusLower === 'pending') return 'text-yellow-500';
-    if (statusLower === 'processing') return 'text-blue-500';
-    if (statusLower === 'failed') return 'text-red-500';
-    return 'text-gray-400';
-  };
-
-  const handleStatusUpdate = async (newStatus: string) => {
-    try {
-      setLoading(true);
-      console.log(`Updating payment portal record ${record.id} status to ${newStatus}`);
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      record.status = newStatus;
-      alert(`Payment portal status updated to ${newStatus}`);
-    } catch (err: any) {
-      setError(`Failed to update status: ${err.message}`);
-      console.error('Status update error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getDisplayTitle = () => {
-    return `${record.accountNo || record.account_id} | ${record.fullName || 'Unknown'} | ${record.provider || 'Payment'}`;
-  };
-
-  const handleExpandModalOpen = (sectionKey: string) => {
-    setExpandedModalSection(sectionKey);
-  };
-
-  const handleExpandModalClose = () => {
-    setExpandedModalSection(null);
-  };
+  const primaryColor = colorPalette?.primary || '#7c3aed';
+  const displayTitle = `${record.accountNo || record.account_id} | ${record.fullName || 'Unknown'}`;
 
   return (
-    <div className={`flex flex-col overflow-hidden border-l relative ${isDarkMode
-      ? 'bg-gray-950 border-white border-opacity-30'
-      : 'bg-white border-gray-300'
-      }`} style={{ width: `${detailsWidth}px`, height: '100%' }}>
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize transition-colors z-50"
-        style={{
-          backgroundColor: isResizing ? (colorPalette?.primary || '#7c3aed') : 'transparent'
-        }}
-        onMouseEnter={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = colorPalette?.accent || '#7c3aed';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }
-        }}
-        onMouseDown={handleMouseDownResize}
-      />
-      <div className={`p-3 flex items-center justify-between border-b ${isDarkMode
-        ? 'bg-gray-800 border-gray-700'
-        : 'bg-gray-100 border-gray-200'
-        }`}>
-        <div className="flex items-center min-w-0 flex-1">
-          <h2 className={`font-medium truncate pr-4 ${isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>{getDisplayTitle()}</h2>
-          {loading && <div className="ml-3 animate-pulse text-orange-500 text-sm flex-shrink-0">Loading...</div>}
-        </div>
+    <Modal
+      visible
+      animationType="slide"
+      transparent={false}
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: BG }}>
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          paddingHorizontal: 16, paddingVertical: 12,
+          backgroundColor: '#f3f4f6', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
+          paddingTop: 60,
+        }}>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <X size={20} color="#6b7280" />
+          </TouchableOpacity>
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#111827', marginLeft: 12 }} numberOfLines={1}>
+            {displayTitle}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {onPrevious && (
+              <TouchableOpacity onPress={onPrevious} style={{ padding: 4 }}>
+                <ChevronLeft size={20} color="#6b7280" />
+              </TouchableOpacity>
+            )}
+            {onNext && (
+              <TouchableOpacity onPress={onNext} style={{ padding: 4 }}>
+                <ChevronRight size={20} color="#6b7280" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={onClose}
-            className={isDarkMode ? 'hover:text-white text-gray-400' : 'hover:text-gray-900 text-gray-600'}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          {/* Core details */}
+          <DetailRow label="Reference No" value={record.reference_no} />
 
-      {error && (
-        <div className={`border p-3 m-3 rounded ${isDarkMode
-          ? 'bg-red-900 bg-opacity-20 border-red-700 text-red-400'
-          : 'bg-red-100 border-red-300 text-red-900'
-          }`}>
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto">
-        <div className={`mx-auto py-4 px-4 ${isDarkMode ? 'bg-gray-950' : 'bg-white'
-          }`}>
-          <div className="space-y-4">
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Reference No</div>
-              <div className={`flex-1 font-mono ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                {record.reference_no || 'N/A'}
-              </div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Account No</div>
-              <div className="text-red-400 flex-1 font-medium flex items-center">
+          <View style={{
+            flexDirection: 'row', paddingVertical: 12,
+            borderBottomWidth: 1, borderBottomColor: ROW_BORDER, alignItems: 'flex-start',
+          }}>
+            <Text style={{ width: 140, fontSize: 14, color: LABEL_COLOR }}>Account No</Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+              <Text style={{ fontSize: 14, color: '#ef4444', fontWeight: '600', flexShrink: 1 }}>
                 {record.accountNo || record.account_id} | {record.fullName || 'Unknown'} | {record.address || 'Address not available'}
-                <button
-                  onClick={() => {
-                    const accNo = record.accountNo || record.account_id;
-                    if (accNo) onViewCustomer?.(String(accNo));
+              </Text>
+              {onViewCustomer && (
+                <TouchableOpacity
+                  onPress={() => {
+                    const acc = record.accountNo || record.account_id;
+                    if (acc) onViewCustomer(String(acc));
                   }}
-                  className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}
+                  style={{ marginLeft: 8 }}
                 >
-                  <Info size={16} />
-                </button>
-              </div>
-            </div>
+                  <Info size={16} color="#6b7280" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Contact No</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                {record.contactNo || 'N/A'}
-              </div>
-            </div>
+          <DetailRow label="Contact No" value={record.contactNo} />
+          <DetailRow label="Account Balance" value={formatCurrency(record.accountBalance || 0)} />
+          <DetailRow label="Total Amount" value={formatCurrency(record.total_amount || 0)} />
+          <DetailRow label="Date Time" value={record.date_time} />
+          <DetailRow label="Checkout ID" value={record.checkout_id} />
 
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Account Balance</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{formatCurrency(record.accountBalance || 0)}</div>
-            </div>
+          <View style={{
+            flexDirection: 'row', paddingVertical: 12,
+            borderBottomWidth: 1, borderBottomColor: ROW_BORDER, alignItems: 'flex-start',
+          }}>
+            <Text style={{ width: 140, fontSize: 14, color: LABEL_COLOR }}>Status</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: getStatusColor(record.status || ''), textTransform: 'capitalize' }}>
+              {record.status || 'N/A'}
+            </Text>
+          </View>
 
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Total Amount</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{formatCurrency(record.total_amount || 0)}</div>
-            </div>
+          <View style={{
+            flexDirection: 'row', paddingVertical: 12,
+            borderBottomWidth: 1, borderBottomColor: ROW_BORDER, alignItems: 'flex-start',
+          }}>
+            <Text style={{ width: 140, fontSize: 14, color: LABEL_COLOR }}>Transaction Status</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: getStatusColor(record.transaction_status || ''), textTransform: 'capitalize' }}>
+              {record.transaction_status || 'N/A'}
+            </Text>
+          </View>
 
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Date Time</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.date_time || 'N/A'}</div>
-            </div>
+          <DetailRow label="E-Wallet Type" value={record.ewallet_type} />
+          <DetailRow label="Payment Channel" value={record.payment_channel} />
+          <DetailRow label="Type" value={record.type} />
+          <DetailRow label="Plan" value={record.plan || 'N/A'} />
+          <DetailRow label="Name" value={record.fullName} />
+          <DetailRow label="Barangay" value={record.barangay} />
+          <DetailRow label="City" value={record.city} />
 
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Checkout ID</div>
-              <div className={`flex-1 font-mono ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.checkout_id || 'N/A'}</div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Status</div>
-              <div className={`flex-1 capitalize font-medium ${getStatusColor(record.status)}`}>
-                {record.status || 'N/A'}
-              </div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Transaction Status</div>
-              <div className={`flex-1 capitalize font-medium ${getStatusColor(record.transaction_status || '')}`}>
-                {record.transaction_status || 'N/A'}
-              </div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>E-Wallet Type</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.ewallet_type || 'N/A'}</div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Payment Channel</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.payment_channel || 'N/A'}</div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Type</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.type || 'N/A'}</div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Plan</div>
-              <div className={`flex-1 flex items-center ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                {record.plan || 'SwitchNet - P999'}
-                <button className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}>
-                  <Info size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Name</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.fullName || 'Unknown'}</div>
-            </div>
-
-            <div className={`flex py-3 ${isDarkMode ? 'border-b border-gray-800' : 'border-b border-gray-300'
-              }`}>
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>Barangay</div>
-              <div className={`flex-1 flex items-center ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                {record.barangay || 'Bilibiran'}
-                <button className={isDarkMode ? 'ml-2 text-gray-400 hover:text-white' : 'ml-2 text-gray-600 hover:text-gray-900'}>
-                  <Info size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex py-3">
-              <div className={`w-40 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>City</div>
-              <div className={`flex-1 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{record.city || 'Binangonan'}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className={`mx-auto px-4 mt-4 ${isDarkMode ? 'bg-gray-950' : 'bg-white'
-          }`}>
-          <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}>
-            <div className={`w-full px-6 py-4 flex items-center justify-between ${isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              }`}>
-              <div className="flex items-center space-x-2">
-                <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>Related Invoices</span>
-                <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                  ? 'bg-gray-600 text-white'
-                  : 'bg-gray-300 text-gray-900'
-                  }`}>{invoicesCount}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleExpandModalOpen('invoices');
-                  }}
-                  className={`text-sm transition-colors hover:underline ${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-600 hover:text-gray-500'
-                    }`}
-                >
-                  {expandedInvoices ? 'Collapse' : 'Expand'}
-                </button>
-                <button
-                  onClick={() => setExpandedInvoices(!expandedInvoices)}
-                  className="flex items-center"
-                >
-                  {expandedInvoices ? (
-                    <ChevronDown size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                  ) : (
-                    <ChevronRight size={20} className={isDarkMode ? 'text-gray-400' : 'text-gray-600'} />
-                  )}
-                </button>
-              </div>
-            </div>
+          {/* Related Invoices */}
+          <View style={{ marginTop: 16, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <TouchableOpacity
+              onPress={() => setExpandedInvoices(!expandedInvoices)}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                padding: 16, backgroundColor: '#f9fafb',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827' }}>Related Invoices</Text>
+                <View style={{ backgroundColor: '#e5e7eb', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                  <Text style={{ fontSize: 12, color: '#374151' }}>{invoicesCount}</Text>
+                </View>
+              </View>
+              <ChevronDown size={20} color="#6b7280" style={{ transform: [{ rotate: expandedInvoices ? '180deg' : '0deg' }] }} />
+            </TouchableOpacity>
 
             {expandedInvoices && (
-              <div className="px-6 pb-4">
-                <RelatedDataTable
-                  data={relatedInvoices}
-                  columns={relatedDataColumns.invoices}
-                  isDarkMode={isDarkMode}
-                />
-              </div>
+              <View style={{ padding: 12 }}>
+                {invoicesLoading ? (
+                  <ActivityIndicator size="small" color={primaryColor} />
+                ) : relatedInvoices.length === 0 ? (
+                  <Text style={{ textAlign: 'center', color: '#6b7280', fontSize: 14, paddingVertical: 12 }}>No invoices found</Text>
+                ) : (
+                  relatedInvoices.map((inv, i) => (
+                    <View key={i} style={{
+                      flexDirection: 'row', justifyContent: 'space-between',
+                      paddingVertical: 8, borderBottomWidth: i < relatedInvoices.length - 1 ? 1 : 0,
+                      borderBottomColor: '#f3f4f6',
+                    }}>
+                      <Text style={{ fontSize: 13, color: '#6b7280', flex: 1 }}>
+                        {inv.invoice_no || inv.id || `Invoice ${i + 1}`}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: '#111827', fontWeight: '500' }}>
+                        {inv.amount ? formatCurrency(Number(inv.amount)) : (inv.status || 'N/A')}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
             )}
-          </div>
-        </div>
-      </div>
+          </View>
 
-      {/* Expanded Modal for Related Data */}
-      {expandedModalSection && (
-        <div className="absolute inset-0 flex flex-col" style={{ backgroundColor: isDarkMode ? '#111827' : '#ffffff', zIndex: 9999 }}>
-          {/* Modal Header */}
-          <div className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                All Related Invoices
-              </h2>
-              <span className={`text-xs px-2 py-1 rounded ${isDarkMode
-                ? 'bg-gray-600 text-white'
-                : 'bg-gray-300 text-gray-900'
-                }`}>
-                {invoicesCount} items
-              </span>
-            </div>
-            <button
-              onClick={handleExpandModalClose}
-              className={`p-2 rounded transition-colors ${isDarkMode
-                ? 'text-gray-400 hover:text-white hover:bg-gray-700'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
-                }`}
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Modal Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <RelatedDataTable
-              data={fullRelatedInvoices}
-              columns={relatedDataColumns.invoices}
-              isDarkMode={isDarkMode}
-            />
-          </div>
-        </div>
-      )}
-    </div>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
+    </Modal>
   );
 };
 

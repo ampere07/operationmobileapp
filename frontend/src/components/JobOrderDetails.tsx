@@ -838,7 +838,7 @@ const JobOrderDetails: React.FC<JobOrderDetailsPropsExtended> = ({ jobOrder, onC
       // Ensure the URL has a proper scheme
       if (!/^[a-zA-Z]+:\/\//.test(finalUrl)) {
         if (finalUrl.startsWith('/')) {
-          const apiBase = process.env.REACT_APP_API_URL || 'https://backend.atssfiber.ph/api';
+          const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
           const origin = apiBase.split('/api')[0];
           finalUrl = `${origin}${finalUrl}`;
         } else {

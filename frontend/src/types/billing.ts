@@ -92,6 +92,28 @@ export interface BillingDetailRecord extends BillingRecord {
   relatedApprovedTransactions?: string;
   relatedAttachments?: string;
   logs?: string;
+  vip_expiration?: string | null;
+  vip_remarks?: string | null;
+  accountNoCustomer?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  proofOfBillingUrl?: string | null;
+  governmentValidIdUrl?: string | null;
+  secondGovernmentValidIdUrl?: string | null;
+  documentAttachmentUrl?: string | null;
+  otherIspBillUrl?: string | null;
+  customerCreatedAt?: string | null;
+  customerUpdatedAt?: string | null;
+  customerUpdatedBy?: string | null;
+  billingAccountCreatedAt?: string | null;
+  billingAccountUpdatedAt?: string | null;
+  billingAccountCreatedBy?: string | null;
+  billingAccountUpdatedBy?: string | null;
+  techCreatedAt?: string | null;
+  techUpdatedAt?: string | null;
+  techCreatedBy?: string | null;
+  techUpdatedBy?: string | null;
+  usernameStatus?: string | null;
 }
 
 export interface OnlineStatusRecord {

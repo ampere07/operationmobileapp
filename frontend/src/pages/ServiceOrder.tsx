@@ -201,7 +201,7 @@ const so = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 48 },
   // Pagination
   paginationBar: { borderTopWidth: 1, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  paginationInfo: { fontSize: 14 },
+  paginationInfo: { fontSize: 12 },
   bold500: { fontWeight: '500' },
   paginationBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pageBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, minWidth: 40, alignItems: 'center', justifyContent: 'center' },
@@ -328,13 +328,17 @@ const ServiceOrderPage: React.FC = () => {
     const isTechnician = userRole.toLowerCase() === 'technician' || userRoleId === 2 ||
       userRole.toLowerCase() === 'agent' || userRoleId === 4;
 
+    const isSuperUser = 
+      userRoleId === 1 || userRoleId === 7 || userRoleId === 8 ||
+      userRole.toLowerCase() === 'superadmin' || userRole.toLowerCase() === 'administrator' || userRole.toLowerCase() === 'headtech';
+
     const lowerSearch = debouncedSearch.toLowerCase();
     const isSearchEmpty = lowerSearch === '';
 
     return serviceOrders
       .filter(serviceOrder => {
         // Hide resolved service orders for technicians
-        if (isTechnician && (userRole.toLowerCase() === 'technician' || userRoleId === 2)) {
+        if (!isSuperUser && isTechnician && (userRole.toLowerCase() === 'technician' || userRoleId === 2)) {
           const supportStatus = (serviceOrder.supportStatus || '').toLowerCase().trim();
           if (supportStatus === 'resolved') return false;
         }
@@ -364,7 +368,7 @@ const ServiceOrderPage: React.FC = () => {
         }
 
         // Role-based filtering: Agents (role_id 4) only see their own referrals
-        if (userRole.toLowerCase() === 'agent' || userRoleId === 4) {
+        if (!isSuperUser && (userRole.toLowerCase() === 'agent' || userRoleId === 4)) {
           const referredBy = (serviceOrder.referredBy || '').toLowerCase();
           const matchesAgent =
             (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
@@ -389,7 +393,7 @@ const ServiceOrderPage: React.FC = () => {
       });
   }, [serviceOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail]);
 
-  const shouldPaginate = userRoleId !== 1 && userRoleId !== 7;
+  const shouldPaginate = true; // Consistently paginate for all roles to prevent UI jumping
 
   const paginatedServiceOrders = useMemo(() => {
     if (!shouldPaginate) return filteredServiceOrders;
@@ -603,8 +607,11 @@ const ServiceOrderPage: React.FC = () => {
             )}
           </View>
 
-          {!isLoading && shouldPaginate && filteredServiceOrders.length > 0 && totalPages > 1 && (
+          {!isLoading && shouldPaginate && filteredServiceOrders.length > 0 && (
             <View style={[so.paginationBar, {
+              flexDirection: isTablet ? 'row' : 'column',
+              justifyContent: isTablet ? 'space-between' : 'center',
+              gap: isTablet ? 0 : 12,
               backgroundColor: '#ffffff',
               borderColor: '#e5e7eb',
               paddingBottom: !isTablet ? 110 : 16
