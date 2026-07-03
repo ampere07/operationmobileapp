@@ -1421,7 +1421,7 @@ class ServiceOrderController extends Controller
                 }
             }
 
-            return 'success';
+            return $radiusSuccess ? 'success' : 'queued';
 
         }
         catch (\Exception $e) {
@@ -1569,7 +1569,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER RESTRICT EMAIL EXCEPTION] ' . $emailEx->getMessage());
             }
 
-            return 'success';
+            return $radiusSuccess ? 'success' : 'queued';
         } catch (\Exception $e) {
             \Log::error('[SERVICE ORDER RESTRICT EXCEPTION] ' . $e->getMessage());
             return 'exception';
@@ -1716,7 +1716,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
             }
 
-            return 'success';
+            return $radiusSuccess ? 'success' : 'queued';
 
         }
         catch (\Exception $e) {
@@ -1895,7 +1895,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
             }
 
-            return 'success';
+            return $radiusSuccess ? 'success' : 'queued';
 
         }
         catch (\Exception $e) {
@@ -1991,7 +1991,7 @@ class ServiceOrderController extends Controller
                     'last_error' => $lastRadiusError,
                     'created_by' => $updatedByUser,
                 ]);
-                return 'radius_failed';
+                return 'queued';
             }
 
             // Generate new username using the same logic as JobOrderController
@@ -2057,7 +2057,7 @@ class ServiceOrderController extends Controller
                     'last_error' => $lastRadiusError,
                     'created_by' => $updatedByUser,
                 ]);
-                return 'radius_failed';
+                return 'queued';
             }
             else {
                 // For other categories, DB-only update (no RADIUS change needed)

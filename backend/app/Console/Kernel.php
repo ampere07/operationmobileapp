@@ -171,6 +171,25 @@ class Kernel extends ConsoleKernel
                  });
 
         // ===================================================================
+        // RADIUS OPERATION RETRY QUEUE
+        // ===================================================================
+
+        // Retry failed RADIUS operations every 2 minutes
+        // Uses: RadiusQueueService, ManualRadiusOperationsService
+        // Processes up to 20 pending items per run with exponential backoff
+        // Logs: storage/logs/radiusrelated.log
+        $schedule->command('cron:process-radius-queue')
+                 ->everyTwoMinutes()
+                 ->withoutOverlapping()
+                 ->runInBackground()
+                 ->onSuccess(function () {
+                     \Illuminate\Support\Facades\Log::info('RADIUS queue processing completed successfully');
+                 })
+                 ->onFailure(function () {
+                     \Illuminate\Support\Facades\Log::error('RADIUS queue processing failed');
+                 });
+
+        // ===================================================================
         // PAYMENT PROCESSING
         // ===================================================================
 

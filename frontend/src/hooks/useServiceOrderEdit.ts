@@ -641,7 +641,13 @@ export const useServiceOrderEdit = (isOpen: boolean, serviceOrderData: any, onCl
       setLoading(false);
       setShowLoadingModal(false);
       onSave(finalData);
-      Alert.alert('Success', 'Updated!');
+      
+      const isQueued = res.data?.reconnect_status === 'queued' || 
+                       res.data?.restricted_status === 'queued' || 
+                       res.data?.pullout_status === 'queued' || 
+                       res.data?.migration_status === 'queued';
+      
+      Alert.alert('Success', isQueued ? 'success saving radius function in queue' : 'Updated!');
       onClose();
     } catch (e: any) {
       if (progressInterval) clearInterval(progressInterval);

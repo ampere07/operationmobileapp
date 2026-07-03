@@ -4,7 +4,7 @@ import { CircleDollarSign, Calendar, FileText, ArrowLeft, RefreshCw, Landmark, C
 import { LinearGradient } from 'expo-linear-gradient';
 import dayjs from 'dayjs';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { fetchAgentCommissionHistory } from '../services/api';
+import { fetchAgentCommissionHistory, fetchAgentIncentiveHistory } from '../services/api';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { JobOrder } from '../types/jobOrder';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,17 +28,21 @@ interface CommissionHistoryItem {
 const Commission: React.FC = () => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [history, setHistory] = useState<CommissionHistoryItem[]>([]);
+  const [incentiveHistory, setIncentiveHistory] = useState<any[]>([]);
+  const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [balance, setBalance] = useState<number>(0);
   const [incentives, setIncentives] = useState<number>(0);
   const [bonus, setBonus] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
+  const [listMode, setListMode] = useState<'all' | 'incentives'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isListModeOpen, setIsListModeOpen] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const { jobOrders, refreshJobOrders } = useJobOrderContext();
@@ -52,7 +56,7 @@ const Commission: React.FC = () => {
           const ud = JSON.parse(data);
           setUserFullName(ud.full_name || '');
           setUserEmail(ud.email || '');
-        } catch (e) {}
+        } catch (e) { }
       }
     });
   }, []);
@@ -63,7 +67,7 @@ const Commission: React.FC = () => {
       const matchesAgent =
         (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
         (userEmail && referredBy.includes(userEmail.toLowerCase()));
-      
+
       if (!matchesAgent) return false;
 
       if (filterType !== 'all') {
@@ -74,6 +78,55 @@ const Commission: React.FC = () => {
       return true;
     }).sort((a, b) => (parseInt(String(b.id)) || 0) - (parseInt(String(a.id)) || 0));
   }, [jobOrders, userFullName, userEmail, filterType]);
+
+  const incentivesBatches = useMemo(() => {
+    // Group by processed_at
+    const groups: { [key: string]: any[] } = {};
+    incentiveHistory.forEach(item => {
+      const key = item.processed_at;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const batches = [];
+    let batchIndex = 1;
+    // Sort groups by processed_at descending
+    const sortedKeys = Object.keys(groups).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+    for (const key of sortedKeys) {
+      const items = groups[key];
+      const customers = items.map((incItem: any) => {
+        // match job order by id
+        const jo = jobOrders.find(j => j.id == incItem.job_order_id);
+        if (jo) return jo;
+        // fallback if job order not in context
+        return {
+          id: incItem.job_order_id,
+          First_Name: 'Unknown',
+          Last_Name: 'Customer',
+          Timestamp: incItem.processed_at
+        };
+      });
+
+      const quota = items[0]?.quota_reached || 10;
+
+      batches.push({
+        id: `batch-${key}-${batchIndex}`,
+        batchNumber: batchIndex++,
+        customers,
+        isComplete: customers.length >= quota,
+        quota,
+        incentiveValue: items[0]?.incentive_value || 0,
+        processedAt: key
+      });
+    }
+
+    return batches;
+  }, [incentiveHistory, jobOrders]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [listMode, filterType]);
 
   const fetchHistoryData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -90,6 +143,46 @@ const Commission: React.FC = () => {
       } else {
         setError(response.message || 'Failed to fetch commission history');
       }
+
+      // Fetch incentive history
+      const incResponse = await fetchAgentIncentiveHistory();
+      let incData = [];
+      if (incResponse.success) {
+         incData = incResponse.data || [];
+      }
+
+      // ----------------------------------------------------
+      // MOCK DATA INJECTION (For demonstration purposes)
+      // ----------------------------------------------------
+      if (incData.length === 0) {
+        incData = [
+          // Batch 1 (Recent)
+          { id: 991, job_order_id: 101, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 992, job_order_id: 102, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 993, job_order_id: 103, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 994, job_order_id: 104, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 995, job_order_id: 105, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 996, job_order_id: 106, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 997, job_order_id: 107, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 998, job_order_id: 108, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 999, job_order_id: 109, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          { id: 1000, job_order_id: 110, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
+          
+          // Batch 2 (Older)
+          { id: 1001, job_order_id: 111, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1002, job_order_id: 112, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1003, job_order_id: 113, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1004, job_order_id: 114, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1005, job_order_id: 115, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1006, job_order_id: 116, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1007, job_order_id: 117, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1008, job_order_id: 118, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1009, job_order_id: 119, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+          { id: 1010, job_order_id: 120, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
+        ];
+      }
+      
+      setIncentiveHistory(incData);
     } catch (err: any) {
       console.error('Error fetching commission history:', err);
       setError(err.message || 'Error connecting to server. Please try again.');
@@ -141,13 +234,19 @@ const Commission: React.FC = () => {
   }, [history]);
 
   const totalPages = useMemo(() => {
+    if (listMode === 'incentives') {
+      return Math.ceil(incentivesBatches.length / 5);
+    }
     return Math.ceil(agentJobOrders.length / 5);
-  }, [agentJobOrders.length]);
+  }, [agentJobOrders.length, incentivesBatches.length, listMode]);
 
   const paginatedJobOrders = useMemo(() => {
     const startIndex = (currentPage - 1) * 5;
+    if (listMode === 'incentives') {
+      return incentivesBatches.slice(startIndex, startIndex + 5);
+    }
     return agentJobOrders.slice(startIndex, startIndex + 5);
-  }, [agentJobOrders, currentPage]);
+  }, [agentJobOrders, incentivesBatches, currentPage, listMode]);
 
   const handlePageChange = useCallback((newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -292,7 +391,7 @@ const Commission: React.FC = () => {
   const renderJobOrderItem = ({ item: jobOrder }: { item: JobOrder }) => {
     const rawStatus = String(jobOrder.commission_status || '').toLowerCase().trim();
     const displayStatus = (!jobOrder.commission_status || rawStatus === 'null' || rawStatus === 'unpaid' ? 'Not Collected' : 'Collected');
-    
+
     return (
       <View style={[styles.card, { padding: 0 }]}>
         <View style={styles.joCardInner}>
@@ -320,6 +419,74 @@ const Commission: React.FC = () => {
             <StatusText status={displayStatus} type="billing" />
           </View>
         </View>
+      </View>
+    );
+  };
+
+  const toggleBatch = (batchId: string) => {
+    setExpandedBatches(prev => ({
+      ...prev,
+      [batchId]: !prev[batchId]
+    }));
+  };
+
+  const renderIncentiveBatch = ({ item }: { item: any }) => {
+    const isExpanded = expandedBatches[item.id] === true; // closed by default
+
+    return (
+      <View style={[styles.card, { padding: 16 }]}>
+        <Pressable 
+          style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isExpanded ? 12 : 0 }}
+          onPress={() => toggleBatch(item.id)}
+        >
+          <View>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b' }}>
+              Incentive Batch #{item.batchNumber}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+              Processed: {formatDateVal(item.processedAt)}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 6, flexDirection: 'row' }}>
+            <View style={{ alignItems: 'flex-end', gap: 6, marginRight: 8 }}>
+              <View style={{ backgroundColor: item.isComplete ? '#dcfce7' : '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                <Text style={{ color: item.isComplete ? '#15803d' : '#b45309', fontSize: 12, fontWeight: 'bold' }}>
+                  {item.customers.length} / {item.quota}
+                </Text>
+              </View>
+              <Text style={{ color: '#16a34a', fontSize: 14, fontWeight: '800' }}>
+                {formatCurrency(item.incentiveValue)}
+              </Text>
+            </View>
+            <ChevronDown 
+              size={20} 
+              color="#64748b" 
+              style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
+            />
+          </View>
+        </Pressable>
+
+        {isExpanded && (
+          <View style={{ gap: 8 }}>
+            {item.customers.map((customer: JobOrder, idx: number) => (
+              <View key={customer.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: (colorPalette?.primary || '#7c3aed') + '20', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: colorPalette?.primary || '#7c3aed', fontSize: 12, fontWeight: '600' }}>
+                    {idx + 1}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, backgroundColor: '#f8fafc', padding: 12, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: '#334155' }}>
+                    {customer.First_Name || customer.first_name || ''} {customer.Last_Name || customer.last_name || ''}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    ID: {customer.id} • Date: {formatDateVal(customer.Timestamp || customer.created_at || customer.processed_at)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -379,43 +546,86 @@ const Commission: React.FC = () => {
         </View>
 
         <View style={styles.sectionHeaderBetween}>
-          <Text style={styles.sectionTitle}>Commission History</Text>
-          <View style={{ position: 'relative', zIndex: 100 }}>
-            <Pressable 
-                onPress={() => setIsFilterOpen(!isFilterOpen)} 
+          <Text style={styles.sectionTitle}>History</Text>
+          <View style={{ flexDirection: 'row', gap: 8, zIndex: 100 }}>
+            {/* List Mode Dropdown */}
+            <View style={{ position: 'relative', zIndex: 101 }}>
+              <Pressable
+                onPress={() => { setIsListModeOpen(!isListModeOpen); setIsFilterOpen(false); }}
                 style={styles.dropdownBtn}
-            >
+              >
                 <Text style={styles.dropdownBtnText}>
-                    {filterType === 'all' ? 'All Status' : 
-                     filterType === 'unpaid' ? 'Not Collected' : 
-                     filterType === 'paid' ? 'Collected' : 'All Status'}
+                  {listMode === 'all' ? 'All Types' : 'Incentives'}
                 </Text>
                 <ChevronDown size={14} color="#64748b" />
-            </Pressable>
+              </Pressable>
 
-            {isFilterOpen && (
+              {isListModeOpen && (
                 <View style={styles.dropdownMenu}>
-                    {(['all', 'unpaid', 'paid'] as const).map((filter) => (
-                        <Pressable
-                            key={filter}
-                            onPress={() => {
-                                setFilterType(filter);
-                                setIsFilterOpen(false);
-                            }}
-                            style={[
-                                styles.dropdownItem,
-                                filterType === filter && { backgroundColor: (colorPalette?.primary || '#7c3aed') + '10' }
-                            ]}
-                        >
-                            <Text style={[
-                                styles.dropdownItemText,
-                                filterType === filter && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }
-                            ]}>
-                                {filter === 'all' ? 'All Status' : filter === 'unpaid' ? 'Not Collected' : 'Collected'}
-                            </Text>
-                        </Pressable>
-                    ))}
+                  {(['all', 'incentives'] as const).map((mode) => (
+                    <Pressable
+                      key={mode}
+                      onPress={() => {
+                        setListMode(mode);
+                        setIsListModeOpen(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        listMode === mode && { backgroundColor: (colorPalette?.primary || '#7c3aed') + '10' }
+                      ]}
+                    >
+                      <Text style={[
+                        styles.dropdownItemText,
+                        listMode === mode && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }
+                      ]}>
+                        {mode === 'all' ? 'All Types' : 'Incentives'}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
+              )}
+            </View>
+
+            {/* Status Filter Dropdown */}
+            {listMode === 'all' && (
+              <View style={{ position: 'relative', zIndex: 100 }}>
+                <Pressable
+                  onPress={() => { setIsFilterOpen(!isFilterOpen); setIsListModeOpen(false); }}
+                  style={styles.dropdownBtn}
+                >
+                  <Text style={styles.dropdownBtnText}>
+                    {filterType === 'all' ? 'All Status' :
+                      filterType === 'unpaid' ? 'Not Collected' :
+                        filterType === 'paid' ? 'Collected' : 'All Status'}
+                  </Text>
+                  <ChevronDown size={14} color="#64748b" />
+                </Pressable>
+
+                {isFilterOpen && (
+                  <View style={styles.dropdownMenu}>
+                    {(['all', 'unpaid', 'paid'] as const).map((filter) => (
+                      <Pressable
+                        key={filter}
+                        onPress={() => {
+                          setFilterType(filter);
+                          setIsFilterOpen(false);
+                        }}
+                        style={[
+                          styles.dropdownItem,
+                          filterType === filter && { backgroundColor: (colorPalette?.primary || '#7c3aed') + '10' }
+                        ]}
+                      >
+                        <Text style={[
+                          styles.dropdownItemText,
+                          filterType === filter && { color: colorPalette?.primary || '#7c3aed', fontWeight: '700' }
+                        ]}>
+                          {filter === 'all' ? 'All Status' : filter === 'unpaid' ? 'Not Collected' : 'Collected'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
             )}
           </View>
         </View>
@@ -446,7 +656,7 @@ const Commission: React.FC = () => {
         <FlatList
           data={paginatedJobOrders}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderJobOrderItem}
+          renderItem={listMode === 'incentives' ? renderIncentiveBatch : renderJobOrderItem}
           ListHeaderComponent={renderHeader}
           ListHeaderComponentStyle={{ zIndex: 1000, elevation: 1000 }}
           ListFooterComponent={renderFooter}

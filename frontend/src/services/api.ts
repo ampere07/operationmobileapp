@@ -47,6 +47,16 @@ export const fetchAgentCommissionHistory = async (type?: string): Promise<any> =
   }
 };
 
+export const fetchAgentIncentiveHistory = async (params?: any): Promise<any> => {
+  try {
+    const response = await apiClient.get('/commissions/incentive-history', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching agent incentive history:', error);
+    throw error;
+  }
+};
+
 export const storeAgentCommissionHistory = async (data: any): Promise<any> => {
   try {
     const response = await apiClient.post('/commissions/history', data);

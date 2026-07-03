@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, ActivityIndicator, Alert, useWindowDimensions, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { SearchablePicker, SearchablePickerTrigger } from '../components/SearchablePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createApplication, uploadApplicationImages } from '../services/api';
-import { getRegions, getCities, getBoroughs, Region, City, Borough } from '../services/cityService';
+import { getRegions, getCitiesByRegionId, getBarangaysByCityId, Region, City, Borough } from '../services/cityService';
 import { planService, Plan } from '../services/planService';
 import ImagePreview from '../components/ImagePreview';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -13,10 +13,12 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
     const { width } = useWindowDimensions();
     const isMobile = width < 768;
     const insets = useSafeAreaInsets();
-    
-    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+    const isMountedRef = useRef(true);
+
+    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
     const [isLoading, setIsLoading] = useState(false);
-    
+    const [isDataReady, setIsDataReady] = useState(false);
+
     const [formData, setFormData] = useState({
         email_address: '',
         first_name: '',
@@ -55,14 +57,32 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
 
     const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
     const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
+    const [isCitiesLoading, setIsCitiesLoading] = useState(false);
+    const [isBarangaysLoading, setIsBarangaysLoading] = useState(false);
+
+    // Searchable dropdown state — only one picker is open at a time, so a single search value is shared
+    const [activePicker, setActivePicker] = useState<null | 'region' | 'city' | 'barangay' | 'plan'>(null);
+    const [pickerSearch, setPickerSearch] = useState('');
+    const openPicker = useCallback((picker: 'region' | 'city' | 'barangay' | 'plan') => {
+        setPickerSearch('');
+        setActivePicker(picker);
+    }, []);
+    const closePicker = useCallback(() => setActivePicker(null), []);
 
     useEffect(() => {
-        settingsColorPaletteService.getActive().then(setColorPalette);
-        
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
+
+    useEffect(() => {
+        settingsColorPaletteService.getActive().then(p => {
+            if (isMountedRef.current) setColorPalette(p);
+        });
+
         const fetchData = async () => {
             try {
                 const authData = await AsyncStorage.getItem('authData');
-                if (authData) {
+                if (authData && isMountedRef.current) {
                     const user = JSON.parse(authData);
                     if (user) {
                         setFormData(prev => ({
@@ -73,49 +93,87 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                     }
                 }
 
-                const [r, c, b, p] = await Promise.all([
+                const [r, p] = await Promise.all([
                     getRegions(),
-                    getCities(),
-                    getBoroughs(),
                     planService.getAllPlans()
                 ]);
+                if (!isMountedRef.current) return;
                 setRegions(r);
-                setCities(c);
-                setBarangays(b);
                 setPlans(p);
+                setIsDataReady(true);
             } catch (err) {
                 console.error("Failed to load data", err);
+                if (isMountedRef.current) setIsDataReady(true);
             }
         };
         fetchData();
     }, []);
 
-    const handleTextChange = (field: string, value: string) => {
+    const handleTextChange = useCallback((field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
-    };
+    }, []);
 
-    const handleRegionChange = (regionName: string) => {
-        const selected = regions.find(r => r.name === regionName);
-        setSelectedRegionId(selected ? selected.id : null);
-        setFormData(prev => ({ ...prev, region: regionName, city: '', barangay: '' }));
+    // Stable refs so change handlers stay referentially stable across renders
+    const regionsRef = useRef(regions);
+    regionsRef.current = regions;
+
+    const citiesRef = useRef(cities);
+    citiesRef.current = cities;
+
+    // Guards so a slow response for a stale selection can't overwrite a newer one
+    const cityRequestIdRef = useRef(0);
+    const barangayRequestIdRef = useRef(0);
+
+    const onRegionChange = useCallback((regionName: string) => {
+        const selected = regionsRef.current.find(r => r.name === regionName);
+        const regionId = selected ? selected.id : null;
+        setSelectedRegionId(regionId);
         setSelectedCityId(null);
-    };
+        setFormData(prev => ({ ...prev, region: regionName, city: '', barangay: '' }));
+        setCities([]);
+        setBarangays([]);
 
-    const handleCityChange = (cityName: string) => {
-        const selected = cities.find(c => c.name === cityName);
-        setSelectedCityId(selected ? selected.id : null);
+        const reqId = ++cityRequestIdRef.current;
+        if (!regionId) return;
+        setIsCitiesLoading(true);
+        getCitiesByRegionId(regionId)
+            .then(list => {
+                if (isMountedRef.current && cityRequestIdRef.current === reqId) setCities(list);
+            })
+            .finally(() => {
+                if (isMountedRef.current && cityRequestIdRef.current === reqId) setIsCitiesLoading(false);
+            });
+    }, []);
+
+    const onCityChange = useCallback((cityName: string) => {
+        const selected = citiesRef.current.find(c => c.name === cityName);
+        const cityId = selected ? selected.id : null;
+        setSelectedCityId(cityId);
         setFormData(prev => ({ ...prev, city: cityName, barangay: '' }));
-    };
+        setBarangays([]);
 
-    const handleImageUpload = (field: keyof typeof documents, file: any) => {
+        const reqId = ++barangayRequestIdRef.current;
+        if (!cityId) return;
+        setIsBarangaysLoading(true);
+        getBarangaysByCityId(cityId)
+            .then(list => {
+                if (isMountedRef.current && barangayRequestIdRef.current === reqId) setBarangays(list);
+            })
+            .finally(() => {
+                if (isMountedRef.current && barangayRequestIdRef.current === reqId) setIsBarangaysLoading(false);
+            });
+    }, []);
+
+    const handleImageUpload = useCallback((field: keyof typeof documents, file: any) => {
         setDocuments(prev => ({ ...prev, [field]: file }));
         setImagePreviews(prev => ({ ...prev, [field]: file ? file.uri : null }));
-    };
+    }, []);
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
+        const fd = formData;
         // Basic validation
-        if (!formData.email_address || !formData.first_name || !formData.last_name || !formData.mobile_number || 
-            !formData.region || !formData.city || !formData.barangay || !formData.installation_address || !formData.desired_plan) {
+        if (!fd.email_address || !fd.first_name || !fd.last_name || !fd.mobile_number ||
+            !fd.region || !fd.city || !fd.barangay || !fd.installation_address || !fd.desired_plan) {
             Alert.alert('Missing Fields', 'Please fill in all required fields marked with *');
             return;
         }
@@ -128,8 +186,8 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
         setIsLoading(true);
         try {
             // 1. Create Application
-            const appResult = await createApplication(formData);
-            
+            const appResult = await createApplication(fd);
+
             if (appResult.success && appResult.application?.id) {
                 // 2. Upload Documents if any
                 const formDataPayload = new FormData();
@@ -151,7 +209,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                 }
 
                 Alert.alert('Success', 'Application submitted successfully!');
-                
+
                 // Reset form
                 setFormData(prev => ({
                     email_address: '', first_name: '', middle_initial: '', last_name: '',
@@ -167,38 +225,61 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                     proof_of_billing: null, government_valid_id: null,
                     secondary_government_valid_id: null, house_front_image: null
                 });
+                setSelectedRegionId(null);
+                setSelectedCityId(null);
+                setCities([]);
+                setBarangays([]);
             } else {
                 throw new Error(appResult.message || 'Failed to create application');
             }
         } catch (error: any) {
             Alert.alert('Error', error?.response?.data?.message || error.message || 'An error occurred during submission.');
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) setIsLoading(false);
         }
-    };
+    }, [formData, documents]);
 
-    const renderInput = (label: string, field: keyof typeof formData, placeholder: string, required = false, isMultiline = false) => (
-        <View style={styles.inputContainer}>
-            <Text style={styles.label}>
-                {label} {required && <Text style={styles.required}>*</Text>}
-            </Text>
-            <TextInput
-                style={[styles.input, isMultiline && styles.textArea]}
-                placeholder={placeholder}
-                placeholderTextColor="#94a3b8"
-                value={String(formData[field] || '')}
-                onChangeText={(val) => handleTextChange(field, val)}
-                multiline={isMultiline}
-                numberOfLines={isMultiline ? 4 : 1}
-                textAlignVertical={isMultiline ? 'top' : 'center'}
-            />
-        </View>
+    // Build { id, label, value } option lists for the searchable pickers
+    const regionOptions = useMemo(() =>
+        regions.map(r => ({ id: String(r.id), label: r.name, value: r.name })),
+        [regions]
     );
 
-    const filteredCities = cities.filter(c => c.region_id === selectedRegionId);
-    const filteredBarangays = barangays.filter(b => b.city_id === selectedCityId);
+    const cityOptions = useMemo(() =>
+        cities.map(c => ({ id: String(c.id), label: c.name, value: c.name })),
+        [cities]
+    );
 
-    // Upload component removed in favor of ImagePreview
+    const barangayOptions = useMemo(() =>
+        barangays.map(b => ({ id: String(b.id), label: b.name, value: b.name })),
+        [barangays]
+    );
+
+    const planOptions = useMemo(() =>
+        plans.map(p => ({
+            id: String(p.id),
+            label: p.description || p.name,
+            value: `${p.name} - P${Number(p.price || 0).toFixed(2)}`
+        })),
+        [plans]
+    );
+
+    // Filter the currently open picker's options by the shared search term
+    const filterOptions = useCallback((opts: { label: string }[]) => {
+        const q = pickerSearch.trim().toLowerCase();
+        return q ? opts.filter(o => o.label.toLowerCase().includes(q)) : opts;
+    }, [pickerSearch]);
+
+    const activeColor = colorPalette?.primary || '#7c3aed';
+
+    if (!isDataReady) {
+        return (
+            <View style={[styles.mainContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={activeColor} />
+                <Text style={{ marginTop: 12, color: '#6b7280', fontSize: 14 }}>Loading form...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.mainContainer}>
@@ -223,7 +304,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                         onPress={handleSubmit}
                         disabled={isLoading}
                         style={[styles.submitHeaderButton, {
-                            backgroundColor: colorPalette?.primary || '#7c3aed',
+                            backgroundColor: activeColor,
                             opacity: isLoading ? 0.6 : 1,
                         }]}
                     >
@@ -239,105 +320,90 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                     <View style={styles.card}>
 
                 <View style={styles.row}>
-                    <View style={styles.col}>{renderInput('Email', 'email_address', 'Enter your email address', true)}</View>
-                    <View style={styles.col}>{renderInput('First Name', 'first_name', 'Enter your first name', true)}</View>
-                </View>
-
-                <View style={styles.row}>
-                    <View style={styles.col}>{renderInput('Middle Initial', 'middle_initial', 'M')}</View>
-                    <View style={styles.col}>{renderInput('Last Name', 'last_name', 'Enter your last name', true)}</View>
+                    <View style={styles.col}>
+                        <InputField label="Email" field="email_address" placeholder="Enter your email address" required formData={formData} onChange={handleTextChange} />
+                    </View>
+                    <View style={styles.col}>
+                        <InputField label="First Name" field="first_name" placeholder="Enter your first name" required formData={formData} onChange={handleTextChange} />
+                    </View>
                 </View>
 
                 <View style={styles.row}>
                     <View style={styles.col}>
-                        {renderInput('Mobile', 'mobile_number', '09********', true)}
+                        <InputField label="Middle Initial" field="middle_initial" placeholder="M" formData={formData} onChange={handleTextChange} />
+                    </View>
+                    <View style={styles.col}>
+                        <InputField label="Last Name" field="last_name" placeholder="Enter your last name" required formData={formData} onChange={handleTextChange} />
+                    </View>
+                </View>
+
+                <View style={styles.row}>
+                    <View style={styles.col}>
+                        <InputField label="Mobile" field="mobile_number" placeholder="09********" required formData={formData} onChange={handleTextChange} />
                         <Text style={styles.formatHint}>Format: 09********</Text>
                     </View>
                     <View style={styles.col}>
-                        {renderInput('Secondary Mobile', 'secondary_mobile_number', '09********')}
+                        <InputField label="Secondary Mobile" field="secondary_mobile_number" placeholder="09********" formData={formData} onChange={handleTextChange} />
                     </View>
                 </View>
 
                 <Text style={styles.sectionTitle}>Installation Address</Text>
-                
+
                 <View style={styles.row}>
                     <View style={styles.col}>
-                        <Text style={styles.label}>Region <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.pickerWrapper}>
-                            <Picker
-                                selectedValue={formData.region}
-                                onValueChange={handleRegionChange}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Select region" value="" color="#94a3b8" />
-                                {regions.map(r => (
-                                    <Picker.Item key={r.id} label={r.name} value={r.name} />
-                                ))}
-                            </Picker>
-                        </View>
+                        <SearchablePickerTrigger
+                            label="Region"
+                            required
+                            value={formData.region}
+                            placeholder="Select region"
+                            onPress={() => openPicker('region')}
+                        />
                     </View>
                     <View style={styles.col}>
-                        <Text style={styles.label}>City/Municipality <Text style={styles.required}>*</Text></Text>
-                        <View style={[styles.pickerWrapper, !selectedRegionId && { opacity: 0.5 }]}>
-                            <Picker
-                                selectedValue={formData.city}
-                                onValueChange={handleCityChange}
-                                style={styles.picker}
-                                enabled={!!selectedRegionId}
-                            >
-                                <Picker.Item label="Select city/municipality" value="" color="#94a3b8" />
-                                {filteredCities.map(c => (
-                                    <Picker.Item key={c.id} label={c.name} value={c.name} />
-                                ))}
-                            </Picker>
-                        </View>
+                        <SearchablePickerTrigger
+                            label="City/Municipality"
+                            required
+                            value={formData.city}
+                            placeholder={isCitiesLoading ? 'Loading cities...' : (selectedRegionId ? 'Select city/municipality' : 'Select a region first')}
+                            onPress={() => { if (selectedRegionId && !isCitiesLoading) openPicker('city'); }}
+                        />
                     </View>
                 </View>
 
                 <View style={[styles.row, { width: isMobile ? '100%' : '50%', paddingRight: isMobile ? 0 : 8 }]}>
                     <View style={styles.col}>
-                        <Text style={styles.label}>Barangay <Text style={styles.required}>*</Text></Text>
-                        <View style={[styles.pickerWrapper, !selectedCityId && { opacity: 0.5 }]}>
-                            <Picker
-                                selectedValue={formData.barangay}
-                                onValueChange={(val) => handleTextChange('barangay', val)}
-                                style={styles.picker}
-                                enabled={!!selectedCityId}
-                            >
-                                <Picker.Item label="Select barangay" value="" color="#94a3b8" />
-                                {filteredBarangays.map(b => (
-                                    <Picker.Item key={b.id} label={b.name} value={b.name} />
-                                ))}
-                            </Picker>
-                        </View>
+                        <SearchablePickerTrigger
+                            label="Barangay"
+                            required
+                            value={formData.barangay}
+                            placeholder={isBarangaysLoading ? 'Loading barangays...' : (selectedCityId ? 'Select barangay' : 'Select a city first')}
+                            onPress={() => { if (selectedCityId && !isBarangaysLoading) openPicker('barangay'); }}
+                        />
                     </View>
                 </View>
 
-                {renderInput('Installation Address', 'installation_address', 'House/Unit Number & Street Name', true, true)}
+                <InputField label="Installation Address" field="installation_address" placeholder="House/Unit Number & Street Name" required isMultiline formData={formData} onChange={handleTextChange} />
 
                 <View style={styles.row}>
-                    <View style={styles.col}>{renderInput('Landmark', 'landmark', 'Enter a landmark', true)}</View>
-                    <View style={styles.col}>{renderInput('Referred By', 'referred_by', 'None / Walk-in')}</View>
+                    <View style={styles.col}>
+                        <InputField label="Landmark" field="landmark" placeholder="Enter a landmark" required formData={formData} onChange={handleTextChange} />
+                    </View>
+                    <View style={styles.col}>
+                        <InputField label="Referred By" field="referred_by" placeholder="None / Walk-in" formData={formData} onChange={handleTextChange} />
+                    </View>
                 </View>
 
                 <Text style={styles.sectionTitle}>Plan Selection</Text>
-                
+
                 <View style={[styles.row, { width: isMobile ? '100%' : '50%', paddingRight: isMobile ? 0 : 8 }]}>
                     <View style={styles.col}>
-                        <Text style={styles.label}>Plan <Text style={styles.required}>*</Text></Text>
-                        <View style={styles.pickerWrapper}>
-                            <Picker
-                                selectedValue={formData.desired_plan}
-                                onValueChange={(val) => handleTextChange('desired_plan', val)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Select plan" value="" color="#94a3b8" />
-                                {plans.map(p => {
-                                    const value = `${p.name} - P${Number(p.price || 0).toFixed(2)}`;
-                                    return <Picker.Item key={p.id} label={p.description || p.name} value={value} />;
-                                })}
-                            </Picker>
-                        </View>
+                        <SearchablePickerTrigger
+                            label="Plan"
+                            required
+                            value={formData.desired_plan}
+                            placeholder="Select plan"
+                            onPress={() => openPicker('plan')}
+                        />
                     </View>
                 </View>
 
@@ -350,7 +416,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                             imageUrl={imagePreviews.proof_of_billing}
                             label="Proof of Billing"
                             onUpload={(file) => handleImageUpload('proof_of_billing', file)}
-                            colorPrimary={colorPalette?.primary || '#ef4444'}
+                            colorPrimary={activeColor}
                         />
                     </View>
                     <View style={styles.col}>
@@ -359,7 +425,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                             label="Government Valid ID (Primary)"
                             required={true}
                             onUpload={(file) => handleImageUpload('government_valid_id', file)}
-                            colorPrimary={colorPalette?.primary || '#ef4444'}
+                            colorPrimary={activeColor}
                         />
                     </View>
                 </View>
@@ -370,7 +436,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                             imageUrl={imagePreviews.secondary_government_valid_id}
                             label="Government Valid ID (Secondary)"
                             onUpload={(file) => handleImageUpload('secondary_government_valid_id', file)}
-                            colorPrimary={colorPalette?.primary || '#ef4444'}
+                            colorPrimary={activeColor}
                         />
                     </View>
                     <View style={styles.col}>
@@ -378,7 +444,7 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
                             imageUrl={imagePreviews.house_front_image}
                             label="House Front Picture"
                             onUpload={(file) => handleImageUpload('house_front_image', file)}
-                            colorPrimary={colorPalette?.primary || '#ef4444'}
+                            colorPrimary={activeColor}
                         />
                     </View>
                 </View>
@@ -386,9 +452,89 @@ const ApplicationForm = ({ onClose }: { onClose?: () => void }) => {
             </View>
         </ScrollView>
         </KeyboardAvoidingView>
+
+            <SearchablePicker
+                isOpen={activePicker === 'region'}
+                onClose={closePicker}
+                title="Select Region"
+                data={filterOptions(regionOptions)}
+                onSelect={(item) => { onRegionChange(item.value); closePicker(); }}
+                keyExtractor={(item) => item.id}
+                searchValue={pickerSearch}
+                onSearchChange={setPickerSearch}
+                placeholder="Search regions..."
+                selectedItemValue={formData.region}
+                activeColor={activeColor}
+            />
+            <SearchablePicker
+                isOpen={activePicker === 'city'}
+                onClose={closePicker}
+                title="Select City/Municipality"
+                data={filterOptions(cityOptions)}
+                onSelect={(item) => { onCityChange(item.value); closePicker(); }}
+                keyExtractor={(item) => item.id}
+                searchValue={pickerSearch}
+                onSearchChange={setPickerSearch}
+                placeholder="Search cities..."
+                selectedItemValue={formData.city}
+                activeColor={activeColor}
+            />
+            <SearchablePicker
+                isOpen={activePicker === 'barangay'}
+                onClose={closePicker}
+                title="Select Barangay"
+                data={filterOptions(barangayOptions)}
+                onSelect={(item) => { handleTextChange('barangay', item.value); closePicker(); }}
+                keyExtractor={(item) => item.id}
+                searchValue={pickerSearch}
+                onSearchChange={setPickerSearch}
+                placeholder="Search barangays..."
+                selectedItemValue={formData.barangay}
+                activeColor={activeColor}
+            />
+            <SearchablePicker
+                isOpen={activePicker === 'plan'}
+                onClose={closePicker}
+                title="Select Plan"
+                data={filterOptions(planOptions)}
+                onSelect={(item) => { handleTextChange('desired_plan', item.value); closePicker(); }}
+                keyExtractor={(item) => item.id}
+                searchValue={pickerSearch}
+                onSearchChange={setPickerSearch}
+                placeholder="Search plans..."
+                selectedItemValue={formData.desired_plan}
+                activeColor={activeColor}
+            />
     </View>
     );
 };
+
+// Extracted as a separate component so each input only re-renders when its own value changes
+const InputField = React.memo(({ label, field, placeholder, required = false, isMultiline = false, formData, onChange }: {
+    label: string;
+    field: string;
+    placeholder: string;
+    required?: boolean;
+    isMultiline?: boolean;
+    formData: Record<string, any>;
+    onChange: (field: string, value: string) => void;
+}) => (
+    <View style={styles.inputContainer}>
+        <Text style={styles.label}>
+            {label} {required && <Text style={styles.required}>*</Text>}
+        </Text>
+        <TextInput
+            style={[styles.input, isMultiline && styles.textArea]}
+            placeholder={placeholder}
+            placeholderTextColor="#94a3b8"
+            value={String(formData[field] || '')}
+            onChangeText={(val) => onChange(field, val)}
+            multiline={isMultiline}
+            numberOfLines={isMultiline ? 4 : 1}
+            textAlignVertical={isMultiline ? 'top' : 'center'}
+        />
+    </View>
+));
 
 const styles = StyleSheet.create({
     mainContainer: {
@@ -516,17 +662,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748b',
         marginTop: 4,
-    },
-    pickerWrapper: {
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
-        borderRadius: 8,
-        overflow: 'hidden',
-        backgroundColor: '#ffffff',
-    },
-    picker: {
-        height: 50,
-        width: '100%',
     },
     uploadHint: {
         fontSize: 13,

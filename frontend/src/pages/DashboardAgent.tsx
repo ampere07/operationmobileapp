@@ -24,7 +24,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const { jobOrders, silentRefresh: jobOrdersRefresh } = useJobOrderContext();
     const [user, setUser] = useState<any>(null);
     const [cashouts, setCashouts] = useState<any[]>([]);
-    const [trendData, setTrendData] = useState<{ points: number[], labels: string[] }>({ points: [0,0,0,0], labels: ['','','',''] });
+    const [trendData, setTrendData] = useState<{ points: number[], labels: string[] }>({ points: [0, 0, 0, 0], labels: ['', '', '', ''] });
     const [stats, setStats] = useState<any>(null);
     const [agentBalance, setAgentBalance] = useState<number>(0);
     const [agentIncentives, setAgentIncentives] = useState<number>(0);
@@ -94,18 +94,18 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const agentEmail = user?.email || '';
     const agentName = user?.full_name || '';
 
-    const { referredCount, onboardReferredCount } = useMemo(() => {
-        if (!agentEmail && !agentName) return { referredCount: 0, onboardReferredCount: 0 };
+    const { referredCount, successfulInstalledCount, failedInstalledCount } = useMemo(() => {
+        if (!agentEmail && !agentName) return { referredCount: 0, successfulInstalledCount: 0, failedInstalledCount: 0 };
 
         const filtered = jobOrders.filter(jo => {
             const referredBy = (jo.Referred_By || jo.referred_by || '').toLowerCase();
-            return (agentEmail && referredBy.includes(agentEmail.toLowerCase())) || 
-                   (agentName && referredBy.includes(agentName.toLowerCase()));
+            return (agentEmail && referredBy.includes(agentEmail.toLowerCase())) ||
+                (agentName && referredBy.includes(agentName.toLowerCase()));
         });
 
         const inProgress = filtered.filter(jo => {
             const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
-            return status === 'in progress' || status === 'inprogress' || status === 'in-progress';
+            return status === 'in progress' || status === 'inprogress' || status === 'in-progress' || status === 'pending';
         }).length;
 
         const onboard = filtered.filter(jo => {
@@ -113,9 +113,15 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
             return status === 'done' || status === 'completed';
         }).length;
 
+        const failed = filtered.filter(jo => {
+            const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
+            return status === 'failed' || status === 'cancelled' || status === 'suspended' || status === 'disapproved';
+        }).length;
+
         return {
             referredCount: inProgress,
-            onboardReferredCount: onboard
+            successfulInstalledCount: onboard,
+            failedInstalledCount: failed
         };
     }, [jobOrders, agentEmail, agentName]);
 
@@ -215,126 +221,142 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                 <View style={styles.contentGap}>
                     <View style={{ gap: 16 }}>
                         <Animated.View style={[styles.balanceCard, { transform: [{ scaleY: cardScaleY }] }]}>
-                        <LinearGradient
-                            colors={isCardFlipped ? ['#000000', colorPalette?.primary || '#ef4444'] : [colorPalette?.primary || '#ef4444', '#000000']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 32, paddingHorizontal: isMobile ? 20 : 28, minHeight: isShort ? 180 : 230 }]}
-                        >
-                            <View style={[styles.profileRow, { marginBottom: isShort ? 12 : 32, justifyContent: 'space-between' }]}>
-                                <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
-                                    <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
-                                </View>
-                                <View style={{ flex: 1, marginHorizontal: 12 }}>
-                                    <Text
-                                        allowFontScaling={false}
-                                        numberOfLines={1}
-                                        adjustsFontSizeToFit
-                                        style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}
+                            <LinearGradient
+                                colors={isCardFlipped ? ['#000000', colorPalette?.primary || '#ef4444'] : [colorPalette?.primary || '#ef4444', '#000000']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 32, paddingHorizontal: isMobile ? 20 : 28, minHeight: isShort ? 180 : 230 }]}
+                            >
+                                <View style={[styles.profileRow, { marginBottom: isShort ? 12 : 32, justifyContent: 'space-between' }]}>
+                                    <View style={[styles.initialsCircle, { width: isShort ? 44 : 50, height: isShort ? 44 : 50, borderRadius: isShort ? 22 : 25 }]}>
+                                        <Text style={[styles.initialsText, { fontSize: isShort ? 18 : 20 }]}>{initials}</Text>
+                                    </View>
+                                    <View style={{ flex: 1, marginHorizontal: 12 }}>
+                                        <Text
+                                            allowFontScaling={false}
+                                            numberOfLines={1}
+                                            adjustsFontSizeToFit
+                                            style={[styles.customerNameText, { fontSize: isShort ? 16 : 18 }]}
+                                        >
+                                            {displayName}
+                                        </Text>
+                                        <Text allowFontScaling={false} style={styles.customerAccountText}>Agent ID: {accountNo}</Text>
+                                        {isCardFlipped && <Text allowFontScaling={false} numberOfLines={1} style={styles.customerAccountText}>{emailAddress}</Text>}
+                                    </View>
+                                    <Pressable
+                                        onPress={handleFlipCard}
+                                        style={({ pressed }) => ({
+                                            opacity: pressed ? 0.6 : 1,
+                                            padding: 8
+                                        })}
                                     >
-                                        {displayName}
-                                    </Text>
-                                    <Text allowFontScaling={false} style={styles.customerAccountText}>Agent ID: {accountNo}</Text>
-                                    {isCardFlipped && <Text allowFontScaling={false} numberOfLines={1} style={styles.customerAccountText}>{emailAddress}</Text>}
+                                        <RefreshCcw size={20} color="#ffffff" />
+                                    </Pressable>
                                 </View>
-                                <Pressable
-                                    onPress={handleFlipCard}
-                                    style={({ pressed }) => ({
-                                        opacity: pressed ? 0.6 : 1,
-                                        padding: 8
-                                    })}
-                                >
-                                    <RefreshCcw size={20} color="#ffffff" />
-                                </Pressable>
-                            </View>
 
-                            {!isCardFlipped ? (
-                                <View style={{ minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
-                                        <View style={styles.billingRow}>
-                                            <View style={styles.billingLeft}>
+                                {!isCardFlipped ? (
+                                    <View style={{ minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
                                                 <Text allowFontScaling={false} style={styles.balanceLabel}>Incentives</Text>
                                                 <Text
                                                     numberOfLines={1}
                                                     adjustsFontSizeToFit
                                                     minimumFontScale={0.5}
                                                     allowFontScaling={false}
-                                                    style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 20 : 24) : 32) : (isMobile ? (isShort ? 28 : 32) : 40) }]}
+                                                    style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
                                                 >
                                                     {formatCurrency(agentIncentives)}
                                                 </Text>
                                             </View>
-                                            <View style={[styles.billingLeft, { alignItems: 'flex-end' }]}>
-                                                <Text allowFontScaling={false} style={styles.balanceLabel}>Bonus</Text>
+                                            <View style={{ flex: 1, alignItems: 'center' }}>
+                                                <Text allowFontScaling={false} style={[styles.balanceLabel, { textAlign: 'center' }]}>Commission</Text>
                                                 <Text
                                                     numberOfLines={1}
                                                     adjustsFontSizeToFit
                                                     minimumFontScale={0.5}
                                                     allowFontScaling={false}
-                                                    style={[styles.balanceAmountText, { fontSize: agentBonus >= 1000 ? (isMobile ? (isShort ? 20 : 24) : 32) : (isMobile ? (isShort ? 28 : 32) : 40) }]}
+                                                    style={[styles.balanceAmountText, { textAlign: 'center', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
+                                                >
+                                                    {formatCurrency(agentBalance)}
+                                                </Text>
+                                            </View>
+                                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                                <Text allowFontScaling={false} style={[styles.balanceLabel, { textAlign: 'right' }]}>Bonus</Text>
+                                                <Text
+                                                    numberOfLines={1}
+                                                    adjustsFontSizeToFit
+                                                    minimumFontScale={0.5}
+                                                    allowFontScaling={false}
+                                                    style={[styles.balanceAmountText, { textAlign: 'right', fontSize: agentBonus >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
                                                 >
                                                     {formatCurrency(agentBonus)}
                                                 </Text>
                                             </View>
                                         </View>
-                                </View>
-                            ) : (
-                                <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
-                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4 }}>In Progress Referred:</Text>
-                                            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '700' }}>{referredCount}</Text>
-                                        </View>
-                                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                                            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 4 }}>Onboard Referred:</Text>
-                                            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '700' }}>{onboardReferredCount}</Text>
-                                        </View>
                                     </View>
-                                </View>
-                            )}
-                        </LinearGradient>
-                    </Animated.View>
-
-                    <View style={styles.balanceCard}>
-                        <LinearGradient
-                            colors={[colorPalette?.primary || '#ef4444', '#000000']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 28, paddingHorizontal: isMobile ? 20 : 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
-                        >
-                            <View style={{ flex: 1 }}>
-                                <Text allowFontScaling={false} style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '600', marginBottom: 8 }}>Total Commission</Text>
-                                <Text
-                                    numberOfLines={1}
-                                    adjustsFontSizeToFit
-                                    minimumFontScale={0.5}
-                                    allowFontScaling={false}
-                                    style={{ fontWeight: 'bold', color: '#ffffff', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
-                                >
-                                    {formatCurrency(agentBalance)}
-                                </Text>
-                            </View>
-                            <Pressable onPress={() => onNavigate && onNavigate('Application')}>
-                                {({ pressed }) => (
-                                    <View style={[
-                                        { 
-                                            backgroundColor: 'transparent', 
-                                            paddingHorizontal: 16, 
-                                            paddingVertical: 10, 
-                                            borderRadius: 12,
-                                            borderWidth: 2,
-                                            borderColor: '#ffffff'
-                                        },
-                                        pressed && { opacity: 0.7, backgroundColor: 'rgba(255,255,255,0.1)' }
-                                    ]}>
-                                        <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>
-                                            Application Form
-                                        </Text>
+                                ) : (
+                                    <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'left' }}>In Progress:</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{referredCount}</Text>
+                                            </View>
+                                            <View style={{ flex: 1, alignItems: 'center' }}>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'center' }}>Successful Installed:</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{successfulInstalledCount}</Text>
+                                            </View>
+                                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'right' }}>Failed Installed:</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{failedInstalledCount}</Text>
+                                            </View>
+                                        </View>
                                     </View>
                                 )}
-                            </Pressable>
-                        </LinearGradient>
+                            </LinearGradient>
+                        </Animated.View>
+
+                        <View style={styles.balanceCard}>
+                            <LinearGradient
+                                colors={[colorPalette?.primary || '#ef4444', '#000000']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={[styles.gradientInner, { paddingVertical: isShort ? 20 : 28, paddingHorizontal: isMobile ? 20 : 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text allowFontScaling={false} style={{ color: '#e5e7eb', fontSize: 14, fontWeight: '600', marginBottom: 8 }}>Total Balance</Text>
+                                    <Text
+                                        numberOfLines={1}
+                                        adjustsFontSizeToFit
+                                        minimumFontScale={0.5}
+                                        allowFontScaling={false}
+                                        style={{ fontWeight: 'bold', color: '#ffffff', fontSize: (agentBalance + agentIncentives + agentBonus) >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
+                                    >
+                                        {formatCurrency(agentBalance + agentIncentives + agentBonus)}
+                                    </Text>
+                                </View>
+                                <Pressable onPress={() => onNavigate && onNavigate('Application')}>
+                                    {({ pressed }) => (
+                                        <View style={[
+                                            {
+                                                backgroundColor: 'transparent',
+                                                paddingHorizontal: 16,
+                                                paddingVertical: 10,
+                                                borderRadius: 12,
+                                                borderWidth: 2,
+                                                borderColor: '#ffffff'
+                                            },
+                                            pressed && { opacity: 0.7, backgroundColor: 'rgba(255,255,255,0.1)' }
+                                        ]}>
+                                            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 13 }}>
+                                                Application Form
+                                            </Text>
+                                        </View>
+                                    )}
+                                </Pressable>
+                            </LinearGradient>
+                        </View>
                     </View>
-                </View>
 
                     {/* Cashout History Section */}
                     <View style={styles.sectionGap}>
@@ -354,7 +376,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                             <Text style={styles.paymentAmountValue}>{formatCurrency(Number(cashout.total_amount))}</Text>
                                             <View style={[styles.statusBadgeSmall, { backgroundColor: 'transparent' }]}>
                                                 <Text style={[
-                                                    styles.statusTextSmall, 
+                                                    styles.statusTextSmall,
                                                     { color: '#16a34a' }
                                                 ]}>
                                                     {'POSTED'}
@@ -379,8 +401,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                 <Text style={styles.sectionTitle}>Commission Trend</Text>
                             </View>
                             <View style={{ position: 'relative', zIndex: 100 }}>
-                                <Pressable 
-                                    onPress={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)} 
+                                <Pressable
+                                    onPress={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
                                     style={styles.dropdownBtn}
                                 >
                                     <Text style={styles.dropdownBtnText}>{getFilterLabel(graphFilter)}</Text>
@@ -434,7 +456,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                                 <Stop offset="100%" stopColor={colorPalette?.primary || '#ef4444'} stopOpacity="0" />
                                             </SvgGradient>
                                         </Defs>
-                                        
+
                                         {/* Grid Lines */}
                                         {[0, 1, 2, 3, 4].map((i) => (
                                             <Path
@@ -453,7 +475,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                             const x = (i / (totalBars - 1)) * (400 - barWidth);
                                             const barHeight = maxVal > 0 ? (p / (maxVal * 1.1 + 1)) * 160 : 0;
                                             const y = 160 - barHeight;
-                                            
+
                                             return (
                                                 <Rect
                                                     key={i}
@@ -488,8 +510,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                     animationType="fade"
                     onRequestClose={() => setSelectedBar(null)}
                 >
-                    <Pressable 
-                        style={styles.modalOverlay} 
+                    <Pressable
+                        style={styles.modalOverlay}
                         onPress={() => setSelectedBar(null)}
                     >
                         <View style={styles.tooltipCard}>
@@ -535,12 +557,12 @@ const styles = StyleSheet.create({
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
     referralContent: { gap: 12, paddingBottom: 8 },
-    paymentItem: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        paddingVertical: 14, 
-        backgroundColor: 'transparent', 
+    paymentItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 14,
+        backgroundColor: 'transparent',
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9'
     },
@@ -568,7 +590,7 @@ const styles = StyleSheet.create({
     graphContainer: { flex: 1, height: 160 },
     xAxisRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, marginLeft: 44, paddingHorizontal: 0 },
     labelItem: { fontSize: 8, color: '#94a3b8', fontWeight: '600', textAlign: 'center', width: 24 },
-    
+
     // Modal Styles
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
     tooltipCard: { backgroundColor: '#ffffff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 300, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 },

@@ -1338,6 +1338,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // User Management Routes
 Route::prefix('users')->middleware('ensure.database.tables')->group(function () {
+    Route::post('/push-token', [UserController::class, 'updatePushToken'])->middleware('auth:sanctum');
     Route::get('/', [UserController::class , 'index']);
     Route::post('/', [UserController::class , 'store']);
     Route::get('/{id}', [UserController::class , 'show']);

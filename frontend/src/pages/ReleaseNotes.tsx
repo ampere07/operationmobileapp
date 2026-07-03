@@ -28,6 +28,16 @@ const ReleaseNotes: React.FC<ReleaseNotesProps> = ({ onBack }) => {
 
     const allNotes: ReleaseNote[] = [
         {
+            version: '2.5.49',
+            date: 'July 3, 2026',
+            title: 'Application Form Crash Fix & Searchable Dropdowns',
+            updates: [
+                { text: 'Application Form Stability: Resolved a crash when opening the New Application form. Region, City, and Barangay lists are now loaded on demand instead of downloading the entire country at once, dramatically reducing memory usage and load time.', visibility: 'agent' },
+                { text: 'Searchable Dropdowns: Upgraded the Region, City/Municipality, Barangay, and Plan dropdowns to searchable pickers. Just start typing to instantly filter long lists instead of scrolling through thousands of entries.', visibility: 'agent' },
+                { text: 'Service Order RADIUS Queue: Reconnect, Restrict, Pullout, and Migration updates no longer fail when the RADIUS server is temporarily unavailable. The operation is now safely queued and retried automatically in the background, and you\'ll see a confirmation that it was saved to the queue.', visibility: 'technician' }
+            ]
+        },
+        {
             version: '2.5.48',
             date: 'June 21, 2026',
             title: 'Native Crash Fix & UI Optimization',
