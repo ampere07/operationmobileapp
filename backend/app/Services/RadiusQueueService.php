@@ -367,4 +367,3 @@ class RadiusQueueService
         Log::channel('single')->info("[{$this->logName}] {$message}");
     }
 }
-

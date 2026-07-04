@@ -1067,7 +1067,7 @@ class ManualRadiusOperationsService
         ?array $payload,
         string $username,
         string $password,
-        int $retries = 2
+        int $retries = 1
     ) {
         // Build list of URLs to try: configured protocol first, then alternate
         // This mirrors RadiusStatusSyncService which tries both protocols per config
@@ -1084,8 +1084,8 @@ class ManualRadiusOperationsService
                     $this->writeLog("[API] Attempt $attempt/$retries: $method $tryUrl");
 
                     $response = Http::withBasicAuth($username, $password)
-                        ->connectTimeout(3)
-                        ->timeout(5)
+                        ->connectTimeout(2)
+                        ->timeout(4)
                         ->withOptions(['verify' => false]);
 
                     switch (strtoupper($method)) {
@@ -1208,7 +1208,6 @@ class ManualRadiusOperationsService
         }
     }
 }
-
 
 
 

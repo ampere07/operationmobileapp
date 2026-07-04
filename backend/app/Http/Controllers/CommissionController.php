@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\JobOrder;
 use App\Models\AgentCommissionHistory;
 use App\Models\AgentAchievementClaim;
+use App\Models\AgentBonusHistory;
 use App\Models\AgentBalance;
 use App\Models\BillingConfig;
 use App\Models\User;
@@ -307,6 +308,153 @@ class CommissionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to record commission payment',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * List bonus payout history from the dedicated agent_bonus_history table.
+     */
+    public function getBonusHistory(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $agentId = $request->input('agent_id');
+            $userRole = strtolower($user->role->role_name ?? '');
+
+            // Non-admins can only see their own history
+            if (!in_array($userRole, ['admin', 'billing', 'superadmin'])) {
+                $agentId = $user->id;
+            }
+
+            $limit = $request->input('limit', 2000);
+            $offset = $request->input('offset', 0);
+            $updatedAfter = $request->input('updated_after');
+
+            $query = AgentBonusHistory::with('agent');
+
+            if ($agentId) {
+                $query->where('agent_id', $agentId);
+            }
+
+            if ($updatedAfter) {
+                $query->where(function ($q) use ($updatedAfter) {
+                    $q->where('updated_at', '>=', $updatedAfter)
+                      ->orWhere('created_at', '>=', $updatedAfter);
+                });
+            }
+
+            $total = $query->count();
+
+            $history = $query->orderBy('created_at', 'desc')
+                ->offset($offset)
+                ->limit($limit)
+                ->get();
+
+            $data = $history->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'ref_number' => $item->ref_number,
+                    'total_amount' => $item->total_amount,
+                    'created_by' => $item->created_by,
+                    'created_at' => $item->created_at,
+                    'remarks' => $item->remarks,
+                    'proof_of_payment' => $item->proof_of_payment,
+                    'agent_id' => $item->agent_id,
+                    'agent_name' => $item->agent ? ($item->agent->full_name ?? ($item->agent->first_name . ' ' . $item->agent->last_name)) : 'Unknown',
+                    'updated_by' => $item->updated_by,
+                    'updated_at' => $item->updated_at,
+                    'approve_by' => $item->approve_by,
+                    'type' => $item->type,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch bonus history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Record a bonus transaction (add or payout) in agent_bonus_history and
+     * adjust the agent's bonus balance accordingly.
+     */
+    public function storeBonusHistory(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $validated = $request->validate([
+                'agent_id'         => 'required|integer',
+                'ref_number'       => 'required|string|max:100',
+                'total_amount'     => 'required|numeric|min:0',
+                'remarks'          => 'required|string',
+                'proof_of_payment' => 'required|string',
+                'type'             => 'nullable|string|max:50',
+            ]);
+
+            $validated['type'] = $validated['type'] ?? 'Bonus_payout';
+            $validated['created_by'] = $user->full_name ?? $user->email_address ?? 'System';
+            $validated['organization_id'] = $user->organization_id ?? null;
+
+            $history = AgentBonusHistory::create($validated);
+
+            // Audit Trail Log
+            $userEmail = $user->email_address ?? $user->email ?? 'System';
+            AuditTrailLog::create([
+                'old_details' => null,
+                'new_details' => [
+                    'type' => 'agent_bonus_histories',
+                    'id' => $history->id,
+                    'data' => $history->toArray()
+                ],
+                'created_by_user' => $userEmail,
+                'updated_by_user' => $userEmail
+            ]);
+
+            // Update the agent's balance (add if Bonus, deduct if Bonus_payout).
+            $agentBalance = AgentBalance::where('agent_id', $validated['agent_id'])->first();
+            if ($agentBalance) {
+                if ($validated['type'] === 'Bonus') {
+                    $agentBalance->update([
+                        'balance' => (float)$agentBalance->balance + (float)$validated['total_amount'],
+                        'bonus'   => (float)($agentBalance->bonus ?? 0) + (float)$validated['total_amount'],
+                    ]);
+                } elseif ($validated['type'] === 'Bonus_payout') {
+                    $agentBalance->update([
+                        'balance' => max(0, (float)$agentBalance->balance - (float)$validated['total_amount']),
+                        'bonus'   => max(0, (float)($agentBalance->bonus ?? 0) - (float)$validated['total_amount']),
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $validated['type'] === 'Bonus'
+                    ? 'Bonus added successfully'
+                    : 'Bonus payout recorded successfully',
+                'data'    => $history,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to record bonus transaction',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -658,7 +806,7 @@ class CommissionController extends Controller
             $exists = AgentAchievementClaim::where('agent_id', $validated['agent_id'])
                 ->where('milestone', $validated['milestone'])
                 ->exists();
-                
+
             if ($exists) {
                 return response()->json(['success' => false, 'message' => 'Milestone already claimed'], 400);
             }

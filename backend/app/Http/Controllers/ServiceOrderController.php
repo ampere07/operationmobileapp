@@ -1313,7 +1313,7 @@ class ServiceOrderController extends Controller
             ];
             $radiusSuccess = false;
             $lastRadiusError = '';
-            for ($attempt = 1; $attempt <= 3; $attempt++) {
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
                 try {
                     $manualRadiusService = app(\App\Services\ManualRadiusOperationsService::class);
                     $radiusResult = $manualRadiusService->reconnectUser($radiusParams);
@@ -1328,7 +1328,7 @@ class ServiceOrderController extends Controller
                     $lastRadiusError = $radEx->getMessage();
                     \Log::channel('radiusrelated')->warning("[SERVICE ORDER RECONNECT RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                 }
-                if ($attempt < 3) sleep(2);
+                if ($attempt < 2) sleep(2);
             }
             if (!$radiusSuccess) {
                 \Log::channel('radiusrelated')->error('[SERVICE ORDER RECONNECT RADIUS] All 3 attempts failed. Queuing for retry.');
@@ -1421,7 +1421,7 @@ class ServiceOrderController extends Controller
                 }
             }
 
-            return $radiusSuccess ? 'success' : 'queued';
+            return 'success';
 
         }
         catch (\Exception $e) {
@@ -1462,7 +1462,7 @@ class ServiceOrderController extends Controller
             ];
             $radiusSuccess = false;
             $lastRadiusError = '';
-            for ($attempt = 1; $attempt <= 3; $attempt++) {
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
                 try {
                     $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
                     $result = $radiusOps->restrictedUser($radiusRestrictParams);
@@ -1477,7 +1477,7 @@ class ServiceOrderController extends Controller
                     $lastRadiusError = $radEx->getMessage();
                     \Log::channel('radiusrelated')->warning("[SERVICE ORDER RESTRICT RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                 }
-                if ($attempt < 3) sleep(2);
+                if ($attempt < 2) sleep(2);
             }
             if (!$radiusSuccess) {
                 \Log::channel('radiusrelated')->error('[SERVICE ORDER RESTRICT RADIUS] All 3 attempts failed. Queuing for retry.');
@@ -1569,7 +1569,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER RESTRICT EMAIL EXCEPTION] ' . $emailEx->getMessage());
             }
 
-            return $radiusSuccess ? 'success' : 'queued';
+            return 'success';
         } catch (\Exception $e) {
             \Log::error('[SERVICE ORDER RESTRICT EXCEPTION] ' . $e->getMessage());
             return 'exception';
@@ -1611,7 +1611,7 @@ class ServiceOrderController extends Controller
             ];
             $radiusSuccess = false;
             $lastRadiusError = '';
-            for ($attempt = 1; $attempt <= 3; $attempt++) {
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
                 try {
                     $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
                     $result = $radiusOps->disconnectUser($radiusDcParams);
@@ -1626,7 +1626,7 @@ class ServiceOrderController extends Controller
                     $lastRadiusError = $radEx->getMessage();
                     \Log::channel('radiusrelated')->warning("[SERVICE ORDER DISCONNECT RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                 }
-                if ($attempt < 3) sleep(2);
+                if ($attempt < 2) sleep(2);
             }
             if (!$radiusSuccess) {
                 \Log::channel('radiusrelated')->error('[SERVICE ORDER DISCONNECT RADIUS] All 3 attempts failed. Queuing for retry.');
@@ -1716,7 +1716,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER DISCONNECT EMAIL EXCEPTION] ' . $e->getMessage());
             }
 
-            return $radiusSuccess ? 'success' : 'queued';
+            return 'success';
 
         }
         catch (\Exception $e) {
@@ -1739,10 +1739,11 @@ class ServiceOrderController extends Controller
                 ->leftJoin('customers', 'billing_accounts.customer_id', '=', 'customers.id')
                 ->leftJoin('technical_details', 'billing_accounts.id', '=', 'technical_details.account_id')
                 ->where('billing_accounts.id', $billingAccount->id)
-                ->select('technical_details.username as pppoe_username')
+                ->select('technical_details.username as pppoe_username', 'technical_details.router_modem_sn as router_modem_sn')
                 ->first();
 
             $username = $accountInfo->pppoe_username ?? null;
+            $routerModemSn = $accountInfo->router_modem_sn ?? null;
 
             \Log::info('[SERVICE ORDER PULLOUT PROCEED] Executing pullout for account: ' . $accountNo);
 
@@ -1758,7 +1759,7 @@ class ServiceOrderController extends Controller
                 ];
                 $radiusSuccess = false;
                 $lastRadiusError = '';
-                for ($attempt = 1; $attempt <= 3; $attempt++) {
+                for ($attempt = 1; $attempt <= 2; $attempt++) {
                     try {
                         $radiusOps = app(\App\Services\ManualRadiusOperationsService::class);
                         $result = $radiusOps->disconnectUser($radiusPulloutParams);
@@ -1773,7 +1774,7 @@ class ServiceOrderController extends Controller
                         $lastRadiusError = $radEx->getMessage();
                         \Log::channel('radiusrelated')->warning("[SERVICE ORDER PULLOUT RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                     }
-                    if ($attempt < 3) sleep(2);
+                    if ($attempt < 2) sleep(2);
                 }
                 if (!$radiusSuccess) {
                     \Log::channel('radiusrelated')->error('[SERVICE ORDER PULLOUT RADIUS] All 3 attempts failed. Queuing for retry.');
@@ -1798,6 +1799,15 @@ class ServiceOrderController extends Controller
             $billingAccount->save();
 
             \Log::info('[SERVICE ORDER PULLOUT DB] Updated billing_status_id to 5 (Pullout) for Account: ' . $accountNo);
+
+            // Clear the ONU name in SmartOLT before wiping the SN from technical_details (best-effort)
+            if (!empty($routerModemSn)) {
+                $smartOltStatus = app(\App\Services\SmartOltService::class)->clearOnuNameBySn($routerModemSn);
+                \Log::info('[SERVICE ORDER PULLOUT SMARTOLT] Clear ONU name result: ' . $smartOltStatus, [
+                    'account_no' => $accountNo,
+                    'router_modem_sn' => $routerModemSn,
+                ]);
+            }
 
             // Clear technical details
             DB::table('technical_details')
@@ -1895,7 +1905,7 @@ class ServiceOrderController extends Controller
                 \Log::error('[SERVICE ORDER PULLOUT EMAIL EXCEPTION] ' . $e->getMessage());
             }
 
-            return $radiusSuccess ? 'success' : 'queued';
+            return 'success';
 
         }
         catch (\Exception $e) {
@@ -1960,7 +1970,7 @@ class ServiceOrderController extends Controller
                 ];
                 $radiusSuccess = false;
                 $lastRadiusError = '';
-                for ($attempt = 1; $attempt <= 3; $attempt++) {
+                for ($attempt = 1; $attempt <= 2; $attempt++) {
                     try {
                         $radiusOps = app(ManualRadiusOperationsService::class);
                         $credResult = $radiusOps->updateCredentials($credParams);
@@ -1975,7 +1985,7 @@ class ServiceOrderController extends Controller
                         $lastRadiusError = $radEx->getMessage();
                         \Log::channel('radiusrelated')->warning("[SERVICE ORDER MIGRATION RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                     }
-                    if ($attempt < 3) sleep(2);
+                    if ($attempt < 2) sleep(2);
                 }
                 if ($radiusSuccess) {
                     return 'success';
@@ -1991,7 +2001,7 @@ class ServiceOrderController extends Controller
                     'last_error' => $lastRadiusError,
                     'created_by' => $updatedByUser,
                 ]);
-                return 'queued';
+                return 'radius_failed';
             }
 
             // Generate new username using the same logic as JobOrderController
@@ -2026,7 +2036,7 @@ class ServiceOrderController extends Controller
                 ];
                 $radiusSuccess = false;
                 $lastRadiusError = '';
-                for ($attempt = 1; $attempt <= 3; $attempt++) {
+                for ($attempt = 1; $attempt <= 2; $attempt++) {
                     try {
                         $radiusOps = app(ManualRadiusOperationsService::class);
                         $credResult = $radiusOps->updateCredentials($credParams);
@@ -2041,7 +2051,7 @@ class ServiceOrderController extends Controller
                         $lastRadiusError = $radEx->getMessage();
                         \Log::channel('radiusrelated')->warning("[SERVICE ORDER MIGRATION RADIUS] Attempt {$attempt}/3 exception: {$lastRadiusError}");
                     }
-                    if ($attempt < 3) sleep(2);
+                    if ($attempt < 2) sleep(2);
                 }
                 if ($radiusSuccess) {
                     return 'success';
@@ -2057,7 +2067,7 @@ class ServiceOrderController extends Controller
                     'last_error' => $lastRadiusError,
                     'created_by' => $updatedByUser,
                 ]);
-                return 'queued';
+                return 'radius_failed';
             }
             else {
                 // For other categories, DB-only update (no RADIUS change needed)
