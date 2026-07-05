@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, useWindowDimensions, Animated, RefreshControl, StyleSheet, DeviceEventEmitter, Modal } from 'react-native';
-import { RefreshCcw, TrendingUp, Calendar, ChevronDown, X } from 'lucide-react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, useWindowDimensions, Animated, RefreshControl, StyleSheet, DeviceEventEmitter, Alert } from 'react-native';
+import { RefreshCcw, Trophy } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Defs, LinearGradient as SvgGradient, Stop, Polyline, Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, G } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
 import { useCustomerDataContext } from '../contexts/CustomerDataContext';
 import { useApplicationContext } from '../contexts/ApplicationContext';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { fetchAgentCommissionHistory, fetchAgentCommissionTrend } from '../services/api';
+import { fetchAgentCommissionHistory, fetchAgentAchievements, claimAgentAchievement } from '../services/api';
+import { agentOwnsReferral } from '../utils/agentReferral';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface DashboardAgentProps {
     onNavigate?: (section: string, tab?: string) => void;
@@ -24,12 +27,10 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const { jobOrders, silentRefresh: jobOrdersRefresh } = useJobOrderContext();
     const [user, setUser] = useState<any>(null);
     const [cashouts, setCashouts] = useState<any[]>([]);
-    const [trendData, setTrendData] = useState<{ points: number[], labels: string[] }>({ points: [0, 0, 0, 0], labels: ['', '', '', ''] });
     const [stats, setStats] = useState<any>(null);
     const [agentBalance, setAgentBalance] = useState<number>(0);
     const [agentIncentives, setAgentIncentives] = useState<number>(0);
     const [agentBonus, setAgentBonus] = useState<number>(0);
-    const [selectedBar, setSelectedBar] = useState<{ index: number, value: number, label: string } | null>(null);
 
     const latestCashouts = useMemo(() => {
         return (cashouts || []).slice(0, 5);
@@ -45,23 +46,9 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
     const [refreshing, setRefreshing] = useState(false);
     const [isCardFlipped, setIsCardFlipped] = useState(false);
-    const [graphFilter, setGraphFilter] = useState<'monthly' | '3months' | 'yearly' | '5years'>('monthly');
-    const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+    const [claimedMilestones, setClaimedMilestones] = useState<number[]>([]);
+    const [isClaiming, setIsClaiming] = useState(false);
     const flipAnim = React.useRef(new Animated.Value(0)).current;
-
-    const getFilterLabel = (filter: string) => {
-        switch (filter) {
-            case 'monthly': return 'Monthly';
-            case '3months': return '3 Months';
-            case 'yearly': return 'Yearly';
-            case '5years': return '5 Years';
-            default: return 'Filter';
-        }
-    };
-
-    const graphData = useMemo(() => {
-        return trendData;
-    }, [trendData]);
 
     const handleFlipCard = useCallback(() => {
         Animated.timing(flipAnim, {
@@ -97,11 +84,9 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const { referredCount, successfulInstalledCount, failedInstalledCount } = useMemo(() => {
         if (!agentEmail && !agentName) return { referredCount: 0, successfulInstalledCount: 0, failedInstalledCount: 0 };
 
-        const filtered = jobOrders.filter(jo => {
-            const referredBy = (jo.Referred_By || jo.referred_by || '').toLowerCase();
-            return (agentEmail && referredBy.includes(agentEmail.toLowerCase())) ||
-                (agentName && referredBy.includes(agentName.toLowerCase()));
-        });
+        const filtered = jobOrders.filter(jo =>
+            agentOwnsReferral(jo.Referred_By || jo.referred_by || '', agentName, agentEmail)
+        );
 
         const inProgress = filtered.filter(jo => {
             const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
@@ -125,6 +110,65 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
         };
     }, [jobOrders, agentEmail, agentName]);
 
+    // ---- Achievement (30-onboard milestone) ----
+    const agentId = user?.id || 0;
+    const onboardReferredCount = successfulInstalledCount;
+    const achievementTarget = 30;
+
+    const possibleMilestones = useMemo(() => {
+        const ms: number[] = [];
+        for (let i = achievementTarget; i <= onboardReferredCount; i += achievementTarget) ms.push(i);
+        return ms;
+    }, [onboardReferredCount]);
+
+    const pendingMilestone = possibleMilestones.find(m => !claimedMilestones.includes(m));
+    const isAchieved = !!pendingMilestone;
+    const achievementProgress = pendingMilestone ? achievementTarget : (onboardReferredCount % achievementTarget);
+
+    const gaugeAnim = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+        Animated.timing(gaugeAnim, {
+            toValue: achievementProgress,
+            duration: 1200,
+            useNativeDriver: false,
+        }).start();
+    }, [achievementProgress]);
+
+    const handleClaimReward = async () => {
+        if (!agentId || !pendingMilestone) return;
+        setIsClaiming(true);
+        try {
+            const response = await claimAgentAchievement({ agent_id: agentId, milestone: pendingMilestone, amount: 1500 });
+            if (response.success) {
+                setClaimedMilestones(prev => [...prev, pendingMilestone]);
+                Alert.alert('Reward Claimed!', `₱1,500 has been added to your bonus for hitting ${pendingMilestone} onboards.`, [{ text: 'OK' }]);
+                fetchHistory();
+            } else {
+                Alert.alert('Error', response.message || 'Failed to claim reward.');
+            }
+        } catch (error: any) {
+            const errMsg = error.response?.data?.message || 'An unexpected error occurred.';
+            Alert.alert('Error', errMsg);
+        } finally {
+            setIsClaiming(false);
+        }
+    };
+
+    // Speedometer gauge geometry
+    const gaugeWidth = 220;
+    const gaugeR = (gaugeWidth - 30) / 2;
+    const gaugeCx = gaugeWidth / 2;
+    const gaugeCy = gaugeWidth / 2;
+    const gaugeCircumference = 2 * Math.PI * gaugeR;
+    const gaugeArcLength = gaugeCircumference * 0.75;
+    const gaugeDashoffset = gaugeAnim.interpolate({
+        inputRange: [0, achievementTarget],
+        outputRange: [gaugeArcLength, 0],
+        extrapolate: 'clamp'
+    });
+
+    const claimButtonColor = colorPalette?.primary || '#ef4444';
+
     const fetchHistory = useCallback(async () => {
         try {
             const response = await fetchAgentCommissionHistory();
@@ -139,29 +183,32 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
         }
     }, []);
 
-    const fetchTrend = useCallback(async () => {
+    const fetchAchievements = useCallback(async (agentId: number) => {
         try {
-            const response = await fetchAgentCommissionTrend(graphFilter);
-            if (response.success) {
-                setTrendData(response.data);
+            const response = await fetchAgentAchievements(agentId);
+            if (response && response.data) {
+                setClaimedMilestones(response.data.map((item: any) => item.milestone));
             }
         } catch (error) {
-            console.error('Failed to fetch trend data:', error);
+            console.error('Failed to fetch achievements:', error);
         }
-    }, [graphFilter]);
+    }, []);
 
     useEffect(() => {
         const loadUser = async () => {
             const storedUser = await AsyncStorage.getItem('authData');
-            if (storedUser) setUser(JSON.parse(storedUser));
+            if (storedUser) {
+                const parsed = JSON.parse(storedUser);
+                setUser(parsed);
+                if (parsed?.id) fetchAchievements(parsed.id);
+            }
         };
         loadUser();
         customerRefresh();
         applicationsRefresh();
         jobOrdersRefresh();
         fetchHistory();
-        fetchTrend();
-    }, [fetchHistory, fetchTrend]);
+    }, [fetchHistory, fetchAchievements]);
 
     useEffect(() => {
         const fetchColorPalette = async () => {
@@ -184,13 +231,13 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
         try {
-            await Promise.all([customerRefresh(), applicationsRefresh(), jobOrdersRefresh(), fetchHistory(), fetchTrend()]);
+            await Promise.all([customerRefresh(), applicationsRefresh(), jobOrdersRefresh(), fetchHistory()]);
         } catch (error) {
             console.error('Refresh failed:', error);
         } finally {
             setRefreshing(false);
         }
-    }, [customerRefresh, applicationsRefresh, jobOrdersRefresh, fetchHistory, fetchTrend]);
+    }, [customerRefresh, applicationsRefresh, jobOrdersRefresh, fetchHistory]);
 
     const formatCurrency = useCallback((amount: number) => {
         const isNegative = amount < 0;
@@ -299,16 +346,16 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                     <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
                                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'left' }}>In Progress:</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{referredCount}</Text>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'left' }}>In Progress</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{referredCount}</Text>
                                             </View>
                                             <View style={{ flex: 1, alignItems: 'center' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'center' }}>Successful Installed:</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{successfulInstalledCount}</Text>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'center' }}>Done</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{successfulInstalledCount}</Text>
                                             </View>
                                             <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginBottom: 4, textAlign: 'right' }}>Failed Installed:</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>{failedInstalledCount}</Text>
+                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'right' }}>Failed</Text>
+                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{failedInstalledCount}</Text>
                                             </View>
                                         </View>
                                     </View>
@@ -393,147 +440,71 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                         </View>
                     </View>
 
-                    {/* Commission Graph Section */}
+                    {/* Achievements Section */}
                     <View style={styles.sectionGap}>
-                        <View style={styles.sectionHeaderBetween}>
-                            <View style={styles.sectionHeader}>
-                                <TrendingUp size={20} color={colorPalette?.primary || '#ef4444'} />
-                                <Text style={styles.sectionTitle}>Commission Trend</Text>
-                            </View>
-                            <View style={{ position: 'relative', zIndex: 100 }}>
-                                <Pressable
-                                    onPress={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-                                    style={styles.dropdownBtn}
-                                >
-                                    <Text style={styles.dropdownBtnText}>{getFilterLabel(graphFilter)}</Text>
-                                    <ChevronDown size={14} color="#64748b" />
-                                </Pressable>
-
-                                {isFilterDropdownOpen && (
-                                    <View style={styles.dropdownMenu}>
-                                        {(['monthly', '3months', 'yearly', '5years'] as const).map((filter) => (
-                                            <Pressable
-                                                key={filter}
-                                                onPress={() => {
-                                                    setGraphFilter(filter);
-                                                    setIsFilterDropdownOpen(false);
-                                                }}
-                                                style={[
-                                                    styles.dropdownItem,
-                                                    graphFilter === filter && { backgroundColor: (colorPalette?.primary || '#ef4444') + '10' }
-                                                ]}
-                                            >
-                                                <Text style={[
-                                                    styles.dropdownItemText,
-                                                    graphFilter === filter && { color: colorPalette?.primary || '#ef4444', fontWeight: '700' }
-                                                ]}>
-                                                    {getFilterLabel(filter)}
-                                                </Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-                            </View>
+                        <View style={styles.sectionHeader}>
+                            <Trophy size={20} color={colorPalette?.primary || '#ef4444'} />
+                            <Text style={styles.sectionTitle}>Achievements</Text>
                         </View>
 
-                        <View style={styles.graphWrapper}>
-                            <View style={styles.graphBody}>
-                                <View style={styles.yAxis}>
-                                    {[1, 0.75, 0.5, 0.25, 0].map((percent, i) => {
-                                        const maxVal = Math.max(...graphData.points) * 1.2;
-                                        return (
-                                            <Text key={i} style={styles.yAxisLabel}>
-                                                {formatCurrency(maxVal * percent).replace('₱', '')}
-                                            </Text>
-                                        );
-                                    })}
-                                </View>
-                                <View style={styles.graphContainer}>
-                                    <Svg width="100%" height={160} viewBox="0 0 400 160">
-                                        <Defs>
-                                            <SvgGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                                                <Stop offset="0%" stopColor={colorPalette?.primary || '#ef4444'} stopOpacity="0.3" />
-                                                <Stop offset="100%" stopColor={colorPalette?.primary || '#ef4444'} stopOpacity="0" />
-                                            </SvgGradient>
-                                        </Defs>
+                        <View style={styles.achievementCard}>
+                            <Text style={styles.achievementTitle}>30 Onboard Referrals</Text>
+                            <Text style={styles.achievementDesc}>Refer 30 customers and have them successfully onboarded.</Text>
 
-                                        {/* Grid Lines */}
-                                        {[0, 1, 2, 3, 4].map((i) => (
-                                            <Path
-                                                key={i}
-                                                d={`M 0 ${i * 40} L 400 ${i * 40}`}
-                                                stroke="#f1f5f9"
-                                                strokeWidth="1"
+                            <View style={styles.gaugeWrapper}>
+                                <View style={{ width: gaugeWidth, height: gaugeWidth, position: 'relative' }}>
+                                    <Svg width={gaugeWidth} height={gaugeWidth} viewBox={`0 0 ${gaugeWidth} ${gaugeWidth}`}>
+                                        <G rotation="135" origin={`${gaugeCx}, ${gaugeCy}`}>
+                                            <Circle
+                                                cx={gaugeCx}
+                                                cy={gaugeCy}
+                                                r={gaugeR}
+                                                stroke="#e2e8f0"
+                                                strokeWidth={30}
+                                                strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
+                                                fill="none"
+                                                strokeLinecap="round"
                                             />
-                                        ))}
-
-                                        {/* Bars */}
-                                        {graphData.points.map((p, i) => {
-                                            const maxVal = Math.max(...graphData.points);
-                                            const barWidth = 24;
-                                            const totalBars = graphData.points.length;
-                                            const x = (i / (totalBars - 1)) * (400 - barWidth);
-                                            const barHeight = maxVal > 0 ? (p / (maxVal * 1.1 + 1)) * 160 : 0;
-                                            const y = 160 - barHeight;
-
-                                            return (
-                                                <Rect
-                                                    key={i}
-                                                    x={x}
-                                                    y={y}
-                                                    width={barWidth}
-                                                    height={barHeight}
-                                                    fill={selectedBar?.index === i ? (colorPalette?.secondary || '#000000') : (colorPalette?.primary || '#ef4444')}
-                                                    rx={6}
-                                                    onPress={() => setSelectedBar({ index: i, value: p, label: graphData.labels[i] })}
-                                                />
-                                            );
-                                        })}
+                                            <AnimatedCircle
+                                                cx={gaugeCx}
+                                                cy={gaugeCy}
+                                                r={gaugeR}
+                                                stroke={colorPalette?.primary || '#ef4444'}
+                                                strokeWidth={30}
+                                                strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
+                                                strokeDashoffset={gaugeDashoffset}
+                                                fill="none"
+                                                strokeLinecap="round"
+                                            />
+                                        </G>
                                     </Svg>
+                                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                        <Text style={styles.gaugeValueText}>{achievementProgress}</Text>
+                                        <Text style={styles.gaugeValueLabel}>Onboarded</Text>
+                                    </View>
                                 </View>
                             </View>
-                            <View style={styles.xAxisRow}>
-                                {graphData.labels.map((label, i) => (
-                                    <Text key={i} style={styles.labelItem}>{label}</Text>
-                                ))}
-                            </View>
+
+                            {isAchieved && (
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.claimBtn,
+                                        { backgroundColor: claimButtonColor, opacity: pressed ? 0.8 : 1 }
+                                    ]}
+                                    onPress={handleClaimReward}
+                                    disabled={isClaiming}
+                                >
+                                    {isClaiming ? (
+                                        <ActivityIndicator size="small" color="#ffffff" />
+                                    ) : (
+                                        <Text style={styles.claimBtnText}>Get Reward (₱1,500)</Text>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
                     </View>
                 </View>
             </ScrollView>
-
-            {/* Mini Modal / Tooltip */}
-            {selectedBar && (
-                <Modal
-                    transparent={true}
-                    visible={!!selectedBar}
-                    animationType="fade"
-                    onRequestClose={() => setSelectedBar(null)}
-                >
-                    <Pressable
-                        style={styles.modalOverlay}
-                        onPress={() => setSelectedBar(null)}
-                    >
-                        <View style={styles.tooltipCard}>
-                            <View style={styles.tooltipHeader}>
-                                <Text style={styles.tooltipTitle}>{selectedBar.label}</Text>
-                                <Pressable onPress={() => setSelectedBar(null)}>
-                                    <X size={16} color="#64748b" />
-                                </Pressable>
-                            </View>
-                            <View style={styles.tooltipBody}>
-                                <Text style={styles.tooltipLabel}>Commission Earned:</Text>
-                                <Text style={[styles.tooltipValue, { color: colorPalette?.primary || '#ef4444' }]}>
-                                    {formatCurrency(selectedBar.value)}
-                                </Text>
-                            </View>
-                            <View style={styles.tooltipFooter}>
-                                <Text style={styles.tooltipHint}>Click anywhere to close</Text>
-                            </View>
-                        </View>
-                    </Pressable>
-                </Modal>
-            )}
         </View>
     );
 };
@@ -556,6 +527,14 @@ const styles = StyleSheet.create({
     sectionGap: { gap: 16 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+    achievementCard: { backgroundColor: '#f9fafb', borderRadius: 24, padding: 20, alignItems: 'center' },
+    achievementTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', textAlign: 'center', marginBottom: 6 },
+    achievementDesc: { fontSize: 14, color: '#64748b', lineHeight: 20, textAlign: 'center', marginBottom: 24 },
+    gaugeWrapper: { alignItems: 'center', marginBottom: 12 },
+    gaugeValueText: { fontSize: 48, fontWeight: '800', color: '#0f172a', lineHeight: 56 },
+    gaugeValueLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginTop: -4 },
+    claimBtn: { backgroundColor: '#ef4444', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12, alignSelf: 'stretch' },
+    claimBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
     referralContent: { gap: 12, paddingBottom: 8 },
     paymentItem: {
         flexDirection: 'row',

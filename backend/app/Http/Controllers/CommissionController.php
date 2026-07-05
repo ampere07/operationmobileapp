@@ -178,10 +178,16 @@ class CommissionController extends Controller
                 ];
             });
 
+            // Include the agent's current balance totals so the dashboard can display them.
+            $agentBalance = $agentId ? AgentBalance::where('agent_id', $agentId)->first() : null;
+
             return response()->json([
                 'success' => true,
                 'data' => $data,
-                'total' => $total
+                'total' => $total,
+                'balance' => $agentBalance ? (float)$agentBalance->balance : 0,
+                'incentives' => $agentBalance ? (float)$agentBalance->incentives : 0,
+                'bonus' => $agentBalance ? (float)($agentBalance->bonus ?? 0) : 0,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -824,30 +830,25 @@ class CommissionController extends Controller
                 'total_amount'  => $validated['amount'],
                 'remarks'       => "Achievement Reward for {$validated['milestone']} Onboards",
                 'proof_of_payment' => 'System Auto Reward',
-                'type'          => 'incentives',
+                'type'          => 'Bonus',
                 'created_by'    => $user->full_name ?? $user->email_address ?? 'System',
                 'organization_id' => $user->organization_id ?? null,
             ];
 
             $history = AgentCommissionHistory::create($historyPayload);
 
-            // Update agent balances table
-            $agentBalance = DB::table('agent_balances')->where('agent_id', $validated['agent_id'])->first();
+            // Update agent balance
+            $agentBalance = AgentBalance::where('agent_id', $validated['agent_id'])->first();
             if ($agentBalance) {
-                $newIncentives = (float)$agentBalance->incentives + (float)$validated['amount'];
-                DB::table('agent_balances')
-                    ->where('agent_id', $validated['agent_id'])
-                    ->update([
-                        'incentives' => $newIncentives,
-                        'updated_at' => now()
-                    ]);
+                $agentBalance->update([
+                    'bonus' => (float)($agentBalance->bonus ?? 0) + (float)$validated['amount'],
+                ]);
             } else {
-                DB::table('agent_balances')->insert([
+                AgentBalance::create([
                     'agent_id' => $validated['agent_id'],
+                    'balance' => 0,
                     'commission' => 0,
-                    'incentives' => (float)$validated['amount'],
-                    'created_at' => now(),
-                    'updated_at' => now()
+                    'bonus' => (float)$validated['amount'],
                 ]);
             }
 

@@ -9,7 +9,7 @@ import {
   Menu as MenuIcon, Package, List, ClipboardCheck, X, ChevronUp,
   CreditCard, FileText, Receipt, Clock,
   MessageSquare, Network, AlertCircle, Router, Server, Wifi, Send, Cable, MapPin, Mail,
-  MessageSquareText, Wallet, Gauge, Layers, Ticket, Award
+  MessageSquareText, Wallet, Gauge, Layers, Ticket
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -85,8 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, userR
     {
       title: 'Agent',
       items: [
-        { id: 'commission', label: 'Commission', icon: ReceiptText, allowedRoles: ['administrator', 'agent'], allowedRoleIds: [1, '1', 4, '4', 7, '7'] },
-        { id: 'achievement', label: 'Achievement', icon: Award, allowedRoles: ['agent'], allowedRoleIds: [4, '4'] },
+        { id: 'commission', label: 'History', icon: ReceiptText, allowedRoles: ['administrator', 'agent'], allowedRoleIds: [1, '1', 4, '4', 7, '7'] },
       ],
     },
     {

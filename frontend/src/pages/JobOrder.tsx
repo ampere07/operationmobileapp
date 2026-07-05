@@ -11,6 +11,7 @@ import { JobOrder } from '../types/jobOrder';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { techInOutService } from '../services/techInOutService';
 import TimeInOutModal from '../modals/TimeInOutModal';
+import { agentOwnsReferral, getOnsiteStatus, isActiveOnsiteStatus } from '../utils/agentReferral';
 
 
 const StatusText = React.memo(({ status, type }: { status?: string | null, type: 'onsite' | 'billing' }) => {
@@ -489,13 +490,14 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       // Role-based filtering: Agents (role_id 4) only see their own referrals
       if (!isSuperUser && (userRole.toLowerCase() === 'agent' || userRoleId === 4)) {
-        const referredBy = (jobOrder.Referred_By || jobOrder.referred_by || '').toLowerCase();
-        // Only match if referredBy contains user's full name or email
-        const matchesAgent =
-          (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
-          (userEmail && referredBy.includes(userEmail.toLowerCase()));
+        const referredBy = jobOrder.Referred_By || jobOrder.referred_by || '';
+        const matchesAgent = agentOwnsReferral(referredBy, userFullName, userEmail);
 
         if (!matchesAgent) return false;
+
+        // Agents only see active job orders here (in progress / reschedule).
+        // Completed ("done") ones are shown on the Agent History page instead.
+        if (!isActiveOnsiteStatus(getOnsiteStatus(jobOrder))) return false;
       }
 
       // Hide job orders with onsite status "done", "completed", or "failed" after 1 day
@@ -561,7 +563,7 @@ const JobOrderPage: React.FC<{ onLogout?: () => void }> = ({ onLogout }) => {
 
       return true;
     });
-  }, [jobOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail, filterValues, getClientFullName, getClientFullAddress]);
+  }, [jobOrders, debouncedSearch, statusFilter, userRole, userRoleId, userFullName, userEmail, authUserData, filterValues, getClientFullName, getClientFullAddress]);
 
   const sortedJobOrders = useMemo(() => {
     return [...filteredJobOrders].sort((a, b) => {

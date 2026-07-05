@@ -131,6 +131,7 @@ class JobOrderController extends Controller
                         'Last_Name' => $application ? $application->last_name : ($customer ? $customer->last_name : null),
                         'Status' => $jobOrder->status,
                         'status' => $jobOrder->status,
+                        'commission_status' => $jobOrder->commission_status,
                         'Created_By' => $jobOrder->created_by_user_email,
                         'Created_At' => $jobOrder->created_at ? $jobOrder->created_at->format('Y-m-d H:i:s') : null,
                         'Updated_By' => $jobOrder->updated_by_user_email,
@@ -249,6 +250,7 @@ class JobOrderController extends Controller
                     'Desired_Plan' => $application ? $application->desired_plan : ($customer ? $customer->desired_plan : null),
                     'Referred_By' => $application ? $application->referred_by : ($customer ? $customer->referred_by : null),
                     'Billing_Status' => $jobOrder->billing_status,
+                    'commission_status' => $jobOrder->commission_status,
                     'job_order_items' => $jobOrder->items,
                 ];
             });

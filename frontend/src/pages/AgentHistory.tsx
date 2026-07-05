@@ -1,48 +1,33 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, Pressable, FlatList, ActivityIndicator, useWindowDimensions, RefreshControl, StyleSheet, DeviceEventEmitter, Linking } from 'react-native';
-import { CircleDollarSign, Calendar, FileText, ArrowLeft, RefreshCw, Landmark, ChevronDown } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, Pressable, FlatList, ActivityIndicator, useWindowDimensions, RefreshControl, StyleSheet, DeviceEventEmitter, Linking, Platform } from 'react-native';
+import { CircleDollarSign, Calendar, FileText, ArrowLeft, RefreshCw, Landmark, ChevronDown, X } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { fetchAgentCommissionHistory, fetchAgentIncentiveHistory } from '../services/api';
 import { useJobOrderContext } from '../contexts/JobOrderContext';
 import { JobOrder } from '../types/jobOrder';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { agentOwnsReferral, getOnsiteStatus, isDoneOnsiteStatus } from '../utils/agentReferral';
 
-interface CommissionHistoryItem {
-  id: number;
-  ref_number: string;
-  total_amount: number | string;
-  created_by?: string;
-  created_at: string;
-  remarks?: string;
-  proof_of_payment?: string;
-  agent_id: number;
-  agent_name: string;
-  commission_id_list?: string;
-  updated_by?: string;
-  updated_at?: string;
-  approved_by?: string;
-}
-
-const Commission: React.FC = () => {
+const AgentHistory: React.FC = () => {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [history, setHistory] = useState<CommissionHistoryItem[]>([]);
   const [incentiveHistory, setIncentiveHistory] = useState<any[]>([]);
   const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
-  const [balance, setBalance] = useState<number>(0);
-  const [incentives, setIncentives] = useState<number>(0);
-  const [bonus, setBonus] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [listMode, setListMode] = useState<'all' | 'incentives'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isListModeOpen, setIsListModeOpen] = useState(false);
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo, setDateTo] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<'from' | 'to' | null>(null);
+  const [isDateOpen, setIsDateOpen] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(() => settingsColorPaletteService.getActiveSync());
 
   const { jobOrders, refreshJobOrders } = useJobOrderContext();
@@ -63,21 +48,28 @@ const Commission: React.FC = () => {
 
   const agentJobOrders = useMemo(() => {
     return jobOrders.filter(jo => {
-      const referredBy = (jo.Referred_By || jo.referred_by || '').toLowerCase();
-      const matchesAgent =
-        (userFullName && referredBy.includes(userFullName.toLowerCase())) ||
-        (userEmail && referredBy.includes(userEmail.toLowerCase()));
+      const referredBy = jo.Referred_By || jo.referred_by || '';
+      if (!agentOwnsReferral(referredBy, userFullName, userEmail)) return false;
 
-      if (!matchesAgent) return false;
+      // Only completed ("done") job orders belong in Agent History.
+      if (!isDoneOnsiteStatus(getOnsiteStatus(jo))) return false;
 
       if (filterType !== 'all') {
         const cStatus = (!jo.commission_status || String(jo.commission_status).toLowerCase() === 'null' ? 'unpaid' : String(jo.commission_status).toLowerCase().trim());
         if (filterType === 'unpaid' && cStatus !== 'unpaid') return false;
         if (filterType === 'paid' && cStatus !== 'paid' && cStatus !== 'done') return false;
       }
+
+      if (dateFrom || dateTo) {
+        const raw = jo.Timestamp || jo.timestamp;
+        const d = raw ? new Date(raw) : null;
+        if (!d || isNaN(d.getTime())) return false;
+        if (dateFrom && d < dayjs(dateFrom).startOf('day').toDate()) return false;
+        if (dateTo && d > dayjs(dateTo).endOf('day').toDate()) return false;
+      }
       return true;
     }).sort((a, b) => (parseInt(String(b.id)) || 0) - (parseInt(String(a.id)) || 0));
-  }, [jobOrders, userFullName, userEmail, filterType]);
+  }, [jobOrders, userFullName, userEmail, filterType, dateFrom, dateTo]);
 
   const incentivesBatches = useMemo(() => {
     // Group by processed_at
@@ -126,7 +118,7 @@ const Commission: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [listMode, filterType]);
+  }, [listMode, filterType, dateFrom, dateTo]);
 
   const fetchHistoryData = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -135,11 +127,7 @@ const Commission: React.FC = () => {
       // Fetch all commission history to populate the top stats correctly
       const response = await fetchAgentCommissionHistory('all');
       if (response.success) {
-        setHistory(response.data || []);
         setCurrentPage(1);
-        setBalance(response.balance !== undefined ? Number(response.balance) : 0);
-        setIncentives(response.incentives !== undefined ? Number(response.incentives) : 0);
-        setBonus(response.bonus !== undefined ? Number(response.bonus) : 0);
       } else {
         setError(response.message || 'Failed to fetch commission history');
       }
@@ -151,37 +139,6 @@ const Commission: React.FC = () => {
          incData = incResponse.data || [];
       }
 
-      // ----------------------------------------------------
-      // MOCK DATA INJECTION (For demonstration purposes)
-      // ----------------------------------------------------
-      if (incData.length === 0) {
-        incData = [
-          // Batch 1 (Recent)
-          { id: 991, job_order_id: 101, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 992, job_order_id: 102, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 993, job_order_id: 103, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 994, job_order_id: 104, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 995, job_order_id: 105, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 996, job_order_id: 106, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 997, job_order_id: 107, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 998, job_order_id: 108, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 999, job_order_id: 109, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          { id: 1000, job_order_id: 110, quota_reached: 10, incentive_value: 1500, processed_at: '2026-07-01 10:00:00' },
-          
-          // Batch 2 (Older)
-          { id: 1001, job_order_id: 111, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1002, job_order_id: 112, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1003, job_order_id: 113, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1004, job_order_id: 114, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1005, job_order_id: 115, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1006, job_order_id: 116, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1007, job_order_id: 117, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1008, job_order_id: 118, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1009, job_order_id: 119, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-          { id: 1010, job_order_id: 120, quota_reached: 10, incentive_value: 1500, processed_at: '2026-06-15 14:30:00' },
-        ];
-      }
-      
       setIncentiveHistory(incData);
     } catch (err: any) {
       console.error('Error fetching commission history:', err);
@@ -225,13 +182,6 @@ const Commission: React.FC = () => {
     if (isNaN(numericAmount)) return '₱0.00';
     return `₱${numericAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, []);
-
-  const totalPaid = useMemo(() => {
-    return history.reduce((sum, item) => {
-      const amt = typeof item.total_amount === 'string' ? parseFloat(item.total_amount) : item.total_amount;
-      return sum + (isNaN(amt) ? 0 : amt);
-    }, 0);
-  }, [history]);
 
   const totalPages = useMemo(() => {
     if (listMode === 'incentives') {
@@ -494,64 +444,13 @@ const Commission: React.FC = () => {
   const renderHeader = () => {
     return (
       <View style={styles.headerContainer}>
-        {/* Main Stats Grid */}
-        <View style={styles.statsGrid}>
-          {/* Card 1: Balance */}
-          <LinearGradient
-            colors={[colorPalette?.primary || '#7c3aed', '#5b21b6']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statCard}
-          >
-            <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
-            <Text style={styles.statLabel}>Available Balance</Text>
-            <Text style={styles.statValue}>{formatCurrency(balance)}</Text>
-          </LinearGradient>
-
-          {/* Card 2: Incentives */}
-          <LinearGradient
-            colors={['#10b981', '#065f46']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statCard}
-          >
-            <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
-            <Text style={styles.statLabel}>Incentives</Text>
-            <Text style={styles.statValue}>{formatCurrency(incentives)}</Text>
-          </LinearGradient>
-
-          {/* Card 3: Bonus */}
-          <LinearGradient
-            colors={['#3b82f6', '#1e3a8a']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statCard}
-          >
-            <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
-            <Text style={styles.statLabel}>Bonus</Text>
-            <Text style={styles.statValue}>{formatCurrency(bonus)}</Text>
-          </LinearGradient>
-
-          {/* Card 4: Total Paid */}
-          <LinearGradient
-            colors={['#f59e0b', '#b45309']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.statCard}
-          >
-            <CircleDollarSign size={24} color="#ffffff" style={styles.statIcon} />
-            <Text style={styles.statLabel}>Total Commission Paid</Text>
-            <Text style={styles.statValue}>{formatCurrency(totalPaid)}</Text>
-          </LinearGradient>
-        </View>
-
-        <View style={styles.sectionHeaderBetween}>
-          <Text style={styles.sectionTitle}>History</Text>
-          <View style={{ flexDirection: 'row', gap: 8, zIndex: 100 }}>
+        <Text style={styles.sectionTitleCentered}>History</Text>
+        <View style={styles.filterRow}>
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center', zIndex: 100 }}>
             {/* List Mode Dropdown */}
             <View style={{ position: 'relative', zIndex: 101 }}>
               <Pressable
-                onPress={() => { setIsListModeOpen(!isListModeOpen); setIsFilterOpen(false); }}
+                onPress={() => { setIsListModeOpen(!isListModeOpen); setIsFilterOpen(false); setIsDateOpen(false); }}
                 style={styles.dropdownBtn}
               >
                 <Text style={styles.dropdownBtnText}>
@@ -590,7 +489,7 @@ const Commission: React.FC = () => {
             {listMode === 'all' && (
               <View style={{ position: 'relative', zIndex: 100 }}>
                 <Pressable
-                  onPress={() => { setIsFilterOpen(!isFilterOpen); setIsListModeOpen(false); }}
+                  onPress={() => { setIsFilterOpen(!isFilterOpen); setIsListModeOpen(false); setIsDateOpen(false); }}
                   style={styles.dropdownBtn}
                 >
                   <Text style={styles.dropdownBtnText}>
@@ -627,8 +526,71 @@ const Commission: React.FC = () => {
                 )}
               </View>
             )}
+
+            {/* Date Range Filter */}
+            <View style={{ position: 'relative', zIndex: 99 }}>
+              <Pressable
+                onPress={() => { setIsDateOpen(!isDateOpen); setIsFilterOpen(false); setIsListModeOpen(false); }}
+                style={styles.dropdownBtn}
+              >
+                <Calendar size={14} color="#64748b" />
+                <Text style={styles.dropdownBtnText}>
+                  {dateFrom || dateTo
+                    ? `${dateFrom ? dayjs(dateFrom).format('MMM D') : 'Any'} - ${dateTo ? dayjs(dateTo).format('MMM D') : 'Any'}`
+                    : 'All Dates'}
+                </Text>
+                <ChevronDown size={14} color="#64748b" />
+              </Pressable>
+
+              {isDateOpen && (
+                <View style={[styles.dropdownMenu, { minWidth: 200 }]}>
+                  <Pressable
+                    onPress={() => setShowDatePicker('from')}
+                    style={styles.dropdownItem}
+                  >
+                    <Text style={styles.dropdownItemText}>
+                      From: {dateFrom ? dayjs(dateFrom).format('MMM D, YYYY') : 'Any'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setShowDatePicker('to')}
+                    style={styles.dropdownItem}
+                  >
+                    <Text style={styles.dropdownItemText}>
+                      To: {dateTo ? dayjs(dateTo).format('MMM D, YYYY') : 'Any'}
+                    </Text>
+                  </Pressable>
+                  {(dateFrom || dateTo) && (
+                    <Pressable
+                      onPress={() => { setDateFrom(null); setDateTo(null); setIsDateOpen(false); }}
+                      style={[styles.dropdownItem, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                    >
+                      <X size={14} color="#ef4444" />
+                      <Text style={[styles.dropdownItemText, { color: '#ef4444', fontWeight: '700' }]}>Clear</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={(showDatePicker === 'from' ? dateFrom : dateTo) || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            maximumDate={new Date()}
+            onChange={(event, selectedDate) => {
+              const picker = showDatePicker;
+              setShowDatePicker(null);
+              if (event.type === 'set' && selectedDate) {
+                if (picker === 'from') setDateFrom(selectedDate);
+                else setDateTo(selectedDate);
+              }
+            }}
+          />
+        )}
       </View>
     );
   };
@@ -785,6 +747,18 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     marginTop: 8,
   },
+  sectionTitleCentered: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginTop: 8,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  filterRow: {
+    alignItems: 'center',
+    zIndex: 10,
+  },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -939,4 +913,4 @@ const styles = StyleSheet.create({
   joCardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
 });
 
-export default Commission;
+export default AgentHistory;

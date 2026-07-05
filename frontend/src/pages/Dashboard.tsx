@@ -99,7 +99,7 @@ import LiveMonitor from './LiveMonitor';
 // import ConcernConfig from './ConcernConfig';
 import DashboardCustomer from './DashboardCustomer';
 import DashboardAgent from './DashboardAgent';
-import Commission from './Commission';
+import AgentHistory from './AgentHistory';
 import Achievement from './Achievement';
 import Bills from './Bills';
 import Menu from './Menu';
@@ -213,7 +213,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             case 'agent-dashboard':
                 return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
             case 'commission':
-                return <Commission />;
+                return <AgentHistory />;
             case 'achievement':
                 return <Achievement />;
             case 'customer-bills':
