@@ -62,7 +62,7 @@ const transformApplication = (app: ApiApplication): Application => {
         customerName: app.customer_name || `${app.first_name || ''} ${app.middle_initial || ''} ${app.last_name || ''}`.trim(),
         timestamp: app.timestamp || (app.create_date && app.create_time ? `${app.create_date} ${app.create_time}` : ''),
         address: addressLine,
-        location: app.location || fullAddress,
+        location: (app as any).location || fullAddress,
         status: app.status || 'pending',
         city: cityName,
         region: regionName,

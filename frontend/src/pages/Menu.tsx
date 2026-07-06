@@ -43,6 +43,11 @@ import {
     Activity,
     ClipboardList,
     MapPinCheck,
+    Building,
+    Shield,
+    Wrench,
+    UserCog,
+    DollarSign,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -175,6 +180,22 @@ const Menu: React.FC<MenuProps> = ({ onLogout, onSectionChange }) => {
                 { id: 'live-monitor', label: 'Live Monitor', icon: Activity },
                 { id: 'applicationManagement', label: 'Applications', icon: ClipboardList },
                 { id: 'applicationVisit', label: 'App Visits', icon: MapPinCheck },
+                { id: 'soa', label: 'SOA', icon: FileText },
+                { id: 'invoice', label: 'Invoices', icon: Receipt },
+                { id: 'soa-generation', label: 'SOA Generation', icon: FileText },
+                { id: 'payment-portal', label: 'Payment Portal', icon: CreditCard },
+                { id: 'transaction-list', label: 'Transactions', icon: Receipt },
+                { id: 'customer', label: 'Customers', icon: Users },
+                { id: 'organizations', label: 'Organizations', icon: Building },
+                { id: 'roles', label: 'Roles', icon: Shield },
+                { id: 'team-agent', label: 'Team Agent', icon: Users },
+                { id: 'agent-management', label: 'Agent Management', icon: UserCog },
+                { id: 'commission', label: 'Pay Out/In', icon: DollarSign },
+                { id: 'tech-users', label: 'Technicians', icon: Wrench },
+                { id: 'so-charges', label: 'SO Charges', icon: Receipt },
+                { id: 'disconnection-logs', label: 'Disconnection Logs', icon: AlertTriangle },
+                { id: 'reconnection-logs', label: 'Reconnection Logs', icon: RefreshCw },
+                { id: 'settings', label: 'Settings', icon: Settings },
             ]
         }] : []),
     ];

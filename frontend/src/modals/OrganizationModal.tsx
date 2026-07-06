@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Organization } from '../types/api';
 import { organizationService } from '../services/userService';
 import ModalUITemplate, { useModalTheme } from './ui-modal/ModalUITemplate';
@@ -12,75 +14,106 @@ interface OrganizationModalProps {
 
 const OrganizationForm: React.FC<{
   formData: any;
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleInputChange: (name: string, value: string) => void;
   errors: Record<string, string>;
 }> = ({ formData, handleInputChange, errors }) => {
   const { isDarkMode } = useModalTheme();
 
-  const inputClass = (error?: string) => `w-full px-4 py-2.5 rounded-lg border transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-50 
-    ${isDarkMode
-      ? `bg-gray-800 text-white ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-700 focus:ring-blue-500/20'}`
-      : `bg-white text-gray-900 ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-200 focus:ring-blue-500/20'}`
-    }`;
+  const labelColor = isDarkMode ? '#9ca3af' : '#6b7280';
+  const textColor = isDarkMode ? '#ffffff' : '#111827';
+  const bgColor = isDarkMode ? '#1f2937' : '#ffffff';
 
-  const labelClass = `block text-sm font-medium mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+  const inputStyle = (error?: string) => ({
+    width: '100%' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: error ? '#ef4444' : (isDarkMode ? '#374151' : '#e5e7eb'),
+    backgroundColor: bgColor,
+    color: textColor,
+    fontSize: 14,
+  });
+
+  const labelStyle = {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    marginBottom: 6,
+    color: labelColor,
+  };
 
   return (
-    <div className="space-y-6">
+    <View style={{ gap: 20 }}>
       {errors.general && (
-        <div className={`p-4 border rounded-xl text-sm font-medium ${isDarkMode ? 'bg-red-900/20 border-red-800/30 text-red-400' : 'bg-red-50 border-red-200 text-red-600'}`}>
-          {errors.general}
-        </div>
+        <View
+          style={{
+            padding: 16,
+            borderWidth: 1,
+            borderRadius: 12,
+            backgroundColor: isDarkMode ? 'rgba(127,29,29,0.2)' : '#fef2f2',
+            borderColor: isDarkMode ? 'rgba(153,27,27,0.3)' : '#fecaca',
+          }}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#f87171' : '#dc2626' }}>
+            {errors.general}
+          </Text>
+        </View>
       )}
 
-      <div className="space-y-4">
-        <div>
-          <label className={labelClass}>Organization Name</label>
-          <input
-            name="organization_name"
+      <View style={{ gap: 16 }}>
+        <View>
+          <Text style={labelStyle}>Organization Name</Text>
+          <TextInput
             value={formData.organization_name}
-            onChange={handleInputChange}
-            className={inputClass(errors.organization_name)}
+            onChangeText={(v) => handleInputChange('organization_name', v)}
+            style={inputStyle(errors.organization_name)}
             placeholder="Organization Name"
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
           />
-          {errors.organization_name && <p className="text-red-500 text-xs mt-1.5 font-medium ml-1">{errors.organization_name}</p>}
-        </div>
+          {errors.organization_name && (
+            <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 6, marginLeft: 4, fontWeight: '500' }}>
+              {errors.organization_name}
+            </Text>
+          )}
+        </View>
 
-        <div>
-          <label className={labelClass}>Address</label>
-          <input
-            name="address"
+        <View>
+          <Text style={labelStyle}>Address</Text>
+          <TextInput
             value={formData.address}
-            onChange={handleInputChange}
-            className={inputClass()}
+            onChangeText={(v) => handleInputChange('address', v)}
+            style={inputStyle()}
             placeholder="Address"
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
           />
-        </div>
+        </View>
 
-        <div>
-          <label className={labelClass}>Contact Number</label>
-          <input
-            name="contact_number"
+        <View>
+          <Text style={labelStyle}>Contact Number</Text>
+          <TextInput
             value={formData.contact_number}
-            onChange={handleInputChange}
-            className={inputClass()}
+            onChangeText={(v) => handleInputChange('contact_number', v)}
+            style={inputStyle()}
             placeholder="Contact Number"
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            keyboardType="phone-pad"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className={labelClass}>Email Address</label>
-          <input
-            name="email_address"
-            type="email"
+        <View>
+          <Text style={labelStyle}>Email Address</Text>
+          <TextInput
             value={formData.email_address}
-            onChange={handleInputChange}
-            className={inputClass(errors.email_address)}
+            onChangeText={(v) => handleInputChange('email_address', v)}
+            style={inputStyle(errors.email_address)}
             placeholder="Email Address"
+            placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
-        </div>
-      </div>
-    </div>
+        </View>
+      </View>
+    </View>
   );
 };
 
@@ -117,8 +150,7 @@ const OrganizationModal: React.FC<OrganizationModalProps> = ({ isOpen, onClose, 
     }
   }, [isOpen, organization]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleInputChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -133,9 +165,9 @@ const OrganizationModal: React.FC<OrganizationModalProps> = ({ isOpen, onClose, 
     return Object.keys(newErrors).length === 0;
   };
 
-  const getUserEmail = () => {
+  const getUserEmail = async () => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       if (authData) {
         const user = JSON.parse(authData);
         return user.email || user.email_address || 'system';
@@ -150,9 +182,9 @@ const OrganizationModal: React.FC<OrganizationModalProps> = ({ isOpen, onClose, 
     if (!validate()) return;
     setLoading(true);
     setErrors({});
-    
+
     try {
-      const userEmail = getUserEmail();
+      const userEmail = await getUserEmail();
       const payload: any = {
         organization_name: formData.organization_name,
         address: formData.address || null,
@@ -166,30 +198,21 @@ const OrganizationModal: React.FC<OrganizationModalProps> = ({ isOpen, onClose, 
         payload.created_by_user_id = userEmail;
       }
 
-      console.log('[OrganizationModal] Sending payload:', payload);
-
       let response: any;
       if (isEditMode && organization) {
-        console.log('[OrganizationModal] Updating organization:', organization.id);
         response = await organizationService.updateOrganization(organization.id, payload);
       } else {
-        console.log('[OrganizationModal] Creating new organization');
         response = await organizationService.createOrganization(payload);
       }
-
-      console.log('[OrganizationModal] Server response:', response);
 
       if (response.success && response.data) {
         onSave(response.data);
         onClose();
       } else {
         const errorMsg = response.message || response.error || 'Action failed';
-        console.error('[OrganizationModal] Action failed:', errorMsg);
         setErrors({ general: errorMsg });
       }
     } catch (err: any) {
-      console.error('[OrganizationModal] Request error:', err);
-      // Try to extract more info from the error if it's an Axios error
       const detailedError = err.response?.data?.message || err.response?.data?.error || err.message;
       setErrors({ general: detailedError || 'An error occurred' });
     } finally {
@@ -207,7 +230,7 @@ const OrganizationModal: React.FC<OrganizationModalProps> = ({ isOpen, onClose, 
       primaryAction={{
         label: isEditMode ? 'Update' : 'Save',
         onClick: handleSave,
-        disabled: loading
+        disabled: loading,
       }}
     >
       <OrganizationForm

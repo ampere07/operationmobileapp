@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   Alert,
   Linking,
+  StyleSheet,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -860,7 +861,7 @@ const SOA: React.FC = () => {
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = {
+const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1222,6 +1223,6 @@ const styles = {
     color: '#fff',
     fontSize: 13,
   },
-};
+});
 
 export default SOA;

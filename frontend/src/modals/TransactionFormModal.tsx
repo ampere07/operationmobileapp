@@ -416,7 +416,7 @@ const TransactionFormModal: React.FC<TransactionFormModalProps> = memo(({
 
       setUploadProgress(80);
       const result = isEdit 
-        ? await transactionService.updateTransaction(initialTransactionData.id, payload)
+        ? await (transactionService as any).updateTransaction(initialTransactionData.id, payload)
         : await transactionService.createTransaction(payload);
       setUploadProgress(100);
 

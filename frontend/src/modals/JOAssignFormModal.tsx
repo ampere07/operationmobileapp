@@ -631,7 +631,7 @@ const JOAssignFormModal: React.FC<JOAssignFormModalProps> = ({
       house_front_picture_url: applicationData?.house_front_picture_url || null,
       installation_landmark: toNullIfEmpty(data.installationLandmark),
       referred_by: toNullIfEmpty(data.referredBy),
-      organization_id: currentUser?.organization_id ?? null,
+      organization_id: (currentUser as any)?.organization_id ?? null,
       created_by_user_email: data.modifiedBy || currentUserEmail,
       updated_by_user_email: data.modifiedBy || currentUserEmail,
     };

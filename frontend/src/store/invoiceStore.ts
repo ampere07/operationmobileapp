@@ -132,7 +132,7 @@ export const useInvoiceStore = create<InvoiceStore>((set, get) => ({
                 staggeredPaymentsCount: 0,
                 invoiceStatus: record.status,
                 billingDay: record.account?.billing_day || 0,
-                organization_id: record.organization_id,
+                organization_id: (record as any).organization_id,
             });
 
             // Initial fetch
@@ -207,7 +207,7 @@ export const useInvoiceStore = create<InvoiceStore>((set, get) => ({
 
         try {
             const isoString = lastUpdated.toISOString();
-            const result = await invoiceService.getAllInvoices(false, 1, 1000, isoString);
+            const result = await (invoiceService.getAllInvoices as any)(false, 1, 1000, isoString);
 
             if (result && result.success && result.data && result.data.length > 0) {
                 // Transform helper (same as in fetchInvoiceRecords)
@@ -259,7 +259,7 @@ export const useInvoiceStore = create<InvoiceStore>((set, get) => ({
                     staggeredPaymentsCount: 0,
                     invoiceStatus: record.status,
                     billingDay: record.account?.billing_day || 0,
-                    organization_id: record.organization_id,
+                    organization_id: (record as any).organization_id,
                 });
 
                 const newTransformed = (result.data as InvoiceRecord[]).map(transform);

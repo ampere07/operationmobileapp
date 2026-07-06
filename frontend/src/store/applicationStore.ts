@@ -76,7 +76,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
             };
 
             // First chunk fetch
-            const firstResult = await getApplications(false, 1, CHUNK_SIZE, search, since);
+            const firstResult = await (getApplications as any)(false, 1, CHUNK_SIZE, search, since);
 
             // Check if this fetch is still valid
             if (get().currentFetchId !== fetchId) {
@@ -87,7 +87,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
                 throw new Error(firstResult.message || 'Failed to fetch applications');
             }
 
-            const dbTotal = firstResult.pagination?.total_count || firstResult.applications?.length || 0;
+            const dbTotal = (firstResult.pagination as any)?.total_count || firstResult.applications?.length || 0;
             let allFetchedRecords = (firstResult.applications || []).map(transformApplication);
 
             // Update state with first chunk
@@ -113,7 +113,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
 
                 try {
                     // Use fastMode = true for background chunks to reduce payload size
-                    const nextResult = await getApplications(true, currentPageNum, CHUNK_SIZE, search, since);
+                    const nextResult = await (getApplications as any)(true, currentPageNum, CHUNK_SIZE, search, since);
 
                     // Check if superseded after async call
                     if (get().currentFetchId !== fetchId) return;
@@ -124,7 +124,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
 
                         set({
                             applications: sortApplications(allFetchedRecords),
-                            totalCount: nextResult.pagination?.total_count || dbTotal,
+                            totalCount: (nextResult.pagination as any)?.total_count || dbTotal,
                             currentPage: currentPageNum,
                             hasMore: allFetchedRecords.length < dbTotal,
                             isFullyLoaded: dbTotal === 0 || allFetchedRecords.length >= dbTotal
@@ -190,7 +190,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
             };
 
             // Fetch only records updated since last sync
-            const result = await getApplications(false, 1, 1000, '', lastSyncTime);
+            const result = await (getApplications as any)(false, 1, 1000, '', lastSyncTime);
 
             // Check if superseded
             if (get().currentFetchId !== fetchId) return;
@@ -203,7 +203,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
                         const updatedApps = [...state.applications];
                         let newCount = 0;
 
-                        newRecords.forEach(newApp => {
+                        newRecords.forEach((newApp: any) => {
                             const index = updatedApps.findIndex(a => a.id === newApp.id);
                             if (index !== -1) {
                                 // Update existing

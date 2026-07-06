@@ -134,6 +134,9 @@ export interface CreateUserRequest {
   organization_id?: number;
   role_id?: number;
   agent_id?: number | null;
+  darkmode?: string;
+  created_by_user_id?: number | null;
+  updated_by_user_id?: number | null;
 }
 
 export interface UpdateUserRequest {

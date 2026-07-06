@@ -60,7 +60,7 @@ export const PaymentPortalProvider: React.FC<{ children: React.ReactNode }> = ({
             const data = await paymentPortalLogsService.getAllLogs();
 
             // Transform the data to match the UI interface
-            const transformedRecords: PaymentPortalRecord[] = data.map(log => ({
+            const transformedRecords: PaymentPortalRecord[] = data.map((log: any) => ({
                 id: log.id.toString(),
                 reference_no: log.reference_no,
                 account_id: log.account_id,

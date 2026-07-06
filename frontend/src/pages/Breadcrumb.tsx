@@ -1,57 +1,57 @@
 import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 
 interface BreadcrumbProps {
   items: Array<{ label: string; href?: string; onClick?: () => void }>;
 }
 
 const Breadcrumb: React.FC<BreadcrumbProps> = ({ items }) => {
+  const isDarkMode = false;
+  const activeColor = '#111827';
+  const mutedColor = '#6b7280';
+
   return (
-    <div className="px-6 py-3">
-      <nav className="flex" aria-label="Breadcrumb">
-        <ol className="inline-flex items-center space-x-1 md:space-x-3">
-          {items.map((item, index) => (
-            <li key={index} className="inline-flex items-center">
+    <View style={{ paddingHorizontal: 24, paddingVertical: 12 }}>
+      <View
+        accessibilityRole="header"
+        accessibilityLabel="Breadcrumb"
+        style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}
+      >
+        {items.map((item, index) => {
+          const isLast = index === items.length - 1;
+          const color = isLast ? activeColor : mutedColor;
+
+          const labelNode = (
+            <Text style={{ fontSize: 14, fontWeight: '500', color }}>
+              {item.label}
+            </Text>
+          );
+
+          return (
+            <View
+              key={index}
+              style={{ flexDirection: 'row', alignItems: 'center' }}
+            >
               {index > 0 && (
-                <svg className="w-4 h-4 text-gray-400 mx-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
+                <ChevronRight
+                  size={16}
+                  color="#9ca3af"
+                  style={{ marginHorizontal: 4 }}
+                />
               )}
               {item.onClick ? (
-                <button
-                  onClick={item.onClick}
-                  className={`text-sm font-medium ${
-                    index === items.length - 1
-                      ? 'text-white'
-                      : 'text-gray-400 hover:text-gray-300 cursor-pointer'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ) : item.href ? (
-                <a
-                  href={item.href}
-                  className={`text-sm font-medium ${
-                    index === items.length - 1
-                      ? 'text-white'
-                      : 'text-gray-400 hover:text-gray-300'
-                  }`}
-                >
-                  {item.label}
-                </a>
+                <TouchableOpacity onPress={item.onClick}>
+                  {labelNode}
+                </TouchableOpacity>
               ) : (
-                <span className={`text-sm font-medium ${
-                  index === items.length - 1
-                    ? 'text-white'
-                    : 'text-gray-400 hover:text-gray-300'
-                }`}>
-                  {item.label}
-                </span>
+                labelNode
               )}
-            </li>
-          ))}
-        </ol>
-      </nav>
-    </div>
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 };
 

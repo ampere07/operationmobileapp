@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, ScrollView, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Role, ApiResponse } from '../types/api';
 import { roleService } from '../services/userService';
 import ModalUITemplate, { useModalTheme } from './ui-modal/ModalUITemplate';
@@ -64,222 +66,141 @@ const SYSTEM_PAGES = [
   { id: 'settings', label: 'Settings' },
 ];
 
-const JOB_ORDER_SUB_PERMISSIONS = [
-  { id: 'job-order.approve', label: 'Approve' },
-  { id: 'job-order.failed', label: 'Failed' },
-  { id: 'job-order.tech-edit', label: 'Tech Edit' },
-  { id: 'job-order.admin-edit', label: 'Admin Edit' },
-  { id: 'job-order.attachment', label: 'Attachment' },
-];
-
-const CUSTOMER_SUB_PERMISSIONS = [
-  { id: 'customer.so-request', label: 'SO Request' },
-  { id: 'customer.details-edit', label: 'Details Edit' },
-  { id: 'customer.attachment', label: 'Attachment' },
-  { id: 'customer.transact', label: 'Transact' },
-];
-
-const TRANSACTION_SUB_PERMISSIONS = [
-  { id: 'transaction-list.batch-approve', label: 'Batch Approve' },
-  { id: 'transaction-list.approve', label: 'Approve' },
-  { id: 'transaction-list.revert-request', label: 'Revert Request' },
-];
-
-const REBATE_SUB_PERMISSIONS = [
-  { id: 'mass-rebate.add', label: 'Add Rebate' },
-];
-
-const STAGGERED_SUB_PERMISSIONS = [
-  { id: 'staggered-payment.add', label: 'Add Staggered' },
-];
-
-const DISCOUNT_SUB_PERMISSIONS = [
-  { id: 'discounts.add', label: 'Add Discount' },
-];
-
-const APPLICATION_SUB_PERMISSIONS = [
-  { id: 'application-management.move-to-jo', label: 'Move to JO' },
-  { id: 'application-management.quick-status', label: 'Quick Status' },
-];
-
-const SERVICE_ORDER_SUB_PERMISSIONS = [
-  { id: 'service-order.tech-edit', label: 'Tech Edit' },
-  { id: 'service-order.admin-edit', label: 'Admin Edit' },
-];
+const SUB_PERMISSIONS: Record<string, { id: string; label: string }[]> = {
+  'job-order': [
+    { id: 'job-order.approve', label: 'Approve' },
+    { id: 'job-order.failed', label: 'Failed' },
+    { id: 'job-order.tech-edit', label: 'Tech Edit' },
+    { id: 'job-order.admin-edit', label: 'Admin Edit' },
+    { id: 'job-order.attachment', label: 'Attachment' },
+  ],
+  customer: [
+    { id: 'customer.so-request', label: 'SO Request' },
+    { id: 'customer.details-edit', label: 'Details Edit' },
+    { id: 'customer.attachment', label: 'Attachment' },
+    { id: 'customer.transact', label: 'Transact' },
+  ],
+  'transaction-list': [
+    { id: 'transaction-list.batch-approve', label: 'Batch Approve' },
+    { id: 'transaction-list.approve', label: 'Approve' },
+    { id: 'transaction-list.revert-request', label: 'Revert Request' },
+  ],
+  'mass-rebate': [{ id: 'mass-rebate.add', label: 'Add Rebate' }],
+  'staggered-payment': [{ id: 'staggered-payment.add', label: 'Add Staggered' }],
+  discounts: [{ id: 'discounts.add', label: 'Add Discount' }],
+  'application-management': [
+    { id: 'application-management.move-to-jo', label: 'Move to JO' },
+    { id: 'application-management.quick-status', label: 'Quick Status' },
+  ],
+  'service-order': [
+    { id: 'service-order.tech-edit', label: 'Tech Edit' },
+    { id: 'service-order.admin-edit', label: 'Admin Edit' },
+  ],
+};
 
 const RoleForm: React.FC<{
   formData: any;
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  handleFieldChange: (name: string, value: string) => void;
   handlePermissionChange: (pageId: string, checked: boolean) => void;
   errors: Record<string, string>;
   selectedPermissions: string[];
-}> = ({ formData, handleInputChange, handlePermissionChange, errors, selectedPermissions }) => {
-  const { isDarkMode } = useModalTheme();
-
-  const inputClass = (error?: string) => `w-full px-4 py-2.5 rounded-lg border transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-50 
-    ${isDarkMode
-      ? `bg-gray-800 text-white ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-700 focus:ring-blue-500/20'}`
-      : `bg-white text-gray-900 ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-200 focus:ring-blue-500/20'}`
-    }`;
-
-  const labelClass = `block text-sm font-medium mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+  primaryColor: string;
+}> = ({ formData, handleFieldChange, handlePermissionChange, errors, selectedPermissions, primaryColor }) => {
+  const labelStyle = { fontSize: 13, fontWeight: '500' as const, marginBottom: 6, color: '#6b7280' };
+  const inputStyle = (error?: string) => ({
+    width: '100%' as const,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: error ? '#ef4444' : '#e5e7eb',
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    fontSize: 14,
+  });
 
   return (
-    <div className="space-y-6">
-      {errors.general && (
-        <div className={`p-4 border rounded-xl text-sm font-medium ${isDarkMode ? 'bg-red-900/20 border-red-800/30 text-red-400' : 'bg-red-50 border-red-200 text-red-600'}`}>
-          {errors.general}
-        </div>
-      )}
+    <View style={{ gap: 20 }}>
+      {errors.general ? (
+        <View style={{ padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: '#fef2f2', borderColor: '#fecaca' }}>
+          <Text style={{ fontSize: 14, fontWeight: '500', color: '#dc2626' }}>{errors.general}</Text>
+        </View>
+      ) : null}
 
-      <div className="space-y-4">
-        <div>
-          <label className={labelClass}>Role Name*</label>
-          <input
-            name="role_name"
-            value={formData.role_name}
-            onChange={handleInputChange}
-            className={inputClass(errors.role_name)}
-            placeholder="e.g. Administrator, Agent"
-          />
-          {errors.role_name && <p className="text-red-500 text-xs mt-1.5 font-medium ml-1">{errors.role_name}</p>}
-        </div>
+      <View>
+        <Text style={labelStyle}>Role Name*</Text>
+        <TextInput
+          value={formData.role_name}
+          onChangeText={(v) => handleFieldChange('role_name', v)}
+          style={inputStyle(errors.role_name)}
+          placeholder="e.g. Administrator, Agent"
+          placeholderTextColor="#9ca3af"
+        />
+        {errors.role_name ? (
+          <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 6, marginLeft: 4, fontWeight: '500' }}>
+            {errors.role_name}
+          </Text>
+        ) : null}
+      </View>
 
-        <div>
-          <label className={labelClass}>Description</label>
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleInputChange}
-            className={inputClass()}
-            placeholder="Briefly describe the role's responsibilities"
-            rows={2}
-          />
-        </div>
+      <View>
+        <Text style={labelStyle}>Description</Text>
+        <TextInput
+          value={formData.description}
+          onChangeText={(v) => handleFieldChange('description', v)}
+          style={[inputStyle(), { minHeight: 64, textAlignVertical: 'top' }]}
+          placeholder="Briefly describe the role's responsibilities"
+          placeholderTextColor="#9ca3af"
+          multiline
+        />
+      </View>
 
-        <div>
-          <label className={labelClass}>Permissions (Page Access)</label>
-          <div className={`border rounded-lg overflow-hidden ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`grid grid-cols-[1.5fr_80px_2fr] px-4 py-2 text-xs font-bold uppercase tracking-wider border-b ${isDarkMode ? 'bg-gray-800 text-gray-400 border-gray-700' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-              <div>Page Name</div>
-              <div className="text-center">Access</div>
-              <div></div>
-            </div>
-            <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
-              {SYSTEM_PAGES.map((page) => (
-                <React.Fragment key={page.id}>
-                  <div className={`grid grid-cols-[1.5fr_80px_2fr] px-4 py-3 items-center transition-colors`}>
-                    <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>{page.label}</div>
-                    <div className="flex justify-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedPermissions.includes(page.id)}
-                        onChange={(e) => handlePermissionChange(page.id, e.target.checked)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                      />
-                    </div>
-                    <div className="flex items-center gap-x-6">
-                      {page.id === 'job-order' && JOB_ORDER_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+      <View>
+        <Text style={labelStyle}>Permissions (Page Access)</Text>
+        <View style={{ borderWidth: 1, borderRadius: 8, borderColor: '#e5e7eb', overflow: 'hidden' }}>
+          <ScrollView style={{ maxHeight: 320 }} nestedScrollEnabled>
+            {SYSTEM_PAGES.map((page) => {
+              const subs = SUB_PERMISSIONS[page.id];
+              const parentChecked = selectedPermissions.includes(page.id);
+              return (
+                <View key={page.id} style={{ borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingHorizontal: 14, paddingVertical: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 14, color: '#374151', flex: 1 }}>{page.label}</Text>
+                    <Switch
+                      value={parentChecked}
+                      onValueChange={(val) => handlePermissionChange(page.id, val)}
+                      trackColor={{ true: primaryColor, false: '#d1d5db' }}
+                      thumbColor="#ffffff"
+                    />
+                  </View>
+                  {subs && parentChecked ? (
+                    <View style={{ marginTop: 8, paddingLeft: 12, gap: 8 }}>
+                      {subs.map((sub) => (
+                        <View key={sub.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={{ fontSize: 12, color: '#6b7280' }}>{sub.label}</Text>
+                          <Switch
+                            value={selectedPermissions.includes(sub.id)}
+                            onValueChange={(val) => handlePermissionChange(sub.id, val)}
+                            trackColor={{ true: primaryColor, false: '#d1d5db' }}
+                            thumbColor="#ffffff"
                           />
-                        </div>
+                        </View>
                       ))}
-                      {page.id === 'customer' && CUSTOMER_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'transaction-list' && TRANSACTION_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'mass-rebate' && REBATE_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'staggered-payment' && STAGGERED_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'discounts' && DISCOUNT_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'application-management' && APPLICATION_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                      {page.id === 'service-order' && SERVICE_ORDER_SUB_PERMISSIONS.map((sub) => (
-                        <div key={sub.id} className="flex flex-col items-center gap-1.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-tight leading-none whitespace-nowrap ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{sub.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedPermissions.includes(sub.id)}
-                            onChange={(e) => handlePermissionChange(sub.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </View>
   );
 };
 
 const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) => {
+  const { colorPalette } = useModalTheme();
+  const primaryColor = colorPalette?.primary || '#7c3aed';
   const isEditMode = !!role;
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -298,18 +219,19 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) 
           role_name: role.role_name || '',
           description: role.description || '',
         });
-        
+
         // Handle permissions (could be array from Laravel or string from legacy)
         let perms: string[] = [];
-        if (role.permissions) {
-          if (Array.isArray(role.permissions)) {
-            perms = role.permissions;
-          } else if (typeof role.permissions === 'string') {
+        const rolePerms = (role as any).permissions;
+        if (rolePerms) {
+          if (Array.isArray(rolePerms)) {
+            perms = rolePerms;
+          } else if (typeof rolePerms === 'string') {
             try {
-              const parsed = JSON.parse(role.permissions);
+              const parsed = JSON.parse(rolePerms);
               perms = Array.isArray(parsed) ? parsed : [];
             } catch (e) {
-              perms = role.permissions.split(',').map(p => p.trim()).filter(Boolean);
+              perms = rolePerms.split(',').map((p: string) => p.trim()).filter(Boolean);
             }
           }
         }
@@ -325,23 +247,22 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) 
     }
   }, [isOpen, role]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleFieldChange = (name: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
   const handlePermissionChange = (pageId: string, checked: boolean) => {
-    setSelectedPermissions(prev => {
+    setSelectedPermissions((prev) => {
       let newPermissions = [...prev];
-      
+
       if (checked) {
         if (!newPermissions.includes(pageId)) {
           newPermissions.push(pageId);
         }
-        
+
         // If it's a sub-permission, auto-check the parent
         if (pageId.includes('.')) {
           const parentId = pageId.split('.')[0];
@@ -352,26 +273,26 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) 
 
         // Handle mutual exclusivity for job-order.tech-edit and job-order.admin-edit
         if (pageId === 'job-order.tech-edit') {
-          newPermissions = newPermissions.filter(id => id !== 'job-order.admin-edit');
+          newPermissions = newPermissions.filter((id) => id !== 'job-order.admin-edit');
         } else if (pageId === 'job-order.admin-edit') {
-          newPermissions = newPermissions.filter(id => id !== 'job-order.tech-edit');
+          newPermissions = newPermissions.filter((id) => id !== 'job-order.tech-edit');
         }
 
         // Handle mutual exclusivity for service-order.tech-edit and service-order.admin-edit
         if (pageId === 'service-order.tech-edit') {
-          newPermissions = newPermissions.filter(id => id !== 'service-order.admin-edit');
+          newPermissions = newPermissions.filter((id) => id !== 'service-order.admin-edit');
         } else if (pageId === 'service-order.admin-edit') {
-          newPermissions = newPermissions.filter(id => id !== 'service-order.tech-edit');
+          newPermissions = newPermissions.filter((id) => id !== 'service-order.tech-edit');
         }
       } else {
-        newPermissions = newPermissions.filter(id => id !== pageId);
-        
+        newPermissions = newPermissions.filter((id) => id !== pageId);
+
         // If it's a parent, auto-uncheck all sub-permissions
         if (!pageId.includes('.')) {
-          newPermissions = newPermissions.filter(id => !id.startsWith(pageId + '.'));
+          newPermissions = newPermissions.filter((id) => !id.startsWith(pageId + '.'));
         }
       }
-      
+
       return newPermissions;
     });
   };
@@ -389,23 +310,27 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) 
     setLoading(true);
 
     try {
-      const payload = {
+      const payload: any = {
         role_name: formData.role_name,
         description: formData.description,
-        permissions: selectedPermissions
+        permissions: selectedPermissions,
       };
 
-      const authData = localStorage.getItem('authData');
-      const currentUser = authData ? JSON.parse(authData) : null;
-      if (currentUser?.organization_id) {
-        (payload as any).organization_id = currentUser.organization_id;
+      try {
+        const authData = await AsyncStorage.getItem('authData');
+        const currentUser = authData ? JSON.parse(authData) : null;
+        if (currentUser?.organization_id) {
+          payload.organization_id = currentUser.organization_id;
+        }
+      } catch (e) {
+        // ignore auth parse errors
       }
 
       let response: ApiResponse<Role>;
       if (isEditMode && role) {
-        response = await roleService.updateRole(role.id, payload as any);
+        response = await roleService.updateRole(role.id, payload);
       } else {
-        response = await roleService.createRole(payload as any);
+        response = await roleService.createRole(payload);
       }
 
       if (response.success && response.data) {
@@ -431,15 +356,16 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, onSave, role }) 
       primaryAction={{
         label: isEditMode ? 'Update' : 'Save',
         onClick: handleSave,
-        disabled: loading
+        disabled: loading,
       }}
     >
       <RoleForm
         formData={formData}
-        handleInputChange={handleInputChange}
+        handleFieldChange={handleFieldChange}
         handlePermissionChange={handlePermissionChange}
         errors={errors}
         selectedPermissions={selectedPermissions}
+        primaryColor={primaryColor}
       />
     </ModalUITemplate>
   );

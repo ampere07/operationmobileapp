@@ -58,7 +58,7 @@ export const useCustomerDashboardStore = create<CustomerDashboardState>((set, ge
                     (isCustomerRole ? soaService.getStatementsByAccountNo(accNo) : soaService.getStatementsByAccount(billingId)).catch(() => []),
                     (isCustomerRole ? invoiceService.getInvoicesByAccountNo(accNo) : invoiceService.getInvoicesByAccount(billingId)).catch(() => []),
                     paymentPortalLogsService.getLogsByAccountNo(accNo).catch(() => []),
-                    transactionService.getTransactionsByAccountNo(accNo).catch(() => ({ success: false, data: [] })),
+                    (transactionService as any).getTransactionsByAccountNo(accNo).catch(() => ({ success: false, data: [] })),
                     serviceChargeService.getServiceChargeLogsByAccountNo(accNo).catch(() => []),
                     serviceChargeService.getServiceOrdersByAccountNo(accNo).catch(() => [])
                 ]);

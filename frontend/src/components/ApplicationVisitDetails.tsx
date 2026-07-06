@@ -234,7 +234,7 @@ const ApplicationVisitDetails: React.FC<ApplicationVisitDetailsProps> = ({
 
       await updateApplicationVisit(applicationVisit.id, {
         visit_status: newStatus,
-        updated_by_user_email: updatedByEmail,
+        updated_by_user_email: updatedByEmail ?? undefined,
       });
 
       setCurrentVisitData({ ...currentVisitData, visit_status: newStatus || '' });

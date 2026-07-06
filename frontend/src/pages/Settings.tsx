@@ -1,9 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, Sun, Moon, Plus, Image, Loader2, CheckCircle, XCircle } from 'lucide-react';
-// import AddColorPaletteModal from '../modals/AddColorPaletteModal';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  RefreshControl,
+  useWindowDimensions,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { Palette, Plus, Image as ImageIcon, Trash2, Check, Zap } from 'lucide-react-native';
+import AddColorPaletteModal from '../modals/AddColorPaletteModal';
+import GenerateBillingModal from '../modals/GenerateBillingModal';
+import LoadingModalGlobal from '../components/common/LoadingModalGlobal';
 import { settingsImageSizeService, ImageSize } from '../services/settingsImageSizeService';
-import { settingsColorPaletteService, ColorPalette as DbColorPalette } from '../services/settingsColorPaletteService';
-import { userSettingsService } from '../services/userSettingsService';
+import {
+  settingsColorPaletteService,
+  ColorPalette as DbColorPalette,
+} from '../services/settingsColorPaletteService';
 import { systemConfigService } from '../services/systemConfigService';
 
 interface ColorPalette {
@@ -14,69 +30,96 @@ interface ColorPalette {
   accent: string;
 }
 
+interface ModalConfig {
+  isOpen: boolean;
+  type: 'success' | 'error' | 'warning' | 'confirm' | 'loading';
+  title: string;
+  message: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}
+
 const Settings: React.FC = () => {
-  const isDarkMode = false; // Forced light mode as per user request
-  const [isLoadingPreferences, setIsLoadingPreferences] = useState<boolean>(true);
+  const isDarkMode = false; // Forced light mode
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddPaletteModal, setShowAddPaletteModal] = useState<boolean>(false);
   const [dbPalettes, setDbPalettes] = useState<DbColorPalette[]>([]);
   const [imageSizes, setImageSizes] = useState<ImageSize[]>([]);
   const [activeImageSizeId, setActiveImageSizeId] = useState<number | null>(null);
   const [selectedImageSizeId, setSelectedImageSizeId] = useState<number | null>(null);
   const [isEditingImageSize, setIsEditingImageSize] = useState<boolean>(false);
-  const [isSavingImageSize, setIsSavingImageSize] = useState<boolean>(false);
+  const [isSavingImageSize] = useState<boolean>(false);
   const [colorPalette, setColorPalette] = useState<DbColorPalette | null>(null);
+  const [userRoleId, setUserRoleId] = useState<number | null>(null);
+  const [userRoleName, setUserRoleName] = useState<string>('');
+  const [showGenerateBillingModal, setShowGenerateBillingModal] = useState<boolean>(false);
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isTogglingDarkMode, setIsTogglingDarkMode] = useState<boolean>(false);
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
-  const [showSuccess, setShowSuccess] = useState<boolean>(false);
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [showError, setShowError] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string>('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoAsset, setLogoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
 
-  useEffect(() => {
-    const fetchColorPalette = async () => {
-      try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
-      } catch (err) {
-        console.error('Failed to fetch color palette:', err);
+  const [loading, setLoading] = useState(false);
+  const [loadingPercentage, setLoadingPercentage] = useState(0);
+  const [modal, setModal] = useState<ModalConfig>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: '',
+  });
+
+  const primary = colorPalette?.primary || '#7c3aed';
+
+  const colors = {
+    pageBg: '#f9fafb',
+    card: '#ffffff',
+    surface: '#f3f4f6',
+    border: '#e5e7eb',
+    text: '#111827',
+    subtext: '#6b7280',
+  };
+
+  const isAdmin = userRoleId === 7 || userRoleName.toLowerCase() === 'superadmin';
+
+  const convertGoogleDriveUrl = (url: string): string => {
+    if (!url) return '';
+    if (url.startsWith('blob:') || url.startsWith('file:')) return url;
+    const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || '';
+    return `${apiUrl}/proxy/image?url=${encodeURIComponent(url)}`;
+  };
+
+  const fetchColorPalette = async () => {
+    try {
+      const activePalette = await settingsColorPaletteService.getActive();
+      setColorPalette(activePalette);
+    } catch (err) {
+      console.error('Failed to fetch color palette:', err);
+    }
+  };
+
+  const loadLogo = async () => {
+    try {
+      const url = await systemConfigService.getLogo();
+      setLogoUrl(url);
+    } catch (error) {
+      console.error('Failed to load logo:', error);
+    }
+  };
+
+  const loadUserRole = async () => {
+    try {
+      const authData = await AsyncStorage.getItem('authData');
+      if (authData) {
+        const userData = JSON.parse(authData);
+        setUserRoleId(userData.role_id || null);
+        setUserRoleName(userData.role || '');
       }
-    };
-    fetchColorPalette();
-  }, []);
-
-  useEffect(() => {
-    const loadLogo = async () => {
-      try {
-        const url = await systemConfigService.getLogo();
-        setLogoUrl(url);
-      } catch (error) {
-        console.error('Failed to load logo:', error);
-      }
-    };
-
-    loadLogo();
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoadingPreferences(true);
-      try {
-        await loadImageSizes();
-        await loadColorPalettes();
-      } catch (error) {
-        console.error('[Settings] Failed to load data:', error);
-      } finally {
-        setIsLoadingPreferences(false);
-      }
-    };
-
-    loadData();
-  }, []);
+    } catch (error) {
+      console.error('[Settings] Failed to load user role:', error);
+    }
+  };
 
   const loadColorPalettes = async () => {
     try {
@@ -91,7 +134,7 @@ const Settings: React.FC = () => {
     try {
       const sizes = await settingsImageSizeService.getAll();
       setImageSizes(sizes);
-      const active = sizes.find(size => size.status === 'active');
+      const active = sizes.find((size) => size.status === 'active');
       if (active) {
         setActiveImageSizeId(active.id);
         setSelectedImageSizeId(active.id);
@@ -101,45 +144,64 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handlePaletteStatusChange = async (id: number, status: 'active' | 'inactive') => {
-    setIsLoading(true);
-    setLoadingMessage('Activating color palette...');
-    setShowError(false);
+  useEffect(() => {
+    fetchColorPalette();
+    loadLogo();
+    loadUserRole();
+    loadImageSizes();
+    loadColorPalettes();
+  }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchColorPalette(), loadLogo(), loadImageSizes(), loadColorPalettes()]);
+    setRefreshing(false);
+  };
+
+  const runProgress = () => {
+    setLoading(true);
+    setLoadingPercentage(0);
+    const progressInterval = setInterval(() => {
+      setLoadingPercentage((prev) => {
+        if (prev >= 90) return Math.min(99, prev + 1);
+        return Math.min(99, prev + 10);
+      });
+    }, 100);
+    return progressInterval;
+  };
+
+  const handlePaletteStatusChange = async (id: number, status: 'active' | 'inactive') => {
+    const progressInterval = runProgress();
     try {
       await settingsColorPaletteService.updateStatus(id, status);
       await loadColorPalettes();
+      await fetchColorPalette();
 
-      if (status === 'active') {
-        const palette = dbPalettes.find(p => p.id === id);
-        if (palette) {
-          document.documentElement.style.setProperty('--color-primary', palette.primary);
-          document.documentElement.style.setProperty('--color-secondary', palette.secondary);
-          document.documentElement.style.setProperty('--color-accent', palette.accent);
-        }
-      }
-
-      setIsLoading(false);
-      setSuccessMessage('Color palette activated successfully!');
-      setShowSuccess(true);
+      clearInterval(progressInterval);
+      setLoadingPercentage(100);
 
       setTimeout(() => {
-        setShowSuccess(false);
-      }, 2000);
+        setLoading(false);
+        setModal({
+          isOpen: true,
+          type: 'success',
+          title: 'Success',
+          message: 'Color palette activated successfully!',
+        });
+      }, 500);
     } catch (error) {
-      setIsLoading(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to activate color palette');
-      setShowError(true);
-
-      setTimeout(() => {
-        setShowError(false);
-      }, 3000);
+      clearInterval(progressInterval);
+      setLoading(false);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to activate color palette',
+      });
     }
   };
 
-  const handleEditImageSize = () => {
-    setIsEditingImageSize(true);
-  };
+  const handleEditImageSize = () => setIsEditingImageSize(true);
 
   const handleCancelImageSize = () => {
     setSelectedImageSizeId(activeImageSizeId);
@@ -149,30 +211,33 @@ const Settings: React.FC = () => {
   const handleSaveImageSize = async () => {
     if (selectedImageSizeId === null) return;
 
-    setIsLoading(true);
-    setLoadingMessage('Updating image upload size...');
-    setShowError(false);
-
+    const progressInterval = runProgress();
     try {
       await settingsImageSizeService.updateStatus(selectedImageSizeId, 'active');
       await loadImageSizes();
       setIsEditingImageSize(false);
 
-      setIsLoading(false);
-      setSuccessMessage('Image upload size updated successfully!');
-      setShowSuccess(true);
+      clearInterval(progressInterval);
+      setLoadingPercentage(100);
 
       setTimeout(() => {
-        setShowSuccess(false);
-      }, 2000);
+        setLoading(false);
+        setModal({
+          isOpen: true,
+          type: 'success',
+          title: 'Success',
+          message: 'Image upload size updated successfully!',
+        });
+      }, 500);
     } catch (error) {
-      setIsLoading(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to update image upload size');
-      setShowError(true);
-
-      setTimeout(() => {
-        setShowError(false);
-      }, 3000);
+      clearInterval(progressInterval);
+      setLoading(false);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to update image upload size',
+      });
     }
   };
 
@@ -182,9 +247,8 @@ const Settings: React.FC = () => {
       primary: newPalette.primary,
       secondary: newPalette.secondary,
       accent: newPalette.accent,
-      updated_by: 'system'
+      updated_by: 'system',
     });
-
     await loadColorPalettes();
   };
 
@@ -197,500 +261,587 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMessage('File size must be less than 5MB');
-        setShowError(true);
-        setTimeout(() => setShowError(false), 3000);
+  const confirmDeletePalette = (id: number, name: string) => {
+    setModal({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Delete Palette',
+      message: `Delete ${name}?`,
+      onConfirm: () => {
+        setModal((m) => ({ ...m, isOpen: false }));
+        handleDeletePalette(id);
+      },
+      onCancel: () => setModal((m) => ({ ...m, isOpen: false })),
+    });
+  };
+
+  const handleSelectLogo = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        setModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'Permission Required',
+          message: 'Photo library access is needed to select a logo.',
+        });
         return;
       }
-      setLogoFile(file);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        setModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'File Too Large',
+          message: 'File size must be less than 5MB',
+        });
+        return;
+      }
+
+      setLogoAsset(asset);
+    } catch (error) {
+      console.error('Failed to pick logo:', error);
     }
   };
 
   const handleUploadLogo = async () => {
-    if (!logoFile) return;
+    if (!logoAsset) return;
 
     setIsUploadingLogo(true);
-    setLoadingMessage('Uploading logo to Google Drive...');
+    const progressInterval = runProgress();
 
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       const userData = authData ? JSON.parse(authData) : null;
       const updatedBy = userData?.username || 'system';
 
-      const result = await systemConfigService.uploadLogo(logoFile, updatedBy);
+      const fileName = logoAsset.fileName || `logo_${Date.now()}.jpg`;
+      const fileType = logoAsset.mimeType || 'image/jpeg';
+      const filePart = {
+        uri: logoAsset.uri,
+        name: fileName,
+        type: fileType,
+      } as unknown as File;
+
+      const result = await systemConfigService.uploadLogo(filePart, updatedBy);
 
       if (result.success && result.data) {
         setLogoUrl(result.data.logo_url);
-        setLogoFile(null);
-        localStorage.setItem('logoUpdated', Date.now().toString());
-        window.dispatchEvent(new Event('storage'));
-        setSuccessMessage('Logo uploaded successfully!');
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2000);
+        setLogoAsset(null);
+
+        clearInterval(progressInterval);
+        setLoadingPercentage(100);
+
+        setTimeout(() => {
+          setLoading(false);
+          setModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Success',
+            message: 'Logo uploaded successfully!',
+          });
+        }, 500);
+      } else {
+        clearInterval(progressInterval);
+        setLoading(false);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload logo');
-      setShowError(true);
-      setTimeout(() => setShowError(false), 3000);
+      clearInterval(progressInterval);
+      setLoading(false);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to upload logo',
+      });
     } finally {
       setIsUploadingLogo(false);
     }
   };
 
-  const handleDeleteLogo = async () => {
-    if (!window.confirm('Are you sure you want to delete the logo?')) return;
-
-    setIsLoading(true);
-    setLoadingMessage('Deleting logo...');
-
+  const doDeleteLogo = async () => {
+    const progressInterval = runProgress();
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       const userData = authData ? JSON.parse(authData) : null;
       const updatedBy = userData?.username || 'system';
 
       await systemConfigService.deleteLogo(updatedBy);
       setLogoUrl(null);
-      localStorage.setItem('logoUpdated', Date.now().toString());
-      window.dispatchEvent(new Event('storage'));
-      setSuccessMessage('Logo deleted successfully!');
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2000);
+
+      clearInterval(progressInterval);
+      setLoadingPercentage(100);
+
+      setTimeout(() => {
+        setLoading(false);
+        setModal({
+          isOpen: true,
+          type: 'success',
+          title: 'Success',
+          message: 'Logo deleted successfully!',
+        });
+      }, 500);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to delete logo');
-      setShowError(true);
-      setTimeout(() => setShowError(false), 3000);
-    } finally {
-      setIsLoading(false);
+      clearInterval(progressInterval);
+      setLoading(false);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to delete logo',
+      });
     }
   };
 
+  const handleDeleteLogo = () => {
+    setModal({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Delete Logo',
+      message: 'Are you sure you want to delete the logo?',
+      onConfirm: () => {
+        setModal((m) => ({ ...m, isOpen: false }));
+        doDeleteLogo();
+      },
+      onCancel: () => setModal((m) => ({ ...m, isOpen: false })),
+    });
+  };
+
+  const CheckBadge = () => (
+    <View
+      style={{
+        height: 20,
+        width: 20,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: primary,
+      }}
+    >
+      <Check size={12} color="#ffffff" strokeWidth={3} />
+    </View>
+  );
+
+  const sectionTitle = (title: string) => (
+    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 16 }}>{title}</Text>
+  );
+
   return (
-    <div className={`p-6 min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
-      }`}>
-      <div className={`mb-6 pb-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
-        }`}>
-        <h2 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-          } mb-2`}>
-          Settings
-        </h2>
-      </div>
+    <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 20, paddingTop: isTablet ? 16 : 60, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primary]} tintColor={primary} />}
+      >
+        {/* Page header */}
+        <View style={{ marginBottom: 24, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <Text style={{ fontSize: 24, fontWeight: '600', color: colors.text }}>Settings</Text>
+        </View>
 
-      <div className="space-y-6">
-        <div className={`pb-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
-          }`}>
-          <div className="flex items-center gap-3 mb-4">
-            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-              System Logo
-            </h3>
-          </div>
+        {!isAdmin && (
+          <View style={{ padding: 24, alignItems: 'center' }}>
+            <Text style={{ color: colors.subtext, textAlign: 'center' }}>
+              No settings available for your role.
+            </Text>
+          </View>
+        )}
 
-          <div className={`p-6 rounded border ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-            }`}>
-            {logoUrl ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center p-4 bg-white rounded">
-                  <img
-                    src={logoUrl}
-                    alt="System Logo"
-                    className="max-h-32 object-contain"
-                    onError={(e) => {
-                      console.error('Failed to load logo image');
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <label
-                    className="px-4 py-2 text-white rounded transition-colors cursor-pointer text-sm"
-                    style={{
-                      backgroundColor: colorPalette?.primary || '#7c3aed'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-                    }}
-                  >
-                    Change Logo
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                  <button
-                    onClick={handleDeleteLogo}
-                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
-                  >
-                    Delete Logo
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded ${isDarkMode ? 'border-gray-600' : 'border-gray-400'
-                  }`}>
-                  <Image className={`h-12 w-12 mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'
-                    }`} />
-                  <p className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    No logo uploaded
-                  </p>
-                  <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'
-                    }`}>
-                    Supported formats: JPEG, PNG, GIF, SVG (Max 5MB)
-                  </p>
-                </div>
-                {logoFile ? (
-                  <div className="space-y-2">
-                    <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
-                      Selected: {logoFile.name}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleUploadLogo}
-                        disabled={isUploadingLogo}
-                        className="px-4 py-2 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        style={{
-                          backgroundColor: isUploadingLogo ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isUploadingLogo && colorPalette?.accent) {
-                            e.currentTarget.style.backgroundColor = colorPalette.accent;
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isUploadingLogo) {
-                            e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-                          }
-                        }}
-                      >
+        {/* System Logo */}
+        {isAdmin && (
+          <View style={{ paddingBottom: 24, marginBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            {sectionTitle('System Logo')}
+            <View style={{ padding: 20, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
+              {logoAsset ? (
+                <View style={{ gap: 16 }}>
+                  <View style={{ alignItems: 'center', gap: 12 }}>
+                    <View
+                      style={{
+                        padding: 16,
+                        backgroundColor: '#ffffff',
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        width: '100%',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Image
+                        source={{ uri: logoAsset.uri }}
+                        style={{ height: 128, width: '100%', maxWidth: 320 }}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <Text style={{ fontSize: 13, color: colors.subtext }}>
+                      Selected: {logoAsset.fileName || 'image'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={handleUploadLogo}
+                      disabled={isUploadingLogo}
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        backgroundColor: isUploadingLogo ? '#9ca3af' : primary,
+                      }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>
                         {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
-                      </button>
-                      <button
-                        onClick={() => setLogoFile(null)}
-                        disabled={isUploadingLogo}
-                        className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <label
-                    className="px-4 py-2 text-white rounded transition-colors cursor-pointer inline-block text-sm"
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setLogoAsset(null)}
+                      disabled={isUploadingLogo}
+                      style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#6b7280' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : logoUrl ? (
+                <View style={{ gap: 16 }}>
+                  <View
                     style={{
-                      backgroundColor: colorPalette?.primary || '#7c3aed'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 16,
+                      backgroundColor: '#ffffff',
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: colors.border,
                     }}
                   >
-                    Select Logo
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoFileChange}
-                      className="hidden"
+                    <Image
+                      source={{ uri: convertGoogleDriveUrl(logoUrl) }}
+                      style={{ height: 128, width: '100%', maxWidth: 320 }}
+                      resizeMode="contain"
                     />
-                  </label>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-
-
-        <div className="pt-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Palette className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-              Color Palette
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {dbPalettes.map((palette) => {
-              const isDefault = palette.palette_name.toLowerCase() === 'default';
-              return (
-                <div
-                  key={palette.id}
-                  className={`p-4 rounded border transition-all relative ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                    }`}
-                  style={{
-                    borderColor: palette.status === 'active' ? (colorPalette?.primary || '#7c3aed') : undefined,
-                    boxShadow: palette.status === 'active' ? '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)' : undefined
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                      }`}>
-                      {palette.palette_name}
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      {palette.status === 'active' && (
-                        <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
-                          <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                      {palette.status === 'inactive' && (
-                        <button
-                          onClick={() => handlePaletteStatusChange(palette.id, 'active')}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${isDarkMode
-                            ? 'bg-gray-700 text-white hover:bg-gray-600'
-                            : 'bg-gray-300 text-gray-900 hover:bg-gray-400'
-                            }`}
-                        >
-                          Activate
-                        </button>
-                      )}
-                      {!isDefault && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Delete ${palette.palette_name}?`)) {
-                              handleDeletePalette(palette.id);
-                            }
-                          }}
-                          className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900 rounded transition-colors"
-                          title="Delete palette"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <div
-                        className="h-10 rounded"
-                        style={{ backgroundColor: palette.primary }}
-                      />
-                      <p className={`text-xs mt-1 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
-                        Primary
-                      </p>
-                    </div>
-                    <div className="flex-1">
-                      <div
-                        className="h-10 rounded"
-                        style={{ backgroundColor: palette.secondary }}
-                      />
-                      <p className="text-xs text-gray-400 mt-1 text-center">
-                        Secondary
-                      </p>
-                    </div>
-                    <div className="flex-1">
-                      <div
-                        className="h-10 rounded"
-                        style={{ backgroundColor: palette.accent }}
-                      />
-                      <p className="text-xs text-gray-400 mt-1 text-center">
-                        Accent
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            <button
-              onClick={() => setShowAddPaletteModal(true)}
-              className={`p-4 rounded border border-dashed transition-all flex flex-col items-center justify-center gap-2 min-h-[140px] ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-                }`}
-            >
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
-                }`}>
-                <Plus className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-              </div>
-              <p className={`font-medium text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>Add Custom Palette</p>
-              <p className={`text-xs text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                Create your own color scheme
-              </p>
-            </button>
-          </div>
-        </div>
-
-        <div className={`pt-6 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'
-          }`}>
-          <div className="flex items-center gap-3 mb-4">
-            <Image className="h-5 w-5" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-              Image Upload Size
-            </h3>
-          </div>
-
-          <div className={`p-4 rounded border ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'
-            }`}>
-            <div className="space-y-2 mb-4">
-              {imageSizes.map((size) => (
-                <div
-                  key={size.id}
-                  onClick={() => isEditingImageSize && setSelectedImageSizeId(size.id)}
-                  className={`flex items-center justify-between p-3 rounded border transition-all ${isEditingImageSize ? 'cursor-pointer' : ''
-                    }`}
-                  style={{
-                    borderColor: selectedImageSizeId === size.id ? (colorPalette?.primary || '#7c3aed') : undefined,
-                    backgroundColor: selectedImageSizeId === size.id ? `${colorPalette?.primary || '#7c3aed'}1A` : undefined
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'
-                      }`}>
-                      {size.image_size}
-                    </span>
-                    <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}>
-                      -{size.image_size_value}% maximum size
-                    </span>
-                  </div>
-                  {size.status === 'active' && !isEditingImageSize && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
-                      <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
-                  {selectedImageSizeId === size.id && isEditingImageSize && (
-                    <div className="h-5 w-5 rounded-full flex items-center justify-center" style={{ backgroundColor: colorPalette?.primary || '#7c3aed' }}>
-                      <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              {!isEditingImageSize ? (
-                <button
-                  onClick={handleEditImageSize}
-                  className="px-4 py-2 text-white rounded transition-colors text-sm"
-                  style={{
-                    backgroundColor: colorPalette?.primary || '#7c3aed'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (colorPalette?.accent) {
-                      e.currentTarget.style.backgroundColor = colorPalette.accent;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-                  }}
-                >
-                  Edit
-                </button>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={handleSelectLogo}
+                      style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: primary }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Change Logo</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleDeleteLogo}
+                      style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#dc2626' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Delete Logo</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ) : (
-                <>
-                  <button
-                    onClick={handleSaveImageSize}
-                    disabled={isSavingImageSize || selectedImageSizeId === activeImageSizeId}
-                    className="px-4 py-2 text-white rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-sm"
+                <View style={{ gap: 16 }}>
+                  <View
                     style={{
-                      backgroundColor: (isSavingImageSize || selectedImageSizeId === activeImageSizeId) ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSavingImageSize && selectedImageSizeId !== activeImageSizeId && colorPalette?.accent) {
-                        e.currentTarget.style.backgroundColor = colorPalette.accent;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSavingImageSize && selectedImageSizeId !== activeImageSizeId) {
-                        e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-                      }
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 32,
+                      borderWidth: 2,
+                      borderStyle: 'dashed',
+                      borderColor: '#9ca3af',
+                      borderRadius: 8,
                     }}
                   >
-                    {isSavingImageSize ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    onClick={handleCancelImageSize}
-                    disabled={isSavingImageSize}
-                    className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-sm"
+                    <ImageIcon size={48} color="#9ca3af" />
+                    <Text style={{ fontSize: 13, marginTop: 16, marginBottom: 8, color: colors.subtext }}>
+                      No logo uploaded
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.subtext }}>
+                      Supported formats: JPEG, PNG, GIF, SVG (Max 5MB)
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleSelectLogo}
+                    style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: primary, alignSelf: 'flex-start' }}
                   >
-                    Cancel
-                  </button>
-                </>
+                    <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Select Logo</Text>
+                  </TouchableOpacity>
+                </View>
               )}
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* 
+            </View>
+          </View>
+        )}
+
+        {/* Color Palette */}
+        {isAdmin && (
+          <View style={{ paddingBottom: 24, marginBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <Palette size={20} color={primary} />
+              <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Color Palette</Text>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              {dbPalettes.map((palette) => {
+                const isDefault = palette.palette_name.toLowerCase() === 'default';
+                const active = palette.status === 'active';
+                return (
+                  <View
+                    key={palette.id}
+                    style={{
+                      padding: 16,
+                      borderRadius: 8,
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? primary : colors.border,
+                      backgroundColor: colors.card,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <Text style={{ fontWeight: '500', fontSize: 14, color: colors.text }}>{palette.palette_name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {active && <CheckBadge />}
+                        {palette.status === 'inactive' && (
+                          <TouchableOpacity
+                            onPress={() => handlePaletteStatusChange(palette.id, 'active')}
+                            style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.surface }}
+                          >
+                            <Text style={{ fontSize: 12, color: colors.text }}>Activate</Text>
+                          </TouchableOpacity>
+                        )}
+                        {!isDefault && (
+                          <TouchableOpacity
+                            onPress={() => confirmDeletePalette(palette.id, palette.palette_name)}
+                            style={{ padding: 6 }}
+                          >
+                            <Trash2 size={16} color="#dc2626" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ height: 40, borderRadius: 6, backgroundColor: palette.primary }} />
+                        <Text style={{ fontSize: 12, marginTop: 4, textAlign: 'center', color: colors.subtext }}>Primary</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ height: 40, borderRadius: 6, backgroundColor: palette.accent }} />
+                        <Text style={{ fontSize: 12, marginTop: 4, textAlign: 'center', color: colors.subtext }}>Accent</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity
+                onPress={() => setShowAddPaletteModal(true)}
+                style={{
+                  padding: 16,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderStyle: 'dashed',
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  minHeight: 120,
+                }}
+              >
+                <View
+                  style={{
+                    height: 40,
+                    width: 40,
+                    borderRadius: 20,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: colors.surface,
+                  }}
+                >
+                  <Plus size={20} color={primary} />
+                </View>
+                <Text style={{ fontWeight: '500', fontSize: 14, color: colors.text }}>Add Custom Palette</Text>
+                <Text style={{ fontSize: 12, textAlign: 'center', color: colors.subtext }}>
+                  Create your own color scheme
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Image Upload Size */}
+        {isAdmin && (
+          <View style={{ paddingBottom: 24, marginBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <ImageIcon size={20} color={primary} />
+              <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Image Upload Size</Text>
+            </View>
+
+            <View style={{ padding: 16, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+              <View style={{ gap: 8, marginBottom: 16 }}>
+                {imageSizes.map((size) => {
+                  const isSelected = selectedImageSizeId === size.id;
+                  return (
+                    <TouchableOpacity
+                      key={size.id}
+                      activeOpacity={isEditingImageSize ? 0.7 : 1}
+                      onPress={() => isEditingImageSize && setSelectedImageSizeId(size.id)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: isSelected ? primary : colors.border,
+                        backgroundColor: isSelected ? `${primary}1A` : 'transparent',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                        <Text style={{ fontWeight: '500', color: colors.text }}>{size.image_size}</Text>
+                        <Text style={{ fontSize: 13, color: colors.subtext }}>
+                          -{size.image_size_value}% maximum size
+                        </Text>
+                      </View>
+                      {size.status === 'active' && !isEditingImageSize && <CheckBadge />}
+                      {isSelected && isEditingImageSize && <CheckBadge />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {!isEditingImageSize ? (
+                  <TouchableOpacity
+                    onPress={handleEditImageSize}
+                    style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: primary }}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Edit</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      onPress={handleSaveImageSize}
+                      disabled={isSavingImageSize || selectedImageSizeId === activeImageSizeId}
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        backgroundColor:
+                          isSavingImageSize || selectedImageSizeId === activeImageSizeId ? '#9ca3af' : primary,
+                      }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>
+                        {isSavingImageSize ? 'Saving...' : 'Save'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleCancelImageSize}
+                      disabled={isSavingImageSize}
+                      style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#6b7280' }}
+                    >
+                      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Manual Billing Generation */}
+        {isAdmin && (
+          <View style={{ paddingBottom: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Manual Billing Generation</Text>
+            <Text style={{ fontSize: 13, marginTop: 4, marginBottom: 16, color: colors.subtext }}>
+              Manually generate an SOA and Invoice for a specific customer with an optional service charge.
+            </Text>
+
+            <View style={{ padding: 20, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: `${primary}18`,
+                  }}
+                >
+                  <Zap size={18} color={primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '500', color: colors.text }}>Generate Billing</Text>
+                  <Text style={{ fontSize: 12, marginTop: 2, color: colors.subtext }}>
+                    Select a customer, set an optional service charge, and generate instantly.
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setShowGenerateBillingModal(true)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingHorizontal: 20,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  backgroundColor: primary,
+                }}
+              >
+                <Zap size={15} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '600' }}>Generate</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
       <AddColorPaletteModal
         isOpen={showAddPaletteModal}
         onClose={() => setShowAddPaletteModal(false)}
         onSave={handleAddPalette}
-      /> */}
+        colorPalette={colorPalette}
+      />
 
-      {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <p className="text-white font-medium">{loadingMessage}</p>
-          </div>
-        </div>
+      <GenerateBillingModal
+        isOpen={showGenerateBillingModal}
+        onClose={() => setShowGenerateBillingModal(false)}
+        colorPalette={colorPalette}
+        isDarkMode={isDarkMode}
+      />
+
+      {loading && (
+        <LoadingModalGlobal
+          isOpen={loading}
+          type="loading"
+          title="Please wait"
+          message=""
+          loadingPercentage={loadingPercentage}
+          colorPalette={colorPalette}
+          isDarkMode={isDarkMode}
+        />
       )}
 
-      {isTogglingDarkMode && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 animate-spin" style={{ color: colorPalette?.primary || '#7c3aed' }} />
-            <p className="text-white font-medium">Updating theme preference...</p>
-          </div>
-        </div>
+      {modal.isOpen && (
+        <LoadingModalGlobal
+          isOpen={modal.isOpen}
+          type={modal.type}
+          title={modal.title}
+          message={modal.message}
+          onConfirm={
+            modal.onConfirm ? modal.onConfirm : () => setModal((m) => ({ ...m, isOpen: false }))
+          }
+          onCancel={modal.onCancel ? modal.onCancel : () => setModal((m) => ({ ...m, isOpen: false }))}
+          colorPalette={colorPalette}
+          isDarkMode={isDarkMode}
+        />
       )}
-
-      {showSuccess && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <CheckCircle className="h-16 w-16 text-green-500" />
-            <p className="text-white font-medium text-lg">{successMessage}</p>
-          </div>
-        </div>
-      )}
-
-      {showError && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60]">
-          <div className="bg-gray-800 rounded-lg p-8 flex flex-col items-center gap-4">
-            <XCircle className="h-16 w-16 text-red-500" />
-            <p className="text-white font-medium text-lg">Error</p>
-            <p className="text-gray-300 text-sm text-center max-w-md">{errorMessage}</p>
-            <button
-              onClick={() => setShowError(false)}
-              className="mt-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    </View>
   );
 };
 

@@ -1,61 +1,88 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertTriangle, Search, Circle, X } from 'lucide-react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { RefreshCw, Circle } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import GlobalSearch from './globalfunctions/GlobalSearch';
 import ReconnectionLogsDetails from '../components/ReconnectionLogsDetails';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
-import { API_BASE_URL } from '../config/api';
+import { useReconnectionStore } from '../store/reconnectionStore';
+import { userService } from '../services/userService';
+import { ReconnectionLogRecord } from '../services/reconnectionService';
 
+// App is forced light mode.
+const isDarkMode = false;
 
-interface ReconnectionLogRecord {
-  id: string;
-  accountNo: string;
-  customerName: string;
-  address: string;
-  contactNumber?: string;
-  emailAddress?: string;
-  plan?: string;
-  balance?: number;
-  status?: string;
-  reconnectionDate?: string;
-  reconnectedBy?: string;
-  reason?: string;
-  remarks?: string;
-  cityId?: number;
-  appliedDate?: string;
-  reconnectionFee?: number;
-  daysDisconnected?: number;
-  reconnectionCode?: string;
-  onlineStatus?: string;
-  username?: string;
-  splynxId?: string;
-  mikrotikId?: string;
-  provider?: string;
-  date?: string;
-  barangay?: string;
-  city?: string;
-  dateFormat?: string;
+const formatDateTime = (dateStr?: string): string => {
+  if (!dateStr) return '-';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const parts = formatter.formatToParts(date);
+    const getPart = (type: string) => parts.find((p) => p.type === type)?.value || '';
+
+    return `${getPart('month')}/${getPart('day')}/${getPart('year')} ${getPart('hour')}:${getPart('minute')} ${getPart('dayPeriod')}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+function getCityName(cityId: number): string {
+  const cityMap: Record<number, string> = {
+    1: 'Binangonan',
+    2: 'Cardona',
+  };
+  return cityMap[cityId] || `City ${cityId}`;
 }
 
-interface LocationItem {
-  id: string;
-  name: string;
-  count: number;
-}
+// Recursive search function to enable deep searching through all record data
+const checkValue = (obj: any, query: string): boolean => {
+  if (!obj || query === '') return query === '';
+  if (typeof obj === 'string') return obj.toLowerCase().includes(query.toLowerCase());
+  if (typeof obj === 'number') return obj.toString().includes(query);
+  if (Array.isArray(obj)) return obj.some((item) => checkValue(item, query));
+  if (typeof obj === 'object') return Object.values(obj).some((value) => checkValue(value, query));
+  return false;
+};
 
 const ReconnectionLogs: React.FC = () => {
+  const { logRecords, isLoading, error, fetchLogRecords, refreshLogRecords, silentRefresh } = useReconnectionStore();
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLog, setSelectedLog] = useState<ReconnectionLogRecord | null>(null);
-  const [logRecords, setLogRecords] = useState<ReconnectionLogRecord[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
+  const [selectedDate, setSelectedDate] = useState<string>('All');
+  const [userOrgId, setUserOrgId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const primaryColor = colorPalette?.primary || '#7c3aed';
+  const { width } = Dimensions.get('window');
+  const isTablet = width >= 768;
 
   useEffect(() => {
     const fetchColorPalette = async () => {
       try {
-        const activePalette = await settingsColorPaletteService.getActive();
-        setColorPalette(activePalette);
+        setColorPalette(await settingsColorPaletteService.getActive());
       } catch (err) {
         console.error('Failed to fetch color palette:', err);
       }
@@ -64,427 +91,317 @@ const ReconnectionLogs: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme');
-      setIsDarkMode(theme === 'dark');
-    };
-
-    checkDarkMode();
-
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  // Essential table columns - only show the most important ones initially
-  const [visibleColumns, setVisibleColumns] = useState([
-    'date', 'accountNo', 'username', 'reconnectionFee', 'plan', 'remarks', 'splynxId', 'mikrotikId', 'provider'
-  ]);
-
-  // All available columns for the table
-  const allColumns = [
-    { key: 'date', label: 'Date', width: 'min-w-36' },
-    { key: 'accountNo', label: 'Account No.', width: 'min-w-32' },
-    { key: 'username', label: 'Username', width: 'min-w-36' },
-    { key: 'reconnectionFee', label: 'Reconnection Fee', width: 'min-w-40' },
-    { key: 'plan', label: 'Plan', width: 'min-w-40' },
-    { key: 'remarks', label: 'Remarks', width: 'min-w-40' },
-    { key: 'splynxId', label: 'Splynx ID', width: 'min-w-32' },
-    { key: 'mikrotikId', label: 'Mikrotik ID', width: 'min-w-32' },
-    { key: 'provider', label: 'Provider', width: 'min-w-28' },
-    { key: 'status', label: 'Status', width: 'min-w-28' },
-    { key: 'customerName', label: 'Full Name', width: 'min-w-40' },
-    { key: 'address', label: 'Address', width: 'min-w-56' },
-    { key: 'contactNumber', label: 'Contact Number', width: 'min-w-36' },
-    { key: 'emailAddress', label: 'Email Address', width: 'min-w-48' },
-    { key: 'balance', label: 'Account Balance', width: 'min-w-32' },
-    { key: 'reconnectionDate', label: 'Reconnection Date', width: 'min-w-36' },
-    { key: 'reconnectedBy', label: 'Reconnected By', width: 'min-w-36' },
-    { key: 'reason', label: 'Reason', width: 'min-w-40' },
-    { key: 'appliedDate', label: 'Applied Date', width: 'min-w-32' },
-    { key: 'daysDisconnected', label: 'Days Disconnected', width: 'min-w-36' },
-    { key: 'reconnectionCode', label: 'Reconnection Code', width: 'min-w-36' }
-  ];
-
-
-
-  // Fetch reconnection log data
-  useEffect(() => {
-    const fetchReconnectionData = async () => {
+    AsyncStorage.getItem('authData').then((raw) => {
+      if (!raw) return;
       try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(`${API_BASE_URL}/reconnection-logs`);
-        const result = await response.json();
-
-        if (result.status === 'success') {
-          setLogRecords(result.data);
-        } else {
-          throw new Error(result.message || 'Failed to fetch logs');
-        }
-      } catch (err: any) {
-        console.error('Failed to fetch reconnection logs:', err);
-        setError(err.message || 'Failed to load reconnection logs. Please try again.');
-        setLogRecords([]);
-      } finally {
-        setIsLoading(false);
+        const d = JSON.parse(raw);
+        setUserOrgId(
+          d.organization_id || d.user?.organization_id || d.organization?.id || d.user?.organization?.id || null
+        );
+      } catch {
+        /* ignore */
       }
-    };
-
-    fetchReconnectionData();
+    });
   }, []);
 
-  // Memoize location items for performance
-  const locationItems: LocationItem[] = useMemo(() => {
-    const items: LocationItem[] = [
-      {
-        id: 'all',
-        name: 'All',
-        count: logRecords.length
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await userService.getAllUsers();
+        if (response.success && response.data) {
+          const map: Record<string, string> = {};
+          response.data.forEach((user: any) => {
+            const firstName = (user.first_name || '').trim();
+            const lastName = (user.last_name || '').trim();
+            const fullName = `${firstName} ${lastName}`.trim();
+            map[user.id.toString()] = fullName || user.username || user.email_address || user.email || 'Unknown User';
+          });
+          setUsersMap(map);
+        }
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
       }
-    ];
-
-    // Create a map to count records by cityId
-    const cityCountMap = new Map<number, number>();
-
-    logRecords.forEach(record => {
-      if (record.cityId !== undefined) {
-        const currentCount = cityCountMap.get(record.cityId) || 0;
-        cityCountMap.set(record.cityId, currentCount + 1);
-      }
-    });
-
-    // Add city items
-    cityCountMap.forEach((count, cityId) => {
-      items.push({
-        id: String(cityId),
-        name: getCityName(cityId),
-        count
-      });
-    });
-
-    return items;
-  }, [logRecords]);
-
-  // Mock function to get city name by ID (would be replaced with actual data)
-  function getCityName(cityId: number): string {
-    const cityMap: Record<number, string> = {
-      1: 'Binangonan',
-      2: 'Cardona'
     };
+    fetchUsers();
+  }, []);
 
-    return cityMap[cityId] || `City ${cityId}`;
-  }
+  useEffect(() => {
+    fetchLogRecords();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Memoize filtered records for performance
-  const filteredLogRecords = useMemo(() => {
-    return logRecords.filter(record => {
-      const matchesLocation = selectedLocation === 'all' ||
-        (record.cityId !== undefined && record.cityId === Number(selectedLocation));
+  // Auto silent-refresh every 15 minutes.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      silentRefresh().catch((err) => console.error('Idle refresh failed:', err));
+    }, 15 * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [silentRefresh]);
 
-      const matchesSearch = searchQuery === '' ||
-        record.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.accountNo.includes(searchQuery);
+  const resolveReconnectedBy = (val: any): string => {
+    if (!val) return '-';
+    const strVal = String(val);
+    if (/^\d+$/.test(strVal)) {
+      return usersMap[strVal] || strVal;
+    }
+    return strVal;
+  };
 
-      return matchesLocation && matchesSearch;
+  // Records filtered by org + search only (drives the count badges/pickers)
+  const orgSearchFiltered = useMemo(() => {
+    return logRecords.filter((record) => {
+      if (userOrgId) {
+        if (record.organization_id !== userOrgId) return false;
+      } else {
+        if (record.organization_id) return false;
+      }
+      return searchQuery === '' || checkValue(record, searchQuery);
     });
-  }, [logRecords, selectedLocation, searchQuery]);
+  }, [logRecords, searchQuery, userOrgId]);
 
-  const handleRowClick = (record: ReconnectionLogRecord) => {
-    setSelectedLog(record);
-  };
+  // Distinct months for the month picker
+  const monthItems = useMemo(() => {
+    const filteredForMonths = orgSearchFiltered.filter((record) => {
+      return selectedLocation === 'all' || (record.cityId !== undefined && record.cityId === Number(selectedLocation));
+    });
+    const months = new Set<string>();
+    filteredForMonths.forEach((record) => {
+      if (record.date && record.date !== '-') {
+        months.add(record.date.substring(0, 7)); // YYYY-MM
+      }
+    });
+    return Array.from(months).sort().reverse();
+  }, [orgSearchFiltered, selectedLocation]);
 
-  const handleCloseDetails = () => {
-    setSelectedLog(null);
-  };
+  // Distinct locations (cities) for the location picker
+  const locationItems = useMemo(() => {
+    const filteredForLocations = orgSearchFiltered.filter((record) => {
+      return selectedDate === 'All' || (record.date && record.date.startsWith(selectedDate));
+    });
+    const cityCountMap = new Map<number, number>();
+    filteredForLocations.forEach((record) => {
+      if (record.cityId !== undefined) {
+        cityCountMap.set(record.cityId, (cityCountMap.get(record.cityId) || 0) + 1);
+      }
+    });
+    const items: { id: string; name: string; count: number }[] = [];
+    cityCountMap.forEach((count, cityId) => {
+      items.push({ id: String(cityId), name: getCityName(cityId), count });
+    });
+    return items;
+  }, [orgSearchFiltered, selectedDate]);
+
+  // Fully filtered records for the list
+  const filteredLogRecords = useMemo(() => {
+    return orgSearchFiltered.filter((record) => {
+      const matchesLocation =
+        selectedLocation === 'all' || (record.cityId !== undefined && record.cityId === Number(selectedLocation));
+      const matchesMonth = selectedDate === 'All' || (record.date && record.date.startsWith(selectedDate));
+      return matchesLocation && matchesMonth;
+    });
+  }, [orgSearchFiltered, selectedLocation, selectedDate]);
 
   const handleRefresh = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/reconnection-logs`);
-      const result = await response.json();
-
-      if (result.status === 'success') {
-        setLogRecords(result.data);
-      } else {
-        throw new Error(result.message || 'Failed to refresh logs');
-      }
-    } catch (err: any) {
-      console.error('Failed to refresh reconnection logs:', err);
-      setError(err.message || 'Failed to refresh reconnection logs. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    setRefreshing(true);
+    await refreshLogRecords();
+    setRefreshing(false);
   };
 
-  const toggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev =>
-      prev.includes(columnKey)
-        ? prev.filter(col => col !== columnKey)
-        : [...prev, columnKey]
+  const renderItem = ({ item }: { item: ReconnectionLogRecord }) => {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => setSelectedLog(item)}
+        style={{
+          backgroundColor: '#ffffff',
+          borderBottomWidth: 1,
+          borderBottomColor: '#f1f5f9',
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: '#111827', flex: 1 }} numberOfLines={1}>
+            {item.customerName || 'Unknown'}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Circle size={10} color="#22c55e" fill="#22c55e" />
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#16a34a' }}>Reconnected</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+          {!!item.accountNo && <Field label="Acct" value={String(item.accountNo)} valueColor="#ef4444" />}
+          {!!item.username && <Field label="User" value={String(item.username)} />}
+          {!!item.plan && <Field label="Plan" value={String(item.plan)} />}
+          {item.reconnectionFee ? <Field label="Fee" value={`₱${item.reconnectionFee.toFixed(2)}`} /> : null}
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
+          <Field label="Date" value={formatDateTime(item.date || item.reconnectionDate)} />
+          {!!item.reconnectedBy && <Field label="By" value={resolveReconnectedBy(item.reconnectedBy)} />}
+        </View>
+        {!!item.remarks && (
+          <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }} numberOfLines={2}>
+            {item.remarks}
+          </Text>
+        )}
+        {!!item.address && (
+          <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }} numberOfLines={1}>
+            {item.address}
+          </Text>
+        )}
+      </TouchableOpacity>
     );
   };
 
-  const renderCellValue = (record: ReconnectionLogRecord, columnKey: string) => {
-    switch (columnKey) {
-      case 'date':
-        return record.date || (record.reconnectionDate ? record.reconnectionDate.split(' ')[0] : '-');
-      case 'accountNo':
-        return <span className="text-red-400">{record.accountNo}</span>;
-      case 'username':
-        return record.username || '-';
-      case 'reconnectionFee':
-        return record.reconnectionFee ? `₱ ${record.reconnectionFee.toFixed(2)}` : '-';
-      case 'plan':
-        return record.plan || '-';
-      case 'remarks':
-        return record.remarks || '-';
-      case 'splynxId':
-        return record.splynxId || '-';
-      case 'mikrotikId':
-        return record.mikrotikId || '-';
-      case 'provider':
-        return record.provider || '-';
-      case 'status':
-        return (
-          <div className="flex items-center space-x-2">
-            <Circle
-              className={`h-3 w-3 text-green-400 fill-green-400`}
-            />
-            <span className="text-xs text-green-400">
-              Reconnected
-            </span>
-          </div>
-        );
-      case 'customerName':
-        return record.customerName;
-      case 'address':
-        return <span title={record.address}>{record.address}</span>;
-      case 'contactNumber':
-        return record.contactNumber || '-';
-      case 'emailAddress':
-        return record.emailAddress || '-';
-      case 'balance':
-        return record.balance ? `₱ ${record.balance.toFixed(2)}` : '-';
-      case 'reconnectionDate':
-        return record.reconnectionDate || '-';
-      case 'reconnectedBy':
-        return record.reconnectedBy || '-';
-      case 'reason':
-        return record.reason || '-';
-      case 'appliedDate':
-        return record.appliedDate || '-';
-      case 'daysDisconnected':
-        return record.daysDisconnected !== undefined ? record.daysDisconnected : '-';
-      case 'reconnectionCode':
-        return record.reconnectionCode || '-';
-      default:
-        return '-';
-    }
-  };
-
-  const displayedColumns = allColumns.filter(col => visibleColumns.includes(col.key));
-
   return (
-    <div className={`h-full flex overflow-hidden ${isDarkMode ? 'bg-gray-950' : 'bg-gray-50'
-      }`}>
-      <div className={`w-64 border-r flex-shrink-0 flex flex-col ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-        <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>Reconnection Logs</h2>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {locationItems.map((location) => (
-            <button
-              key={location.id}
-              onClick={() => setSelectedLocation(location.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${selectedLocation === location.id
-                ? 'bg-orange-500 bg-opacity-20 text-orange-400'
-                : isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
-                }`}
+    <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+      {/* Header */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          paddingTop: isTablet ? 16 : 60,
+          paddingBottom: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: '#e5e7eb',
+          backgroundColor: '#ffffff',
+          gap: 10,
+        }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Reconnection Logs</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <GlobalSearch
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDarkMode={isDarkMode}
+            colorPalette={colorPalette}
+            placeholder="Search reconnection logs..."
+          />
+          <TouchableOpacity
+            onPress={() => fetchLogRecords(true)}
+            disabled={isLoading}
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              backgroundColor: primaryColor,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isLoading ? 0.5 : 1,
+            }}
+          >
+            {isLoading ? <ActivityIndicator size="small" color="#ffffff" /> : <RefreshCw size={16} color="#ffffff" />}
+          </TouchableOpacity>
+        </View>
+
+        {/* Filters */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: '#d1d5db',
+              borderRadius: 6,
+              overflow: 'hidden',
+              flex: 1,
+              height: 40,
+              justifyContent: 'center',
+            }}
+          >
+            <Picker
+              selectedValue={selectedDate}
+              onValueChange={(v) => setSelectedDate(v)}
+              style={{ color: '#111827' }}
+              dropdownIconColor="#6b7280"
             >
-              <div className="flex items-center">
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                <span className="capitalize">{location.name}</span>
-              </div>
-              {location.count > 0 && (
-                <span className={`px-2 py-1 rounded-full text-xs ${selectedLocation === location.id
-                  ? 'bg-orange-600 text-white'
-                  : isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                  }`}>
-                  {location.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+              <Picker.Item label="All Months" value="All" />
+              {monthItems.map((m) => (
+                <Picker.Item key={m} label={m} value={m} />
+              ))}
+            </Picker>
+          </View>
+          <View
+            style={{
+              borderWidth: 1,
+              borderColor: '#d1d5db',
+              borderRadius: 6,
+              overflow: 'hidden',
+              flex: 1,
+              height: 40,
+              justifyContent: 'center',
+            }}
+          >
+            <Picker
+              selectedValue={selectedLocation}
+              onValueChange={(v) => setSelectedLocation(v)}
+              style={{ color: '#111827' }}
+              dropdownIconColor="#6b7280"
+            >
+              <Picker.Item label="All Locations" value="all" />
+              {locationItems.map((loc) => (
+                <Picker.Item key={loc.id} label={`${loc.name} (${loc.count})`} value={loc.id} />
+              ))}
+            </Picker>
+          </View>
+        </View>
+        <Text style={{ fontSize: 12, color: '#6b7280' }}>{filteredLogRecords.length} records</Text>
+      </View>
 
-      <div className={`flex-1 overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-white'
-        }`}>
-        <div className="flex flex-col h-full">
-          <div className={`p-4 border-b flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  placeholder="Search reconnection logs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={`w-full rounded pl-10 pr-4 py-2 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 ${isDarkMode
-                    ? 'bg-gray-800 text-white border-gray-700'
-                    : 'bg-white text-gray-900 border-gray-300'
-                    }`}
-                />
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`} />
-              </div>
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="text-white px-4 py-2 rounded text-sm transition-colors"
-                style={{
-                  backgroundColor: isLoading ? '#4b5563' : (colorPalette?.primary || '#7c3aed')
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading && colorPalette?.accent) {
-                    e.currentTarget.style.backgroundColor = colorPalette.accent;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading) {
-                    e.currentTarget.style.backgroundColor = colorPalette?.primary || '#7c3aed';
-                  }
-                }}
-              >
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
-              {isLoading ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className={`h-4 w-1/3 rounded mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                    <div className={`h-4 w-1/2 rounded ${isDarkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}></div>
-                  </div>
-                  <p className="mt-4">Loading reconnection logs...</p>
-                </div>
-              ) : error ? (
-                <div className={`px-4 py-12 text-center ${isDarkMode ? 'text-red-400' : 'text-red-600'
-                  }`}>
-                  <p>{error}</p>
-                  <button
-                    onClick={handleRefresh}
-                    className={`mt-4 text-white px-4 py-2 rounded ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-500 hover:bg-gray-600'
-                      }`}>
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto overflow-y-hidden">
-                  <table className="w-max min-w-full text-sm border-separate border-spacing-0">
-                    <thead>
-                      <tr className={`border-b sticky top-0 z-10 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
-                        }`}>
-                        {displayedColumns.map((column, index) => (
-                          <th
-                            key={column.key}
-                            className={`text-left py-3 px-3 font-normal ${column.width} whitespace-nowrap ${isDarkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-600 bg-gray-50'
-                              } ${index < displayedColumns.length - 1
-                                ? isDarkMode ? 'border-r border-gray-700' : 'border-r border-gray-200'
-                                : ''
-                              }`}
-                          >
-                            {column.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLogRecords.length > 0 ? (
-                        filteredLogRecords.map((record) => (
-                          <tr
-                            key={record.id}
-                            className={`border-b cursor-pointer transition-colors ${isDarkMode
-                              ? 'border-gray-800 hover:bg-gray-900'
-                              : 'border-gray-200 hover:bg-gray-50'
-                              } ${selectedLog?.id === record.id
-                                ? isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                                : ''
-                              }`}
-                            onClick={() => handleRowClick(record)}
-                          >
-                            {displayedColumns.map((column, index) => (
-                              <td
-                                key={column.key}
-                                className={`py-4 px-3 whitespace-nowrap ${isDarkMode ? 'text-white' : 'text-gray-900'
-                                  } ${index < displayedColumns.length - 1
-                                    ? isDarkMode ? 'border-r border-gray-800' : 'border-r border-gray-200'
-                                    : ''
-                                  }`}
-                              >
-                                {renderCellValue(record, column.key)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={displayedColumns.length} className={`px-4 py-12 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
-                            No reconnection logs found matching your filters
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Body */}
+      {isLoading && logRecords.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80 }}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <Text style={{ color: '#6b7280', marginTop: 12 }}>Loading reconnection logs...</Text>
+        </View>
+      ) : error && logRecords.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 80, gap: 12 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#ef4444', textAlign: 'center', paddingHorizontal: 24 }}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            onPress={() => fetchLogRecords(true)}
+            style={{ paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, backgroundColor: primaryColor }}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredLogRecords}
+          keyExtractor={(item, idx) => String(item.id ?? idx)}
+          renderItem={renderItem}
+          initialNumToRender={20}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryColor} colors={[primaryColor]} />
+          }
+          ListEmptyComponent={
+            <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+              <Text style={{ color: '#6b7280' }}>No reconnection logs found matching your filters</Text>
+            </View>
+          }
+          ListFooterComponent={
+            isLoading && logRecords.length > 0 ? (
+              <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={primaryColor} />
+                <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Loading more...</Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
 
       {selectedLog && (
-        <div className={`w-full max-w-3xl border-l flex-shrink-0 relative ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
-          }`}>
-          <div className="absolute top-4 right-4 z-10">
-            <button
-              onClick={handleCloseDetails}
-              className={`transition-colors rounded p-1 ${isDarkMode
-                ? 'text-gray-400 hover:text-white bg-gray-800'
-                : 'text-gray-600 hover:text-gray-900 bg-gray-100'
-                }`}
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <ReconnectionLogsDetails
-            reconnectionRecord={selectedLog}
-          />
-        </div>
+        <ReconnectionLogsDetails
+          reconnectionRecord={selectedLog}
+          onClose={() => setSelectedLog(null)}
+          isMobile={!isTablet}
+        />
       )}
-    </div>
+    </View>
   );
 };
+
+const Field: React.FC<{ label: string; value: string; valueColor?: string }> = ({ label, value, valueColor }) => (
+  <Text style={{ fontSize: 11, color: '#6b7280' }}>
+    <Text style={{ fontWeight: '600' }}>{label}: </Text>
+    <Text style={{ color: valueColor || '#6b7280' }}>{value}</Text>
+  </Text>
+);
 
 export default ReconnectionLogs;

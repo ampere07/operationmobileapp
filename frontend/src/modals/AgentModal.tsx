@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Agent } from '../types/api';
 import { agentService } from '../services/agentService';
 import ModalUITemplate, { useModalTheme } from './ui-modal/ModalUITemplate';
@@ -11,42 +13,64 @@ interface AgentModalProps {
 }
 
 const AgentForm: React.FC<{
-  formData: any;
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  formData: { team_name: string };
+  handleInputChange: (name: string, value: string) => void;
   errors: Record<string, string>;
 }> = ({ formData, handleInputChange, errors }) => {
   const { isDarkMode } = useModalTheme();
 
-  const inputClass = (error?: string) => `w-full px-4 py-2.5 rounded-lg border transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-50 
-    ${isDarkMode
-      ? `bg-gray-800 text-white ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-700 focus:ring-blue-500/20'}`
-      : `bg-white text-gray-900 ${error ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-200 focus:ring-blue-500/20'}`
-    }`;
-
-  const labelClass = `block text-sm font-medium mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`;
+  const labelColor = isDarkMode ? '#9ca3af' : '#6b7280';
+  const inputBg = isDarkMode ? '#1f2937' : '#ffffff';
+  const inputText = isDarkMode ? '#ffffff' : '#111827';
+  const borderColor = (error?: string) =>
+    error ? '#ef4444' : isDarkMode ? '#374151' : '#e5e7eb';
 
   return (
-    <div className="space-y-6">
-      {errors.general && (
-        <div className={`p-4 border rounded-xl text-sm font-medium ${isDarkMode ? 'bg-red-900/20 border-red-800/30 text-red-400' : 'bg-red-50 border-red-200 text-red-600'}`}>
-          {errors.general}
-        </div>
-      )}
+    <View style={{ gap: 24 }}>
+      {errors.general ? (
+        <View
+          style={{
+            padding: 16,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: isDarkMode ? 'rgba(153,27,27,0.3)' : '#fecaca',
+            backgroundColor: isDarkMode ? 'rgba(127,29,29,0.2)' : '#fef2f2',
+          }}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '500', color: isDarkMode ? '#f87171' : '#dc2626' }}>
+            {errors.general}
+          </Text>
+        </View>
+      ) : null}
 
-      <div className="space-y-4">
-        <div>
-          <label className={labelClass}>Team Name</label>
-          <input
-            name="team_name"
-            value={formData.team_name}
-            onChange={handleInputChange}
-            className={inputClass(errors.team_name)}
-            placeholder="Enter team name"
-          />
-          {errors.team_name && <p className="text-red-500 text-xs mt-1.5 font-medium ml-1">{errors.team_name}</p>}
-        </div>
-      </div>
-    </div>
+      <View>
+        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+          Team Name
+        </Text>
+        <TextInput
+          value={formData.team_name}
+          onChangeText={(text) => handleInputChange('team_name', text)}
+          placeholder="Enter team name"
+          placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+          style={{
+            width: '100%',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: borderColor(errors.team_name),
+            backgroundColor: inputBg,
+            color: inputText,
+            fontSize: 14,
+          }}
+        />
+        {errors.team_name ? (
+          <Text style={{ color: '#ef4444', fontSize: 12, marginTop: 6, marginLeft: 4, fontWeight: '500' }}>
+            {errors.team_name}
+          </Text>
+        ) : null}
+      </View>
+    </View>
   );
 };
 
@@ -62,37 +86,31 @@ const AgentModal: React.FC<AgentModalProps> = ({ isOpen, onClose, onSave, agent 
   useEffect(() => {
     if (isOpen) {
       if (agent) {
-        setFormData({
-          team_name: agent.team_name || '',
-        });
+        setFormData({ team_name: agent.team_name || '' });
       } else {
-        setFormData({
-          team_name: '',
-        });
+        setFormData({ team_name: '' });
       }
       setErrors({});
     }
   }, [isOpen, agent]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleInputChange = (name: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.team_name.trim()) newErrors.team_name = 'Required';
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const getUserEmail = () => {
+  const getUserEmail = async (): Promise<string> => {
     try {
-      const authData = localStorage.getItem('authData');
+      const authData = await AsyncStorage.getItem('authData');
       if (authData) {
         const user = JSON.parse(authData);
         return user.email || user.email_address || 'system';
@@ -107,17 +125,17 @@ const AgentModal: React.FC<AgentModalProps> = ({ isOpen, onClose, onSave, agent 
     if (!validate()) return;
     setLoading(true);
     try {
-      const userEmail = getUserEmail();
+      const userEmail = await getUserEmail();
       const payload = {
         ...formData,
-        created_by: userEmail
+        created_by: userEmail,
       };
 
       let response: any;
       if (isEditMode && agent) {
         response = await agentService.updateAgent(agent.id, payload);
       } else {
-        response = await agentService.createAgent(payload);
+        response = await agentService.createAgent(payload as Omit<Agent, 'id' | 'created_at'>);
       }
 
       if (response.success && response.data) {
@@ -143,14 +161,10 @@ const AgentModal: React.FC<AgentModalProps> = ({ isOpen, onClose, onSave, agent 
       primaryAction={{
         label: isEditMode ? 'Update' : 'Save',
         onClick: handleSave,
-        disabled: loading
+        disabled: loading,
       }}
     >
-      <AgentForm
-        formData={formData}
-        handleInputChange={handleInputChange}
-        errors={errors}
-      />
+      <AgentForm formData={formData} handleInputChange={handleInputChange} errors={errors} />
     </ModalUITemplate>
   );
 };

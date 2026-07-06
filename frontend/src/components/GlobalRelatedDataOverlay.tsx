@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import RelatedDataTable from './RelatedDataTable';
+import RelatedDataTableBase from './RelatedDataTable';
+const RelatedDataTable: any = RelatedDataTableBase;
 import { TableColumn } from '../config/relatedDataColumns';
 
 interface GlobalRelatedDataOverlayProps {

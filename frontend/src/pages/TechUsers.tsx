@@ -1,5 +1,27 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Loader2, RefreshCw, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, User as UserIcon, Trash2, Edit } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Dimensions,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Plus,
+  RefreshCw,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronLeft,
+  ChevronRight,
+  User as UserIcon,
+  Trash2,
+  Edit,
+} from 'lucide-react-native';
 import GlobalSearch from './globalfunctions/GlobalSearch';
 import { Technician } from '../types/api';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
@@ -7,249 +29,348 @@ import TechnicianModal from '../modals/TechnicianModal';
 import { useTechnicianStore } from '../store/technicianStore';
 import { technicianService } from '../services/technicianService';
 
+const { width } = Dimensions.get('window');
+const isTablet = width >= 768;
+
 const TechUsers: React.FC = () => {
-    const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
+  // FORCED LIGHT MODE
+  const isDarkMode = false;
 
-    const {
-        technicians,
-        isLoading,
-        error,
-        fetchTechnicians,
-        refreshTechnicians,
-        addTechnician,
-        updateTechnician,
-        removeTechnician
-    } = useTechnicianStore();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [colorPalette, setColorPalette] = useState<ColorPalette | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [authData, setAuthData] = useState<any>({});
 
-    const [selectedTech, setSelectedTech] = useState<Technician | null>(null);
-    const [showModal, setShowModal] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(25);
+  const {
+    technicians,
+    isLoading,
+    error,
+    fetchTechnicians,
+    refreshTechnicians,
+    addTechnician,
+    updateTechnician,
+    removeTechnician,
+  } = useTechnicianStore();
 
-    useEffect(() => {
-        const fetchPalette = async () => {
-            const palette = await settingsColorPaletteService.getActive();
-            setColorPalette(palette);
-        };
-        fetchPalette();
+  const [selectedTech, setSelectedTech] = useState<Technician | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
-        const observer = new MutationObserver(() => {
-            setIsDarkMode(localStorage.getItem('theme') !== 'light');
-        });
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-        setIsDarkMode(localStorage.getItem('theme') !== 'light');
-        return () => observer.disconnect();
-    }, []);
-
-    useEffect(() => {
-        fetchTechnicians();
-    }, [fetchTechnicians]);
-
-    const getFullName = (t: Technician): string => {
-        const parts = [t.first_name, t.middle_initial, t.last_name].filter(Boolean);
-        return parts.join(' ');
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const palette = await settingsColorPaletteService.getActive();
+        setColorPalette(palette);
+      } catch (err) {
+        console.error('Failed to fetch color palette:', err);
+      }
+      try {
+        const raw = await AsyncStorage.getItem('authData');
+        setAuthData(raw ? JSON.parse(raw) : {});
+      } catch (err) {
+        console.error('Failed to load authData:', err);
+      }
     };
+    init();
+  }, []);
 
-    const userOrgId = useMemo(() => {
-        try {
-            const authData = JSON.parse(localStorage.getItem('authData') || '{}');
-            return authData.organization_id || authData.user?.organization_id || authData.organization?.id || authData.user?.organization?.id || null;
-        } catch {
-            return null;
-        }
-    }, []);
+  useEffect(() => {
+    fetchTechnicians();
+  }, [fetchTechnicians]);
 
-    const filteredTechs = useMemo(() => {
-        return technicians.filter(tech => {
-            // Organization filter — mirrors applicationmanagement.tsx logic exactly
-            if (userOrgId) {
-                if (tech.organization_id !== userOrgId) return false;
-            } else {
-                if (tech.organization_id) return false;
-            }
+  // Auto refresh every 15 minutes
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshTechnicians().catch((e) => console.error('Idle refresh failed:', e));
+    }, 15 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [refreshTechnicians]);
 
-            const fullName = getFullName(tech).toLowerCase();
-            const query = searchQuery.toLowerCase().trim();
-            return fullName.includes(query);
-        });
-    }, [technicians, searchQuery, userOrgId]);
+  const primaryColor = colorPalette?.primary || '#7c3aed';
 
-    const totalPages = Math.ceil(filteredTechs.length / itemsPerPage);
-    const paginatedTechs = useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return filteredTechs.slice(start, start + itemsPerPage);
-    }, [filteredTechs, currentPage, itemsPerPage]);
+  const getFullName = (t: Technician): string => {
+    const parts = [t.first_name, t.middle_initial, t.last_name].filter(Boolean);
+    return parts.join(' ');
+  };
 
-    const handlePageChange = (newPage: number) => {
-        if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
-    };
-
-    const handleSaveTech = (savedTech: Technician) => {
-        const exists = technicians.find(t => t.id === savedTech.id);
-        if (exists) {
-            updateTechnician(savedTech);
-        } else {
-            addTechnician(savedTech);
-        }
-    };
-
-    const handleDeleteTech = async (id: number) => {
-        if (window.confirm('Are you sure you want to delete this technician?')) {
-            try {
-                const res = await technicianService.deleteTechnician(id);
-                if (res.success) {
-                    removeTechnician(id);
-                } else {
-                    alert(res.message || 'Failed to delete technician');
-                }
-            } catch (err: any) {
-                alert(err.message || 'An error occurred');
-            }
-        }
-    };
-
-    const PaginationControls = () => {
-        if (totalPages <= 1) return null;
-        return (
-            <div className={`border-t p-4 flex items-center justify-between ${isDarkMode ? 'bg-gray-900 border-gray-800 text-gray-400' : 'bg-white border-gray-200 text-gray-600'}`}>
-                <div className="flex items-center gap-4 text-xs">
-                    <div className="flex items-center gap-2">
-                        <span>Show</span>
-                        <select
-                            value={itemsPerPage}
-                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                            className={`px-2 py-1 rounded border focus:outline-none text-[10px] ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'}`}
-                        >
-                            {[10, 25, 50, 100].map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                    </div>
-                    <span>{Math.min((currentPage - 1) * itemsPerPage + 1, filteredTechs.length)}-{Math.min(currentPage * itemsPerPage, filteredTechs.length)} of {filteredTechs.length}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                    <button onClick={() => handlePageChange(1)} disabled={currentPage === 1} className="p-1 disabled:opacity-30" title="First Page"><ChevronsLeft size={16} /></button>
-                    <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="p-1 disabled:opacity-30" title="Previous Page"><ChevronLeft size={16} /></button>
-                    <span className="text-xs px-2">Page {currentPage} of {totalPages}</span>
-                    <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="p-1 disabled:opacity-30" title="Next Page"><ChevronRight size={16} /></button>
-                    <button onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages} className="p-1 disabled:opacity-30" title="Last Page"><ChevronsRight size={16} /></button>
-                </div>
-            </div>
-        );
-    };
-
+  const userOrgId = useMemo(() => {
     return (
-        <div className={`h-full flex flex-col overflow-hidden pb-16 md:pb-0 ${isDarkMode ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
-            {/* Header */}
-            <div className={`p-6 border-b ${isDarkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Technician Management</h1>
-                        <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Manage system technicians</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => refreshTechnicians()}
-                            className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
-                        >
-                            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-                        </button>
-                        <button
-                            onClick={() => { setSelectedTech(null); setShowModal(true); }}
-                            className="p-2 rounded-lg text-white shadow-lg transition-transform active:scale-95"
-                            style={{ backgroundColor: colorPalette?.primary || '#3b82f6' }}
-                        >
-                            <Plus size={20} />
-                        </button>
-                    </div>
-                </div>
-
-                <GlobalSearch 
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    isDarkMode={isDarkMode}
-                    colorPalette={colorPalette}
-                    placeholder="Search technician name..."
-                />
-            </div>
-
-            {/* List Content */}
-            <div className="flex-1 overflow-y-auto" ref={scrollRef}>
-                {isLoading && technicians.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 opacity-50">
-                        <Loader2 className="animate-spin mb-4" size={32} />
-                        <p className="text-sm">Loading technicians...</p>
-                    </div>
-                ) : error ? (
-                    <div className="p-10 text-center text-red-500 text-sm">{error}</div>
-                ) : filteredTechs.length === 0 ? (
-                    <div className="p-12 text-center opacity-40">
-                        <UserIcon size={48} className="mx-auto mb-4" />
-                        <p className="text-sm">No technicians found</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead className={`sticky top-0 z-10 ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-gray-50 text-gray-600'}`}>
-                                <tr>
-                                    <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider">Name</th>
-                                    <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider">Last Updated</th>
-                                    <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider">Updated By</th>
-                                    <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wider text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className={`divide-y ${isDarkMode ? 'divide-gray-800' : 'divide-gray-100'}`}>
-                                {paginatedTechs.map((tech) => (
-                                    <tr key={tech.id} className={`${isDarkMode ? 'hover:bg-gray-900/50' : 'hover:bg-gray-50'} transition-colors`}>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
-                                                    <UserIcon size={14} />
-                                                </div>
-                                                <span className="text-sm font-medium">{getFullName(tech)}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
-                                            {tech.updated_at ? new Date(tech.updated_at).toLocaleDateString() : 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
-                                            {tech.updated_by || 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => { setSelectedTech(tech); setShowModal(true); }}
-                                                    className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-800 text-blue-400' : 'hover:bg-gray-100 text-blue-600'}`}
-                                                >
-                                                    <Edit size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteTech(tech.id)}
-                                                    className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-800 text-red-400' : 'hover:bg-gray-100 text-red-600'}`}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            {!isLoading && filteredTechs.length > 0 && <PaginationControls />}
-
-            <TechnicianModal
-                isOpen={showModal}
-                onClose={() => setShowModal(false)}
-                onSave={handleSaveTech}
-                technician={selectedTech}
-            />
-        </div>
+      authData.organization_id ||
+      authData.user?.organization_id ||
+      authData.organization?.id ||
+      authData.user?.organization?.id ||
+      null
     );
+  }, [authData]);
+
+  const filteredTechs = useMemo(() => {
+    return technicians.filter((tech) => {
+      // Organization filter — mirrors applicationmanagement.tsx logic exactly
+      if (userOrgId) {
+        if (tech.organization_id !== userOrgId) return false;
+      } else {
+        if (tech.organization_id) return false;
+      }
+
+      const fullName = getFullName(tech).toLowerCase();
+      const query = searchQuery.toLowerCase().trim();
+      return fullName.includes(query);
+    });
+  }, [technicians, searchQuery, userOrgId]);
+
+  const totalPages = Math.ceil(filteredTechs.length / itemsPerPage);
+  const paginatedTechs = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTechs.slice(start, start + itemsPerPage);
+  }, [filteredTechs, currentPage, itemsPerPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshTechnicians();
+    setRefreshing(false);
+  };
+
+  const handleSaveTech = (savedTech: Technician) => {
+    const exists = technicians.find((t) => t.id === savedTech.id);
+    if (exists) {
+      updateTechnician(savedTech);
+    } else {
+      addTechnician(savedTech);
+    }
+  };
+
+  const handleDeleteTech = (id: number) => {
+    Alert.alert('Delete Technician', 'Are you sure you want to delete this technician?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const res = await technicianService.deleteTechnician(id);
+            if (res.success) {
+              removeTechnician(id);
+            } else {
+              Alert.alert('Error', res.message || 'Failed to delete technician');
+            }
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'An error occurred');
+          }
+        },
+      },
+    ]);
+  };
+
+  const renderTech = ({ item: tech }: { item: Technician }) => (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: '#ffffff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+      }}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: '#f3f4f6',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginRight: 12,
+        }}
+      >
+        <UserIcon size={18} color="#6b7280" />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 2 }} numberOfLines={1}>
+          {getFullName(tech)}
+        </Text>
+        <Text style={{ fontSize: 12, color: '#9ca3af' }} numberOfLines={1}>
+          {tech.updated_at ? new Date(tech.updated_at).toLocaleDateString() : 'N/A'}
+          {tech.updated_by ? ` • ${tech.updated_by}` : ''}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <TouchableOpacity
+          onPress={() => {
+            setSelectedTech(tech);
+            setShowModal(true);
+          }}
+          style={{ padding: 8, borderRadius: 8, backgroundColor: '#eff6ff' }}
+        >
+          <Edit size={16} color="#2563eb" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleDeleteTech(tech.id)}
+          style={{ padding: 8, borderRadius: 8, backgroundColor: '#fef2f2' }}
+        >
+          <Trash2 size={16} color="#dc2626" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const PaginationControls = () => {
+    if (totalPages <= 1) return null;
+    const start = Math.min((currentPage - 1) * itemsPerPage + 1, filteredTechs.length);
+    const end = Math.min(currentPage * itemsPerPage, filteredTechs.length);
+    return (
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: '#e5e7eb',
+          backgroundColor: '#ffffff',
+          padding: 12,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 12, color: '#6b7280' }}>Show</Text>
+            <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 6, overflow: 'hidden', minWidth: 70 }}>
+              <Picker
+                selectedValue={String(itemsPerPage)}
+                onValueChange={(v) => {
+                  setItemsPerPage(Number(v));
+                  setCurrentPage(1);
+                }}
+                style={{ height: 36, fontSize: 12 }}
+              >
+                {[10, 25, 50, 100].map((v) => (
+                  <Picker.Item key={v} label={String(v)} value={String(v)} />
+                ))}
+              </Picker>
+            </View>
+            <Text style={{ fontSize: 12, color: '#6b7280' }}>
+              {start}-{end} of {filteredTechs.length}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity onPress={() => handlePageChange(1)} disabled={currentPage === 1} style={{ padding: 4, opacity: currentPage === 1 ? 0.3 : 1 }}>
+              <ChevronsLeft size={16} color="#374151" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} style={{ padding: 4, opacity: currentPage === 1 ? 0.3 : 1 }}>
+              <ChevronLeft size={16} color="#374151" />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 12, color: '#374151', paddingHorizontal: 8 }}>
+              Page {currentPage} of {totalPages}
+            </Text>
+            <TouchableOpacity onPress={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} style={{ padding: 4, opacity: currentPage === totalPages ? 0.3 : 1 }}>
+              <ChevronRight size={16} color="#374151" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handlePageChange(totalPages)} disabled={currentPage === totalPages} style={{ padding: 4, opacity: currentPage === totalPages ? 0.3 : 1 }}>
+              <ChevronsRight size={16} color="#374151" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const ListContent = () => {
+    if (isLoading && technicians.length === 0) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <Text style={{ marginTop: 12, fontSize: 14, color: '#6b7280' }}>Loading technicians...</Text>
+        </View>
+      );
+    }
+    if (error) {
+      return (
+        <View style={{ padding: 40, alignItems: 'center' }}>
+          <Text style={{ fontSize: 14, color: '#ef4444' }}>{error}</Text>
+        </View>
+      );
+    }
+    if (filteredTechs.length === 0) {
+      return (
+        <View style={{ padding: 48, alignItems: 'center', opacity: 0.4 }}>
+          <UserIcon size={48} color="#6b7280" />
+          <Text style={{ marginTop: 12, fontSize: 14, color: '#6b7280' }}>No technicians found</Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f9fafb' }}>
+      {/* Header */}
+      <View
+        style={{
+          backgroundColor: '#ffffff',
+          borderBottomWidth: 1,
+          borderBottomColor: '#e5e7eb',
+          paddingTop: isTablet ? 16 : 60,
+          paddingHorizontal: 16,
+          paddingBottom: 12,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <View>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Technician Management</Text>
+            <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>Manage system technicians</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity onPress={() => refreshTechnicians()} style={{ padding: 8, borderRadius: 8, backgroundColor: '#f3f4f6' }}>
+              <RefreshCw size={18} color="#6b7280" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedTech(null);
+                setShowModal(true);
+              }}
+              style={{ padding: 8, borderRadius: 8, backgroundColor: primaryColor }}
+            >
+              <Plus size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <GlobalSearch
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          isDarkMode={isDarkMode}
+          colorPalette={colorPalette}
+          placeholder="Search technician name..."
+        />
+      </View>
+
+      {/* List */}
+      <View style={{ flex: 1 }}>
+        <ListContent />
+        {filteredTechs.length > 0 && (
+          <FlatList
+            data={paginatedTechs}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderTech}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[primaryColor]} />
+            }
+            contentContainerStyle={{ backgroundColor: '#ffffff' }}
+          />
+        )}
+        {!isLoading && filteredTechs.length > 0 && <PaginationControls />}
+      </View>
+
+      <TechnicianModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSave={handleSaveTech}
+        technician={selectedTech}
+      />
+    </View>
+  );
 };
 
 export default TechUsers;

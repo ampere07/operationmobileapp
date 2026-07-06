@@ -111,25 +111,25 @@ const convertCustomerDataToBillingDetail = (customerData: CustomerDetailData): B
   accountBalance: customerData.billingAccount?.accountBalance || 0,
   housingStatus: customerData.housingStatus || '',
   addressCoordinates: customerData.addressCoordinates || '',
-  accountNoCustomer: customerData.accountNoCustomer,
-  proofOfBillingUrl: customerData.proofOfBillingUrl,
-  governmentValidIdUrl: customerData.governmentValidIdUrl,
-  secondGovernmentValidIdUrl: customerData.secondGovernmentValidIdUrl,
-  documentAttachmentUrl: customerData.documentAttachmentUrl,
-  otherIspBillUrl: customerData.otherIspBillUrl,
-  customerCreatedAt: customerData.createdAt,
-  customerUpdatedAt: customerData.updatedAt,
-  customerUpdatedBy: customerData.updatedBy,
-  billingAccountCreatedAt: customerData.billingAccount?.createdAt,
-  billingAccountUpdatedAt: customerData.billingAccount?.updatedAt,
-  billingAccountCreatedBy: customerData.billingAccount?.createdBy,
-  billingAccountUpdatedBy: customerData.billingAccount?.updatedBy,
-  balanceUpdateDate: customerData.billingAccount?.balanceUpdateDate,
-  techCreatedAt: customerData.technicalDetails?.createdAt,
-  techUpdatedAt: customerData.technicalDetails?.updatedAt,
-  techCreatedBy: customerData.technicalDetails?.createdBy,
-  techUpdatedBy: customerData.technicalDetails?.updatedBy,
-  usernameStatus: customerData.technicalDetails?.usernameStatus,
+  accountNoCustomer: (customerData as any).accountNoCustomer,
+  proofOfBillingUrl: (customerData as any).proofOfBillingUrl,
+  governmentValidIdUrl: (customerData as any).governmentValidIdUrl,
+  secondGovernmentValidIdUrl: (customerData as any).secondGovernmentValidIdUrl,
+  documentAttachmentUrl: (customerData as any).documentAttachmentUrl,
+  otherIspBillUrl: (customerData as any).otherIspBillUrl,
+  customerCreatedAt: (customerData as any).createdAt,
+  customerUpdatedAt: (customerData as any).updatedAt,
+  customerUpdatedBy: (customerData as any).updatedBy,
+  billingAccountCreatedAt: (customerData.billingAccount as any)?.createdAt,
+  billingAccountUpdatedAt: (customerData.billingAccount as any)?.updatedAt,
+  billingAccountCreatedBy: (customerData.billingAccount as any)?.createdBy,
+  billingAccountUpdatedBy: (customerData.billingAccount as any)?.updatedBy,
+  balanceUpdateDate: (customerData.billingAccount as any)?.balanceUpdateDate,
+  techCreatedAt: (customerData.technicalDetails as any)?.createdAt,
+  techUpdatedAt: (customerData.technicalDetails as any)?.updatedAt,
+  techCreatedBy: (customerData.technicalDetails as any)?.createdBy,
+  techUpdatedBy: (customerData.technicalDetails as any)?.updatedBy,
+  usernameStatus: (customerData.technicalDetails as any)?.usernameStatus,
   vip_expiration: (customerData.billingAccount as any)?.vip_expiration || '',
   vip_remarks: (customerData.billingAccount as any)?.vip_remarks || '',
 });
@@ -957,7 +957,7 @@ const PaymentPortal: React.FC = () => {
       {/* Detail Modal */}
       {selectedRecord && (
         <PaymentPortalDetails
-          record={selectedRecord}
+          record={selectedRecord as any}
           onClose={() => setSelectedRecord(null)}
           onViewCustomer={handleViewCustomer}
           onPrevious={currentRecordIndex > 0 ? handlePreviousRecord : undefined}

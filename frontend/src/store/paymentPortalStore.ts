@@ -113,7 +113,7 @@ export const usePaymentPortalStore = create<PaymentPortalStore>((set, get) => ({
             const result = await paymentPortalLogsService.getAllLogs({
                 updated_since: formattedDate,
                 limit: 1000
-            });
+            } as any);
 
             if (result && result.success && result.data && result.data.length > 0) {
                 const updatedRecords = result.data;

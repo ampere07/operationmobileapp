@@ -137,7 +137,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         try {
             const formattedDate = lastUpdated.toISOString().slice(0, 19).replace('T', ' ');
 
-            const result = await transactionService.getAllTransactions(1000, 0, formattedDate);
+            const result = await (transactionService.getAllTransactions as any)(1000, 0, formattedDate);
 
             if (result && result.success && result.data && result.data.length > 0) {
                 const updatedTransactions = result.data;

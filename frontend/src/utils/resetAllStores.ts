@@ -239,5 +239,5 @@ export const resetAllStores = () => {
     hasMore: true,
     currentPage: 1,
     lastUpdated: null,
-  });
+  } as any);
 };

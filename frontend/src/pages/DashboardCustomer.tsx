@@ -169,6 +169,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
 
     useEffect(() => {
         const loadData = async () => {
+            const storedUser = await AsyncStorage.getItem('authData');
             if (storedUser) setUser(JSON.parse(storedUser));
 
             if (accountNo && accountNo !== 'N/A') {
@@ -605,7 +606,7 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
                                                 ]}
                                             >
                                                 <LinearGradient
-                                                    colors={ad.colors as string[]}
+                                                    colors={ad.colors as any}
                                                     start={{ x: 0, y: 0 }}
                                                     end={{ x: 1, y: 1 }}
                                                     style={StyleSheet.absoluteFill}

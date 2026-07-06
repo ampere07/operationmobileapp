@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, TextInput, Pressable, Modal, StyleSheet, Keyboard } from 'react-native';
 import { Search, X, Check, ChevronDown } from 'lucide-react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList as FlashListBase } from '@shopify/flash-list';
+const FlashList: any = FlashListBase;
 
 interface SearchablePickerProps {
   isOpen: boolean;

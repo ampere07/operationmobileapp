@@ -119,7 +119,7 @@ const transform = (record: SOARecord): SOARecordUI => {
         referenceNo: (record as any).reference_no || '',
         orNo: (record as any).or_no || '',
         transactionId: (record as any).transaction_id || '',
-        organization_id: record.organization_id,
+        organization_id: (record as any).organization_id,
     };
 };
 
@@ -238,14 +238,14 @@ export const useSOAStore = create<SOAState>((set, get) => ({
             const isoString = lastUpdated.toISOString();
             
             // Note: Keep fastMode false to ensure we get customer details for any updated records
-            const result = await soaService.getAllStatementsWithTotal(false, 1, 1000, isoString);
+            const result = await (soaService.getAllStatementsWithTotal as any)(false, 1, 1000, isoString);
             
             if (result && result.data && result.data.length > 0) {
                 const newTransformed = result.data.map(transform);
                 
                 const updateMap = new Map();
                 soaRecords.forEach(r => updateMap.set(r.id, r));
-                newTransformed.forEach(r => updateMap.set(r.id, r));
+                newTransformed.forEach((r: any) => updateMap.set(r.id, r));
                 
                 const allFetchedRecords = Array.from(updateMap.values());
                 

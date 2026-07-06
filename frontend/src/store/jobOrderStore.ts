@@ -166,7 +166,7 @@ export const useJobOrderStore = create<JobOrderState>((set, get) => ({
             // Format date for MySQL: YYYY-MM-DD HH:mm:ss
             const formattedDate = lastUpdated.toISOString().slice(0, 19).replace('T', ' ');
 
-            const response = await getJobOrders(false, 1, 1000, '', assignedEmail, formattedDate);
+            const response = await (getJobOrders as any)(false, 1, 1000, '', assignedEmail, formattedDate);
 
             if (response.success && response.jobOrders && response.jobOrders.length > 0) {
                 const updatedJOs = response.jobOrders;
@@ -176,7 +176,7 @@ export const useJobOrderStore = create<JobOrderState>((set, get) => ({
                     state.jobOrders.forEach(jo => currentMap.set(jo.id, jo));
 
                     // Merge updates
-                    updatedJOs.forEach(jo => {
+                    updatedJOs.forEach((jo: any) => {
                         const existing = currentMap.get(jo.id);
                         if (existing) {
                             currentMap.set(jo.id, { ...existing, ...jo });
@@ -197,7 +197,7 @@ export const useJobOrderStore = create<JobOrderState>((set, get) => ({
                     return {
                         jobOrders: Array.from(currentMap.values()).sort(sortFn),
                         totalCount: (response.pagination as any)?.total_count || 
-                                   (state.totalCount + updatedJOs.filter(jo => !state.jobOrders.find(o => o.id === jo.id)).length),
+                                   (state.totalCount + updatedJOs.filter((jo: any) => !state.jobOrders.find(o => o.id === jo.id)).length),
                         isFullyLoaded: true, // If we're getting updates, we must have finished initial load
                         lastUpdated: new Date()
                     };

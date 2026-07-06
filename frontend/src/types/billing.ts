@@ -105,15 +105,12 @@ export interface BillingDetailRecord extends BillingRecord {
   customerCreatedAt?: string | null;
   customerUpdatedAt?: string | null;
   customerUpdatedBy?: string | null;
-  billingAccountCreatedAt?: string | null;
-  billingAccountUpdatedAt?: string | null;
-  billingAccountCreatedBy?: string | null;
-  billingAccountUpdatedBy?: string | null;
   techCreatedAt?: string | null;
   techUpdatedAt?: string | null;
   techCreatedBy?: string | null;
   techUpdatedBy?: string | null;
   usernameStatus?: string | null;
+  location?: string | null;
 }
 
 export interface OnlineStatusRecord {

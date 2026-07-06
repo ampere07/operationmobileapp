@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import ModalUITemplate from './ui-modal/ModalUITemplate';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Camera, X } from 'lucide-react-native';
+import ModalUITemplate, { useModalTheme } from './ui-modal/ModalUITemplate';
 import apiClient from '../config/api';
-import { User, Camera, X, Loader2 } from 'lucide-react';
-import SearchableField, { GroupedOption } from '../components/common/SearchableField';
 import { transactionService } from '../services/transactionService';
 import { userService } from '../services/userService';
 import { agentService } from '../services/agentService';
@@ -24,6 +27,21 @@ interface PayoutFormData {
     [key: string]: string | number;
 }
 
+interface PickedImage {
+    uri: string;
+    name: string;
+    type: string;
+}
+
+const generateRefNumber = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 10; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+};
+
 const IncentivesPayoutForm: React.FC<{
     agentId?: number;
     agentName?: string;
@@ -31,18 +49,7 @@ const IncentivesPayoutForm: React.FC<{
     onSuccess: () => void;
     isOpen: boolean;
 }> = ({ agentId, agentName, onClose, onSuccess, isOpen }) => {
-    const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-
-    useEffect(() => {
-        const checkDarkMode = () => {
-            const theme = localStorage.getItem('theme');
-            setIsDarkMode(theme === 'dark' || theme === null);
-        };
-        checkDarkMode();
-        const observer = new MutationObserver(checkDarkMode);
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-        return () => observer.disconnect();
-    }, []);
+    const { isDarkMode } = useModalTheme();
 
     const [agents, setAgents] = useState<any[]>([]);
     const [teams, setTeams] = useState<any[]>([]);
@@ -51,6 +58,16 @@ const IncentivesPayoutForm: React.FC<{
     const [selectedAgentName, setSelectedAgentName] = useState<string>(agentName || '');
     const [selectedAgentId, setSelectedAgentId] = useState<number | string>(agentId || '');
     const [incentiveType, setIncentiveType] = useState<'incentives' | 'incentives_payout'>('incentives_payout');
+
+    const [image, setImage] = useState<PickedImage | null>(null);
+
+    const [formData, setFormData] = useState<PayoutFormData>({
+        agent_id: agentId || '',
+        ref_number: '',
+        total_amount: '',
+        remarks: '',
+        proof_of_payment: '',
+    });
 
     useEffect(() => {
         const fetchAgentsData = async () => {
@@ -65,7 +82,7 @@ const IncentivesPayoutForm: React.FC<{
                             setAgents(responseById.data);
                         }
                     }
-                } catch (error) {
+                } catch {
                     setAgents([]);
                 }
             }
@@ -78,7 +95,7 @@ const IncentivesPayoutForm: React.FC<{
                     if (response.success && response.data) {
                         setTeams(response.data);
                     }
-                } catch (error) {
+                } catch {
                     setTeams([]);
                 }
             }
@@ -88,72 +105,41 @@ const IncentivesPayoutForm: React.FC<{
         fetchTeamsData();
     }, [isOpen]);
 
-    const getGroupedAgents = (): GroupedOption[] => {
+    // Flat, team-grouped agent list for the Picker (replaces the web SearchableField).
+    const getFlatAgents = (): { id: any; name: string; group: string }[] => {
         if (!agents.length) return [];
-
         const groups: Record<number, any[]> = {};
         const noTeam: any[] = [];
 
-        agents.forEach(agent => {
+        agents.forEach((agent) => {
+            const entry = {
+                ...agent,
+                name: `${agent.first_name || ''} ${agent.middle_initial || ''} ${agent.last_name || ''}`.replace(/\s+/g, ' ').trim(),
+            };
             if (agent.agent_id) {
                 if (!groups[agent.agent_id]) groups[agent.agent_id] = [];
-                groups[agent.agent_id].push({
-                    name: `${agent.first_name || ''} ${agent.middle_initial || ''} ${agent.last_name || ''}`.replace(/\s+/g, ' ').trim(),
-                    ...agent
-                });
+                groups[agent.agent_id].push(entry);
             } else {
-                noTeam.push({
-                    name: `${agent.first_name || ''} ${agent.middle_initial || ''} ${agent.last_name || ''}`.replace(/\s+/g, ' ').trim(),
-                    ...agent
-                });
+                noTeam.push(entry);
             }
         });
 
-        const grouped: GroupedOption[] = [];
-
-        teams.forEach(team => {
+        const flat: { id: any; name: string; group: string }[] = [];
+        teams.forEach((team) => {
             const teamAgents = groups[team.id];
             if (teamAgents && teamAgents.length > 0) {
-                grouped.push({
-                    label: team.team_name || `Team ${team.id}`,
-                    options: teamAgents
-                });
+                const groupLabel = team.team_name || `Team ${team.id}`;
+                teamAgents.forEach((a) => flat.push({ id: a.id, name: a.name, group: groupLabel }));
             }
         });
-
-        if (noTeam.length > 0) {
-            grouped.push({
-                label: 'No Team',
-                options: noTeam
-            });
-        }
-
-        return grouped;
+        noTeam.forEach((a) => flat.push({ id: a.id, name: a.name, group: 'No Team' }));
+        return flat;
     };
 
-    const groupedAgents = getGroupedAgents();
+    const flatAgents = getFlatAgents();
 
-    // Image upload state
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const generateRefNumber = () => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let result = '';
-        for (let i = 0; i < 10; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return result;
-    };
-
-    const [formData, setFormData] = useState<PayoutFormData>({
-        agent_id: agentId || '',
-        ref_number: '',
-        total_amount: '',
-        remarks: '',
-        proof_of_payment: ''
-    });
+    const selectedAgentObj = agents.find((a) => Number(a.id) === Number(selectedAgentId));
+    const availableIncentives = (selectedAgentObj as any)?.agent_balance?.incentives || 0;
 
     // Auto-fill incentives when agentId changes or isOpen triggers
     useEffect(() => {
@@ -164,8 +150,8 @@ const IncentivesPayoutForm: React.FC<{
 
             let initialAmount = '';
             if (agentId && agents.length > 0) {
-                const selectedAgentObj = agents.find(a => Number(a.id) === Number(agentId));
-                const incentivesBalance = selectedAgentObj?.agent_balance?.incentives || 0;
+                const obj = agents.find((a) => Number(a.id) === Number(agentId));
+                const incentivesBalance = (obj as any)?.agent_balance?.incentives || 0;
                 initialAmount = incentivesBalance > 0 ? String(incentivesBalance) : '';
             }
 
@@ -174,50 +160,44 @@ const IncentivesPayoutForm: React.FC<{
                 ref_number: generateRefNumber(),
                 total_amount: initialAmount,
                 remarks: '',
-                proof_of_payment: ''
+                proof_of_payment: '',
             });
-            setImageFile(null);
-            setImagePreview(null);
+            setImage(null);
             setError(null);
         } else {
-            if (imagePreview && imagePreview.startsWith('blob:')) {
-                URL.revokeObjectURL(imagePreview);
-            }
-            setImagePreview(null);
-            setImageFile(null);
+            setImage(null);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, agentId, agentName, agents]);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (imagePreview && imagePreview.startsWith('blob:')) {
-            URL.revokeObjectURL(imagePreview);
+    const handlePickImage = async () => {
+        try {
+            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permission.granted) {
+                setError('Permission to access photos is required.');
+                return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.8,
+            });
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                const name = asset.fileName || asset.uri.split('/').pop() || `proof_${Date.now()}.jpg`;
+                setImage({ uri: asset.uri, name, type: asset.mimeType || 'image/jpeg' });
+            }
+        } catch (e: any) {
+            setError(e.message || 'Failed to pick image');
         }
-
-        setImageFile(file);
-        setImagePreview(URL.createObjectURL(file));
     };
 
     const handleRemoveImage = () => {
-        if (imagePreview && imagePreview.startsWith('blob:')) {
-            URL.revokeObjectURL(imagePreview);
-        }
-        setImageFile(null);
-        setImagePreview(null);
-        setFormData(prev => ({ ...prev, proof_of_payment: '' }));
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        setImage(null);
+        setFormData((prev) => ({ ...prev, proof_of_payment: '' }));
     };
 
     const handleSave = async () => {
-        if (!formData.agent_id || !formData.ref_number || !formData.total_amount || !formData.remarks || !imageFile) {
+        if (!formData.agent_id || !formData.ref_number || !formData.total_amount || !formData.remarks || !image) {
             setError('Agent, reference number, amount, proof, and remarks are required.');
             return;
         }
@@ -231,11 +211,15 @@ const IncentivesPayoutForm: React.FC<{
         try {
             let proofUrl = formData.proof_of_payment;
 
-            if (imageFile) {
+            if (image) {
                 const imageFormData = new FormData();
                 const folderPrefix = incentiveType === 'incentives_payout' ? 'incentive-payout' : 'incentive-add';
                 imageFormData.append('folder_name', `${folderPrefix} - ${selectedAgentName}`);
-                imageFormData.append('payment_proof_image', imageFile, imageFile.name);
+                imageFormData.append(
+                    'payment_proof_image',
+                    { uri: image.uri, name: image.name, type: image.type } as any,
+                    image.name,
+                );
 
                 const uploadResponse = await transactionService.uploadTransactionImage(imageFormData);
                 if (uploadResponse.success && uploadResponse.data?.payment_proof_image_url) {
@@ -247,15 +231,15 @@ const IncentivesPayoutForm: React.FC<{
                 }
             }
 
-            const authData = localStorage.getItem('authData');
-            const currentUser = authData ? JSON.parse(authData) : null;
+            const authRaw = await AsyncStorage.getItem('authData');
+            const currentUser = authRaw ? JSON.parse(authRaw) : null;
 
             const payload = {
-              ...formData,
-              proof_of_payment: proofUrl,
-              type: incentiveType,
-              job_order_ids: [],
-              ...(currentUser?.organization_id ? { organization_id: currentUser.organization_id } : {})
+                ...formData,
+                proof_of_payment: proofUrl,
+                type: incentiveType,
+                job_order_ids: [],
+                ...(currentUser?.organization_id ? { organization_id: currentUser.organization_id } : {}),
             };
             const response = await apiClient.post('/commissions/history', payload);
 
@@ -276,22 +260,39 @@ const IncentivesPayoutForm: React.FC<{
         }
     };
 
-    const inputClass = `w-full px-3 py-2.5 rounded-lg border text-sm transition-all duration-200 outline-none focus:ring-2 focus:ring-opacity-50 ${isDarkMode
-        ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:ring-gray-600 focus:border-gray-600'
-        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-gray-400 focus:border-gray-400'
-        }`;
+    const labelColor = isDarkMode ? '#d1d5db' : '#374151';
+    const mutedColor = isDarkMode ? '#6b7280' : '#9ca3af';
+    const inputBg = isDarkMode ? '#1f2937' : '#ffffff';
+    const inputBorder = isDarkMode ? '#374151' : '#d1d5db';
+    const inputText = isDarkMode ? '#ffffff' : '#111827';
 
-    const labelClass = `block text-sm font-medium mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`;
+    const inputStyle = {
+        width: '100%' as const,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: inputBorder,
+        backgroundColor: inputBg,
+        color: inputText,
+        fontSize: 14,
+    };
 
-    const selectedAgentObj = agents.find(a => Number(a.id) === Number(selectedAgentId));
-    const availableIncentives = selectedAgentObj?.agent_balance?.incentives || 0;
+    const pickerContainerStyle = {
+        width: '100%' as const,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: inputBorder,
+        backgroundColor: inputBg,
+        overflow: 'hidden' as const,
+    };
 
     return (
         <ModalUITemplate
             isOpen={isOpen}
             onClose={onClose}
-            title={selectedAgentName 
-                ? (incentiveType === 'incentives_payout' ? `Record Incentive Payout — ${selectedAgentName}` : `Add Incentives — ${selectedAgentName}`) 
+            title={selectedAgentName
+                ? (incentiveType === 'incentives_payout' ? `Record Incentive Payout — ${selectedAgentName}` : `Add Incentives — ${selectedAgentName}`)
                 : (incentiveType === 'incentives_payout' ? 'New Incentive Payout' : 'Add Incentives')}
             loading={loading}
             maxWidth="max-w-lg"
@@ -300,178 +301,189 @@ const IncentivesPayoutForm: React.FC<{
             primaryAction={{
                 label: 'Save',
                 onClick: handleSave,
-                disabled: loading || !formData.agent_id || !formData.total_amount || Number(formData.total_amount) <= 0 || (incentiveType === 'incentives_payout' && Number(formData.total_amount) > availableIncentives) || !formData.remarks || !imageFile
+                disabled: loading || !formData.agent_id || !formData.total_amount || Number(formData.total_amount) <= 0 || (incentiveType === 'incentives_payout' && Number(formData.total_amount) > availableIncentives) || !formData.remarks || !image,
             }}
         >
-            <div className="space-y-5">
+            <View style={{ gap: 20 }}>
                 {/* Agent Selector */}
-                {!agentId && (
-                    <SearchableField
-                        label="Agent"
-                        placeholder="Search agent..."
-                        value={selectedAgentName}
-                        onSelect={(val, option) => {
-                            const newName = option?.name || val;
-                            const newId = option?.id || '';
-                            setSelectedAgentName(newName);
-                            setSelectedAgentId(newId);
-                            
-                            const selectedAgentObj = agents.find(a => Number(a.id) === Number(newId));
-                            const incentivesBalance = selectedAgentObj?.agent_balance?.incentives || 0;
-                            
-                            setFormData(prev => ({ 
-                                ...prev, 
-                                agent_id: newId, 
-                                total_amount: incentiveType === 'incentives_payout' && incentivesBalance > 0 ? String(incentivesBalance) : '' 
-                            }));
-                        }}
-                        groupedOptions={groupedAgents}
-                        optionLabelKey="name"
-                        isDarkMode={isDarkMode}
-                        required
-                        isHeaderSelectable={true}
-                        emptyMessage="No data of agents available"
-                        icon={<User size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />}
-                    />
-                )}
+                {!agentId ? (
+                    <View>
+                        <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                            Agent <Text style={{ color: '#ef4444' }}>*</Text>
+                        </Text>
+                        <View style={pickerContainerStyle}>
+                            <Picker
+                                selectedValue={String(selectedAgentId)}
+                                onValueChange={(val) => {
+                                    const chosen = flatAgents.find((a) => String(a.id) === String(val));
+                                    const newId = chosen?.id ?? '';
+                                    const newName = chosen?.name ?? '';
+                                    setSelectedAgentName(newName);
+                                    setSelectedAgentId(newId);
+                                    const obj = agents.find((a) => Number(a.id) === Number(newId));
+                                    const incentivesBalance = (obj as any)?.agent_balance?.incentives || 0;
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        agent_id: newId,
+                                        total_amount: incentiveType === 'incentives_payout' && incentivesBalance > 0 ? String(incentivesBalance) : '',
+                                    }));
+                                }}
+                                dropdownIconColor={inputText}
+                                style={{ color: inputText }}
+                            >
+                                <Picker.Item label={flatAgents.length ? 'Search agent...' : 'No data of agents available'} value="" color={mutedColor} />
+                                {flatAgents.map((a) => (
+                                    <Picker.Item key={String(a.id)} label={`${a.name} (${a.group})`} value={String(a.id)} />
+                                ))}
+                            </Picker>
+                        </View>
+                    </View>
+                ) : null}
 
                 {/* Transaction Type Selector */}
-                <div>
-                    <label className={labelClass}>Transaction Type <span className="text-red-500">*</span></label>
-                    <select
-                        value={incentiveType}
-                        onChange={(e) => {
-                            const newType = e.target.value as 'incentives' | 'incentives_payout';
-                            setIncentiveType(newType);
-                            if (newType === 'incentives_payout') {
-                                setFormData(prev => ({
-                                    ...prev,
-                                    total_amount: availableIncentives > 0 ? String(availableIncentives) : ''
-                                }));
-                            } else {
-                                setFormData(prev => ({
-                                    ...prev,
-                                    total_amount: ''
-                                }));
-                            }
-                        }}
-                        className={inputClass}
-                    >
-                        <option value="incentives_payout">Payout</option>
-                        <option value="incentives">Add Incentives</option>
-                    </select>
-                </div>
+                <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                        Transaction Type <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <View style={pickerContainerStyle}>
+                        <Picker
+                            selectedValue={incentiveType}
+                            onValueChange={(val) => {
+                                const newType = val as 'incentives' | 'incentives_payout';
+                                setIncentiveType(newType);
+                                if (newType === 'incentives_payout') {
+                                    setFormData((prev) => ({ ...prev, total_amount: availableIncentives > 0 ? String(availableIncentives) : '' }));
+                                } else {
+                                    setFormData((prev) => ({ ...prev, total_amount: '' }));
+                                }
+                            }}
+                            dropdownIconColor={inputText}
+                            style={{ color: inputText }}
+                        >
+                            <Picker.Item label="Payout" value="incentives_payout" />
+                            <Picker.Item label="Add Incentives" value="incentives" />
+                        </Picker>
+                    </View>
+                </View>
 
                 {/* Error Banner */}
-                {error && (
-                    <div className={`p-3 rounded-lg text-sm ${isDarkMode
-                        ? 'bg-red-900/20 text-red-400 border border-red-800/50'
-                        : 'bg-red-50 text-red-600 border border-red-200'
-                        }`}>
-                        {error}
-                    </div>
-                )}
+                {error ? (
+                    <View style={{
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: isDarkMode ? 'rgba(153,27,27,0.5)' : '#fecaca',
+                        backgroundColor: isDarkMode ? 'rgba(127,29,29,0.2)' : '#fef2f2',
+                    }}>
+                        <Text style={{ fontSize: 14, color: isDarkMode ? '#f87171' : '#dc2626' }}>{error}</Text>
+                    </View>
+                ) : null}
 
                 {/* Available Incentives */}
-                {selectedAgentId && (
-                    <div className={`p-3 rounded-lg text-sm flex items-center justify-between ${isDarkMode
-                        ? 'bg-blue-900/20 text-blue-300 border border-blue-800/50'
-                        : 'bg-blue-50 text-blue-700 border border-blue-200'
-                        }`}>
-                        <span>Available Incentives Balance:</span>
-                        <span className="font-bold">₱{Number(availableIncentives).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </div>
-                )}
+                {selectedAgentId ? (
+                    <View style={{
+                        padding: 12,
+                        borderRadius: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: isDarkMode ? 'rgba(30,64,175,0.5)' : '#bfdbfe',
+                        backgroundColor: isDarkMode ? 'rgba(30,58,138,0.2)' : '#eff6ff',
+                    }}>
+                        <Text style={{ fontSize: 14, color: isDarkMode ? '#93c5fd' : '#1d4ed8' }}>Available Incentives Balance:</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: isDarkMode ? '#93c5fd' : '#1d4ed8' }}>
+                            ₱{Number(availableIncentives).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </Text>
+                    </View>
+                ) : null}
 
                 {/* Reference Number */}
-                <div>
-                    <label className={labelClass}>Reference Number <span className="text-red-500">*</span></label>
-                    <input
-                        name="ref_number"
-                        value={formData.ref_number}
-                        readOnly
-                        className={`${inputClass} cursor-not-allowed opacity-75`}
-                        title="Auto-generated reference number"
-                    />
-                </div>
+                <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                        Reference Number <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput value={formData.ref_number} editable={false} style={{ ...inputStyle, opacity: 0.75 }} />
+                </View>
 
                 {/* Total Amount */}
-                <div>
-                    <label className={labelClass}>Total Amount <span className="text-red-500">*</span></label>
-                    <input
-                        name="total_amount"
-                        type="number"
-                        step="0.01"
-                        min="0"
+                <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                        Total Amount <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
                         value={formData.total_amount}
-                        onChange={handleInputChange}
-                        className={inputClass}
+                        onChangeText={(text) => setFormData((prev) => ({ ...prev, total_amount: text }))}
+                        keyboardType="numeric"
                         placeholder="0.00"
+                        placeholderTextColor={mutedColor}
+                        style={inputStyle}
                     />
-                </div>
+                </View>
 
                 {/* Proof — Image Upload */}
-                <div>
-                    <label className={labelClass}>Proof <span className="text-red-500">*</span></label>
-                    <div
-                        className={`relative w-full border-2 border-dashed rounded-lg overflow-hidden cursor-pointer transition-colors ${isDarkMode
-                            ? 'border-gray-700 bg-gray-800 hover:border-gray-500'
-                            : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-                            } ${imagePreview ? 'h-auto' : 'h-40'}`}
-                        onClick={() => fileInputRef.current?.click()}
+                <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                        Proof <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TouchableOpacity
+                        onPress={handlePickImage}
+                        activeOpacity={0.8}
+                        style={{
+                            width: '100%',
+                            borderWidth: 2,
+                            borderStyle: 'dashed',
+                            borderRadius: 8,
+                            borderColor: isDarkMode ? '#374151' : '#d1d5db',
+                            backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb',
+                            overflow: 'hidden',
+                            minHeight: image ? undefined : 160,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
                     >
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageSelect}
-                            className="hidden"
-                        />
-
-                        {imagePreview ? (
-                            <div className="relative w-full">
-                                <img
-                                    src={imagePreview}
-                                    alt="Proof"
-                                    className="w-full h-auto object-contain block"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleRemoveImage(); }}
-                                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-md z-20 transition-colors"
-                                    title="Remove image"
+                        {image ? (
+                            <View style={{ width: '100%' }}>
+                                <Image source={{ uri: image.uri }} style={{ width: '100%', height: 200, resizeMode: 'contain' }} />
+                                <TouchableOpacity
+                                    onPress={handleRemoveImage}
+                                    style={{ position: 'absolute', top: 8, right: 8, backgroundColor: '#ef4444', borderRadius: 999, padding: 4 }}
                                 >
-                                    <X size={14} />
-                                </button>
-                                <div className="absolute bottom-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-xs flex items-center gap-1 shadow-md pointer-events-none">
-                                    <Camera size={12} /> Uploaded
-                                </div>
-                            </div>
+                                    <X size={14} color="#ffffff" />
+                                </TouchableOpacity>
+                                <View style={{ position: 'absolute', bottom: 8, left: 8, backgroundColor: '#22c55e', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <Camera size={12} color="#ffffff" />
+                                    <Text style={{ color: '#ffffff', fontSize: 12 }}>Uploaded</Text>
+                                </View>
+                            </View>
                         ) : (
-                            <div className={`w-full h-full flex flex-col items-center justify-center gap-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                <Camera size={28} />
-                                <span className="text-sm font-medium">Click to upload proof</span>
-                                <span className="text-xs opacity-60">PNG, JPG, JPEG accepted</span>
-                            </div>
+                            <View style={{ alignItems: 'center', gap: 8, paddingVertical: 24 }}>
+                                <Camera size={28} color={mutedColor} />
+                                <Text style={{ fontSize: 14, fontWeight: '500', color: mutedColor }}>Tap to upload proof</Text>
+                                <Text style={{ fontSize: 12, color: mutedColor, opacity: 0.6 }}>PNG, JPG, JPEG accepted</Text>
+                            </View>
                         )}
-                    </div>
-                    <p className={`text-[11px] mt-1.5 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 11, marginTop: 6, color: mutedColor }}>
                         Image will be saved to Google Drive automatically
-                    </p>
-                </div>
+                    </Text>
+                </View>
 
                 {/* Remarks */}
-                <div>
-                    <label className={labelClass}>Remarks <span className="text-red-500">*</span></label>
-                    <textarea
-                        name="remarks"
+                <View>
+                    <Text style={{ fontSize: 14, fontWeight: '500', marginBottom: 6, color: labelColor }}>
+                        Remarks <Text style={{ color: '#ef4444' }}>*</Text>
+                    </Text>
+                    <TextInput
                         value={formData.remarks}
-                        onChange={handleInputChange}
-                        className={`${inputClass} min-h-[90px] resize-none`}
+                        onChangeText={(text) => setFormData((prev) => ({ ...prev, remarks: text }))}
+                        multiline
                         placeholder="Any additional details..."
+                        placeholderTextColor={mutedColor}
+                        style={{ ...inputStyle, minHeight: 90, textAlignVertical: 'top' }}
                     />
-                </div>
-            </div>
+                </View>
+            </View>
         </ModalUITemplate>
     );
 };

@@ -34,7 +34,7 @@ export const BillingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         try {
             const data = await getBillingRecords();
-            setBillingRecords(data);
+            setBillingRecords(data.data);
             setLastUpdated(new Date());
             setError(null);
         } catch (err) {

@@ -97,10 +97,10 @@ export const transformServiceOrder = (order: ServiceOrderData): ServiceOrder => 
         username: order.username || '',
         connectionType: order.connection_type || '',
         routerModemSN: order.router_modem_sn || '',
-        lcp: order.lcp || order.old_lcp || '',
-        nap: order.nap || order.old_nap || '',
-        port: order.port || order.old_port || '',
-        vlan: order.vlan || order.old_vlan || '',
+        lcp: order.lcp || (order as any).old_lcp || '',
+        nap: order.nap || (order as any).old_nap || '',
+        port: order.port || (order as any).old_port || '',
+        vlan: order.vlan || (order as any).old_vlan || '',
         concern: order.concern || '',
         concernRemarks: order.concern_remarks || '',
         visitStatus: order.visit_status || '',
@@ -234,7 +234,7 @@ export const useServiceOrderStore = create<ServiceOrderState>((set, get) => ({
             let currentFetchPage = Math.floor(currentOffset / CHUNK_SIZE) + 1;
 
 
-            const firstResult = (await getServiceOrders(fetchEmail, currentFetchPage, CHUNK_SIZE, '', undefined, accountNo)) as any;
+            const firstResult = (await (getServiceOrders as any)(fetchEmail, currentFetchPage, CHUNK_SIZE, '', undefined, accountNo)) as any;
 
             // Check if this fetch is still valid
             if (get().currentFetchId !== fetchId) {
@@ -278,7 +278,7 @@ export const useServiceOrderStore = create<ServiceOrderState>((set, get) => ({
                     }
 
                     try {
-                        const result = (await getServiceOrders(fetchEmail, currentFetchPage, CHUNK_SIZE, '', undefined, accountNo)) as any;
+                        const result = (await (getServiceOrders as any)(fetchEmail, currentFetchPage, CHUNK_SIZE, '', undefined, accountNo)) as any;
 
                         // Check if superseded after async call
                         if (get().currentFetchId !== fetchId) return;
@@ -376,7 +376,7 @@ export const useServiceOrderStore = create<ServiceOrderState>((set, get) => ({
             // Format date for MySQL: YYYY-MM-DD HH:mm:ss
             const formattedDate = lastUpdated.toISOString().slice(0, 19).replace('T', ' ');
             
-            const result = await getServiceOrders(fetchEmail, 1, 1000, '', formattedDate, accountNo) as any;
+            const result = await (getServiceOrders as any)(fetchEmail, 1, 1000, '', formattedDate, accountNo) as any;
 
             if (result && result.success && Array.isArray(result.data) && result.data.length > 0) {
                 const updatedTransformed = result.data.map(transformServiceOrder);

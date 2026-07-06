@@ -85,7 +85,7 @@ export const InvoiceProvider: React.FC<InvoiceProviderProps> = ({ children }) =>
             // PHASE 1: Fast load - Get basic data INSTANTLY (50 records, no joins)
             const fastData = await invoiceService.getAllInvoices(true, 1, 50);
 
-            const transformedFastData: InvoiceRecordUI[] = fastData.map(record => ({
+            const transformedFastData: InvoiceRecordUI[] = fastData.map((record: any) => ({
                 id: record.id.toString(),
                 accountNo: record.account_no || '',
                 invoiceDate: new Date(record.invoice_date).toLocaleDateString(),
@@ -132,7 +132,7 @@ export const InvoiceProvider: React.FC<InvoiceProviderProps> = ({ children }) =>
                 try {
                     const fullData = await invoiceService.getAllInvoices(false, 1, 50);
 
-                    const transformedData: InvoiceRecordUI[] = fullData.map(record => ({
+                    const transformedData: InvoiceRecordUI[] = fullData.map((record: any) => ({
                         id: record.id.toString(),
                         accountNo: record.account_no || record.account?.account_no || '',
                         invoiceDate: new Date(record.invoice_date).toLocaleDateString(),

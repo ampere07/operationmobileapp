@@ -3,7 +3,7 @@ import { View, Dimensions, useWindowDimensions, ActivityIndicator, Linking, Pres
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-// import { InvoiceProvider } from '../contexts/InvoiceContext';
+import { InvoiceProvider } from '../contexts/InvoiceContext';
 // import { OverdueProvider } from '../contexts/OverdueContext';
 import { DCNoticeProvider } from '../contexts/DCNoticeContext';
 import { StaggeredPaymentProvider } from '../contexts/StaggeredPaymentContext';
@@ -20,8 +20,8 @@ import StaggeredPayment from './StaggeredPayment';
 import MassRebate from './Rebate';
 // import SMSBlast from './SMSBlast';
 // import SMSBlastLogs from './SMSBlastLogs';
-// import DisconnectionLogs from './DisconnectionLogs';
-// import ReconnectionLogs from './ReconnectionLogs';
+import DisconnectionLogs from './DisconnectionLogs';
+import ReconnectionLogs from './ReconnectionLogs';
 import Sidebar from './Sidebar';
 import DashboardContent from '../components/DashboardContent';
 // import UserManagement from './UserManagement';
@@ -32,10 +32,15 @@ import DashboardContent from '../components/DashboardContent';
 // import { SOAProvider } from '../contexts/SOAContext';
 // import GroupManagement from './GroupManagement';
 import ApplicationManagement from './ApplicationManagement';
-// import Customer from './Customer';
+import Customer from './Customer';
+import OrganizationManagement from './organization';
+import Roles from './roles';
+import TeamAgent from './teamAgent';
+import TechUsers from './TechUsers';
+import SOcharge from './SOcharge';
 import BillingListView from './BillingListView';
-// import TransactionList from './TransactionList';
-// import PaymentPortal from './PaymentPortal';
+import TransactionList from './TransactionList';
+import PaymentPortal from './PaymentPortal';
 import JobOrder from './JobOrder';
 import ServiceOrder from './ServiceOrder';
 import ApplicationVisit from './ApplicationVisit';
@@ -48,14 +53,14 @@ import ApplicationVisit from './ApplicationVisit';
 import Inventory from './Inventory';
 // import ExpensesLog from './ExpensesLog';
 import Logs from './Logs';
-// import SOA from './SOA';
-// import Invoice from './Invoice';
+import SOA from './SOA';
+import Invoice from './Invoice';
 import InventoryCategoryList from './InventoryCategoryList';
-// import SOAGeneration from './SOAGeneration';
+import SOAGeneration from './SOAGeneration';
 // import UsageTypeList from './UsageTypeList';
 // import Ports from './Ports';
 // import StatusRemarksList from './StatusRemarksList';
-// import Settings from './Settings';
+import Settings from './Settings';
 import PaymentMethodList from './PaymentMethodList';
 import UsageTypeList from './UsageTypeList';
 import WorkCategoryList from './WorkCategoryList';
@@ -292,6 +297,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <ApplicationVisit />;
             case 'activity-logs':
                 return <Logs />;
+            case 'soa':
+                return <SOA />;
+            case 'invoice':
+                return <InvoiceProvider><Invoice /></InvoiceProvider>;
+            case 'customer':
+                return <Customer />;
+            case 'organizations':
+                return <OrganizationManagement />;
+            case 'roles':
+                return <Roles />;
+            case 'team-agent':
+                return <TeamAgent />;
+            case 'tech-users':
+                return <TechUsers />;
+            case 'so-charges':
+                return <SOcharge />;
+            case 'disconnection-logs':
+                return <DisconnectionLogs />;
+            case 'reconnection-logs':
+                return <ReconnectionLogs />;
+            case 'settings':
+                return <Settings />;
+            case 'soa-generation':
+                return <SOAGeneration />;
+            case 'payment-portal':
+                return <PaymentPortal />;
+            case 'transaction-list':
+                return <TransactionList />;
             case 'email-logs':
                 return <EmailLogs />;
             case 'sms-logs':
@@ -312,6 +345,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <GroupManagement />;
             case 'user-management':
                 return <UserManagement />;
+            case 'agent-management':
+                return <UserManagement agentOnly />;
             case 'transactions-revert':
                 return <TransactionsRevert />;
             case 'database-setup':

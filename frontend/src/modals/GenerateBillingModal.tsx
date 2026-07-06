@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Zap, ChevronDown, DollarSign, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { getBillingRecords, generateCustomBilling, BillingRecord } from '../services/billingService';
+import {
+  View,
+  Text,
+  Modal,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  useWindowDimensions,
+} from 'react-native';
+import { X, Zap, ChevronDown, CheckCircle, XCircle } from 'lucide-react-native';
+import apiClient from '../config/api';
+import { getBillingRecords, BillingRecord } from '../services/billingService';
 
 interface GenerateBillingModalProps {
   isOpen: boolean;
@@ -14,19 +25,33 @@ interface AlertState {
   type: 'success' | 'error';
   title: string;
   message: string;
-  details?: {
-    soa?: any;
-    invoice?: any;
-    notifications?: any;
-  };
 }
+
+const generateCustomBilling = async (
+  accountNo: string,
+  serviceCharge: number
+): Promise<{ success: boolean; message: string; data?: any }> => {
+  try {
+    const response = await apiClient.post<any>('/billing-generation/generate-custom', {
+      account_no: accountNo,
+      service_charge: serviceCharge,
+    });
+    return response.data;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message || error?.message || 'Failed to generate custom billing';
+    return { success: false, message };
+  }
+};
 
 const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
   isOpen,
   onClose,
   colorPalette,
-  isDarkMode = true,
 }) => {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
   const [accounts, setAccounts] = useState<BillingRecord[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [selectedAccountNo, setSelectedAccountNo] = useState('');
@@ -40,19 +65,16 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
 
   const [alert, setAlert] = useState<AlertState>({ show: false, type: 'success', title: '', message: '' });
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const primary = colorPalette?.primary || '#7c3aed';
-  const accent = colorPalette?.accent || primary;
 
-  /* ── theme-aware colours ────────────────────────────────────────── */
-  const bg = isDarkMode ? '#111827' : '#ffffff';
-  const surface = isDarkMode ? '#1f2937' : '#f9fafb';
-  const border = isDarkMode ? '#374151' : '#e5e7eb';
-  const text = isDarkMode ? '#f9fafb' : '#111827';
-  const subtext = isDarkMode ? '#9ca3af' : '#6b7280';
-  const inputBg = isDarkMode ? '#111827' : '#ffffff';
+  // Forced light-mode colors
+  const bg = '#ffffff';
+  const surface = '#f9fafb';
+  const border = '#e5e7eb';
+  const text = '#111827';
+  const subtext = '#6b7280';
+  const inputBg = '#ffffff';
 
-  /* ── load accounts on open ──────────────────────────────────────── */
   useEffect(() => {
     if (!isOpen) return;
     setLoadingAccounts(true);
@@ -77,18 +99,6 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
       .finally(() => setLoadingAccounts(false));
   }, [isOpen]);
 
-  /* ── close dropdown when clicking outside ───────────────────────── */
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  /* ── reset on close ─────────────────────────────────────────────── */
   useEffect(() => {
     if (!isOpen) {
       setSelectedAccountNo('');
@@ -101,9 +111,7 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const filteredAccounts = accounts.filter(a => {
+  const filteredAccounts = accounts.filter((a) => {
     const q = searchQuery.toLowerCase();
     return (
       a.customerName?.toLowerCase().includes(q) ||
@@ -113,11 +121,10 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
   });
 
   const selectedAccount = accounts.find(
-    a => (a.accountNo || a.account_no) === selectedAccountNo
+    (a) => (a.accountNo || a.account_no) === selectedAccountNo
   );
 
   const handleServiceChargeChange = (val: string) => {
-    // allow only numeric + decimal
     const cleaned = val.replace(/[^0-9.]/g, '');
     setServiceCharge(cleaned);
   };
@@ -130,7 +137,7 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
   const startProgress = () => {
     setLoadingPct(0);
     progressIntervalRef.current = setInterval(() => {
-      setLoadingPct(prev => {
+      setLoadingPct((prev) => {
         if (prev >= 90) return Math.min(99, prev + 0.5);
         return Math.min(90, prev + 8);
       });
@@ -147,7 +154,12 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
 
   const handleGenerate = async () => {
     if (!selectedAccountNo) {
-      setAlert({ show: true, type: 'error', title: 'Validation Error', message: 'Please select a customer account.' });
+      setAlert({
+        show: true,
+        type: 'error',
+        title: 'Validation Error',
+        message: 'Please select a customer account.',
+      });
       return;
     }
 
@@ -165,19 +177,23 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
         const data = result.data || {};
         const soaId = data.soa?.id ? `#${data.soa.id}` : '';
         const invId = data.invoice?.id ? `#${data.invoice.id}` : '';
-        const emailStatus = data.notifications?.email_queued ? '✓ Email queued' : '✗ Email not sent';
-        const smsStatus = data.notifications?.sms_sent ? '✓ SMS sent' : '✗ SMS not sent';
-        const chargeNote = charge > 0 ? `\nService Charge Applied: ₱${charge.toFixed(2)}` : '';
+        const emailStatus = data.notifications?.email_queued ? 'Email queued' : 'Email not sent';
+        const smsStatus = data.notifications?.sms_sent ? 'SMS sent' : 'SMS not sent';
+        const chargeNote = charge > 0 ? `\nService Charge Applied: PHP ${charge.toFixed(2)}` : '';
 
         setAlert({
           show: true,
           type: 'success',
           title: 'Billing Generated Successfully!',
-          message: `Customer: ${data.customer_name || selectedAccountNo}${chargeNote}\nSOA ${soaId} & Invoice ${invId} created.\n${emailStatus} · ${smsStatus}`,
-          details: data,
+          message: `Customer: ${data.customer_name || selectedAccountNo}${chargeNote}\nSOA ${soaId} & Invoice ${invId} created.\n${emailStatus} - ${smsStatus}`,
         });
       } else {
-        setAlert({ show: true, type: 'error', title: 'Generation Failed', message: result.message || 'An unexpected error occurred.' });
+        setAlert({
+          show: true,
+          type: 'error',
+          title: 'Generation Failed',
+          message: result.message || 'An unexpected error occurred.',
+        });
       }
     } catch (err: any) {
       finishProgress(false);
@@ -187,344 +203,337 @@ const GenerateBillingModal: React.FC<GenerateBillingModalProps> = ({
     }
   };
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[9998]"
-        style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-        onClick={() => { if (!isGenerating) onClose(); }}
-      />
+  const chargeNum = parseFloat(serviceCharge) || 0;
 
-      {/* Drawer panel */}
-      <div
-        className="fixed right-0 top-0 bottom-0 z-[9999] flex flex-col"
-        style={{
-          width: '100%',
-          maxWidth: '480px',
-          backgroundColor: bg,
-          borderLeft: `1px solid ${border}`,
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
-          animation: 'slideInRight 0.3s cubic-bezier(0.16,1,0.3,1)',
-        }}
-      >
-        {/* ── Header ── */}
-        <div
+  return (
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+        <View
           style={{
-            padding: '24px',
-            borderBottom: `1px solid ${border}`,
-            background: `linear-gradient(135deg, ${primary}18 0%, transparent 60%)`,
+            backgroundColor: bg,
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            maxHeight: '94%',
+            paddingBottom: isTablet ? 16 : 24,
           }}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className="flex items-center justify-center rounded-xl"
-                style={{ width: 44, height: 44, backgroundColor: `${primary}20` }}
-              >
-                <Zap size={22} style={{ color: primary }} />
-              </div>
-              <div>
-                <h2 className="font-bold text-lg" style={{ color: text }}>
-                  Generate Billing
-                </h2>
-                <p className="text-sm" style={{ color: subtext }}>
-                  Manual custom billing generation
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => { if (!isGenerating) onClose(); }}
-              disabled={isGenerating}
-              className="rounded-lg p-2 transition-colors"
-              style={{ backgroundColor: `${border}80`, color: subtext }}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = border; }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = `${border}80`; }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
-        {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto" style={{ padding: '24px' }}>
-
-          {/* Alert banner */}
-          {alert.show && (
-            <div
-              className="mb-5 rounded-xl p-4 flex items-start gap-3"
-              style={{
-                backgroundColor: alert.type === 'success' ? '#065f4620' : '#7f1d1d20',
-                border: `1px solid ${alert.type === 'success' ? '#10b981' : '#ef4444'}40`,
-              }}
-            >
-              {alert.type === 'success'
-                ? <CheckCircle size={20} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
-                : <XCircle size={20} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
-              }
-              <div>
-                <p className="font-semibold text-sm" style={{ color: alert.type === 'success' ? '#10b981' : '#ef4444' }}>
-                  {alert.title}
-                </p>
-                <p className="text-xs mt-1 whitespace-pre-line" style={{ color: subtext }}>
-                  {alert.message}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ── Customer Dropdown ── */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold mb-2" style={{ color: text }}>
-              Customer Account <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <div ref={dropdownRef} className="relative">
-              <button
-                id="billing-customer-select"
-                onClick={() => !loadingAccounts && setDropdownOpen(p => !p)}
-                disabled={loadingAccounts || isGenerating}
-                className="w-full flex items-center justify-between rounded-xl px-4 py-3 text-sm transition-all"
+          {/* Header */}
+          <View
+            style={{
+              padding: 20,
+              borderBottomWidth: 1,
+              borderBottomColor: border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <View
                 style={{
-                  backgroundColor: inputBg,
-                  border: `1.5px solid ${dropdownOpen ? primary : border}`,
-                  color: selectedAccount ? text : subtext,
-                  boxShadow: dropdownOpen ? `0 0 0 3px ${primary}25` : 'none',
-                  cursor: loadingAccounts ? 'wait' : 'pointer',
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: `${primary}20`,
                 }}
               >
-                <span className="truncate">
+                <Zap size={22} color={primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', fontSize: 18, color: text }}>Generate Billing</Text>
+                <Text style={{ fontSize: 13, color: subtext }}>Manual custom billing generation</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                if (!isGenerating) onClose();
+              }}
+              disabled={isGenerating}
+              style={{ padding: 8, borderRadius: 8, backgroundColor: `${border}80` }}
+            >
+              <X size={18} color={subtext} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Body */}
+          <ScrollView style={{ paddingHorizontal: 20 }} contentContainerStyle={{ paddingVertical: 20 }}>
+            {alert.show && (
+              <View
+                style={{
+                  marginBottom: 20,
+                  borderRadius: 12,
+                  padding: 16,
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  backgroundColor: alert.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  borderWidth: 1,
+                  borderColor: alert.type === 'success' ? '#10b981' : '#ef4444',
+                }}
+              >
+                {alert.type === 'success' ? (
+                  <CheckCircle size={20} color="#10b981" />
+                ) : (
+                  <XCircle size={20} color="#ef4444" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontWeight: '600',
+                      fontSize: 14,
+                      color: alert.type === 'success' ? '#059669' : '#dc2626',
+                    }}
+                  >
+                    {alert.title}
+                  </Text>
+                  <Text style={{ fontSize: 12, marginTop: 4, color: subtext }}>{alert.message}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Customer selector */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: text, marginBottom: 8 }}>
+                Customer Account <Text style={{ color: '#ef4444' }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                onPress={() => !loadingAccounts && !isGenerating && setDropdownOpen((p) => !p)}
+                disabled={loadingAccounts || isGenerating}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: inputBg,
+                  borderWidth: 1.5,
+                  borderColor: dropdownOpen ? primary : border,
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{ flex: 1, fontSize: 14, color: selectedAccount ? text : subtext }}
+                >
                   {loadingAccounts
-                    ? 'Loading accounts…'
+                    ? 'Loading accounts...'
                     : selectedAccount
-                      ? `${selectedAccount.customerName} — ${selectedAccount.accountNo || selectedAccount.account_no}`
-                      : 'Select a customer…'}
-                </span>
-                {loadingAccounts
-                  ? <Loader2 size={16} className="animate-spin" style={{ color: primary }} />
-                  : <ChevronDown size={16} style={{ color: subtext, transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                }
-              </button>
+                    ? `${selectedAccount.customerName} - ${selectedAccount.accountNo || selectedAccount.account_no}`
+                    : 'Select a customer...'}
+                </Text>
+                {loadingAccounts ? (
+                  <ActivityIndicator size="small" color={primary} />
+                ) : (
+                  <ChevronDown size={16} color={subtext} />
+                )}
+              </TouchableOpacity>
 
               {dropdownOpen && (
-                <div
-                  className="absolute z-10 w-full mt-1 rounded-xl overflow-hidden"
+                <View
                   style={{
+                    marginTop: 6,
+                    borderRadius: 12,
+                    overflow: 'hidden',
                     backgroundColor: surface,
-                    border: `1.5px solid ${primary}50`,
-                    boxShadow: `0 8px 32px rgba(0,0,0,0.3)`,
-                    maxHeight: '280px',
+                    borderWidth: 1.5,
+                    borderColor: `${primary}80`,
                   }}
                 >
-                  {/* Search */}
-                  <div style={{ padding: '8px', borderBottom: `1px solid ${border}` }}>
-                    <input
-                      autoFocus
-                      type="text"
-                      placeholder="Search by name or account no…"
+                  <View style={{ padding: 8, borderBottomWidth: 1, borderBottomColor: border }}>
+                    <TextInput
+                      placeholder="Search by name or account no..."
+                      placeholderTextColor={subtext}
                       value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      className="w-full text-sm rounded-lg px-3 py-2 outline-none"
-                      style={{ backgroundColor: inputBg, border: `1px solid ${border}`, color: text }}
+                      onChangeText={setSearchQuery}
+                      autoCapitalize="none"
+                      style={{
+                        borderRadius: 8,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        backgroundColor: inputBg,
+                        borderWidth: 1,
+                        borderColor: border,
+                        color: text,
+                        fontSize: 14,
+                      }}
                     />
-                  </div>
-                  {/* List */}
-                  <div className="overflow-y-auto" style={{ maxHeight: '210px' }}>
+                  </View>
+                  <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                     {filteredAccounts.length === 0 ? (
-                      <div className="px-4 py-3 text-sm" style={{ color: subtext }}>
+                      <Text style={{ paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: subtext }}>
                         No accounts found
-                      </div>
+                      </Text>
                     ) : (
-                      filteredAccounts.map(account => {
+                      filteredAccounts.map((account) => {
                         const accNo = account.accountNo || account.account_no || '';
                         const isSelected = accNo === selectedAccountNo;
                         return (
-                          <button
+                          <TouchableOpacity
                             key={accNo}
-                            className="w-full text-left flex items-center justify-between px-4 py-3 text-sm transition-colors"
-                            style={{
-                              backgroundColor: isSelected ? `${primary}20` : 'transparent',
-                              color: text,
-                              borderLeft: isSelected ? `3px solid ${primary}` : '3px solid transparent',
-                            }}
-                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = `${border}60`; }}
-                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                            onClick={() => {
+                            onPress={() => {
                               setSelectedAccountNo(accNo);
                               setDropdownOpen(false);
                               setSearchQuery('');
                             }}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                              backgroundColor: isSelected ? `${primary}20` : 'transparent',
+                              borderLeftWidth: 3,
+                              borderLeftColor: isSelected ? primary : 'transparent',
+                            }}
                           >
-                            <span className="font-medium truncate">{account.customerName}</span>
-                            <span className="text-xs ml-2 shrink-0" style={{ color: subtext }}>{accNo}</span>
-                          </button>
+                            <Text numberOfLines={1} style={{ fontWeight: '500', color: text, flex: 1 }}>
+                              {account.customerName}
+                            </Text>
+                            <Text style={{ fontSize: 12, marginLeft: 8, color: subtext }}>{accNo}</Text>
+                          </TouchableOpacity>
                         );
                       })
                     )}
-                  </div>
-                </div>
+                  </ScrollView>
+                </View>
               )}
-            </div>
 
-            {selectedAccount && (
-              <div className="mt-2 text-xs flex items-center gap-1" style={{ color: subtext }}>
-                <span>Plan:</span>
-                <span style={{ color: primary }}>{selectedAccount.plan || selectedAccount.desiredPlan || 'N/A'}</span>
-                <span className="ml-3">Status:</span>
-                <span style={{ color: '#10b981' }}>{selectedAccount.billingStatus || 'Active'}</span>
-              </div>
-            )}
-          </div>
+              {selectedAccount && (
+                <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                  <Text style={{ fontSize: 12, color: subtext }}>Plan:</Text>
+                  <Text style={{ fontSize: 12, color: primary }}>
+                    {selectedAccount.plan || (selectedAccount as any).desiredPlan || 'N/A'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: subtext, marginLeft: 12 }}>Status:</Text>
+                  <Text style={{ fontSize: 12, color: '#10b981' }}>{selectedAccount.billingStatus || 'Active'}</Text>
+                </View>
+              )}
+            </View>
 
-          {/* ── Service Charge ── */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold mb-2" style={{ color: text }}>
-              Service Charge <span className="font-normal text-xs" style={{ color: subtext }}>(optional · ₱)</span>
-            </label>
-            <div className="relative">
-              <div
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: subtext }}
-              >
-                <DollarSign size={16} />
-              </div>
-              <input
-                id="billing-service-charge"
-                type="text"
-                inputMode="decimal"
+            {/* Service Charge */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: text, marginBottom: 8 }}>
+                Service Charge <Text style={{ fontWeight: '400', fontSize: 12, color: subtext }}>(optional - PHP)</Text>
+              </Text>
+              <TextInput
                 value={serviceCharge}
-                onChange={e => handleServiceChargeChange(e.target.value)}
-                onFocus={() => { if (serviceCharge === '0.00') setServiceCharge(''); }}
+                onChangeText={handleServiceChargeChange}
+                onFocus={() => {
+                  if (serviceCharge === '0.00') setServiceCharge('');
+                }}
                 onBlur={handleServiceChargeBlur}
-                disabled={isGenerating}
-                className="w-full pl-9 pr-4 py-3 text-sm rounded-xl outline-none transition-all"
+                editable={!isGenerating}
+                keyboardType="decimal-pad"
                 style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  fontSize: 14,
+                  borderRadius: 12,
                   backgroundColor: inputBg,
-                  border: `1.5px solid ${parseFloat(serviceCharge) > 0 ? primary : border}`,
+                  borderWidth: 1.5,
+                  borderColor: chargeNum > 0 ? primary : border,
                   color: text,
-                  boxShadow: parseFloat(serviceCharge) > 0 ? `0 0 0 3px ${primary}25` : 'none',
                 }}
               />
-            </div>
-            <p className="text-xs mt-2" style={{ color: subtext }}>
-              {parseFloat(serviceCharge) > 0
-                ? `₱${parseFloat(serviceCharge).toFixed(2)} will be added as a service charge to this billing cycle.`
-                : 'Leave at 0.00 to generate billing without an additional service charge.'}
-            </p>
-          </div>
+              <Text style={{ fontSize: 12, marginTop: 8, color: subtext }}>
+                {chargeNum > 0
+                  ? `PHP ${chargeNum.toFixed(2)} will be added as a service charge to this billing cycle.`
+                  : 'Leave at 0.00 to generate billing without an additional service charge.'}
+              </Text>
+            </View>
 
-          {/* ── Info box ── */}
-          <div
-            className="rounded-xl p-4 mb-6"
-            style={{ backgroundColor: `${primary}10`, border: `1px solid ${primary}30` }}
-          >
-            <p className="text-xs font-semibold mb-1" style={{ color: primary }}>What will happen?</p>
-            <ul className="text-xs space-y-1" style={{ color: subtext }}>
-              <li>• A Statement of Account (SOA) will be generated</li>
-              <li>• An Invoice will be generated for the selected account</li>
-              <li>• PDFs will be saved to Google Drive automatically</li>
-              <li>• Email &amp; SMS notifications will be sent immediately</li>
-              {parseFloat(serviceCharge) > 0 && (
-                <li style={{ color: primary }}>• ₱{parseFloat(serviceCharge).toFixed(2)} service charge will be applied to the SOA</li>
-              )}
-            </ul>
-          </div>
-        </div>
-
-        {/* ── Footer / Progress / Generate button ── */}
-        <div style={{ padding: '20px 24px', borderTop: `1px solid ${border}` }}>
-          {isGenerating && (
-            <div className="mb-4">
-              {/* Progress bar */}
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium" style={{ color: subtext }}>Generating billing…</span>
-                <span className="text-xs font-bold" style={{ color: primary }}>{Math.round(loadingPct)}%</span>
-              </div>
-              <div className="w-full rounded-full overflow-hidden" style={{ height: 6, backgroundColor: `${primary}20` }}>
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${loadingPct}%`,
-                    background: `linear-gradient(90deg, ${primary}, ${accent})`,
-                  }}
-                />
-              </div>
-              <p className="text-xs mt-2 text-center" style={{ color: subtext }}>
-                {loadingPct < 30 ? 'Inserting service charge log…'
-                  : loadingPct < 55 ? 'Generating Statement of Account…'
-                  : loadingPct < 80 ? 'Generating Invoice…'
-                  : loadingPct < 95 ? 'Sending notifications…'
-                  : 'Finalizing…'}
-              </p>
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              id="cancel-generate-billing"
-              onClick={onClose}
-              disabled={isGenerating}
-              className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
+            {/* Info box */}
+            <View
               style={{
-                backgroundColor: `${border}80`,
-                color: text,
-                border: `1px solid ${border}`,
-                opacity: isGenerating ? 0.5 : 1,
-                cursor: isGenerating ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={e => { if (!isGenerating) e.currentTarget.style.backgroundColor = border; }}
-              onMouseLeave={e => { if (!isGenerating) e.currentTarget.style.backgroundColor = `${border}80`; }}
-            >
-              Cancel
-            </button>
-
-            <button
-              id="confirm-generate-billing"
-              onClick={handleGenerate}
-              disabled={isGenerating || !selectedAccountNo}
-              className="flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-              style={{
-                background: isGenerating || !selectedAccountNo
-                  ? `${primary}60`
-                  : `linear-gradient(135deg, ${primary}, ${accent})`,
-                color: '#ffffff',
-                cursor: isGenerating || !selectedAccountNo ? 'not-allowed' : 'pointer',
-                boxShadow: !isGenerating && selectedAccountNo ? `0 4px 16px ${primary}50` : 'none',
-              }}
-              onMouseEnter={e => {
-                if (!isGenerating && selectedAccountNo) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = `0 6px 20px ${primary}60`;
-                }
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = !isGenerating && selectedAccountNo ? `0 4px 16px ${primary}50` : 'none';
+                borderRadius: 12,
+                padding: 16,
+                backgroundColor: `${primary}10`,
+                borderWidth: 1,
+                borderColor: `${primary}30`,
               }}
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <Zap size={16} />
-                  Generate Billing
-                </>
+              <Text style={{ fontSize: 12, fontWeight: '600', marginBottom: 4, color: primary }}>
+                What will happen?
+              </Text>
+              <Text style={{ fontSize: 12, color: subtext, lineHeight: 18 }}>
+                {'• A Statement of Account (SOA) will be generated\n'}
+                {'• An Invoice will be generated for the selected account\n'}
+                {'• PDFs will be saved to Google Drive automatically\n'}
+                {'• Email & SMS notifications will be sent immediately'}
+              </Text>
+              {chargeNum > 0 && (
+                <Text style={{ fontSize: 12, color: primary, marginTop: 2 }}>
+                  {`• PHP ${chargeNum.toFixed(2)} service charge will be applied to the SOA`}
+                </Text>
               )}
-            </button>
-          </div>
-        </div>
-      </div>
+            </View>
+          </ScrollView>
 
-      {/* Slide-in animation */}
-      <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);   opacity: 1; }
-        }
-      `}</style>
-    </>
+          {/* Footer */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: border }}>
+            {isGenerating && (
+              <View style={{ marginBottom: 16 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '500', color: subtext }}>Generating billing...</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: primary }}>{Math.round(loadingPct)}%</Text>
+                </View>
+                <View style={{ width: '100%', height: 6, borderRadius: 999, overflow: 'hidden', backgroundColor: `${primary}20` }}>
+                  <View style={{ height: '100%', borderRadius: 999, width: `${loadingPct}%`, backgroundColor: primary }} />
+                </View>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                onPress={onClose}
+                disabled={isGenerating}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  backgroundColor: `${border}80`,
+                  borderWidth: 1,
+                  borderColor: border,
+                  alignItems: 'center',
+                  opacity: isGenerating ? 0.5 : 1,
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: text }}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleGenerate}
+                disabled={isGenerating || !selectedAccountNo}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  backgroundColor: isGenerating || !selectedAccountNo ? `${primary}60` : primary,
+                }}
+              >
+                {isGenerating ? (
+                  <>
+                    <ActivityIndicator size="small" color="#ffffff" />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#ffffff' }}>Generating...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Zap size={16} color="#ffffff" />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#ffffff' }}>Generate Billing</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 

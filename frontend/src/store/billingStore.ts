@@ -41,7 +41,7 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
                 billingRecords: allFetchedRecords,
                 totalCount: dbTotal,
                 isLoading: false,
-                lastFetchTimestamp: result.serverTime || new Date().toISOString()
+                lastFetchTimestamp: (result as any).serverTime || new Date().toISOString()
             });
 
             // Progressive background loading
@@ -94,14 +94,14 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
         set({ error: null });
         try {
             // Use updated_since to fetch only records changed since last fetch
-            const result = await getBillingRecords(1, 10000, lastFetchTimestamp || undefined);
+            const result = await (getBillingRecords as any)(1, 10000, lastFetchTimestamp || undefined);
 
-            const now = result.serverTime || new Date().toISOString();
+            const now = (result as any).serverTime || new Date().toISOString();
 
             if (result.data.length > 0) {
                 const existingRecords = get().billingRecords;
                 const newRecordsMap = new Map<string, BillingRecord>();
-                result.data.forEach(r => newRecordsMap.set(r.id, r));
+                result.data.forEach((r: any) => newRecordsMap.set(r.id, r));
 
                 const existingIds = new Set(existingRecords.map(r => r.id));
 
@@ -111,7 +111,7 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
                 );
 
                 // Add brand new records that don't exist yet
-                const brandNewRecords = result.data.filter(r => !existingIds.has(r.id));
+                const brandNewRecords = result.data.filter((r: any) => !existingIds.has(r.id));
 
                 set({
                     billingRecords: [...brandNewRecords, ...mergedRecords],
@@ -119,7 +119,7 @@ export const useBillingStore = create<BillingStore>((set, get) => ({
                     lastFetchTimestamp: now
                 });
             } else {
-                set({ lastFetchTimestamp: result.serverTime || now });
+                set({ lastFetchTimestamp: (result as any).serverTime || now });
             }
 
         } catch (err: any) {

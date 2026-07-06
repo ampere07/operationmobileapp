@@ -401,7 +401,7 @@ const CustomerDetailsEditModal: React.FC<CustomerDetailsEditModalProps> = ({
 
           if (usedRes.success && usedRes.data) {
             setUsedPorts(new Set(usedRes.data.used));
-            setPortAccounts(usedRes.data.port_accounts || {});
+            setPortAccounts((usedRes.data as any).port_accounts || {});
             setTotalPorts(usedRes.data.total);
           } else {
             setUsedPorts(new Set());
