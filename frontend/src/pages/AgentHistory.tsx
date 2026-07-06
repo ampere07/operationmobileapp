@@ -61,7 +61,7 @@ const AgentHistory: React.FC = () => {
       }
 
       if (dateFrom || dateTo) {
-        const raw = jo.Timestamp || jo.timestamp;
+        const raw = jo.created_at || (jo as any).Created_At || jo.Timestamp || jo.timestamp;
         const d = raw ? new Date(raw) : null;
         if (!d || isNaN(d.getTime())) return false;
         if (dateFrom && d < dayjs(dateFrom).startOf('day').toDate()) return false;
@@ -136,7 +136,7 @@ const AgentHistory: React.FC = () => {
       const incResponse = await fetchAgentIncentiveHistory();
       let incData = [];
       if (incResponse.success) {
-         incData = incResponse.data || [];
+        incData = incResponse.data || [];
       }
 
       setIncentiveHistory(incData);
@@ -276,6 +276,8 @@ const AgentHistory: React.FC = () => {
         break;
       case 'pending':
       case 'in progress':
+      case 'reschedule':
+      case 'rescheduled':
         textColor = '#fb923c';
         break;
       case 'suspended':
@@ -341,6 +343,7 @@ const AgentHistory: React.FC = () => {
   const renderJobOrderItem = ({ item: jobOrder }: { item: JobOrder }) => {
     const rawStatus = String(jobOrder.commission_status || '').toLowerCase().trim();
     const displayStatus = (!jobOrder.commission_status || rawStatus === 'null' || rawStatus === 'unpaid' ? 'Not Collected' : 'Collected');
+    const onsiteStatus = jobOrder.Onsite_Status || jobOrder.onsite_status || null;
 
     return (
       <View style={[styles.card, { padding: 0 }]}>
@@ -366,7 +369,14 @@ const AgentHistory: React.FC = () => {
             </Text>
           </View>
           <View style={styles.joCardRight}>
-            <StatusText status={displayStatus} type="billing" />
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.joStatusCaption}>Installation Status</Text>
+              <StatusText status={onsiteStatus} type="onsite" />
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.joStatusCaption}>Commission</Text>
+              <StatusText status={displayStatus} type="billing" />
+            </View>
           </View>
         </View>
       </View>
@@ -385,7 +395,7 @@ const AgentHistory: React.FC = () => {
 
     return (
       <View style={[styles.card, { padding: 16 }]}>
-        <Pressable 
+        <Pressable
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isExpanded ? 12 : 0 }}
           onPress={() => toggleBatch(item.id)}
         >
@@ -408,9 +418,9 @@ const AgentHistory: React.FC = () => {
                 {formatCurrency(item.incentiveValue)}
               </Text>
             </View>
-            <ChevronDown 
-              size={20} 
-              color="#64748b" 
+            <ChevronDown
+              size={20}
+              color="#64748b"
               style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
             />
           </View>
@@ -910,7 +920,8 @@ const styles = StyleSheet.create({
   joCardLeft: { flex: 1, minWidth: 0 },
   joCardName: { fontWeight: '500', fontSize: 14, marginBottom: 4 },
   joCardSub: { fontSize: 12 },
-  joCardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 4, marginLeft: 16, flexShrink: 0 },
+  joCardRight: { flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginLeft: 16, flexShrink: 0 },
+  joStatusCaption: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 },
 });
 
 export default AgentHistory;

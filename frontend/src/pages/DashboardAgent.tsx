@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, useWindowDimensions, Animated, RefreshControl, StyleSheet, DeviceEventEmitter, Alert } from 'react-native';
-import { RefreshCcw, Trophy } from 'lucide-react-native';
+import { RefreshCcw } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, G } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +31,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const [agentBalance, setAgentBalance] = useState<number>(0);
     const [agentIncentives, setAgentIncentives] = useState<number>(0);
     const [agentBonus, setAgentBonus] = useState<number>(0);
+    const [agentAchievement, setAgentAchievement] = useState<number>(0);
 
     const latestCashouts = useMemo(() => {
         return (cashouts || []).slice(0, 5);
@@ -81,8 +82,8 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
     const agentEmail = user?.email || '';
     const agentName = user?.full_name || '';
 
-    const { referredCount, successfulInstalledCount, failedInstalledCount } = useMemo(() => {
-        if (!agentEmail && !agentName) return { referredCount: 0, successfulInstalledCount: 0, failedInstalledCount: 0 };
+    const { referredCount, successfulInstalledCount, failedInstalledCount, rescheduleCount } = useMemo(() => {
+        if (!agentEmail && !agentName) return { referredCount: 0, successfulInstalledCount: 0, failedInstalledCount: 0, rescheduleCount: 0 };
 
         const filtered = jobOrders.filter(jo =>
             agentOwnsReferral(jo.Referred_By || jo.referred_by || '', agentName, agentEmail)
@@ -103,10 +104,16 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
             return status === 'failed' || status === 'cancelled' || status === 'suspended' || status === 'disapproved';
         }).length;
 
+        const reschedule = filtered.filter(jo => {
+            const status = (jo.Onsite_Status || jo.onsite_status || '').toLowerCase().trim();
+            return status === 'reschedule' || status === 'rescheduled' || status === 're-schedule';
+        }).length;
+
         return {
             referredCount: inProgress,
             successfulInstalledCount: onboard,
-            failedInstalledCount: failed
+            failedInstalledCount: failed,
+            rescheduleCount: reschedule
         };
     }, [jobOrders, agentEmail, agentName]);
 
@@ -141,7 +148,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
             const response = await claimAgentAchievement({ agent_id: agentId, milestone: pendingMilestone, amount: 1500 });
             if (response.success) {
                 setClaimedMilestones(prev => [...prev, pendingMilestone]);
-                Alert.alert('Reward Claimed!', `₱1,500 has been added to your bonus for hitting ${pendingMilestone} onboards.`, [{ text: 'OK' }]);
+                Alert.alert('Reward Claimed!', `₱1,500 has been added to your achievement rewards for hitting ${pendingMilestone} onboards.`, [{ text: 'OK' }]);
                 fetchHistory();
             } else {
                 Alert.alert('Error', response.message || 'Failed to claim reward.');
@@ -177,6 +184,7 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                 setAgentBalance(response.balance !== undefined ? Number(response.balance) : 0);
                 setAgentIncentives(response.incentives !== undefined ? Number(response.incentives) : 0);
                 setAgentBonus(response.bonus !== undefined ? Number(response.bonus) : 0);
+                setAgentAchievement(response.achievement !== undefined ? Number(response.achievement) : 0);
             }
         } catch (error) {
             console.error('Failed to fetch cashout history:', error);
@@ -302,66 +310,127 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                 </View>
 
                                 {!isCardFlipped ? (
-                                    <View style={{ minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                                                <Text allowFontScaling={false} style={styles.balanceLabel}>Incentives</Text>
-                                                <Text
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.5}
-                                                    allowFontScaling={false}
-                                                    style={[styles.balanceAmountText, { fontSize: agentIncentives >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
-                                                >
-                                                    {formatCurrency(agentIncentives)}
-                                                </Text>
-                                            </View>
-                                            <View style={{ flex: 1, alignItems: 'center' }}>
-                                                <Text allowFontScaling={false} style={[styles.balanceLabel, { textAlign: 'center' }]}>Commission</Text>
-                                                <Text
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.5}
-                                                    allowFontScaling={false}
-                                                    style={[styles.balanceAmountText, { textAlign: 'center', fontSize: agentBalance >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
-                                                >
-                                                    {formatCurrency(agentBalance)}
-                                                </Text>
-                                            </View>
-                                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                                                <Text allowFontScaling={false} style={[styles.balanceLabel, { textAlign: 'right' }]}>Bonus</Text>
-                                                <Text
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.5}
-                                                    allowFontScaling={false}
-                                                    style={[styles.balanceAmountText, { textAlign: 'right', fontSize: agentBonus >= 1000 ? (isMobile ? (isShort ? 18 : 20) : 24) : (isMobile ? (isShort ? 24 : 26) : 32) }]}
-                                                >
-                                                    {formatCurrency(agentBonus)}
-                                                </Text>
-                                            </View>
+                                    <View style={{ justifyContent: 'center' }}>
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                                            {[
+                                                { label: 'Incentives', value: agentIncentives },
+                                                { label: 'Commission', value: agentBalance },
+                                                { label: 'Bonus', value: agentBonus },
+                                                { label: 'Achievement', value: agentAchievement },
+                                            ].map((item, i) => {
+                                                const alignRight = i % 2 === 1;
+                                                return (
+                                                    <View key={item.label} style={{ width: '50%', alignItems: alignRight ? 'flex-end' : 'flex-start', paddingVertical: isShort ? 6 : 10, paddingHorizontal: 2 }}>
+                                                        <Text
+                                                            allowFontScaling={false}
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            style={[styles.balanceLabel, { textAlign: alignRight ? 'right' : 'left' }]}
+                                                        >
+                                                            {item.label}
+                                                        </Text>
+                                                        <Text
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            minimumFontScale={0.4}
+                                                            allowFontScaling={false}
+                                                            style={[styles.balanceAmountText, { textAlign: alignRight ? 'right' : 'left', fontSize: isMobile ? (isShort ? 20 : 24) : 28 }]}
+                                                        >
+                                                            {formatCurrency(item.value)}
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            })}
                                         </View>
                                     </View>
                                 ) : (
-                                    <View style={{ gap: 16, minHeight: isShort ? 80 : 90, justifyContent: 'center' }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'left' }}>In Progress</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{referredCount}</Text>
-                                            </View>
-                                            <View style={{ flex: 1, alignItems: 'center' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'center' }}>Done</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{successfulInstalledCount}</Text>
-                                            </View>
-                                            <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                                                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginBottom: 4, textAlign: 'right' }}>Failed</Text>
-                                                <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '700' }}>{failedInstalledCount}</Text>
-                                            </View>
+                                    <View style={{ justifyContent: 'center' }}>
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                                            {[
+                                                { label: 'In Progress', value: referredCount },
+                                                { label: 'Done', value: successfulInstalledCount },
+                                                { label: 'Failed', value: failedInstalledCount },
+                                                { label: 'Reschedule', value: rescheduleCount },
+                                            ].map((item, i) => {
+                                                const alignRight = i % 2 === 1;
+                                                return (
+                                                    <View key={item.label} style={{ width: '50%', alignItems: alignRight ? 'flex-end' : 'flex-start', paddingVertical: isShort ? 6 : 10, paddingHorizontal: 2 }}>
+                                                        <Text
+                                                            numberOfLines={1}
+                                                            adjustsFontSizeToFit
+                                                            allowFontScaling={false}
+                                                            style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 4, textAlign: alignRight ? 'right' : 'left' }}
+                                                        >
+                                                            {item.label}
+                                                        </Text>
+                                                        <Text style={{ color: '#ffffff', fontSize: 24, fontWeight: '700', textAlign: alignRight ? 'right' : 'left' }}>{item.value}</Text>
+                                                    </View>
+                                                );
+                                            })}
                                         </View>
                                     </View>
                                 )}
                             </LinearGradient>
                         </Animated.View>
+
+                        {/* Achievements Section */}
+                        <View style={styles.sectionGap}>
+                            <View style={styles.achievementCard}>
+                                <Text style={styles.achievementTitle}>30 Onboard Referrals</Text>
+                                <Text style={styles.achievementDesc}>Refer 30 customers and have them successfully onboarded.</Text>
+
+                                <View style={styles.gaugeWrapper}>
+                                    <View style={{ width: gaugeWidth, height: gaugeWidth, position: 'relative' }}>
+                                        <Svg width={gaugeWidth} height={gaugeWidth} viewBox={`0 0 ${gaugeWidth} ${gaugeWidth}`}>
+                                            <G rotation="135" origin={`${gaugeCx}, ${gaugeCy}`}>
+                                                <Circle
+                                                    cx={gaugeCx}
+                                                    cy={gaugeCy}
+                                                    r={gaugeR}
+                                                    stroke="#e2e8f0"
+                                                    strokeWidth={30}
+                                                    strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
+                                                    fill="none"
+                                                    strokeLinecap="round"
+                                                />
+                                                <AnimatedCircle
+                                                    cx={gaugeCx}
+                                                    cy={gaugeCy}
+                                                    r={gaugeR}
+                                                    stroke={colorPalette?.primary || '#ef4444'}
+                                                    strokeWidth={30}
+                                                    strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
+                                                    strokeDashoffset={gaugeDashoffset}
+                                                    fill="none"
+                                                    strokeLinecap="round"
+                                                />
+                                            </G>
+                                        </Svg>
+                                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Text style={styles.gaugeValueText}>{achievementProgress}</Text>
+                                            <Text style={styles.gaugeValueLabel}>Onboarded</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {isAchieved && (
+                                    <Pressable
+                                        style={({ pressed }) => [
+                                            styles.claimBtn,
+                                            { backgroundColor: claimButtonColor, opacity: pressed ? 0.8 : 1 }
+                                        ]}
+                                        onPress={handleClaimReward}
+                                        disabled={isClaiming}
+                                    >
+                                        {isClaiming ? (
+                                            <ActivityIndicator size="small" color="#ffffff" />
+                                        ) : (
+                                            <Text style={styles.claimBtnText}>Get Reward (₱1,500)</Text>
+                                        )}
+                                    </Pressable>
+                                )}
+                            </View>
+                        </View>
 
                         <View style={styles.balanceCard}>
                             <LinearGradient
@@ -377,9 +446,9 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                         adjustsFontSizeToFit
                                         minimumFontScale={0.5}
                                         allowFontScaling={false}
-                                        style={{ fontWeight: 'bold', color: '#ffffff', fontSize: (agentBalance + agentIncentives + agentBonus) >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
+                                        style={{ fontWeight: 'bold', color: '#ffffff', fontSize: (agentBalance + agentIncentives + agentBonus + agentAchievement) >= 1000 ? (isMobile ? (isShort ? 32 : 36) : 44) : (isMobile ? (isShort ? 40 : 44) : 52) }}
                                     >
-                                        {formatCurrency(agentBalance + agentIncentives + agentBonus)}
+                                        {formatCurrency(agentBalance + agentIncentives + agentBonus + agentAchievement)}
                                     </Text>
                                 </View>
                                 <Pressable onPress={() => onNavigate && onNavigate('Application')}>
@@ -436,70 +505,6 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
                                 <View style={styles.emptyReferrals}>
                                     <Text style={styles.emptyReferralsText}>No cashouts found</Text>
                                 </View>
-                            )}
-                        </View>
-                    </View>
-
-                    {/* Achievements Section */}
-                    <View style={styles.sectionGap}>
-                        <View style={styles.sectionHeader}>
-                            <Trophy size={20} color={colorPalette?.primary || '#ef4444'} />
-                            <Text style={styles.sectionTitle}>Achievements</Text>
-                        </View>
-
-                        <View style={styles.achievementCard}>
-                            <Text style={styles.achievementTitle}>30 Onboard Referrals</Text>
-                            <Text style={styles.achievementDesc}>Refer 30 customers and have them successfully onboarded.</Text>
-
-                            <View style={styles.gaugeWrapper}>
-                                <View style={{ width: gaugeWidth, height: gaugeWidth, position: 'relative' }}>
-                                    <Svg width={gaugeWidth} height={gaugeWidth} viewBox={`0 0 ${gaugeWidth} ${gaugeWidth}`}>
-                                        <G rotation="135" origin={`${gaugeCx}, ${gaugeCy}`}>
-                                            <Circle
-                                                cx={gaugeCx}
-                                                cy={gaugeCy}
-                                                r={gaugeR}
-                                                stroke="#e2e8f0"
-                                                strokeWidth={30}
-                                                strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
-                                                fill="none"
-                                                strokeLinecap="round"
-                                            />
-                                            <AnimatedCircle
-                                                cx={gaugeCx}
-                                                cy={gaugeCy}
-                                                r={gaugeR}
-                                                stroke={colorPalette?.primary || '#ef4444'}
-                                                strokeWidth={30}
-                                                strokeDasharray={`${gaugeArcLength}, ${gaugeCircumference}`}
-                                                strokeDashoffset={gaugeDashoffset}
-                                                fill="none"
-                                                strokeLinecap="round"
-                                            />
-                                        </G>
-                                    </Svg>
-                                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-                                        <Text style={styles.gaugeValueText}>{achievementProgress}</Text>
-                                        <Text style={styles.gaugeValueLabel}>Onboarded</Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            {isAchieved && (
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.claimBtn,
-                                        { backgroundColor: claimButtonColor, opacity: pressed ? 0.8 : 1 }
-                                    ]}
-                                    onPress={handleClaimReward}
-                                    disabled={isClaiming}
-                                >
-                                    {isClaiming ? (
-                                        <ActivityIndicator size="small" color="#ffffff" />
-                                    ) : (
-                                        <Text style={styles.claimBtnText}>Get Reward (₱1,500)</Text>
-                                    )}
-                                </Pressable>
                             )}
                         </View>
                     </View>

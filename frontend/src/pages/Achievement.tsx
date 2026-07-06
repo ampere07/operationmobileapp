@@ -109,7 +109,7 @@ const Achievement: React.FC = () => {
             const response = await claimAgentAchievement(payload);
             if (response.success) {
                 setClaimedMilestones(prev => [...prev, pendingMilestone]);
-                Alert.alert("Reward Claimed!", `₱1,500 has been added to your bonus for hitting ${pendingMilestone} onboards.`, [{ text: "OK" }]);
+                Alert.alert("Reward Claimed!", `₱1,500 has been added to your achievement rewards for hitting ${pendingMilestone} onboards.`, [{ text: "OK" }]);
             } else {
                 Alert.alert("Error", response.message || "Failed to claim reward.");
             }

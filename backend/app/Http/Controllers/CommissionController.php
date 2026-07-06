@@ -188,6 +188,7 @@ class CommissionController extends Controller
                 'balance' => $agentBalance ? (float)$agentBalance->balance : 0,
                 'incentives' => $agentBalance ? (float)$agentBalance->incentives : 0,
                 'bonus' => $agentBalance ? (float)($agentBalance->bonus ?? 0) : 0,
+                'achievement' => $agentBalance ? (float)($agentBalance->achievement ?? 0) : 0,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -830,25 +831,25 @@ class CommissionController extends Controller
                 'total_amount'  => $validated['amount'],
                 'remarks'       => "Achievement Reward for {$validated['milestone']} Onboards",
                 'proof_of_payment' => 'System Auto Reward',
-                'type'          => 'Bonus',
+                'type'          => 'achievement',
                 'created_by'    => $user->full_name ?? $user->email_address ?? 'System',
                 'organization_id' => $user->organization_id ?? null,
             ];
 
             $history = AgentCommissionHistory::create($historyPayload);
 
-            // Update agent balance
+            // Update agent balance (credit the achievement column)
             $agentBalance = AgentBalance::where('agent_id', $validated['agent_id'])->first();
             if ($agentBalance) {
                 $agentBalance->update([
-                    'bonus' => (float)($agentBalance->bonus ?? 0) + (float)$validated['amount'],
+                    'achievement' => (float)($agentBalance->achievement ?? 0) + (float)$validated['amount'],
                 ]);
             } else {
                 AgentBalance::create([
                     'agent_id' => $validated['agent_id'],
                     'balance' => 0,
                     'commission' => 0,
-                    'bonus' => (float)$validated['amount'],
+                    'achievement' => (float)$validated['amount'],
                 ]);
             }
 

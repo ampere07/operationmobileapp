@@ -32,8 +32,10 @@ export const getOnsiteStatus = (jo: any): string =>
   String(jo?.Onsite_Status || jo?.onsite_status || '').toLowerCase().trim();
 
 // Active (still-in-the-field) job orders shown to agents on the Job Order page.
+// Agents only see job orders that are in progress or rescheduled.
 export const isActiveOnsiteStatus = (status: string): boolean =>
-  status === 'inprogress' || status === 'in progress' || status === 'in-progress' || status === 'reschedule';
+  status === 'inprogress' || status === 'in progress' || status === 'in-progress' ||
+  status === 'reschedule' || status === 'rescheduled' || status === 're-schedule';
 
 // Completed job orders shown to agents on the Agent History page.
 export const isDoneOnsiteStatus = (status: string): boolean =>
