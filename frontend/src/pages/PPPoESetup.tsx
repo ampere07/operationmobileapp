@@ -98,7 +98,7 @@ const PPPoESetup: React.FC = () => {
     try {
       setShowLoading(true);
       const data = await pppoeService.getPatterns();
-      setPatterns(data);
+      setPatterns(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to fetch patterns:', error);
       setErrorMessage(error.response?.data?.message || 'Failed to load patterns. Please make sure the database is set up correctly.');
@@ -215,8 +215,8 @@ const PPPoESetup: React.FC = () => {
   const handleEdit = (pattern: UsernamePattern) => {
     setPatternName(pattern.pattern_name);
     setPatternType(pattern.pattern_type as 'username' | 'password');
-    setCurrentSequence(pattern.sequence);
-    const customPwdItem = pattern.sequence.find((item) => item.type === 'custom_password');
+    setCurrentSequence(Array.isArray(pattern.sequence) ? pattern.sequence : []);
+    const customPwdItem = (pattern.sequence || []).find((item) => item.type === 'custom_password');
     if (customPwdItem?.value) setCustomPasswordValue(customPwdItem.value);
     setIsEditing(true);
   };
@@ -260,7 +260,7 @@ const PPPoESetup: React.FC = () => {
   };
 
   const getPreviewText = (sequence: SequenceItem[]) =>
-    sequence
+    (Array.isArray(sequence) ? sequence : [])
       .map((item) => {
         if (item.type === 'custom_password' && item.value) return item.value;
         if (item.type === 'tech_input') return '[Manual Input]';

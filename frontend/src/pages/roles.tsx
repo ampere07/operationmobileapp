@@ -94,7 +94,7 @@ const Roles: React.FC = () => {
         return false;
       }
 
-      const name = role.role_name.toLowerCase();
+      const name = (role.role_name || '').toLowerCase();
       const query = searchQuery.toLowerCase().trim();
       return name.includes(query);
     });

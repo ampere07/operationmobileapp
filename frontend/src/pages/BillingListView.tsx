@@ -273,7 +273,7 @@ const BillingListView: React.FC = () => {
         {/* Balance row */}
         <View style={styles.cardFooter}>
           <Text style={styles.cardBalance}>
-            Balance: <Text style={{ fontWeight: '700' }}>₱{item.balance.toFixed(2)}</Text>
+            Balance: <Text style={{ fontWeight: '700' }}>₱{item.balance?.toFixed(2) ?? '0.00'}</Text>
           </Text>
           {item.dateInstalled ? (
             <Text style={styles.cardDate}>Installed: {item.dateInstalled}</Text>

@@ -229,7 +229,7 @@ const Rebate: React.FC = () => {
     try {
       if (!silent) setIsLoading(true);
       const response = await apiClient.get<RebateRecord[]>('/rebates');
-      setRebateRecords(response.data);
+      setRebateRecords(Array.isArray(response.data) ? response.data : []);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch Rebate records:', err);
@@ -244,7 +244,7 @@ const Rebate: React.FC = () => {
       setRefreshing(true);
       setIsRefreshingManual(true);
       const response = await apiClient.get<RebateRecord[]>('/rebates');
-      setRebateRecords(response.data);
+      setRebateRecords(Array.isArray(response.data) ? response.data : []);
       setError(null);
     } catch (err) {
       console.error('Failed to refresh Rebate records:', err);

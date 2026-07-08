@@ -204,11 +204,15 @@ const DashboardAgent: React.FC<DashboardAgentProps> = ({ onNavigate }) => {
 
     useEffect(() => {
         const loadUser = async () => {
-            const storedUser = await AsyncStorage.getItem('authData');
-            if (storedUser) {
-                const parsed = JSON.parse(storedUser);
-                setUser(parsed);
-                if (parsed?.id) fetchAchievements(parsed.id);
+            try {
+                const storedUser = await AsyncStorage.getItem('authData');
+                if (storedUser) {
+                    const parsed = JSON.parse(storedUser);
+                    setUser(parsed);
+                    if (parsed?.id) fetchAchievements(parsed.id);
+                }
+            } catch (e) {
+                console.error('Failed to parse auth data:', e);
             }
         };
         loadUser();

@@ -207,7 +207,7 @@ const DataLogs: React.FC = () => {
       }
       // Filter by log type
       if (logTypeFilter !== 'all') {
-        const rowType = row.log_type.toLowerCase();
+        const rowType = String(row.log_type || '').toLowerCase();
         const filter = logTypeFilter.toLowerCase();
 
         if (filter === 'service_order' && !rowType.includes('service order') && !rowType.includes('serviceorders') && !rowType.includes('serviceorder')) return false;
@@ -229,10 +229,10 @@ const DataLogs: React.FC = () => {
       // Filter by search query
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase();
-        const matchType = row.log_type.toLowerCase().includes(q);
-        const matchId = row.id.toLowerCase().includes(q);
-        const matchCreatedBy = row.created_by.toLowerCase().includes(q);
-        const matchUpdatedBy = row.updated_by.toLowerCase().includes(q);
+        const matchType = String(row.log_type || '').toLowerCase().includes(q);
+        const matchId = String(row.id || '').toLowerCase().includes(q);
+        const matchCreatedBy = String(row.created_by || '').toLowerCase().includes(q);
+        const matchUpdatedBy = String(row.updated_by || '').toLowerCase().includes(q);
         const matchOld = row.old_details ? row.old_details.toLowerCase().includes(q) : false;
         const matchNew = row.new_details ? row.new_details.toLowerCase().includes(q) : false;
         return matchType || matchId || matchCreatedBy || matchUpdatedBy || matchOld || matchNew;

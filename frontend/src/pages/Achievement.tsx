@@ -58,12 +58,17 @@ const Achievement: React.FC = () => {
         };
 
         const initUser = async () => {
-            const authData = await AsyncStorage.getItem('authData');
-            if (authData) {
-                const parsed = JSON.parse(authData);
-                setUser(parsed);
-                checkAchievements(parsed.id);
-            } else {
+            try {
+                const authData = await AsyncStorage.getItem('authData');
+                if (authData) {
+                    const parsed = JSON.parse(authData);
+                    setUser(parsed);
+                    checkAchievements(parsed.id);
+                } else {
+                    setLoading(false);
+                }
+            } catch (e) {
+                console.error('Failed to parse auth data:', e);
                 setLoading(false);
             }
         };

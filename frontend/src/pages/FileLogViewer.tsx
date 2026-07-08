@@ -114,8 +114,8 @@ const FileLogViewer: React.FC<FileLogViewerProps> = ({ type, title }) => {
           <Text style={{ color: '#2563eb', fontFamily: 'monospace', fontSize: 12, opacity: 0.8 }}>
             [{item.datetime}]
           </Text>
-          <Text style={{ color: getLevelColor(item.level), fontFamily: 'monospace', fontSize: 12, fontWeight: '700' }}>
-            {item.level.toUpperCase()}:
+          <Text style={{ color: getLevelColor(item.level || ''), fontFamily: 'monospace', fontSize: 12, fontWeight: '700' }}>
+            {(item.level || '').toUpperCase()}:
           </Text>
           <Text style={{ color: '#374151', fontFamily: 'monospace', fontSize: 12 }}>
             {item.message}

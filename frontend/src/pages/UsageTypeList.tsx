@@ -234,7 +234,7 @@ const UsageTypeList: React.FC = () => {
     const matchesOrg = currentUserOrgId ? ut.organization_id === currentUserOrgId : !ut.organization_id;
     if (!matchesOrg) return false;
     const query = searchQuery.toLowerCase();
-    return ut.usage_name.toLowerCase().includes(query);
+    return (ut.usage_name || '').toLowerCase().includes(query);
   });
 
   const totalPages = Math.ceil(filteredUsageTypes.length / itemsPerPage);

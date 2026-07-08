@@ -83,7 +83,7 @@ const SMSBlast: React.FC = () => {
       const response = await apiClient.get('/sms-blast');
       const result = response.data;
       if (result.status === 'success') {
-        setSmsBlastRecords(result.data);
+        setSmsBlastRecords(Array.isArray(result.data) ? result.data : []);
       } else {
         throw new Error(result.message || 'Failed to fetch records');
       }
