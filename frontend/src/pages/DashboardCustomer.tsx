@@ -170,7 +170,13 @@ const DashboardCustomer: React.FC<DashboardCustomerProps> = ({ onNavigate }) => 
     useEffect(() => {
         const loadData = async () => {
             const storedUser = await AsyncStorage.getItem('authData');
-            if (storedUser) setUser(JSON.parse(storedUser));
+            if (storedUser) {
+                try {
+                    setUser(JSON.parse(storedUser));
+                } catch (e) {
+                    console.error('Failed to parse auth data:', e);
+                }
+            }
 
             if (accountNo && accountNo !== 'N/A') {
                 try {

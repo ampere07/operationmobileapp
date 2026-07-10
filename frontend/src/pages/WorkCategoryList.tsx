@@ -234,7 +234,7 @@ const WorkCategoryList: React.FC = () => {
     const matchesOrg = currentUserOrgId ? wc.organization_id === currentUserOrgId : !wc.organization_id;
     if (!matchesOrg) return false;
     const query = searchQuery.toLowerCase();
-    return wc.category.toLowerCase().includes(query);
+    return (wc.category || '').toLowerCase().includes(query);
   });
 
   const totalPages = Math.ceil(filteredWorkCategories.length / itemsPerPage);

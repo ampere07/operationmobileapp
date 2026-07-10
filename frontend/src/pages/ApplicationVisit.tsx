@@ -166,7 +166,7 @@ const ApplicationVisitPage: React.FC = () => {
     const items: LocationItem[] = [{ id: 'all', name: 'All', count: applicationVisits.length }];
     const locationSet = new Set<string>();
     applicationVisits.forEach(visit => {
-      const parts = visit.full_address.split(',');
+      const parts = (visit.full_address || '').split(',');
       const city = parts.length > 3 ? parts[3].trim() : '';
       if (city) locationSet.add(city.toLowerCase());
     });
@@ -175,7 +175,7 @@ const ApplicationVisitPage: React.FC = () => {
         id: location,
         name: location.charAt(0).toUpperCase() + location.slice(1),
         count: applicationVisits.filter(v => {
-          const parts = v.full_address.split(',');
+          const parts = (v.full_address || '').split(',');
           const city = parts.length > 3 ? parts[3].trim() : '';
           return city.toLowerCase() === location;
         }).length,
@@ -187,13 +187,13 @@ const ApplicationVisitPage: React.FC = () => {
   // Filter + sort pipeline
   const sortedVisits = useMemo(() => {
     let filtered = applicationVisits.filter(visit => {
-      const parts = visit.full_address.split(',');
+      const parts = (visit.full_address || '').split(',');
       const city = parts.length > 3 ? parts[3].trim().toLowerCase() : '';
       const matchesLocation = selectedLocation === 'all' || city === selectedLocation;
       const q = searchQuery.toLowerCase();
       const matchesSearch = q === '' ||
-        visit.full_name.toLowerCase().includes(q) ||
-        visit.full_address.toLowerCase().includes(q) ||
+        (visit.full_name || '').toLowerCase().includes(q) ||
+        (visit.full_address || '').toLowerCase().includes(q) ||
         (visit.assigned_email || '').toLowerCase().includes(q);
       return matchesLocation && matchesSearch;
     });

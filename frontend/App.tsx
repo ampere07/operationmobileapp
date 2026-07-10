@@ -22,6 +22,7 @@ import { getAppVersionConfig, compareVersions } from './src/services/appVersionS
 import { version as currentVersion } from './package.json';
 import ForceUpdateModal from './src/modals/ForceUpdateModal';
 import { StatusBar } from 'expo-status-bar';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 const IDLE_TIMEOUT = 2 * 60 * 60 * 1000; // 2 hours in ms
 const WARNING_TIMEOUT = 1.5 * 60 * 60 * 1000; // 1.5 hours in ms
@@ -315,6 +316,7 @@ function App() {
 
   return (
     <SafeAreaProvider>
+      <ErrorBoundary resetKey={isLoggedIn ? 'in' : 'out'}>
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
       <StatusBar hidden={true} />
       {isLoggedIn ? (
@@ -353,6 +355,7 @@ function App() {
         />
       )}
     </View>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

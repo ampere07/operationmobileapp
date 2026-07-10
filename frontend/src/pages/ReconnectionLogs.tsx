@@ -232,7 +232,7 @@ const ReconnectionLogs: React.FC = () => {
           {!!item.accountNo && <Field label="Acct" value={String(item.accountNo)} valueColor="#ef4444" />}
           {!!item.username && <Field label="User" value={String(item.username)} />}
           {!!item.plan && <Field label="Plan" value={String(item.plan)} />}
-          {item.reconnectionFee ? <Field label="Fee" value={`₱${item.reconnectionFee.toFixed(2)}`} /> : null}
+          {item.reconnectionFee ? <Field label="Fee" value={`₱${(Number(item.reconnectionFee) || 0).toFixed(2)}`} /> : null}
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
           <Field label="Date" value={formatDateTime(item.date || item.reconnectionDate)} />

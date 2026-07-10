@@ -115,6 +115,7 @@ import ReleaseNotes from './ReleaseNotes';
 import { CustomerDataProvider } from '../contexts/CustomerDataContext';
 import { settingsColorPaletteService, ColorPalette } from '../services/settingsColorPaletteService';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 interface DashboardProps {
     onLogout: () => void;
@@ -456,7 +457,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                                     backgroundColor: isDarkMode ? '#030712' : '#f9fafb'
                                 }}>
                                     <View style={{ height: '100%', overflow: 'scroll' }}>
-                                        {content}
+                                        <ErrorBoundary resetKey={activeSection} sectionName={activeSection}>
+                                            {content}
+                                        </ErrorBoundary>
                                     </View>
                                 </View>
 

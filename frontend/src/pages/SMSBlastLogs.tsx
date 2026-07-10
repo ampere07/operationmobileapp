@@ -137,8 +137,8 @@ const SMSBlastLogs: React.FC = () => {
       if (selectedMessageType !== 'All' && log.messageType !== selectedMessageType) return false;
       if (q) {
         return (
-          log.recipientNumber.toLowerCase().includes(q) ||
-          log.messageId.toLowerCase().includes(q) ||
+          (log.recipientNumber || '').toLowerCase().includes(q) ||
+          (log.messageId || '').toLowerCase().includes(q) ||
           (log.failureReason ? log.failureReason.toLowerCase().includes(q) : false)
         );
       }
@@ -349,7 +349,7 @@ const SMSBlastLogs: React.FC = () => {
               <DetailRow label="Provider" value={selectedLog.provider} />
               <DetailRow label="Message Type" value={selectedLog.messageType} />
               {!!selectedLog.failureReason && <DetailRow label="Failure Reason" value={selectedLog.failureReason} />}
-              {selectedLog.cost !== undefined && (
+              {typeof selectedLog.cost === 'number' && (
                 <DetailRow label="Cost" value={`₱${selectedLog.cost.toFixed(2)}`} />
               )}
               {!!selectedLog.barangay && <DetailRow label="Barangay" value={selectedLog.barangay} />}

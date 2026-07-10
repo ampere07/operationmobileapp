@@ -456,7 +456,12 @@ const LiveMonitor: React.FC = () => {
     (async () => {
       // Auth data
       const raw = await AsyncStorage.getItem('authData');
-      const auth = raw ? JSON.parse(raw) : {};
+      let auth: any = {};
+      try {
+        auth = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        console.error('Failed to parse auth data:', e);
+      }
       setAuthData(auth);
       const superAdmin = auth.organization_id === null || auth.organization_id === undefined;
       setIsSuperAdmin(superAdmin);
@@ -478,8 +483,15 @@ const LiveMonitor: React.FC = () => {
       const initialStates: Record<string, WidgetState> = {};
       for (const id of Object.keys(WIDGETS)) {
         const saved = await AsyncStorage.getItem(`widget_state_${id}`);
+        let state: any = null;
         if (saved) {
-          let state = JSON.parse(saved);
+          try {
+            state = JSON.parse(saved);
+          } catch (e) {
+            console.error(`Failed to parse widget_state_${id}:`, e);
+          }
+        }
+        if (state) {
           if (state.viewType === 'table' && !id.includes('detailed_queue')) state.viewType = 'list';
           if (state.viewType === 'grid' && id !== 'tech_availability') state.viewType = 'list';
           initialStates[id] = state;

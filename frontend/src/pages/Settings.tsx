@@ -584,7 +584,7 @@ const Settings: React.FC = () => {
 
             <View style={{ gap: 12 }}>
               {dbPalettes.map((palette) => {
-                const isDefault = palette.palette_name.toLowerCase() === 'default';
+                const isDefault = (palette.palette_name || '').toLowerCase() === 'default';
                 const active = palette.status === 'active';
                 return (
                   <View
