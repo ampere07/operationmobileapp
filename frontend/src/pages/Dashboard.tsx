@@ -106,6 +106,8 @@ import DashboardCustomer from './DashboardCustomer';
 import DashboardAgent from './DashboardAgent';
 import AgentHistory from './AgentHistory';
 import Achievement from './Achievement';
+import Commission from './Commission';
+import AgentPayout from './AgentPayout';
 import Bills from './Bills';
 import Menu from './Menu';
 import ApplicationForm from './ApplicationForm';
@@ -218,6 +220,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             case 'agent-dashboard':
                 return <DashboardAgent onNavigate={(section, tab) => handleSectionChange(section, tab)} />;
             case 'commission':
+                return <Commission />;
+            case 'agent-payout':
+                return <AgentPayout />;
+            case 'agent-history':
                 return <AgentHistory />;
             case 'achievement':
                 return <Achievement />;
@@ -331,6 +337,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 return <SmsLogs />;
             case 'file-log-viewer':
                 return <FileLogViewer type="smartolt" title="SmartOLT Logs" />;
+            case 'radius-logs':
+                return <FileLogViewer type="radius" title="Radius Logs" />;
             case 'expenses-log':
                 return <ExpensesLog />;
             case 'data-logs':
